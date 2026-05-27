@@ -1,0 +1,3489 @@
+Title: A Statistical Theory of Regularization-Based Continual Learning
+
+URL Source: https://openreview.net/pdf?id=A54CXWn9VB
+
+Number of Pages: 19
+
+Markdown Content:
+# A Statistical Theory of Regularization-Based Continual Learning 
+
+Xuyang Zhao 1 Huiyuan Wang 2 Weiran Huang † 3 4 Wei Lin † 1
+
+## Abstract 
+
+We provide a statistical analysis of regularization-based continual learning on a sequence of linear regression tasks, with emphasis on how differ-ent regularization terms affect the model perfor-mance. We first derive the convergence rate for the oracle estimator obtained as if all data were available simultaneously. Next, we consider a family of generalized ℓ2-regularization algorithms indexed by matrix-valued hyperparameters, which includes the minimum norm estimator and con-tinual ridge regression as special cases. As more tasks are introduced, we derive an iterative up-date formula for the estimation error of general-ized ℓ2-regularized estimators, from which we determine the hyperparameters resulting in the optimal algorithm. Interestingly, the choice of hyperparameters can effectively balance the trade-off between forward and backward knowledge transfer and adjust for data heterogeneity. More-over, the estimation error of the optimal algorithm is derived explicitly, which is of the same order as that of the oracle estimator. In contrast, our lower bounds for the minimum norm estimator and continual ridge regression show their subopti-mality. A byproduct of our theoretical analysis is the equivalence between early stopping and gen-eralized ℓ2-regularization in continual learning, which may be of independent interest. Finally, we conduct experiments to complement our theory.                           
+
+> 1School of Mathematical Sciences and Center for Statis-tical Science, Peking University, Beijing, China 2Department of Biostatistics, Epidemiology and Informatics, Perelman School of Medicine, University of Pennsylvania, Philadel-phia, PA, USA 3MIFA Lab, Qing Yuan Research Insti-tute, SEIEE, Shanghai Jiao Tong University, Shanghai, China
+> 4Shanghai AI Laboratory, Shanghai, China. †Correspondence to: Weiran Huang <weiran.huang@outlook.com >, Wei Lin
+> <weilin@math.pku.edu.cn >. This work was done while the first author was visiting MIFA Lab.
+> Proceedings of the 41 st International Conference on Machine Learning , Vienna, Austria. PMLR 235, 2024. Copyright 2024 by the author(s).
+
+## 1. Introduction 
+
+Continual learning (CL) in machine learning involves train-ing a model continuously across multiple tasks, constrained by limited memory. As more tasks are introduced and ad-ditional data samples are collected, it is expected that the model will exhibit enhanced performance on both old and new tasks. However, due to memory limits, not all past data can be retained; typically, only a subset of the data or sum-mary statistics are stored. This makes continual learning more challenging than single-task learning, as it prohibits the simple pooling of all samples (Parisi et al., 2019). Alter-natively, without using exceedingly large long-term memory, we can view continual learning as an online multi-task prob-lem where a model is sequentially fitted to data provided for each task. However, such an approach may result in poor performance of the current model on previous tasks, a phenomenon known as catastrophic forgetting (McCloskey & Cohen, 1989; Goodfellow et al., 2014). Clearly, forget-ting information from earlier tasks undermines the overall effectiveness of the model. There are two goals of continual learning algorithms. One is the forward knowledge transfer , which focuses on trans-ferring knowledge from previous tasks to make learning on new tasks simpler. The other is the backward knowledge transfer (Lin et al., 2023), which aims to address the issue of catastrophic forgetting when learning new tasks and keep the overall performance improving over time. From a sta-tistical perspective, the main difficulty in these two goals is heterogeneity among tasks, i.e., the data distribution can vary across different tasks. In the presence of heterogeneity, the forward and backward knowledge transfer can contradict each other, between which a trade-off will arise (Lin et al., 2023; Wang et al., 2024). An ideal CL algorithm should properly balance the knowledge extracted from old tasks and the information contained in new samples to achieve both forward and backward knowledge transfer. To resolve the conflict, many algorithms have been proposed recently. Roughly speaking, these algorithms fall into three categories: regularization-based methods (Kirkpatrick et al., 2017; Aljundi et al., 2018; Liu & Liu, 2022), replay-based methods (Chaudhry et al., 2019; Riemer et al., 2019; Jin et al., 2021), and expansion-based methods (Serra et al., 2018; Yoon et al., 2020; Yang et al., 2021). The common 1A Statistical Theory of Regularization-Based Continual Learning 
+
+intuition underlying these algorithms is applying different techniques that can use old information to constrain the model’s change on new tasks, thereby achieving forward and backward knowledge transfer simultaneously. How-ever, the theoretical understanding of CL algorithms is still underdeveloped. In particular, none of the existing work shows an explicit trade-off between forward and backward knowledge transfer, let alone offering a guidance on how to balance them properly. Also, the roles of heterogeneity and noise are not fully discussed, which are crucial aspects of practical continual learning. In this paper, we enrich the existing literature by establish-ing theoretical properties of regularization-based contin-ual learning algorithms within the linear regression frame-work. Our analysis includes considerations for heterogene-ity, noise, and overparametrization, and offers an in-depth investigation of the trade-off between forward and back-ward knowledge transfer. Specifically, our contributions are summarized as follows. • We provide lower bounds for two continual learning al-gorithms, i.e., the minimum norm estimator (Lin et al., 2023) and continual ridge regression (Li et al., 2023). These bounds reveal their suboptimality compared to the oracle estimator, which motivates us to study some new algorithms. • We point out two main reasons for the failure of the above two methods: forward–backward trade-off and information heterogeneity. The former is essentially the trade-off between the information carried in old tasks and that in the new task, and the latter means that the knowledge carried in different tasks varies. • Inspired by our findings, we propose a generalized ℓ2-regularized estimator. By choosing its hyperparameters properly to deal with the forward–backward trade-off and information heterogeneity, we show that our esti-mator attains the error rate of the oracle estimator and hence avoids catastrophic forgetting. • We establish the relationship between early stopping between ℓ2-regularization in continual linear regres-sion. We show that, if the learning rate of gradient descent takes a more general form as in our gener-alized ℓ2-regularization, then these two methods are actually equivalent. This can be viewed as an extension of similar results shown for learning a single task. • We conduct simulation experiments to complement our theory. We obtain a practical algorithm based on the above theoretical results, which has a close connec-tion with elastic weighted consolidation (EWC). We illustrate its performance through simulations. 
+
+1.1. Related Work Continual learning algorithms. Over the past several years, continual learning has attracted considerable attention, leading to the proposal of numerous empirical algorithms aimed at mitigating catastrophic forgetting. Broadly speak-ing, these methods can be categorized into three groups: (1) regularization-based methods (Kirkpatrick et al., 2017; Aljundi et al., 2018; Liu & Liu, 2022), which regularize modifications to the importance weights for old tasks when learning the new task; (2) expansion-based methods (Serra et al., 2018; Yoon et al., 2020; Yang et al., 2021), which learn a mask to fix the importance weights for old tasks during the new task learning and further expand the neural network when needed; (3) memory-based methods, which either store and replay the data from old tasks when learning the new task, i.e., experience-replay based methods (Chaudhry et al., 2019; Riemer et al., 2019; Jin et al., 2021), or store the gradient information from old tasks and learn the new task in the direction orthogonal to old tasks, i.e., orthogonal-projection based methods (Farajtabar et al., 2020; Saha et al., 2021; Lin et al., 2022). 
+
+Theoretical studies in CL. McCloskey & Cohen (1989) proposed a unified framework for the performance analysis of regularization-based CL methods, by formulating them as a second-order Taylor approximation of the loss function for each task. Bennani et al. (2020) and Doan et al. (2021) ana-lyzed generalization error and forgetting for the orthogonal gradient descent (OGD) approach (Yin et al., 2020) based on NTK models, and further proposed variants of OGD to address forgetting. Lee et al. (2021) and Asanuma et al. (2021) studied CL in the teacher–student setup to character-ize the impact of task similarity on forgetting performance. Cao et al. (2022) and Li et al. (2022) investigated continual representation learning with dynamically expanding feature spaces, and developed provably efficient CL methods with a characterization of the sample complexity. Besides, there are some theoretical works on regularization-based methods. Evron et al. (2022) studied the minimum norm estimator in CL under an overparameterized and noise-free setup. Li et al. (2023) gave a fixed design analysis of continual ridge regression for two-task linear regression. Chen et al. (2022) characterized the lower memory bound in CL using the PAC framework. Andle & Yasaei Sekeh (2022) analyzed the selection of frozen filters based on layer sensitivity to maximize the performance of CL. Wen et al. (2024) studied the contrastive CL methods and provided upper and lower performance bounds. Yang et al. (2022) presented a CL algorithm based on supervised PCA and gave a theoretical analysis. Denevi et al. (2019) proposed to add a bias term to SGD and showed improved performance theoretically. 2A Statistical Theory of Regularization-Based Continual Learning 
+
+## 2. Continual Linear Regression 
+
+Data. We consider a standard continual learning problem where a sequence of tasks indexed by t = 1 , . . . , T arrives sequentially. Suppose that each task t holds a dataset Dt =
+
+{(x(t) 
+
+> i
+
+, y (t) 
+
+> i
+
+) ∈ Rp × R}nt
+
+> i=1
+
+, where nt denotes its sample size. We assume that all of the T tasks are generated by a linear model with the same regression coefficient, i.e., for all t ∈ [T ] and i ∈ [nt],
+
+y(t) 
+
+> i
+
+= ( x(t) 
+
+> i
+
+)⊤w∗ + ε(t) 
+
+> i
+
+, (1) where w∗ ∈ Rp is the true parameter and ε(t) 
+
+> i
+
+are inde-pendent random noises with variance σ2. By stacking the data as Xt := (x(t)1 , . . . , x(t) 
+
+> nt
+
+)⊤ ∈ Rnt×p, yt := (y(t)1 , . . . , y (t) 
+
+> nt
+
+) ∈ Rnt , and εt := ( ε(t)1 , . . . , ε (t) 
+
+> nt
+
+) ∈ Rnt ,we can rewrite (1) as 
+
+yt = Xtw∗ + εt.
+
+We define Σt := X⊤ 
+
+> t
+
+X/n t ∈ Rp×p as the covariance matrix for task t. Note that we do not require nt > p , i.e., we allow for overparametrization in any single task. 
+
+Evaluation metric. Our goal is to estimate w∗ in the continual learning setting. For any estimator bw, we use 
+
+L( bw) := E∥ bw − w∗∥2 to denote its estimation error. Note that the definition of L applies to each task, since they share a common true parameter w∗. Based on L, two key metrics, forgetting and generalization error, can be defined respectively as 
+
+Ft := 1
+
+t − 1
+
+> t−1
+
+X 
+
+> τ=1
+
+(L( bwt) − L ( bwτ )) ,
+
+Gt := 1
+
+t
+
+> t
+
+X 
+
+> τ=1
+
+L( bwt) = L( bwt),
+
+for each t ∈ [T ], where bwτ denotes the output of a continual learning algorithm after the arrival of task τ . Small Ft
+
+means that the estimator learned after task t still has good performance on previous tasks. If Ft < 0 for every t ∈
+
+[T ], the continual learning algorithm achieves consistently increasing performance and avoids catastrophic forgetting. 
+
+Oracle estimator. Without the constraint of continual learning, i.e., data of all tasks are available simultaneously, we can estimate w∗ by simply pooling all samples together and solving the offline optimization problem 
+
+min 
+
+> w
+
+( TX
+
+> t=1
+
+∥Xtw − yt∥2
+
+)
+
+.
+
+We call its solution the oracle estimator (ORA) and denote it by 
+
+bw(ORA)  
+
+> T
+
+:= arg min 
+
+> w
+
+( TX
+
+> t=1
+
+∥Xtw − yt∥2
+
+)
+
+. (2) The oracle estimator cannot be used in continual learning practice since it requires simultaneous availability of all data. Nevertheless, it serves as an ideal baseline to gauge the accuracy of estimating w∗ without continual learning constraint. If a continual learning algorithm exhibits com-parable performance to the oracle estimator, then we can assert the superiority of that algorithm. 
+
+## 3. Learning Algorithms 
+
+In this paper, our primary objective is to investigate the 
+
+generalized ℓ2-regularization algorithm (GR), which is a family of regularization-based continual learning algorithms. Specifically, it sequentially produces an estimate of w∗ as depicted in Algorithm 1, where {Ht}Tt=1 are user-specified regularization weight matrices and ∥w − bw(GR)  
+
+> t−1
+
+∥2 
+
+> Ht
+
+:= (w − bw(GR)  
+
+> t−1
+
+)⊤Ht(w − bw(GR)  
+
+> t−1
+
+).
+
+Algorithm 1 Generalized ℓ2-regularization method 
+
+Initialization: bw(GR) 0 = 0 
+
+Iterative update for each task t ∈ [T ]:
+
+bw(GR)  
+
+> t
+
+:= arg min 
+
+> w
+
+ 1
+
+n ∥Xtw − yt∥2
+
++ ∥w − bw(GR)  
+
+> t−1
+
+∥2
+
+> Ht
+
+ (3) The choice of {Ht}Tt=1 determines how we navigate the balance between forward and backward knowledge transfer. With different choices of {Ht}Tt=1 , the GR algorithm en-compasses several commonly studied algorithms as special cases. For example, when Ht = λtIp for some λt > 0,GR becomes the conventional continual ridge regression algorithm (Li et al., 2023). In the overparameterized sce-nario where p > n t, if Ht → 0, then GR is equivalent to the minimum norm estimator (Evron et al., 2022; Lin et al., 2023). In the rest of this section, we give an in-depth discussion of these two algorithms. 
+
+3.1. Minimum Norm Estimator 
+
+Let γ(t) 
+
+> j
+
+be the jth eigenvalue of Σt. If |{ j : γ(t) 
+
+> j
+
+> 0}| =
+
+nt < p , then there always exists some w that interpolates the training data of task t, i.e., Xtw = yt. In this overpa-rameterized regime, some recent works (Evron et al., 2022; 3A Statistical Theory of Regularization-Based Continual Learning 
+
+Lin et al., 2023) studied the the minimum norm estimator (MN), which is defined in Algorithm 2. 
+
+Algorithm 2 Minimum norm estimator 
+
+Initialization: bw(MN) 0 = 0 
+
+Iterative update for each task t ∈ [T ]:
+
+bw(MN)  
+
+> t
+
+= arg min 
+
+> w
+
+
+
+∥w − bw(MN)  
+
+> t−1
+
+∥2
+
+s.t. Xtw = yt,
+
+
+
+Compared to ℓ2-regularization methods, MN can be re-garded as the limit of the ℓ2-regularized estimator when the penalty strength tends to 0. From this perspective, it might overly prioritize the data from the new task and un-derestimate the knowledge embedded in old tasks. Given that yt = Xtw∗ + εt̸ = Xtw∗, imposing the condition 
+
+Xtw = yt on the estimators inevitably introduces the noise term, which in reality dominates the information when 
+
+p > n .Specifically, the following theorem provides a lower bound showing that the estimation error of the MN estimator can-not converge to 0.
+
+Theorem 3.1 (Lower bound for the minimum norm estima-tor) . Suppose that Σt satisfies |{ j : γ(t) 
+
+> j
+
+> 0}| = nt < p .Then we have 
+
+L( bw(MN)  
+
+> t
+
+) ≥ σ2
+
+max j∈[p] γ(t)
+
+> j
+
+.
+
+From Theorem 3.1 we see that the estimation error of the minimum norm estimator is lower bounded by a term inde-pendent of the old tasks. Consequently, even if the old tasks provide sufficient sam-ples for an accurate estimate of w∗ or the number of tasks increases infinitely, the estimation error of the MN estimator is always lower bounded by a constant that is not approach-ing 0. Indeed, irrespective of the accuracy of bwt−1, even if it precisely matches w∗, the MN estimator cannot leverage it to obtain a better estimate. This is because the estimator attempts to interpolate the newly encountered deficient data and hence does not balance the trade-off between old and new tasks, which we refer to as the forward–backward trade-off . As a result, the MN estimator is highly susceptible to catastrophic forgetting. 
+
+3.2. Continual Ridge Regression 
+
+Continual ridge regression (CRR) (Li et al., 2023) uses ridge regularization to constrain the parameter’s change when fitting new tasks. Specifically, it updates the estimate using the iterations defined in Algorithm 3. 
+
+Algorithm 3 Continual ridge regression 
+
+Initialization: bw(CRR)  
+
+> 0
+
+= 0 
+
+Iterative update for each task t ∈ [T ]:
+
+bw(CRR)  
+
+> t
+
+= arg min 
+
+> w
+
+ 1
+
+n ∥Xtw − yt∥2
+
++ λt∥w − bwt−1∥2
+
+
+
+Clearly, CRR is a special case of our generalized ℓ2-regularized estimator, which uses the conventional ridge penalty by setting λ(1)  
+
+> t
+
+= · · · = λ(p) 
+
+> t
+
+= λt. CRR treats each coordinate of w∗ equally, i.e., it potentially assumes that 
+
+|( bw(CRR)  
+
+> t
+
+)j − (w∗)j |2 are the same for different j.However, such homogeneity does not always exist in con-tinual learning setting since the information introduced by different tasks can vary across various directions of 
+
+w∗, especially in the scenario where the data distributions differ across tasks. For example, there may exist some 
+
+i̸ = j such that |( bw(CRR)  
+
+> t
+
+)j − (w∗)j |2 = o(1) while 
+
+|( bw(CRR)  
+
+> t
+
+)i − (w∗)i|2 = O(1) if previous tasks contain very little information about (w∗)i. In this case, the suitable values for λi and λj might differ. Consequently, the CRR estimator, which cannot address such information hetero-geneity , may be suboptimal. More specifically, we have the following lower bound for the CRR estimator, which shows that its worst-case perfor-mance is much worse than that of GR. 
+
+Theorem 3.2 (Lower bound for continual ridge regression) .
+
+Consider a two-task and two-dimensional continual learn-ing problem with covariance matrices Σ1 = diag(1 , ϵ ) and 
+
+Σ2 = diag( ϵ, 1) and sample sizes n1 and n2. Then we have 
+
+sup 
+
+> n1,n 2,ϵ
+
+inf 
+
+> λ
+
+L
+
+bw(CRR) 2
+
+
+
+L
+
+bw(GR) 2
+
+ = + ∞,
+
+where λ is the regularization hyperparameter of CRR. 
+
+## 4. Generalized ℓ2-Regularization Attains Oracle Rate 
+
+In this section, we provide a theoretical analysis of the generalized ℓ2-regularized estimator (GR) defined in (3). Our theory shows that, through the proper selection of the regularization weight matrix Ht, it is possible to avoid catastrophic forgetting, and the resulting estimation error can even be comparable with that of the oracle estimator. 4A Statistical Theory of Regularization-Based Continual Learning 
+
+Before establishing our main results, we first present some assumptions for our analysis. 
+
+4.1. Assumptions Assumption 4.1 (Fixed design) . The features {Xt}Tt=1 are fixed while the noises εt are random with mean 0 and vari-ance σ2 > 0.
+
+Assumption 4.2 (Commutable covariance matrices) . The set of covariance matrices {Σt}Tt=1 are commutable. 
+
+These two assumptions ensure that the GR estimator have explicit solutions, which helps to deliver our messages con-cisely. Similar assumptions are commonly made in related literature (Lei et al., 2021; Wu et al., 2022; Li et al., 2023). In Section 6, we will show that without these assumptions, similar results still hold. By simple linear algebra, Assumption 4.2 is equivalent to the fact that {Σt}Tt=1 are simultaneously diagonalizable. There-fore, there exists a single orthogonal matrix U ∈ Rp×p
+
+such that Σt = U ΓtU ⊤, where Γt = diag {γ(t)1 , . . . , γ (t) 
+
+> p
+
+}
+
+denotes the diagonal matrix consisting of the eigenvalues of 
+
+Σt. In this case, the heterogeneity among different tasks is solely encoded by the different eigenvalues in Γt.
+
+Assumption 4.3 (Sufficient sample size) . For each j ∈ [p],
+
+PTt=1 γ(t) 
+
+> j
+
+> 0.
+
+This assumption is imposed to simplify the analysis of 
+
+bw(ORA) . Under this assumption, when the data of all T
+
+tasks are pooled together, there is no overparameterization, i.e., PTt=1 Σt has full rank. Therefore, the oracle estima-tor bw(ORA) defined by (2) has a unique solution, whose estimation error can be calculated directly. Indeed, the following lemma gives an explicit expression for the estimation error of the oracle estimator. 
+
+Lemma 4.1 (Estimation error of the oracle estimator) . Sup-pose that Assumptions 4.1–4.3 hold. Then the estimator error of the oracle estimator is 
+
+L( bw(ORA)  
+
+> T
+
+) = 
+
+> p
+
+X
+
+> j=1
+
+σ2
+
+γ(1)  
+
+> j
+
+n1 + · · · + γ(t) 
+
+> j
+
+nT
+
+.
+
+As the task number T increases, the estimation error of ORA is monotonically decreasing. Therefore, it does not suffer from the issue of catastrophic forgetting. We remark that Assumption 4.3 still allows a single task to be overparameterized. 
+
+4.2. Main Results 
+
+In this section, we consider a set of specific choices of 
+
+Ht = U ΛtU ⊤, where Λt = diag {λ(t)1 , . . . , λ (t) 
+
+> p
+
+} is some diagonal matrix. We show that if Λt is selected properly, the estimation error of GR is compatible with that of the oracle estimator; as a result, catastrophic forgetting is avoided. We first decompose the estimation error into components along different directions. Let uj ∈ Rp be the jth column of 
+
+U . Define e(t) 
+
+> j
+
+:= ( u⊤ 
+
+> j
+
+( bw(GR)  
+
+> t
+
+− w∗)) 2 to be the projected estimation error of bw(GR)  
+
+> t
+
+onto uj for j ≥ 1 and e(0)  
+
+> j
+
+:= 
+
+ u⊤ 
+
+> j
+
+w∗
+
+2. Since U is orthogonal, we have L( bw(GR)  
+
+> t
+
+) = 
+
+Ppj=1 e(t) 
+
+> j
+
+.We are ready to present our main result regarding the esti-mation error of the GR estimator. 
+
+Theorem 4.2. Suppose that Assumptions 4.1–4.3 hold. Con-sider Ht = U ΛtU ⊤, where Λt = diag {λ(t)1 , . . . , λ (t) 
+
+> p
+
+} is some diagonal matrix. Then the projected estimation error satisfies 
+
+E
+
+h
+
+e(t)
+
+> j
+
+i
+
+= E
+
+h
+
+e(t−1) 
+
+> j
+
+i
+
+− 2
+
+γ(t) 
+
+> j
+
+E
+
+h
+
+e(t−1) 
+
+> j
+
+i
+
+λ(t) 
+
+> j
+
++ γ(t)
+
+> j
+
++(γ(t) 
+
+> j
+
+)2E
+
+h
+
+e(t−1) 
+
+> j
+
+i
+
++ γ(t) 
+
+> j
+
+σ2/n 
+
+(λ(t) 
+
+> j
+
++ γ(t) 
+
+> j
+
+)2 .
+
+(4) 
+
+If we set Λt by 
+
+λ(t) 
+
+> j
+
+= σ2/e (0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t−1)  
+
+> j
+
+nt−1
+
+nt
+
+(5) 
+
+for each j ∈ [p] and t ∈ [T ], then (4) is minimized and we have 
+
+E
+
+h
+
+e(t)
+
+> j
+
+i
+
+= σ2
+
+σ2/e (0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t) 
+
+> j
+
+nt
+
+,
+
+which further implies 
+
+L( bw(GR)  
+
+> t
+
+) = 
+
+> p
+
+X
+
+> j=1
+
+σ2
+
+σ2/e (0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t) 
+
+> j
+
+nt
+
+. (6) Under the choices of regularization weight matrices given in Theorem 4.2, we see that the estimation error of the GR estimator is monotonically nonincreasing with task index t.Indeed, as long as the covariance matrices Σt are positive definite, the estimation error is strictly decreasing. There-fore, the forgetting error Ft ≤ 0 for every t ∈ [T ] and hence catastrophic forgetting is eliminated, even though we allow a single task to be overparameterized and the covariance matrices to be different across tasks. Compared with Lemma 4.1, the estimation errors of the GR and oracle estimators are asymptotically equivalent as 
+
+T increases, even though the latter can only be calculated 5A Statistical Theory of Regularization-Based Continual Learning 
+
+when pooling data of all tasks together. Indeed, the only difference between them is the additional term σ2/e (0)  
+
+> j
+
+in the denominator of the estimation error of GR. Therefore, the estimation error of GR is even slightly smaller than that of the oracle estimator. This is because GR has an extra ridge term when learning the first task, whereas the oracle estimator has no regularization term. We also remark that given a fixed set of tasks, the final estimation error 
+
+L( bw(GR)  
+
+> T
+
+) is independent of the task ordering, although the choice of Ht is dependent on it. The key to achieving these desirable properties lies in the specific form of {Ht}Tt=1 . From the proof of Theorem 4.2, we identify two crucial considerations in choosing 
+
+{Ht}Tt=1 .(1) The first consideration concerns balancing the trade-off between the information carried in bwt−1 and that in Dt,i.e., the forward–backward trade-off. For example, if the estimation error of bwt−1 is relatively small (larger 
+
+nτ for τ ≤ t − 1) compared with the error of the new task, σ2/n t, we should increase the regularization strength λ(t) 
+
+> j
+
+.(2) The second one involves addressing the information heterogeneity among different tasks. As the covariance matrices vary, the amount of information pertaining to different directions of w∗ within different tasks may differ. Therefore, Λt should adapt to this information heterogeneity, allowing λ(t) 
+
+> i
+
+and λ(t) 
+
+> j
+
+to be different for 
+
+i̸ = j.The choice of hyperparameters specified in Theorem 4.2 effectively addresses the forward–backward trade-off and information heterogeneity, thereby avoiding catastrophic forgetting and achieving an estimation error comparable with that of the oracle estimator. We remark that Theorem 4.2 does not necessitate p < n t; it allows any individual task to be overparameterized. As long as aggregating all the data leads to an underparameterized linear regression problem, we can progressively improve the estimation of w∗ as new tasks are continuously introduced using generalized ℓ2-regularization. Ultimately, we achieve the error rate of the oracle estimator after completing the final task. 
+
+4.3. A Practical Algorithm 
+
+Now we take a closer look at the optimal choice of {Ht}Tt=1 
+
+developed in Theorem 4.2. Substituting (5) into the defini-tion of Ht gives 
+
+Ht = 1
+
+nt
+
+(n1Σ1 + · · · + nt−1Σt−1 + σ2U E 0U ⊤),
+
+which is the summation of the covariance matrices of old tasks weighted by sample sizes plus an additional error term. Tasks with larger sample size will be allocated with larger weights in the optimal regularization matrix, which is reasonable since they contain more information about w∗.If nt is sufficiently large, the term σ2U E 0U ⊤/n t in Ht is negligible and we can approximate Ht by 
+
+˜Ht := 1
+
+nt
+
+(n1Σ1 + · · · + nt−1Σt−1) ≈ Ht, (7) which can be easily computed in practice. This approxi-mation makes the generalized ℓ2-regularized estimator a practical algorithm, which can be implemented without any underlying knowledge about the true parameter. 
+
+Connection with other regularization methods. Note that in linear regression, the covariance matrix is just the Hessian matrix (or Fisher information matrix) of the loss function. This links our GR estimator to some other pop-ular regularization-based algorithms such as EWC and its variants (Kirkpatrick et al., 2017; Husz ´ar, 2018; Schwarz et al., 2018). Specifically, if all tasks have the same sam-ple size, our method recovers the online EWC proposed by Schwarz et al. (2018) with the hyperparameter γ = 1 . Our theory gives a precise characterization of how to combine the Fisher information of old tasks properly in continual linear regression. 
+
+Approximate weight matrices. We now present a result demonstrating that using the approximate optimal weight matrices has minimal impact on the estimation error when certain conditions are met. To this end, we define ρ(t) 
+
+> j
+
+:= 
+
+γ(t) 
+
+> j
+
+/(e(j)0 +γ(1)  
+
+> j
+
+n1 +. . . γ (t−1)  
+
+> j
+
+nt−1), which can be viewed as the information ratio between the new task t and the old tasks. A larger ρ indicates that the new task contains more information. 
+
+Theorem 4.3. Suppose that Assumptions 4.1–4.3 hold. As-sume that we use ˜Ht := U ˜ΛtU ⊤ instead of Ht defined in Theorem 4.2 as the regularization weight matrices. Let 
+
+∆(t) 
+
+> j
+
+= 1 /(eλj +γj )−1/(λj +γj ). Suppose that there exists some constant C > 0 such that 
+
+(γ(t) 
+
+> j
+
+∆(t) 
+
+> j
+
+)2 ≤ C(C − 1)( ρ(t) 
+
+> j
+
+)2
+
+(1 + ρ(t) 
+
+> j
+
+)(1 + Cρ (t) 
+
+> j
+
+)2 (8) 
+
+for each t. Then for every t ∈ [T ], we have 
+
+L( bw(GR)  
+
+> t
+
+) ≤ Ce(0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t) 
+
+> j
+
+nt
+
+.
+
+Since ρ(t) 
+
+> j
+
+is of order o(1) , the right-hand side of (8) is roughly O(( ρ(t) 
+
+> j
+
+)2). Therefore, as ρ(t) 
+
+> j
+
+becomes larger, 6A Statistical Theory of Regularization-Based Continual Learning 
+
+which means that there is relatively more information of 
+
+u⊤ 
+
+> j
+
+w∗ contained in the new task t, the requirement on the approximation accuracy of eλ(t) 
+
+> j
+
+becomes looser. In this case, we can still attain the oracle rate without calculating the optimal regularization matrix very accurately. In Section 7, we will conduct experiments to illustrate the performance of the generalized ℓ2-regularized estimator using ˜Ht defined in (7) instead of Ht.
+
+## 5. Connection Between Early Stopping and 
+
+## ℓ2-Regularization 
+
+Besides adding a penalty term to the loss function, another commonly used regularization method is early stopping. When training a single task, several works (Raskutti et al., 2014; Ali et al., 2019) have shown that applying gradient descent with early stopping is equivalent to ridge regression, in both classification and regression tasks. However, in continual learning where there is a sequence of tasks to be learned, similar results are still limited. In this section, we show that such equivalence also exists in continual linear regression. Specifically, we formulate the early stopping estimator (ES) for continual linear regression in the following algorithm. Specifically, let bw(ES) 0 = 0 be the initial value. At each task t, we set bw(ES)  
+
+> t−1
+
+as the initial point and apply mt-step gradient descent to the loss function of this new task, where 
+
+At is a positive definite matrix used to control the learning rate and mt is the number of gradient descent iterations. 
+
+Algorithm 4 Early stopping estimator 
+
+Initialization: bw(ES) 0 = 0 
+
+for each task t = 1 to T do 
+
+w(0)  
+
+> t
+
+= bw(ES)  
+
+> t−1
+
+;
+
+for τ = 1 to mt do 
+
+w(τ ) 
+
+> t
+
+= w(τ −1)  
+
+> t
+
+− (At/n )X⊤ 
+
+> t
+
+(Xtw(τ −1)  
+
+> t
+
+− yt); 
+
+end for 
+
+bw(ES)  
+
+> t
+
+= w(mt) 
+
+> t
+
+;
+
+end for 
+
+Note that in ordinary gradient descent, At is simply stIp
+
+for some st > 0, which we refer to as vanilla early stop-ping (vanilla ES). In contrast, here we take a more general form of the learning rate matrix in order to capture the information heterogeneity and align with the generalized 
+
+ℓ2-regularization studied above. The following theorem establishes the equivalence between the ES and GR estimators. 
+
+Theorem 5.1. Assume that Σt = UtΓtU ⊤ 
+
+> t
+
+, At =
+
+UtStU ⊤ 
+
+> t
+
+, and Ht = UtΛtU ⊤ 
+
+> t
+
+for some positive defi-nite diagonal matrices Γt = diag {γ(t)1 , . . . , γ (t) 
+
+> p
+
+}, St =diag {s(t)1 , . . . , s (t) 
+
+> p
+
+} and Λt = diag {λ(t)1 , . . . , λ (t) 
+
+> p
+
+} satisfy-ing 
+
+λ(t) 
+
+> j
+
+= γ(t) 
+
+> j
+
+(1 − s(t) 
+
+> j
+
+γ(t) 
+
+> j
+
+)mt
+
+1 − (1 − s(t) 
+
+> j
+
+γ(t) 
+
+> j
+
+)mt
+
+(9) 
+
+for each j ∈ [p] and t ∈ [T ]. Then for each t ∈ [T ], we have 
+
+bw(ES)  
+
+> t
+
+= bw(GR)  
+
+> t
+
+,
+
+where bw(ES)  
+
+> t
+
+is the ES estimator using the learning rate matrix At, and bw(GR)  
+
+> t
+
+is the GR estimator using the regu-larization weight matrix Ht.
+
+Note that this result does not require commutable covaraince matrices in Assumption 4.2. From Theorem 5.1 we conclude that with some proper choices of the learning rate matrix 
+
+At and regularization weight matrix Ht, the ES estimator 
+
+bw(ES)  
+
+> t
+
+and the GR estimator bw(GR)  
+
+> t
+
+output exactly the same estimates for each t. Indeed, the errors bwt − w∗ of these two estimators are both the weighted average of the error of the (t − 1) th task bwt−1 − w∗ and the variance term for the new task, X⊤ 
+
+> t
+
+εt/n , where the weights are determined by the learning rate matrix At, iteration number mt, and regularization weight matrix Ht.We remark that (9) is required to hold for each j ∈ [p].Therefore, vanilla ES with At = stIp and vanilla ℓ2-regularization with Ht = λtIp may not be equivalent since 
+
+γ(t) 
+
+> j
+
+could be different for different j and a single λt and 
+
+st could not make (9) hold for every j ∈ [p]. It could happen that vanilla ES is equivalent to some generalized 
+
+ℓ2-regularized estimator or vice verse. Similar to ℓ2-regularization, early stopping with proper learning rate matrix At can also avoid catastrophic forget-ting and attain the oracle rate. 
+
+Corollary 5.2. Suppose that Assumption 4.1–4.3 hold. Assume that At = U S tU ⊤ for some diagonal matrix 
+
+St = diag {s(t)1 , . . . , s (t) 
+
+> p
+
+} satisfying 
+
+
+
+1 − s(t) 
+
+> j
+
+γ(t)
+
+> j
+
+mt
+
+= 1 − γ(t) 
+
+> j
+
+nt
+
+σ2/e (0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t) 
+
+> j
+
+nt
+
+(10) 
+
+for each j ∈ [p]. Then the estimation error of bw(ES)  
+
+> t
+
+is 
+
+L( bw(ES)  
+
+> t
+
+) = 
+
+> p
+
+X
+
+> j=1
+
+σ2
+
+σ2/e (0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t) 
+
+> j
+
+nt
+
+.
+
+If the new task t has a larger sample size nt, the term 
+
+(1 − sj γj )mt should decrease by (10), implying that both the learning rate s(t) 
+
+> j
+
+and the iteration number mt should be increased. This means that when task t provides more information, we should traverse a more extensive path in the gradient descent process, allowing for a deeper utilization of the new data. 7A Statistical Theory of Regularization-Based Continual Learning 
+
+## 6. Extensions 
+
+In this section, we discuss some possible extensions to relax our model assumptions. 
+
+Commutable covariance matrices. The main purpose of Assumption 4.2 is to obtain explicit forms for some crucial quantities of ℓ2-regularized estimators, such as the optimal regularization matrix Ht and the corresponding optimal estimation error. Without this assumption, even though the optimal estimation error does not have an explicit form, we can still show that there exist some regularization weight matrices such that the estimation error is monotonically nonincreasing with t.Therefore, catastrophic forgetting can still be avoided. Specifically, we have the following result without Assump-tion 4.2. 
+
+Theorem 6.1. There exist {λ(t) 
+
+> j
+
+, j = 1, . . . , p, t =1 . . . , T } such that for each t ∈ [T ],
+
+L( bw(GR)  
+
+> t
+
+) ≤ L ( bw(GR)  
+
+> t−1
+
+),
+
+where the strict inequality holds for t satisfying 
+
+Ppj=1 γ(t) 
+
+> j
+
+> 0.
+
+Intuitively, the condition Ppj=1 γ(t) 
+
+> j
+
+means that task t has nonzero information about the true parameter w∗. There-fore, there always exists some choice of the regularization weight matrix under which we can leverage the new infor-mation and improve on the existing estimator. Moreover, in Section 7 we will empirically show that violat-ing this assumption will not cause a significant performance degradation for our method. 
+
+Other loss functions. Our theory can be extended to gen-eral convex loss functions. In this scenario, the Hessian matrix of the loss function at the true parameter plays the role of the data covariance matrix in linear regression. The heterogeneity among different tasks is encoded by the dif-ferences in the Hessian matrices. Our analysis can then proceed with some modifications. 
+
+Common true parameters. Our model (1) assumes that all tasks share the same true parameter w∗. In real-world continual learning, new challenges may arise when the true parameters are different across tasks. Analyzing the setting with distinct true parameters may need to introduce more trade-offs and insights. For example, if the parameters are not too far apart, our results may still hold with an additional error term. On the other hand, if the parameters differ significantly, negative transfer may dominate and continual learning might not work at all. We leave a comprehensive analysis of this problem to future work. 
+
+## 7. Experiments 
+
+We conduct simulation experiments to illustrate the perfor-mance of continual ridge regression (CRR), the minimum norm estimator (MN), and the generalized ℓ2-regularized estimator (GR). 
+
+Data generation. We consider two data generating set-tings, namely with and without covariate shift. The differ-ence between them is whether the covariance matrices are the same for different tasks. (1) Without covariate shift. The true parameter w∗ is sampled from N (0 , Ip) and is fixed for each task. The features x(t) 
+
+> i
+
+are independently sampled from 
+
+N (0 , Ip) and the noises ε(t) 
+
+> i
+
+are independently sam-pled from N (0 , σ 2). Then the labels are generated by 
+
+y(t) 
+
+> i
+
+= w⊤∗ x(t) 
+
+> i
+
++ ε(t) 
+
+> i
+
+.(2) With covariate shift. The true parameter w∗ is sam-pled from N (0 , Ip) and is fixed for each task. The covariance matrices of the features are generated as follows. We first randomly sample the eigenvalues 
+
+γ(j) 
+
+> t
+
+by P (γ(j) 
+
+> t
+
+= 1) = 0 .99 and P (γ(j) 
+
+> t
+
+= 100) = 0.01 . Then the covariance matrices are set by Σt := diag {γ(1)  
+
+> t
+
+, . . . , γ (p) 
+
+> t
+
+}. After the covariance matrices are generated, the features x(t) 
+
+> i
+
+are independently sam-pled from N (0 , Σt) and the noises ε(t) 
+
+> i
+
+are indepen-dently sampled from N (0 , σ 2). Finally, the labels are generated by y(t) 
+
+> i
+
+= w⊤∗ x(t) 
+
+> i
+
++ ε(t) 
+
+> i
+
+.
+
+Experimental configuration. We compare the perfor-mance of the CRR, MN, and GR algorithms with that of the oracle estimator. The regularization weight matrices of GR are set to ˜Ht as discussed in Section 4.3. We set the task number T = 20 and sample size n1 = · · · =
+
+nt = 150 . The parameter dimension p = 200 , and hence each single task is overparameterized. We consider two noise levels: σ2 = 1 or 5. We repeated our experiments 100 
+
+times and present the average results. 
+
+Simulation results. The simulation results for different noise levels are depicted in Figure 1. We observe that the es-timation error of the MN estimator remains nearly constant as the task number t increases. Furthermore, a higher noise level makes the MN estimator perform worse than the other methods. This highlights the sensitivity of MN to noise. The simulation results with and without covariate shift are contrasted in Figure 2, from which we find that covariate shift makes the CRR estimator worse. In the absence of covariate shift, CRR exhibits a decreasing loss, even though it is inferior to the GR estimator. In the presence of covariate 8A Statistical Theory of Regularization-Based Continual Learning 4          
+
+>   
+>   
+>  
+>  
+> 4   
+>   
+>   
+>  
+>  
+> 
+> 
+> 
+> 
+
+Figure 1. Simulation results for different noise levels: T = 20 ,
+
+nt = 150 , p = 200 , σ2 = 1 or 5, and no covariate shift. 4            
+
+>   
+>   
+>  
+> ! 
+> 4    
+>   
+>   
+>   
+>  
+> ! 
+> 
+> 
+> 
+> 
+
+Figure 2. Simulation results with and without covariate shift: T =20 , nt = 150 , p = 200 , and σ2 = 1 .
+
+shift, the performance of CRR deteriorates significantly, and its estimation error remains approximately constant. In each case, the GR estimator consistently demonstrates a decreasing estimation error, which eventually converges to the oracle estimator. It is noteworthy that, due to the random generating process for sampling the features, Assumption 4.2 does not hold for the empirical covariance matrices. Nevertheless, this departure does not adversely impact the performance of our method. 
+
+## 8. Conclusion 
+
+Our analysis focuses on regularization-based continual learning across a series of linear regression tasks. We estab-lish the estimation error of the oracle estimator with access to all data concurrently. We then explore a set of generalized 
+
+ℓ2-regularization algorithms characterized by matrix-valued hyperparameters. We develop an iterative formula to update the estimation error for these generalized ℓ2-regularized es-timators when new tasks are introduced. This allows us to identify the hyperparameters that optimize the performance of the algorithm. Remarkably, selecting the optimal hyper-parameters achieves a balanced trade-off between forward and backward knowledge transfer and accommodates the variability in data distribution. Furthermore, we explicitly derive the estimation error of the optimal algorithm, which is found to match the order for the oracle estimator. Finally, we show that early stopping and generalized ℓ2-regularization, rather than the conventional ridge regression, are equivalent in the context of continual learning, thereby addressing a question raised by Evron et al. (2023) on the connection be-tween early stopping and explicit regularization in continual learning. 
+
+## Acknowledgments 
+
+Xuyang Zhao and Wei Lin are supported by National Natural Science Foundation of China grants 12171012, 12292980, and 12292981. Weiran Huang is supported by 2023 CCF-Baidu Open Fund and Microsoft Research Asia. We thank three reviewers for valuable comments that have helped improve the paper. 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none of which we feel must be specifically highlighted here. 
+
+## References 
+
+Ali, A., Kolter, J. Z., and Tibshirani, R. J. A continuous-time view of early stopping for least squares regression. In International Conference on Artificial Intelligence and Statistics , pp. 1370–1378, 2019. Aljundi, R., Babiloni, F., Elhoseiny, M., Rohrbach, M., and Tuytelaars, T. Memory aware synapses: Learning what (not) to forget. In European Conference on Computer Vision , pp. 139–154, 2018. Andle, J. and Yasaei Sekeh, S. Theoretical understanding of the information flow on continual learning performance. In European Conference on Computer Vision , pp. 86–101, 2022. Asanuma, H., Takagi, S., Nagano, Y., Yoshida, Y., Igarashi, Y., and Okada, M. Statistical mechanical analysis of catastrophic forgetting in continual learning with teacher and student networks. Journal of the Physical Society of Japan , 90(10):104001, 2021. Bennani, M. A., Doan, T., and Sugiyama, M. Generali-sation guarantees for continual learning with orthogonal gradient descent. arXiv preprint arXiv:2006.11942 , 2020. Cao, X., Liu, W., and Vempala, S. Provable lifelong learning of representations. In International Conference on Artifi-cial Intelligence and Statistics , pp. 6334–6356, 2022. 9A Statistical Theory of Regularization-Based Continual Learning 
+
+Chaudhry, A., Ranzato, M., Rohrbach, M., and Elhoseiny, M. Efficient lifelong learning with A-GEM. In Interna-tional Conference on Learning Representations , 2019. Chen, X., Papadimitriou, C., and Peng, B. Memory bounds for continual learning. In IEEE Symposium on Founda-tions of Computer Science , pp. 519–530, 2022. Denevi, G., Ciliberto, C., Grazzi, R., and Pontil, M. Learning-to-learn stochastic gradient descent with biased regularization. In International Conference on Machine Learning , pp. 1566–1575, 2019. Doan, T., Bennani, M. A., Mazoure, B., Rabusseau, G., and Alquier, P. A theoretical analysis of catastrophic forget-ting through the NTK overlap matrix. In International Conference on Artificial Intelligence and Statistics , pp. 1072–1080, 2021. Evron, I., Moroshko, E., Ward, R., Srebro, N., and Soudry, D. How catastrophic can catastrophic forgetting be in linear regression? In Conference on Learning Theory , pp. 4028–4079, 2022. Evron, I., Moroshko, E., Buzaglo, G., Khriesh, M., Marjieh, B., Srebro, N., and Soudry, D. Continual learning in linear classification on separable data. In International Conference on Machine Learning , pp. 9440–9484, 2023. Farajtabar, M., Azizan, N., Mott, A., and Li, A. Orthogonal gradient descent for continual learning. In International Conference on Artificial Intelligence and Statistics , pp. 3762–3773, 2020. Goodfellow, I. J., Mirza, M., Xiao, D., Courville, A., and Bengio, Y. An empirical investigation of catastrophic forgetting in gradient-based neural networks. In Interna-tional Conference on Learning Representations , 2014. Husz ´ar, F. Note on the quadratic penalties in elastic weight consolidation. Proceedings of the National Academy of Sciences , 115(11):E2496–E2497, 2018. Jin, X., Sadhu, A., Du, J., and Ren, X. Gradient-based edit-ing of memory examples for online task-free continual learning. Advances in Neural Information Processing Systems , 34:29193–29205, 2021. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Des-jardins, G., Rusu, A. A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the Na-tional Academy of Sciences , 114(13):3521–3526, 2017. Lee, S., Goldt, S., and Saxe, A. Continual learning in the teacher-student setup: Impact of task similarity. In 
+
+International Conference on Machine Learning , pp. 6109– 6119, 2021. Lei, Q., Hu, W., and Lee, J. Near-optimal linear regression under distribution shift. In International Conference on Machine Learning , pp. 6164–6174, 2021. Li, H., Wu, J., and Braverman, V. Fixed design analysis of regularization-based continual learning. In Conference on Lifelong Learning Agents , 2023. Li, Y., Li, M., Asif, M. S., and Oymak, S. Provable and efficient continual representation learning. arXiv preprint arXiv:2203.02026 , 2022. Lin, S., Yang, L., Fan, D., and Zhang, J. Trgp: Trust region gradient projection for continual learning. In Interna-tional Conference on Learning Representations , 2022. Lin, S., Ju, P., Liang, Y., and Shroff, N. Theory on forget-ting and generalization of continual learning. In Inter-national Conference on Machine Learning , pp. 21078– 21100, 2023. Liu, H. and Liu, H. Continual learning with recursive gradi-ent optimization. In International Conference on Learn-ing Representations , 2022. McCloskey, M. and Cohen, N. J. Catastrophic interfer-ence in connectionist networks: The sequential learning problem. In Psychology of Learning and Motivation ,volume 24, pp. 109–165. Elsevier, 1989. Parisi, G. I., Kemker, R., Part, J. L., Kanan, C., and Wermter, S. Continual lifelong learning with neural networks: A review. Neural Networks , 113:54–71, 2019. Raskutti, G., Wainwright, M. J., and Yu, B. Early stop-ping and non-parametric regression: An optimal data-dependent stopping rule. Journal of Machine Learning Research , 15(11):335–366, 2014. Riemer, M., Cases, I., Ajemian, R., Liu, M., Rish, I., Tu, Y., and Tesauro, G. Learning to learn without forgetting by maximizing transfer and minimizing interference. In 
+
+International Conference on Learning Representations ,2019. Saha, G., Garg, I., and Roy, K. Gradient projection memory for continual learning. In International Conference on Learning Representations , 2021. Schwarz, J., Czarnecki, W., Luketina, J., Grabska-Barwinska, A., Teh, Y. W., Pascanu, R., and Hadsell, R. Progress & compress: A scalable framework for con-tinual learning. In International Conference on Machine Learning , pp. 4528–4537, 2018. Serra, J., Suris, D., Miron, M., and Karatzoglou, A. Over-coming catastrophic forgetting with hard attention to the task. In International Conference on Machine Learning ,pp. 4548–4557, 2018. 10 A Statistical Theory of Regularization-Based Continual Learning 
+
+Wang, L., Zhang, X., Su, H., and Zhu, J. A comprehen-sive survey of continual learning: Theory, method and application. IEEE Transactions on Pattern Analysis and Machine Intelligence , 2024. Wen, Y. W., Tan, Z., Zheng, K., Xie, C., and Huang, W. Provable contrastive continual learning. In International Conference on Machine Learning , 2024. Wu, J., Zou, D., Braverman, V., Gu, Q., and Kakade, S. The power and limitation of pretraining-finetuning for linear regression under covariate shift. Advances in Neural Information Processing Systems , 35:33041–33053, 2022. Yang, C., Tiomoko, M., and Wang, Z. Optimizing spca-based continual learning: A theoretical approach. In 
+
+International Conference on Learning Representations ,2022. Yang, L., Lin, S., Zhang, J., and Fan, D. Grown: Grow only when necessary for continual learning. arXiv preprint arXiv:2110.00908 , 2021. Yin, D., Farajtabar, M., Li, A., Levine, N., and Mott, A. Op-timization and generalization of regularization-based con-tinual learning: A loss approximation viewpoint. arXiv preprint arXiv:2006.10974 , 2020. Yoon, J., Kim, S., Yang, E., and Hwang, S. J. Scalable and order-robust continual learning with additive parameter decomposition. In International Conference on Learning Representations , 2020. 11 A Statistical Theory of Regularization-Based Continual Learning 
+
+# Appendix 
+
+## A. Proofs for Section 3 
+
+Proof of Theorem 3.1. By the definition of minimum norm estimator, we have 
+
+Xt bw(MN)  
+
+> t
+
+= yt
+
+for each t ∈ [T ]. Therefore, 
+
+Xt( bwMN  
+
+> t
+
+− w∗) = yt − Xtw∗ = εt,
+
+which implies 
+
+( bw(MN)  
+
+> t
+
+− w∗)⊤Σt( bwMN  
+
+> t
+
+− w∗) = 1
+
+nt
+
+∥Xt( bwt − w∗)∥2 = 1
+
+nt
+
+∥εt∥2.
+
+Taking expectation with respect to εt on both sides gives 
+
+E( bw(MN)  
+
+> t
+
+− w∗)⊤Σt( bw(MN)  
+
+> t
+
+− w∗) = σ2.
+
+By the property of eigenvalues, we have 
+
+E( bw(MN)  
+
+> t
+
+− w∗)⊤Σt( bw(MN)  
+
+> t
+
+− w∗) ≤ max  
+
+> j∈[p]
+
+γ(t) 
+
+> j
+
+E∥ bwt − w∗∥2.
+
+Therefore, we finally conclude that 
+
+E∥ bwt − w∗∥2 ≥ σ2
+
+max j∈[p] γ(t)
+
+> j
+
+.
+
+Proof of Theorem 3.2. Without loss of generality, we assume w2 
+
+> ∗,1
+
+= w2 
+
+> ∗,1
+
+= 1 . In this two-task problem, the definition of CRR estimator is 
+
+bw1 = arg min 
+
+> w
+
+ 1
+
+n1
+
+∥X1w − y1∥2 + λ1∥w∥2
+
+
+
+,
+
+bw2 = arg min 
+
+> w
+
+ 1
+
+n2
+
+∥X2w − y2∥2 + λ2∥w − bw1∥2
+
+
+
+,
+
+where λ1 and λ2 are the hyperparameters. 
+
+Task 1 By taking derivatives, we can explicitly obtain the solution of bw1:
+
+bw1 = ( Σ1 + λ1I2)−1(X1y1/n 1).
+
+By the definition of Σ1, we further have 
+
+bw1,1 = 11 + λ1
+
+X⊤
+
+> 1,1
+
+y1
+
+n1
+
+and 
+
+bw1,2 = 1
+
+ϵ + λ1
+
+X⊤
+
+> 1,2
+
+y1
+
+n1
+
+,
+
+where bw1,j is the jth coordinate of bw and X1,j is the jth column of X. Therefore, using the definition of Σ1 again we obtain 
+
+E ( bw1,1 − w∗,1)2 = E 11 + λ1
+
+X⊤
+
+> 1,1
+
+(X1w∗ + ε1)
+
+n1
+
+− w∗,1
+
+!2
+
+= E w∗,1
+
+1 + λ1
+
+− w∗,1 + 11 + λ1
+
+X⊤
+
+> 1,1
+
+ε1
+
+n1
+
+!2
+
+=
+
+ λ1
+
+1 + λ1
+
+2
+
++
+
+ 11 + λ1
+
+2 σ2
+
+n1
+
+≥ σ2
+
+n1 + σ2 ,
+
+12 A Statistical Theory of Regularization-Based Continual Learning 
+
+where the last equation holds if and only if λ1 = σ2/n 1. Similarly, for bw1,2 we have 
+
+E ( bw1,2 − w∗,2)2 = E 1
+
+ϵ + λ1
+
+X⊤
+
+> 1,2
+
+(X1w∗ + ε1)
+
+n1
+
+− w∗,2
+
+!2
+
+= E ϵϵ + λ1
+
+w∗,2 − w∗,2 + 1
+
+ϵ + λ1
+
+X⊤
+
+> 1,2
+
+ε1
+
+n1
+
+!2
+
+=
+
+ λ1
+
+ϵ + λ1
+
+2
+
++ ϵ
+
+(ϵ + λ1)2
+
+σ2
+
+n1
+
+≥ σ2
+
+ϵn 1 + σ2 ,
+
+where the last equation holds if and only if λ1 = σ2/ϵn 1.
+
+Task 2 Through almost the same analysis, for bw2 we have 
+
+E ( bw2,1 − w∗,1)2| bw1
+
+ = E
+
+"
+
+1
+
+ϵ + λ2
+
+X⊤
+
+> 2,1
+
+(X2w∗ + ε2)
+
+n2
+
++ λ2 bw1,1
+
+!
+
+− w∗,1
+
+#2
+
+=
+
+ λ2
+
+ϵ + λ2
+
+2
+
+( bw1,1 − w∗,1)2 + ϵ
+
+(ϵ + λ2)2
+
+σ2
+
+n2
+
+and 
+
+E ( bw2,2 − w∗,2)2| bw1
+
+ = E
+
+"
+
+11 + λ2
+
+X⊤
+
+> 2,2
+
+(X2w∗ + ε2)
+
+n2
+
++ λ2 bw1,2
+
+!
+
+− w∗,2
+
+#2
+
+=
+
+ λ2
+
+1 + λ2
+
+2
+
+( bw1,2 − w∗,2)2 + 1(1 + λ2)2
+
+σ2
+
+n2
+
+.
+
+From Theorem 4.2, we know that 
+
+E( bw(GR)  
+
+> 2,1
+
+− w∗,1)2 = O
+
+ σ2
+
+n1 + ϵn 2
+
+
+
+and 
+
+E( bw(GR)  
+
+> 2,2
+
+− w∗,2)2 = O
+
+ σ2
+
+ϵn 1 + n2
+
+
+
+.
+
+By some calculations, if 
+
+E( bw(CRR)  
+
+> 2,1
+
+− w∗,1)2
+
+E( bw(GR)  
+
+> 2,1
+
+− w∗,1)2 < ∞
+
+when n1, n 2 → ∞ and ϵ → 0, we need 
+
+ϵ
+
+1 −
+
+q ϵn 2
+
+> n1+ϵn 2
+
+q ϵn 2
+
+> n1+ϵn 2
+
+≲ λ2 ≲ ϵ
+
+q n1
+
+> n1+ϵn 2
+
+1 −
+
+q n1
+
+> n1+ϵn 2
+
+.
+
+If 
+
+E( bw(CRR)  
+
+> 2,2
+
+− w∗,2)2
+
+E( bw(GR)  
+
+> 2,2
+
+− w∗,2)2 < ∞
+
+when n1, n 2 → ∞ and ϵ → 0, we need 
+
+r ϵn 1 + n2
+
+n2
+
+− 1 ≲ λ2 ≲
+
+q 1
+
+> ϵn 1+n2
+
+1 −
+
+q 1
+
+> ϵn 1+n2
+
+.
+
+13 A Statistical Theory of Regularization-Based Continual Learning 
+
+We consider a special case, where ϵn 2/n 1 → ∞ . Then the above requirements become 
+
+ϵ n1
+
+n1 + ϵn 2
+
+≲ λ2 ≲ ϵ
+
+r n1
+
+n1 + ϵn 2
+
+and 
+
+ϵn 1
+
+n2
+
+≲ λ2 ≲
+
+r 1
+
+ϵn 1 + n2
+
+.
+
+However, if n1 = O(n2), n2 = O(n3) and ϵ = O(n−0.5) for some n → ∞ , the lower bound of the first inequality if greater than the upper bound of the second inequality: 
+
+ϵ n1
+
+n1 + ϵn 2
+
+= O(n−1)
+
+while r 1
+
+ϵn 1 + n2
+
+= O(n−1.5).
+
+Therefore, by contradiction we have 
+
+sup 
+
+> n1,n 2,ϵ
+
+inf 
+
+> λ2
+
+L( bw(CRR )2 )
+
+L( bw(GR )2 ) = ∞.
+
+## B. Proofs for Section 4 
+
+Proof of Lemma 4.1. The oracle estimator bw(ORA)  
+
+> T
+
+satisfies 
+
+> T
+
+X
+
+> t=1
+
+X⊤ 
+
+> t
+
+(Xt bw(ORA)  
+
+> T
+
+− yt) = 0 ,
+
+which implies TX
+
+> t=1
+
+X⊤ 
+
+> t
+
+Xt
+
+!bw(ORA)  
+
+> T
+
+=
+
+> T
+
+X
+
+> t=1
+
+X⊤ 
+
+> t
+
+yt.
+
+By Assumption 4.2 and 4.3, we have that PTt=1 X⊤ 
+
+> t
+
+Xt is invertible. Therefore, the ORA has the following explicit form solution 
+
+bw(ORA)  
+
+> T
+
+=
+
+> T
+
+X
+
+> t=1
+
+X⊤ 
+
+> t
+
+Xt
+
+!−1 TX
+
+> t=1
+
+X⊤ 
+
+> t
+
+yt
+
+!
+
+=
+
+> T
+
+X
+
+> t=1
+
+X⊤ 
+
+> t
+
+Xt
+
+!−1 TX
+
+> t=1
+
+X⊤ 
+
+> t
+
+(Xtw∗ + εt)
+
+!
+
+= w∗ +
+
+> T
+
+X
+
+> t=1
+
+X⊤ 
+
+> t
+
+Xt
+
+!−1 TX
+
+> t=1
+
+X⊤ 
+
+> t
+
+εt
+
+!
+
+.
+
+Taking expectation with respect to {εt}Tt=1 , we obtain 
+
+E ∥ bw(ora)  
+
+> T
+
+− w∗∥2 = E
+
+> T
+
+X
+
+> t=1
+
+X⊤ 
+
+> t
+
+Xt
+
+!−1 TX
+
+> t=1
+
+X⊤ 
+
+> t
+
+εt
+
+! 2
+
+= tr 
+
+
+
+> T
+
+X
+
+> t=1
+
+X⊤ 
+
+> t
+
+Xt
+
+!−1 .
+
+14 A Statistical Theory of Regularization-Based Continual Learning 
+
+By Assumption 4.2, we can further have 
+
+tr 
+
+
+
+> T
+
+X
+
+> t=1
+
+X⊤ 
+
+> t
+
+Xt
+
+!−1 = tr 
+
+
+
+> T
+
+X
+
+> t=1
+
+ntΓt
+
+!−1
+
+=
+
+> p
+
+X
+
+> j=1
+
+1
+
+n1γ(1)  
+
+> j
+
++ . . . n T γ(T )
+
+> j
+
+,
+
+which completes the proof. 
+
+Proof of Theorem 4.2. For each t = 1 , . . . , T , the solution of GR estimator bw(GR)  
+
+> t
+
+satisfies 
+
+1
+
+nt
+
+X⊤ 
+
+> t
+
+(Xt bw(GR)  
+
+> t
+
+− yt) + Ht( bw(GR)  
+
+> t
+
+− bw(GR)  
+
+> t−1
+
+) = 0 
+
+Since yt = Xtw∗ + εt, it can be written explicitly as 
+
+bw(GR)  
+
+> t
+
+= w∗ + ( X⊤ 
+
+> t
+
+Xt + nHt)−1X⊤ 
+
+> t
+
+εt + ( X⊤ 
+
+> t
+
+Xt + ntHt)−1ntHt( bw(GR)  
+
+> t−1
+
+− w∗).
+
+Therefore, for each j = 1 , . . . , p ,
+
+u⊤ 
+
+> j
+
+( bw(GR)  
+
+> t
+
+− w∗) = u⊤ 
+
+> j
+
+(ntΣt + ntHt)−1X⊤ 
+
+> t
+
+εt + ( ntΣt + ntHt)−1ntΛtU ⊤( bw(GR)  
+
+> t−1
+
+− w∗),
+
+which implies that 
+
+E
+
+h
+
+e(t)
+
+> j
+
+i
+
+= E
+
+
+
+u⊤ 
+
+> j
+
+( bw(GR)  
+
+> t
+
+− w∗) 2
+
+> (i)
+
+= E (u⊤ 
+
+> j
+
+(X⊤ 
+
+> t
+
+Xt + ntHt)−1Xtεt)2 + E (u⊤ 
+
+> j
+
+(X⊤ 
+
+> t
+
+Xt + ntHt)−1ntHt( bwt−1 − w∗)) 2
+
+> (ii)
+
+= E (u⊤ 
+
+> j
+
+U (ntΓt + ntΛt)−1U ⊤Xtεt)2 + n2 
+
+> t
+
+E (u⊤ 
+
+> j
+
+U (ntΓt + ntΛt)−1ΛU ⊤( bwt−1 − w∗)) 2
+
+> (iii)
+
+=
+
+γ(t) 
+
+> j
+
+σ2/n + ( λ(t) 
+
+> j
+
+)2E
+
+h
+
+e(t−1) 
+
+> j
+
+i
+
+(λ(t) 
+
+> j
+
++ γ(t) 
+
+> j
+
+)2
+
+=
+
+γ(t) 
+
+> j
+
+σ2/n + ( λ(t) 
+
+> j
+
++ γ(t) 
+
+> j
+
+− γ(t) 
+
+> j
+
+)2E
+
+h
+
+e(t−1) 
+
+> j
+
+i
+
+(λ(t) 
+
+> j
+
++ γ(t) 
+
+> j
+
+)2
+
+= E
+
+h
+
+e(t−1) 
+
+> j
+
+i
+
+− 2
+
+γ(t) 
+
+> j
+
+E
+
+h
+
+e(t−1) 
+
+> j
+
+i
+
+λ(t) 
+
+> j
+
++ γ(t)
+
+> j
+
++(γ(t) 
+
+> j
+
+)2E
+
+h
+
+e(t−1) 
+
+> j
+
+i
+
++ γ(t) 
+
+> j
+
+σ2/n 
+
+(λ(t) 
+
+> j
+
++ γ(t) 
+
+> j
+
+)2 ,
+
+(11) where (i) comes from the independence between εt and bw(GR)  
+
+> t−1
+
+, (ii) comes from Assumption 4.2 and (iii) is obtained by the property of eigenvalues and eigenvectors. To derive the optimal value of λ(t) 
+
+> j
+
+Now we consider two different cases: 1. Consider the case γj = 0 . Then as long as λj > 0, Σt + Ht is invertible and we have 
+
+E
+
+h
+
+e(t)
+
+> j
+
+i
+
+= E
+
+h
+
+e(t−1) 
+
+> j
+
+i
+
+.
+
+This means that data of task t do not bring new information about the direction j of w∗, which makes the jth projected error e(t) 
+
+> j
+
+unchanged. 15 A Statistical Theory of Regularization-Based Continual Learning 
+
+2. Consider the case γj > 0. In this case, the last formula of Equation 11 can be regarded as a quadratic function of 
+
+1/(λ(t) 
+
+> j
+
++ γ(t) 
+
+> j
+
+) as λ(t) 
+
+> j
+
+changes. Therefore, the optimal λj is obtained by 
+
+1
+
+λ(t) 
+
+> j
+
++ γ(t)
+
+> j
+
+=
+
+E
+
+h
+
+e(t−1) 
+
+> j
+
+i
+
+γ(t) 
+
+> j
+
+E
+
+h
+
+e(t−1) 
+
+> j
+
+i
+
++ σ2/n t
+
+,
+
+which is the minimum of the quadratic function. This further implies that λ(t) 
+
+> j
+
+= σ2/n t  
+
+> E(e(t−1)
+> j)2
+
+, where we have 
+
+E
+
+h
+
+e(t)
+
+> j
+
+i
+
+=
+
+
+
+E
+
+h
+
+e(t−1) 
+
+> j
+
+i 2
+
+γ2 
+
+> j
+
++ E
+
+h
+
+e(t−1) 
+
+> j
+
+i
+
+γj σ2/n t − γ2
+
+> j
+
+
+
+E
+
+h
+
+e(t−1) 
+
+> j
+
+i 2
+
+γ2
+
+> j
+
+
+
+E
+
+h
+
+e(t−1) 
+
+> j
+
+i 2
+
++ γj σ2/n t
+
+=
+
+E
+
+h
+
+e(t−1) 
+
+> j
+
+i
+
+· σ2/(γj nt)
+
+E
+
+h
+
+e(t−1) 
+
+> j
+
+i
+
++ σ2/(γj nt)= 1
+
+
+
+E
+
+h
+
+e(t−1) 
+
+> j
+
+i −1
+
++ ( σ2/(γj nt)) −1
+
+.
+
+(12) To prove the final results, we consider mathematical induction. By Assumption 4.3, for each j ∈ [p], there exists τj ∈ [T ]
+
+such that τj > 0. Therefore, by the above derivation, e(τj ) 
+
+> j
+
+satisfies 
+
+E
+
+h
+
+e(τj )
+
+> j
+
+i
+
+= 1(e(0)  
+
+> j
+
+)−1 + ( σ2/(γ(τj ) 
+
+> j
+
+nτj )) −1
+
+= σ2
+
+σ2/e (0)  
+
+> j
+
++ γ(τj ) 
+
+> j
+
+nτj
+
+= σ2
+
+σ2/e (0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(τj ) 
+
+> j
+
+nτj
+
+.
+
+For t < τ j , by Case (1) discussed above we have 
+
+E
+
+h
+
+e(t)
+
+> j
+
+i
+
+= σ2
+
+σ2/e (0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t−1)  
+
+> j
+
+nt
+
+since γ(t) 
+
+> j
+
+= 0 for every t < τ j .
+
+Now suppose 
+
+E etj
+
+ = σ2
+
+σ2/e (0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t) 
+
+> j
+
+nt
+
+holds for some t ≥ τj . If γ(t+1)  
+
+> j
+
+= 0 , by Case (1) we have 
+
+E
+
+h
+
+e(t+1) 
+
+> j
+
+i
+
+= Ee(t) 
+
+> j
+
+= σ2
+
+σ2/e (0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t+1)  
+
+> j
+
+nt+1 
+
+since γ(t+1)  
+
+> j
+
+= 0 . If γ(t+1)  
+
+> j
+
+> 0, by Case (2) we have 
+
+E
+
+h
+
+e(t+1) 
+
+> j
+
+i
+
+= 1
+
+
+
+Ee (t)
+
+> j
+
+−1
+
++
+
+
+
+σ2/γ (t+1)  
+
+> j
+
+nt+1 
+
+−1
+
+= σ2
+
+σ2/e (0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t+1)  
+
+> j
+
+nt+1 
+
+.
+
+16 A Statistical Theory of Regularization-Based Continual Learning 
+
+Therefore, we conclude that for each t ∈ [T ],
+
+E[e(t) 
+
+> j
+
+] = σ2
+
+σ2/e (0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t) 
+
+> j
+
+nt
+
+holds if Λt is chosen by 
+
+λ(t) 
+
+> j
+
+= σ2/n t
+
+Ee (t−1) 
+
+> j
+
+= σ2/e (0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t−1)  
+
+> j
+
+nt−1
+
+nt
+
+.
+
+Finally, since ∥ bwGR  
+
+> t
+
+) − w∗∥2 = Ppj=1 e(t) 
+
+> j
+
+, taking summation of all e(t) 
+
+> j
+
+gives 
+
+L( bw(GR)  
+
+> t
+
+) = 
+
+> p
+
+X
+
+> j=1
+
+σ2
+
+σ2/e (0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t) 
+
+> j
+
+nt
+
+.
+
+Proof of Theorem 4.3. Recall from the proof of Theorem 4.2 that 
+
+E
+
+h
+
+e(t)
+
+> j
+
+i
+
+= E(u⊤ 
+
+> j
+
+(X⊤ 
+
+> t
+
+Xt + nH t)−1Xtεt)2 + E(u⊤ 
+
+> j
+
+(X⊤ 
+
+> t
+
+Xt + nH t)−1nH t( bwt−1 − w∗)) 2
+
+= E(u⊤ 
+
+> j
+
+U (nΓt + nΛt)−1U ⊤Xtεt)2 + n2E(u⊤ 
+
+> j
+
+U (nΓt + nΛt)−1ΛU ⊤( bwt−1 − w∗)) 2
+
+= γj σ2/n + λ2 
+
+> j
+
+Ee(t−1) 
+
+> j
+
+(λj + γj )2
+
+= γj σ2/n + ( λj + γj − γj )2Ee(t−1) 
+
+> j
+
+(λj + γj )2
+
+= Ee(t−1)  
+
+> j
+
+− 2 γj Ee(t−1) 
+
+> j
+
+λj + γj
+
++ γ2 
+
+> j
+
+Ee(t−1)  
+
+> j
+
++ γj σ2/n 
+
+(λj + γj )2 .
+
+The optimal λj that minimize the above equation satisfies 
+
+1
+
+λj + γj
+
+= Ee(t−1) 
+
+> j
+
+γj Ee(t−1)  
+
+> j
+
++ σ2/n t
+
+,
+
+namely 
+
+λj = σ2/n t
+
+Ee(t−1) 
+
+> j
+
+.
+
+Now suppose we use its approximated version instead: 
+
+1
+
+eλj + γj
+
+= 1
+
+λj + γj
+
++ ∆ 
+
+for some eλj . Then we have 
+
+Ee(t) 
+
+> j
+
+≤ Ee(t−1)  
+
+> j
+
+· σ2/(γj nt)
+
+Ee(t−1)  
+
+> j
+
++ σ2/(γj nt) + ( γ2 
+
+> j
+
+Ee(t−1)  
+
+> j
+
++ γj σ2/n )∆ 2.
+
+Suppose that 
+
+Ee(t−1)  
+
+> j
+
+≤ Cσ 2
+
+e(0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + . . . γ (t−1)  
+
+> j
+
+nt−1
+
+.
+
+17 A Statistical Theory of Regularization-Based Continual Learning 
+
+If we want 
+
+Ee(t) 
+
+> j
+
+≤ Cσ 2
+
+e(0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + . . . γ (t) 
+
+> j
+
+nt
+
+,
+
+holds true, we only need to make sure 
+
+Eet−1 
+
+> j
+
+· σ2/(γj nt)
+
+Eet−1 
+
+> j
+
++ σ2/(γj nt) + ( γ2 
+
+> j
+
+Ee(t−1)  
+
+> j
+
++ γj σ2/n )∆ 2
+
+≤ Cσ 2
+
+e(0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t−1)  
+
+> j
+
+nt−1 + Cγ (t) 
+
+> j
+
+nt
+
++ γ2 
+
+> j
+
+∆2 Cσ 2
+
+e0 
+
+> j
+
++ γ1 
+
+> j
+
+n1 + . . . γ t−1 
+
+> j
+
+nt−1
+
++ σ2
+
+γtj nt
+
+!
+
+≤ Cσ 2
+
+e(0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t) 
+
+> j
+
+nt
+
+.
+
+Define 
+
+ρ(t) 
+
+> j
+
+:= γ(t) 
+
+> j
+
+nt
+
+e(0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t) 
+
+> j
+
+nt
+
+,
+
+then the above inequality becomes 
+
+C
+
+1 + Cρ (t)
+
+> j
+
++ ( γ(t) 
+
+> j
+
+)2∆2 C + 1
+
+ρ(t)
+
+> j
+
+!
+
+≤ C
+
+1 + ρ(t)
+
+> j
+
+,
+
+which is indeed 
+
+(γ(t) 
+
+> j
+
+)2∆2 ≤ C(C − 1)( ρ(t) 
+
+> j
+
+)2
+
+(1 + ρ(t) 
+
+> j
+
+)(1 + Cρ (t) 
+
+> j
+
+)2 .
+
+## C. Proofs for Section 5 
+
+Proof of Theorem 5.1. For each t ∈ [T ] and τ ∈ [mt], using the update iteration of MN estimator we have 
+
+w(τ ) 
+
+> t
+
+− w∗ = ( Ip − AtX⊤ 
+
+> t
+
+Xt/n t)w(τ −1)  
+
+> t
+
++ ( At/n t)X⊤ 
+
+> t
+
+(Xtw∗ + εt) − w∗
+
+= ( Ip − AtX⊤ 
+
+> t
+
+Xt/n t)( w(τ −1)  
+
+> t
+
+− w∗) + AtX⊤ 
+
+> t
+
+εt/n t
+
+= ( Ip − AtX⊤ 
+
+> t
+
+Xt/n t)τ (w(ES)  
+
+> t−1
+
+− w∗) + ( I − (I − AtX⊤ 
+
+> t
+
+Xt/n t)τ )( AtX⊤ 
+
+> t
+
+Xt/n t)−1 At
+
+nt
+
+X⊤ 
+
+> t
+
+εt
+
+= U (Ip − StΓt)τ U ⊤(w(ES)  
+
+> t−1
+
+− w∗) + U (Ip − (Ip − StΓt)τ )Γ−1 
+
+> t
+
+U ⊤ X⊤
+
+> t
+
+nt
+
+εt.
+
+Therefore, for each j = 1 , . . . , p , we have 
+
+u⊤ 
+
+> j
+
+(w(τ ) 
+
+> t
+
+− w∗) = (1 − sj γj )τ u⊤ 
+
+> j
+
+(w(ES)  
+
+> t−1
+
+− w∗) + (1 − (1 − sj γj )τ )u⊤
+
+> j
+
+X⊤
+
+> t
+
+γj n εj .
+
+Note that By the proof of Theorem 4.2, the solution of generalized ℓ2 regularization estimator satisfies 
+
+u⊤ 
+
+> j
+
+( bw(GR)  
+
+> t
+
+− w∗) = ( γj + λj )−1λj u⊤ 
+
+> j
+
+( bw(GR)  
+
+> t−1
+
+− w∗) + ( γj + λj )−1γj u⊤
+
+> j
+
+X⊤
+
+> t
+
+γj n εt.
+
+Therefore, if λj and sj satisfy 
+
+(1 − sj γj )mt = λj
+
+γj + λj
+
+,
+
+18 A Statistical Theory of Regularization-Based Continual Learning 
+
+namely 
+
+sj = 1 − (λj /(γj + λj )) 1/m t
+
+γj
+
+or 
+
+λj = γj (1 − sj γj )mt
+
+1 − (1 − sj γj )mt ,
+
+the early stopping and ℓ2 regularization output the same estimator, i.e., 
+
+w(ES)  
+
+> t
+
+= w(mt) 
+
+> t
+
+= bw(GR)  
+
+> t
+
+.
+
+Proof of Corollary 5.2. By Theorem 4.2 and Theorem 5.1, if s(t) 
+
+> j
+
+and mt satisfy 
+
+
+
+1 − s(t) 
+
+> j
+
+γj
+
+mt
+
+= σ2/(γj n)
+
+E
+
+h
+
+e(t−1) 
+
+> j
+
+i
+
++ σ2/(γj n)
+
+,
+
+the ES estimator bw(ES)  
+
+> t
+
+equals the optimal generalized ℓ2 regularization estimator defined in Theorem 4.2. In this case, its estimation error satisfies 
+
+L( bw(ES)  
+
+> t
+
+) = 
+
+> p
+
+X
+
+> j=1
+
+σ2
+
+σ2/e (0)  
+
+> j
+
++ γ(1)  
+
+> j
+
+n1 + · · · + γ(t) 
+
+> j
+
+nt
+
+.
+
+## D. Proof for Section 6 
+
+Proof of Theorem 6.1. For simplicity, we omit the superscript of the GR estimator in this proof. Let UtΓtU ⊤ 
+
+> t
+
+be the eigendecomposition of Σt and define e(t2) 
+
+> j,t 1
+
+:= (( u(t1) 
+
+> j
+
+)⊤( bwt2 − w∗)) 2 as the projected error of wt2 onto the jth eigenvector of wt1 . Note that if Assumption 4.2 holds, u(t1) 
+
+> j
+
+= u(t2) 
+
+> j
+
+for every t1, t 1 ∈ [T ] and e(t2) 
+
+> j,t 1
+
+equals to e(t2) 
+
+> j
+
+defined in Section 4 for each t1.By the same derivation of (12), we directly have 
+
+E
+
+h
+
+e(t)
+
+> j,t
+
+i
+
+= 1
+
+
+
+E
+
+h
+
+e(t−1) 
+
+> j,t
+
+i −1
+
++ ( σ2/(γj nt)) −1
+
+≤ E
+
+h
+
+e(t−1) 
+
+> j,t
+
+i
+
+.
+
+Therefore, summing them up with respect to j gives 
+
+L( bwt) ≤ L ( bwt−1).
+
+Obviously, the inequality holds strictly as long as Ppj=1 γ(t) 
+
+> j
+
+> 0, i.e., there exists one j such that γj > 0.We remark that if e(t−1)  
+
+> j,t
+
+= e(t−1)  
+
+> j,t −1
+
+for every t, we can use mathematical induction to derive the estimation error in Theorem 4.2. However, without Assumption 4.2, we cannot ensure this equation holds true. 19

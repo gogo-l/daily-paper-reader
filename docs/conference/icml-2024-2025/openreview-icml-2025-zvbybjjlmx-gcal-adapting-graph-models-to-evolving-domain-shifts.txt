@@ -1,0 +1,1144 @@
+Title: GCAL: Adapting Graph Models to Evolving Domain Shifts
+
+URL Source: https://openreview.net/pdf?id=zVBYbjjlMX
+
+Number of Pages: 17
+
+Markdown Content:
+# GCAL: Adapting Graph Models to Evolving Domain Shifts 
+
+Ziyue Qiao * 1 Qianyi Cai * 2 Hao Dong 3 Jiawei Gu 1 Pengyang Wang 4 Meng Xiao 3 Xiao Luo 5 Hui Xiong 2 6 
+
+## Abstract 
+
+This paper addresses the challenge of graph do-main adaptation on evolving, multiple out-of-distribution (OOD) graphs. Conventional graph domain adaptation methods are confined to single-step adaptation, making them ineffective in han-dling continuous domain shifts and prone to catas-trophic forgetting. This paper introduces the 
+
+Graph Continual Adaptive Learning ( GCAL )method, designed to enhance model sustainabil-ity and adaptability across various graph domains. GCAL employs a bilevel optimization strategy. The ”adapt” phase uses an information maximiza-tion approach to fine-tune the model with new graph domains while re-adapting past memories to mitigate forgetting. Concurrently, the ”gener-ate memory” phase, guided by a theoretical lower bound derived from information bottleneck theory, involves a variational memory graph generation module to condense original graphs into memo-ries. Extensive experimental evaluations demon-strate that GCAL substantially outperforms exist-ing methods in terms of adaptability and knowl-edge retention. The code of GCAL is available at 
+
+https://github.com/joe817/GCAL .
+
+## 1. Introduction 
+
+Graphs are ubiquitously present in the real world, serving as fundamental structures for representing complex systems in a multitude of domains. Graph models, leveraging these in-
+
+> *
+
+Equal contribution 1School of Computing and Information Technology, Great Bay University 2Thrust of Artificial Intel-ligence, The Hong Kong University of Science and Technol-ogy (Guangzhou) 3Computer Network Information Center, Uni-versity of the Chinese Academy of Sciences 4University of Macau 5Department of Computer Science, University of Cali-fornia, Los Angeles 6Department of Computer Science and En-gineering, The Hong Kong University of Science and Technol-ogy Hong Kong SAR, China. Correspondence to: Hui Xiong 
+
+<xionghui@ust.hk >, Xiao Luo <xiaoluo@cs.ucla.edu >, Meng Xiao <shaow@cnic.cn >.
+
+Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s). … … 
+
+> ……
+> …
+> …
+
+…    
+
+> Graph Model
+> Θ(,$
+> Evolving OOD graphs
+> .(,$.(
+> Continual
+> Adaptation
+> Prevent
+> Forgetting
+> Graph Model
+> Θ(
+> (a) (b)
+
+Figure 1. (a) The challenge of continual adaptation of graph mod-els on evolving OOD graph sequences. (b) Empirical evaluations of the SOTA graph adaptation method across four OOD graph datasets in a continual adaptation setting. 
+
+tricate connections, have been pivotal in advancing data min-ing and knowledge discovery. Classic graph models such as Graph Convolutional Networks (GCNs) (Kipf & Welling, 2016) and Graph Attention Networks (GATs) (Veli ˇckovi ´cet al., 2017) have been successfully applied in numerous applications ranging from social network analysis (Dong et al., 2023; Qiao et al., 2022; Sun et al., 2024) to bioinfor-matics (Huang et al., 2024; Wang et al., 2024c) and recom-mendation systems (He et al., 2020; Wu et al., 2024b). Despite the successes, the sustainability of graph models in handling ever-increasing volumes of graph data presents unique challenges, particularly in scenarios involving new, unseen graphs. Such OOD scenarios commonly arise when a model trained on one set of graph data is applied to a different and novel set. This discrepancy underscores a pivotal issue in graph machine learning: Domain Adaptation in Graph Models . The objective is to enhance the model’s inference ability to generalize across different but related graph distributions without substantial retraining. However, the current body of research often limits its focus to single-step adaptations employing techniques like Max-imum Mean Discrepancy (MMD) (Dziugaite et al., 2015) and adversarial learning (Dan et al., 2024; Qiao et al., 2023; Zhang et al., 2018). While useful, these techniques fall short when the model is subjected to continual domain shifts over time or domains: As graph datasets grow and evolve, models encounter new domains that necessitate ongoing adaptation but lose their ability to adapt to previous graphs, resulting 
+
+1GCAL: Adapting Graph Models to Evolving Domain Shifts 
+
+in catastrophic forgetting. The problem is illustrated in Fig-ure 1 (a), and as the empirical results depicted in Figure 1 (b), the state-of-the-art (SOTA) graph domain adaptation method EERM (Wu et al., 2022b) experiences a continuous and serious decline in performance across four evolving OOD graph datasets. Continual learning (Wang et al., 2024a; 2022; Zhang et al., 2022a;b; 2023b), or lifelong learning, offers a promising so-lution to mitigate catastrophic forgetting. A widely adopted strategy within this paradigm is the replay mechanisms, where the model periodically revisits selected or generated old data to reinforce past knowledge. This practice helps in maintaining a balance between training cost and knowledge retention. However, existing approaches typically rely on labeled data to select and replay memories, presenting a sub-stantial barrier in many applications where such labels are either unavailable or prohibitively expensive to obtain. This introduces a significant research gap: the development of continual adaptive methods for unsupervised memory gen-eration and replay in graph models . Such methods would need to autonomously identify critical features and struc-tural patterns within graphs that are essential for the model’s long-term adaptability and robustness. In this paper, we introduce a novel method named Graph Continual Adaptive Learning (GCAL), specifically designed to tackle the challenges of catastrophic forgetting in graph models’ continual adaptation. Our approach employs an ”adapt and generate memory” bilevel optimization strat-egy, activated each time new graph data is introduced. For ”adapt,” we utilize an information maximization approach to adapt the model to new domain graphs, simultaneously re-adapting the previous memory graphs to prevent forget-ting. For ”generate memory,” we theoretically derive a lower bound for preserving informative and generalized memory graphs from the current graph, leveraging the principles of the information bottleneck. The main contributions of this research are outlined as follows: • We introduce the GCAL framework to effectively man-age catastrophic forgetting and enhance the sustainable reuse of graph models during their continual adaptation across evolving OOD graph data. • We derive a theoretical lower bound that ensures the preservation of informative and generalized memory graphs. Based on this foundation, we design a memory graph generator equipped with three tailored losses to effectively guide the memory graph learning process. • We conduct extensive experiments on various graph datasets, demonstrating that GCAL significantly out-performs state-of-the-art across domain shifts. 
+
+## 2. Preliminary 
+
+We present the formulation for the continual adaptive learn-ing on graphs. Given a graph model f (Θ 0) : Gs → Y 
+
+pre-trained on one or multiple source graphs for a specific classification task, where Θ0 represents the pre-trained pa-rameters, Gs is the source graph and Y = {y1, y 2, ..., y C }
+
+is the set of C classes. The sequence of m target domain graphs is defined as {G1, G 2, ..., G m}, where each graph 
+
+Gt = {At, X t} belong to the t-th domain. At ∈ RNt×Nt
+
+is the adjacency matrix and Nt are the numbers of nodes. 
+
+Xt ∈ RNt×d is the attribute matrices and d are the dimen-sions of node attributes. In this scenario, the target graphs arrive one by one sequentially, and each target graph may exhibit a different distribution from previous ones due to changes in the underlying data over region and time, i.e., 
+
+p(Gi)̸ = p(Gj ), ∀i̸ = j, where p(·) is the data distribu-tion. We aim at sustainable reusing of the graph model for the continual adaptation and inference on multiple out-of-distribution target domains within the same task in an online fashion. As the target domain graph Gt arrives, we feed the model on Gt to adapt the parameters Θt−1 → Θt and make the prediction accordingly. There are two purposes in the process of test-time training: (1) Adapting : we aim to ensure that the model adapts effectively to new target do-main graphs as they arise; (2) Avoid Forgetting : we aim to retain the model’s performance on previously encountered target graphs after each adaptation, all without the need for complete retraining. 
+
+## 3. Methodology 
+
+As shown in Figure 2, our method first utilizes an infor-mation maximization approach to adapt the current model 
+
+Θt−1 to the newly arrived graph Gt while simultaneously conducting memory replay on the previous memory graphs to avoid forgetting, which will be introduced in Sec. 3.1. Then the updated model parameter Θt is used to learn the small memory graph bGt for Gt, which will be introduced in Sec. 3.2. To generate the memory graph, we develop a variational memory graph generation module comprising a variational GNN, a trainable selector, and a novel graph structure learning and reparameterization technique. To optimize the memory graph, we follow the lower bound to introduce three learning objectives. The memory graph learning loss uses a graph condensation technology to learn task-related memory graphs. The regularization losses are proposed to ensure the stability and informativeness of the memory graph. The generation loss enhances the relevance of the memory graph to the original graph. 
+
+3.1. Adaptation with Memory Replay 
+
+In the t-th adaptation step, the goal is to refine the current model f (Θ t−1) to make the prediction to enhance its pre-2GCAL: Adapting Graph Models to Evolving Domain Shifts … …      
+
+> …
+> GNN $,&
+> ……
+> …
+> TopKSelector
+> ((+.,/.4)
+> …
+> …
+> K
+> …
+> …
+> GNN Classifier
+> GNN Classifier
+> ……
+> …
+> …
+> …
+> Variational
+> Memory
+> Graph Generator
+
+%/7@ 
+
+%/7@ 
+
+%*?A 
+
+> …
+> …
+
+%?9B 
+
+> Φ
+> Variational Memory Graph Generator
+
+%;9C  
+
+> Memory Graph Learning
+> …
+> …
+> …
+> …Memory
+> Graph
+> Pool '
+
+%/*;  
+
+> GNN Classifier
+
+Θ$D2     
+
+> GNN Classifier
+> Step
+> t+1 Parameter sharing
+> Adaptation with Memory Replay
+> Forward Pass
+> Backpropagation
+> '(%
+> (%(&('
+> '(&'('
+
+Θ$D2
+
+Θ$
+
+Θ$
+
+> )(Θ()
+> ')(Θ()
+> -)
+> -*)
+> .(
+> .(
+> .(
+> /.(0+
+> log &-
+> /.(/1(
+> "#(
+
+Figure 2. The GCAL framework involves several steps: Starting with the graph model f (Θ t−1), the current graph Gt, and the accumulated memory graph pool G = { bGi}t−1 
+
+> i=1
+
+, GCAL first applies the Adaptation with Memory Replay method using loss LAM R for model adaptation. Next, a Variational Memory Generator creates a new memory graph bGt for Gt, which is refined using the memory graph learning loss 
+
+LM GL , the regularization losses LReg to ensure stability and informativeness, and the generation loss LGen to enhance the memory graph’s relevance to Gt. Finally, bGt is added to G for future adaptation. 
+
+dictive accuracy on target domain graphs. Since there is no label on the target graphs, the model adaptation is primar-ily conducted self-supervised. We adopt the Information Maximization (Liang et al., 2020) leveraged on the output probability of the model. This approach rests on the fun-damental premise: A model that effectively discriminates target data will exhibit high inferential confidence, char-acterized by output probabilities that closely resemble a one-hot vector . With the output probability pv of each node 
+
+v encoded from pre-trained model f (Θ t−1), the objective to minimize risk (see Eq. 1) on is as follows: 
+
+LAdp (G; Θ t−1) = −Ev∼V 
+
+hPCk=1 pv,k log( pv,k )
+
+i
+
++ PCk=1 bpk log bpk,
+
+(1) where pi,k denotes the k-th element of pi. The expected probability bpk is calculated as bpk = Ev∈V [pv,k ]. The sec-ond term introduces a diversity regularization designed to enhance the variety of output probabilities. This regulariza-tion helps prevent the issue where a few high integrity scores might dominate during training, potentially causing all un-labeled nodes to converge towards the same pseudo-label, resulting in overfitting. To prevent the model from forgetting previously learned graphs while adapting to new graphs, known as memory replay in continual learning, we apply the information max-imization loss not only to the new graph but also to all previous graphs. For efficient replay, we use a graph mem-ory pool, denoted as G = { bG1, bG2, . . . , bGt−1}. This pool contains a sequence of smaller synthetic graphs, each repre-senting a previously encountered graph. We then perform adaptation using memory replay, formulated as follows: 
+
+LAM R = LAdp (Gt; Θ t−1) + 
+
+> t−1
+
+X
+
+> i=1
+
+LAdp ( bGi; Θ t−1). (2) By combining the adaptation loss on the new graph Gt with the adaptation losses on the graphs in the memory pool G,the model f (Θ t−1) is continually refined to adapt to new graphs while reinforcing performance on historical graphs. 
+
+3.2. Variational Memory Graph Generation 
+
+In our model, meanwhile adapting to the new graph Gt with memory-aware replay, our goal is also to learn the memory 
+
+bGt corresponding to Gt, forming a series of memories Gt
+
+that can be replayed when the next adaptation task arrives to prevent forgetting. We consider three factors: (1) the mem-ory size should be significantly smaller than the original graph, (2) the memory should be informative, retaining as much important information from the source graph as possi-ble, and (3) the memory should be generalizable, capable of being stored across diverse graph distributions. 
+
+3.2.1. D ERIVING INFORMATION BOTTLENECK ON 
+
+MEMORY GRAPHS 
+
+To achieve the above motivations, we proposed a varia-tional information bottleneck based memory graph genera-tion method. Graph information bottleneck (Sun et al., 2022; Wu et al., 2020b) usually aims to maximize the below: 
+
+bGt = arg max 
+
+> bGt
+
+h
+
+I( bGt; bYt) − βI ( bGt; Gt)
+
+i
+
+, (3) where I(·; ·) denotes the mutual information and bYt repre-sents the training signals associated with nodes in bGt. The first term, I( bGt; bYt), aims to preserve task-related informa-tion within the memory, while the second term, I( bGt; Gt),focuses on compressing information from the original graph into the smaller memory graph, effectively filtering out irrel-3GCAL: Adapting Graph Models to Evolving Domain Shifts 
+
+evant information. β acts as a trade-off parameter, balancing the compression of input data with the preservation of task-relevant information. Despite the goal of bGt to preserve information from the graph, directly generating it from Gt is challenging. Instead, we generate bGt from the original graph through a varia-tional latent representation Zt, expressed as Pg ( bGt|Gt) = 
+
+Pg ( bGt|Zt, G t)Pg (Zt|Gt) where g(Φ) is the generator with parameter Φ. Utilizing this chain rule, we can reformulate the second term in Eq.3 as: I( bGt; Gt) = I( bGt; Gt, Z t) −
+
+I( bGt; Zt|Gt). Consequently, the optimization objective for generating bGt can be reformulated as follows: 
+
+L(Φ) = max 
+
+> Φ
+
+h
+
+I( bGt; bYt) − βI ( bGt; Gt, Z t) + βI ( bGt; Zt|Gt)
+
+i
+
+.
+
+(4) To optimize this objective in a parameterized manner, we derive a lower bound in the following Theorem: 
+
+Theorem 3.1. Let bGt be a generated graph conditioned on the latent representation Zt of the original graph Gt.Suppose Q( bGt) is a variational approximation of the true posterior P ( bGt), Then, the following lower bound on the optimization objective for Φ holds: 
+
+L(Φ) ≥E[log Pf ( bYt| bGt)] − βE[KL (Pg ( bGt|Gt, Z t) ∥ Q( bGt))] + βE[log( Pg ( bGt|Gt, Z t))] .
+
+(5) 
+
+Here, KL (· ∥ · ) indicates the Kullback-Leibler divergence. 
+
+Pf is considered as the classifier f (Θ t).
+
+The proof can be found in Appendix A. Thus, the mem-ory graph learning objective can be maximizing the above lower bound. In the following sections, we first introduce the variational memory generator. Then, we introduce the optimization objectives for each item in Equation 5 in detail. 3.2.2. V ARIATIONAL MEMORY GRAPH GENERATOR 
+
+In Theorem 3.1, we define the memory graph generator as 
+
+g(Φ) : P (Gt) → P ( bGt). We first employ a GNN archi-tecture to process the input graph Gt, transforming it into latent distributions: 
+
+[μ; log σ] = TopKSelector (GNN μ,σ (At, X t)) ,
+
+TopKSelector (X) = argsort 
+
+> X
+
+
+
+Sigmoid 
+
+ Xp
+
+∥p∥
+
+ 
+
+[: K],
+
+(6) where μ ∈ RK∗h and log σ ∈ RK∗h represent the mean and variance components for each node, respectively. K ≪
+
+Nt is the number of nodes in the generated graph, and h
+
+is the hidden dimension. GNN μ,σ (·) is parameterized to output a vector of dimensions 2 ∗ h, divided into mean and variance components. To manage graph dimensionality and emphasize significant distributions, a top-k selector layer TopKSelector (·) reduces the number of distributions, where p ∈ Rh is its trainable parameters. We compute the logarithm of the standard deviation (i.e., log σ) rather than directly calculating σ, which smoothly scales the deviation, enhancing numerical stability and interpretability. We first generate the latent variable of each node of the mem-ory graph from the distribution via the reparameterization trick: 
+
+bzi ∼ N  bzi|μi, σ 2
+
+> i
+
+ = μi + σ2 
+
+> i
+
+⊙ ε, (7) where i = 1 , ..., K and ε ∈ N (0 , I ) is a random variable drawn from a standard normal distribution. This reparam-eterization ensures that the sampling process remains dif-ferentiable, allowing the gradients to be backpropagated through the sampling step during training. Then, we assume bzi as the node features in the memory graph and obtain the feature matrix via bXt = id ([ bzi]Ki=1 )
+
+where id (·) is the identity function. We further generate the edges of the memory graph from bzi. We assume that each edge follows an independent Bernoulli distribution, with each edge characterized by a binary random variable ai,j ∼
+
+Bernoulli (wi,j ) for each edge. We use bzi to generate the learnable Bernoulli weights for each edge. Given that ai,j is non-differentiable to wi,j , we approximate it as a continuous variable within the interval [0,1]. To facilitate gradient-based optimization, the Gumbel-Max reparameterization trick, as detailed by (Maddison et al., 2017), is employed to update the edges as follows: 
+
+wi,j = (MLP ([ bzi; bzj ]) + MLP ([ bzj ; bzi])) 2 ,ai,j = Sigmoid 
+
+
+
+(wi,j + log δ
+
+1 − δ )/τ 
+
+
+
+,
+
+(8) where δ ∼ Uniform (0 , 1) and τ represents the temperature hyperparameter. As τ approaches 0, ai becomes increas-ingly binary. The reparameterization enables a well-defined gradient, ∂a i,j  
+
+> ∂w i,j
+
+, allowing for effective training of wi,j . Con-sequently, ai,j can be obtained through the training process and used as the edge weight in constructing the adjacency matrix bAt for the memory graph. In this way, by combining the above modules together, we obtain the variational memory graph generator g(Φ) and the memory graph is obtained by bGt = g(Gt, Φ) = { bAt, bXt}.Leveraging the variational approach not only aids in the gen-eration of nodes and edges but also helps in managing and optimizing the underlying distributions of these elements efficiently. 3.2.3. M EMORY GRAPH LEARNING VIA 
+
+CONDENSATION LOSS 
+
+The first term in Eq.5, E[log Pf ( bYt| bGt)] , involves maxi-mizing the expected log-likelihood of the predicted out-comes given the generated memory graphs bGt. This can 4GCAL: Adapting Graph Models to Evolving Domain Shifts 
+
+be reframed as minimizing the condensation loss (Jin et al., 2021), a novel objective that enhances the fidelity and rele-vance of the generated graphs to downstream tasks: 
+
+min  
+
+> Φ
+
+L(f ( bGt; Θ t), bYt), bGt ∈ Gt
+
+s.t. Θt = arg min  
+
+> Θ
+
+L(f (Gt; Θ t−1), Y t), (9) where L is the task-related loss on the graphs and corre-sponding training signals. As bYt and Yt are not directly observable, we instead use the adaptation loss in Eq.1 with the soft pseudo-labels as training signals. In previous ap-proaches, the gradient matching scheme was often employed to minimize this loss. This method aligns the gradients of the model trained on the generated memory graph bGt with the gradients from the true graph Gt with respect to the network parameters Θt. By doing so, it ensures that the model’s behavior on the generated data closely mirrors its behavior on actual data, facilitating better generalization: 
+
+LM GL = min  
+
+> Φ
+
+D
+
+ ∂LAdp ( bGt;f (Θ t))  
+
+> ∂Θt
+
+, ∂LAdp (Gt;f (Θ t)) 
+
+> ∂Θt
+
+
+
+,
+
+(10) where D(·, ·) is the sum of the distance between gradients at each layer. Given two gradients bg ∈ Rd1×d2 and g ∈
+
+Rd1×d2 at a specific layer, the distance between them is defined as: 
+
+D(bg, g) = 
+
+> d2
+
+X
+
+> i=1
+
+
+
+1 − bgi · gi
+
+∥bgi∥∥ gi∥
+
+
+
+, (11) where bgi, gi are the i-th column vectors of the gradient matrices. With this optimization, we are able to achieve task-related memory graph learning through the efficient gradient-matching strategy. 3.2.4. R EGULARIZATION LOSS 
+
+The second term in Eq.5, E[KL (Pg ( bGt|Gt, Z t) ∥ Q( bGt))] ,corresponds to the KL divergence measure the learned dis-tribution Pg of the predicted graph bGt, given the actual graph Gt and latent variables Zt, deviates from a simpler prior Q( bGt). We refine the prior distribution Q( bGt) by dis-tinguishing between the components of node features and edges, i.e., Q( bGt) = Q( bAt, bXt) = Q( bAt) · Q( bXt). Thus, the optimization objective of the term can be rewritten as minimizing the following: 
+
+min  
+
+> Φ
+
+E[KL (Pg ( bAt|Gt, Z t) ∥ Q( bAt))] + E[KL (Pg ( bXt|Gt, Z t) ∥ Q( bXt))] .
+
+(12) For the first term, as outlined in Section 3.2.2, we define the edges to follow an independent Bernoulli distribution. Accordingly, we specify Q( bAt) such that each edge ai,j ad-heres to a Bernoulli distribution Bernoulli (q), where q is the predefined probability parameter. Additionally, consis-tent with prevailing approaches in the literature, we define 
+
+Q( bXt) for node features as a Normal Gaussian distribution 
+
+N (0 , I ), where I represents the identity matrix in Rh×h.Then, the overall regularization loss can be defined as fol-lows: 
+
+LReg = min 
+
+> Φ
+
+12
+
+> K
+
+X
+
+> i=1
+> h
+
+X
+
+> j=1
+
+ μ2 
+
+> i,j
+
++ σ2 
+
+> i,j
+
+− log( σ2 
+
+> i,j
+
+) − 1 +
+
+> K
+
+X
+
+> i,j =1
+
+
+
+wi,j log wi,j 
+
+q + (1 − wi,j ) log 1 − wi,j 
+
+1 − q
+
+
+
+.
+
+(13) This approach acts as the regularization term that ensures that the variability introduced during the generation of new memory graphs is effectively controlled, leading to more stable adaptations over successive domains. 3.2.5. G ENERATION LOSS 
+
+For the last terms Eq.5, the objective becomes minimiz-ing −E[log( Pg ( bGt|Gt, Z t))] , the likelihood of generating the graph bGt. In conventional methods, the original graph usually serves as a reference for optimizing the generated graph, typically employing a reconstruction-based discrep-ancy loss to quantify the differences between the generated and the original graphs. However, our approach deviates from traditional methods due to the reduced size of the gen-erated graph, challenging direct structural and feature-based comparisons. To address this, we adopt a distribution-based discrepancy measure, specifically designed to assess differ-ences in the aggregate properties of the graphs: 
+
+LGen = min  
+
+> Φ
+
+Dis ( bGt, G t) = 
+
+> K
+
+X
+
+> i=1
+
+bui(Θ) −
+
+> Nt
+
+X
+
+> i=1
+
+ui(Θ) 2
+
+,
+
+(14) where Dis (·) means the discrepancy between the memory graph and the original graph, bui(Θ) , u i(Θ) ∈ Rh′
+
+are the hidden representations of nodes encoded from the model 
+
+f (Θ) before the final classification head. Note that the node representations are different from those in Eq.7, which are encoded by the variational generator. ∥ · ∥ 2 denotes the L2 normalization distance. We did not use MMD or adversarial alignment methods but a more concise measure to minimize the distribution discrepancy because the detailed distribution learning has already been effectively optimized in the former modules, and additionally, our method is more efficient and robust. 
+
+3.3. Optimization 
+
+Combining the loss of adaptation with memory replay and the three losses in memory generation, we can establish the overall learning objective as a bi-level optimization frame-5GCAL: Adapting Graph Models to Evolving Domain Shifts 
+
+work. When the t-th graph Gt arrives, the learning contains two stages, the inner loop aims to adapt the model f (Θ t−1)
+
+on Gt while the outer loop aims to learn a memory graph 
+
+bGt based on the adapted model f (Θ t):
+
+min 
+
+> bGt,Φ
+
+LM GL (Gt, Θt; Φ) + λ1LReg (Gt; Φ) + λ2LGen (Gt, Θt; Φ) ,
+
+s.t. Θt = arg min  
+
+> Θ
+
+LAM R (Gt, { bGi}t−1 
+
+> i=1
+
+; Θ t−1),
+
+(15) where λ1, λ 2 are the loss weights. For the generator, for each timestep, a new generator is utilized to create the memory graph, and only the memory graphs are preserved in the memory buffer. We also use an exponential moving average (EMA) strategy (Wang et al., 2022) to update the mode parameters to smooth the parameter updates. 
+
+## 4. Experiments 
+
+4.1. Experimental Setup Datasets Our paper involves two primary categories of graph datasets, differentiated by regional and temporal shifts. For regional shifts, Facebook-100(Traud et al., 2012) and Twitch-Explicit(Rozemberczki et al., 2021) datasets consist of multiple social networks from different regions. For tem-poral shifts, OGB-Arxiv(Hu et al., 2020) is a paper citation network dataset, and Elliptic(Pareja et al., 2020) is a Bitcoin transactions network dataset, both of which include graphs from different time steps. In these datasets, each graph is treated as a separate domain. We select certain domains to pre-train a graph model and then adapt it continuously using the remaining graphs. 
+
+Baselines . We evaluate the performance of our continual adaptive learning framework against a diverse set of base-line methods. Test employs a pretrained graph model to perform direct inference on the target dataset without any adaptation, serving as the lower bound. The category ”No Rehearsal Based Test-Time Adaptation” comprises one-step test-time adaptation methods, including DANN (Ganin et al., 2016), Tent (Wang et al., 2021), BN Stats Adapt (Li et al., 2016), EERM (Wu et al., 2022b), and GTRANS (Jin et al., 2022). The category ”Continual Test Time Adaptation” refers to continual test-time training methods, including CoTTA (Wang et al., 2022) and EATA (Niu et al., 2022). For baselines not originally designed for graphs, their archi-tectures have been adapted to GCNs to ensure consistency in evaluation. 
+
+Evaluation Metrics . We report the performance matrix 
+
+M result ∈ RT ×T , which is a lower triangular matrix where 
+
+M result  
+
+> i,j
+
+(for i ≥ j) represents the performance on the do-main j after training on the domain i. Specifically, similar to (Jin et al., 2022; Wu et al., 2022b), for the Twitch-Explicit and Facebook-100 datasets, the results are measured us-ing ROC-AUC and Accuracy, respectively. For the Ellip-
+
+Table 1. The statistics of datasets with distribution shifts, where # denotes ”the number of”.                 
+
+> Category Datasets #Nodes #Edges #Domains Regional Shifts Twitch-explicit 1,912 - 9,498 31,299 - 153,138 7Facebook-100 769 - 41,554 33,312 - 2,724,458 12 Temporal Shifts Elliptic 1,089 - 7,880 1,168 - 9,164 41 OGB-Arxiv 4,427 - 39,711 1,225 - 38,735 11
+
+tic dataset, the metric used is the F1 Score, while for the OGB-Arxiv dataset, Accuracy is used. To compute a single numeric value upon completing all domains, we calculate the Average Performance (AP) as 1
+
+> T
+
+PTi=1 M result  
+
+> T,i
+
+, primar-ily assessing adaptation ability, and the Average Forgetting (AF) as 1 
+
+> T−1
+
+PT −1 
+
+> i=1
+
+(M result  
+
+> T,i
+
+− M result  
+
+> i,i
+
+), primarily evaluating the ability to avoid forgetting. Each experiment is repeated five times, with results reported as the mean and standard deviation. Detailed introduction for datasets, baselines, and experimental settings is in Appendix B. 
+
+4.2. Experimental Results 
+
+4.2.1. O VERALL PERFORMANCE COMPARISON .(RQ1) This experiment aims to answer: How does GCAL perform in the unsupervised continual adaptation setting across evolving graph data? We compare GCAL with various baselines divided by different domain adaptation strategies and report the experimental results in Table 2. Note that Test does not involve modifying the model; EERM and GTrans train a new parameter at each graph, inapplicable to previous ones. Thus, their AF results are not applicable. Ob-viously, we observe that GCAL sets a new state-of-the-art, surpassing all baseline methods across all datasets. Specifically, certain baseline methods, especially traditional domain adaptation methods, demonstrate poor results. This can be attributed to the difficulty of the problem, which involves various timesteps of unsupervised continual adap-tation. This setting requires the model to dynamically adapt to new domains while concurrently retaining knowledge of previous ones. Specifically, when a model fails to preserve knowledge from the current domain, accumulating errors may disrupt performance in future domains and even cause the model to degrade over time. Our approach mitigates this challenge and collectively enhances the sustainable reuse of graph models and effectively alleviates catastrophic for-getting across evolving graph data via the Adaptation with Memory Replay framework. Among the advanced base-lines, the most comparable method to GCAL is CoTTA. Our method outperforms CoTTA primarily by integrating the variational memory graph generation module. Instead of solely using EMA for model updates, we employ the Varia-tional Memory Generator to generate previous graphs that enhance knowledge transfer. This strategy not only lever-6GCAL: Adapting Graph Models to Evolving Domain Shifts 
+
+Table 2. Data performance comparison across four datasets, evaluated against eight baseline methods and GCAL. Test represents the lower bound, while Full indicates the upper bound. N/A: Not Applicable. 
+
+Methods Twitch-explicit Facebook-100 Elliptic OGB-Arxiv AP-AUC/% ↑ AF/% ↑ AP-ACC/% ↑ AF/% ↑ AP-F1/% ↑ AF/% ↑ AP-ACC/% ↑ AF/% ↑
+
+Test 53.88 ±0.00 N/A 50.55 ±0.00 N/A 53.97 ±0.00 N/A 42.43 ±0.00 N/A DANN 51.50 ±0.39 0.19 ±0.55 50.63 ±0.64 0.38 ±1.13 53.84 ±0.56 -0.95 ±0.54 42.62 ±0.23 -1.28 ±0.16 Norm 52.65 ±0.00 -2.30 ±0.00 47.62 ±0.00 0.53 ±0.00 54.67 ±0.00 0.02 ±0.00 40.21 ±0.00 0.11 ±0.00 TENT 52.84 ±0.98 -1.83 ±1.05 46.63 ±0.00 0.61 ±0.00 46.54 ±0.00 0.55 ±0.00 36.72 ±0.37 -0.02 ±0.18 EERM 52.08 ±0.00 N/A 49.70 ±0.03 N/A 46.51 ±0.00 N/A 36.26 ±0.00 N/A GTrans 53.55 ±0.29 N/A OOM N/A 54.25 ±0.02 N/A 39.69 ±0.04 N/A CoTTA 53.94 ±0.36 0.34 ±0.41 50.12 ±0.16 0.59 ±0.12 54.08 ±0.05 -1.92 ±0.06 40.28 ±0.01 -1.96 ±0.01 EATA 53.56 ±0.10 -0.72 ±0.07 49.02 ±3.16 -0.57 ±0.03 50.48 ±0.07 -0.76 ±0.06 40.91 ±0.70 -1.35 ±0.59 GCAL 55.65 ±0.09 0.42 ±0.13 52.72 ±0.36 0.72 ±0.19 56.57 ±0.14 0.88 ±0.13 45.22 ±0.17 0.76 ±0.05 1 2 3 4 5 6 7
+
+> Domains
+> 50
+> 52
+> 54
+> 56
+> 58
+> 60
+> Average ROC-AUC
+> Test
+> DANN
+> Norm
+> TENT
+> EERM
+> GTrans
+> CoTTA
+> EATA
+> GCAL
+
+(a) Twitch-explicit 1 2 3 4 5 6 7 8 9 10 11 12  
+
+> Domains
+> 46
+> 48
+> 50
+> 52
+> 54
+> 56
+> 58
+> Average ACC/%
+> Test
+> DANN
+> Norm
+> TENT
+> EERM
+> CoTTA
+> EATA
+> GCAL
+
+(b) Facebook-100 1 10 20 30 40  
+
+> Domains
+> 45
+> 50
+> 55
+> 60
+> 65
+> 70
+> Average F1/%
+> Test
+> DANN
+> Norm
+> TENT
+> EERM
+> GTrans
+> CoTTA
+> EATA
+> GCAL
+
+(c) Elliptic 1 2 3 4 5 6 7 8 9 10 11  
+
+> Domains
+> 40
+> 45
+> 50
+> 55
+> 60
+> Average ACC/%
+> Test
+> DANN
+> Norm
+> TENT
+> EERM
+> GTrans
+> CoTTA
+> EATA
+> GCAL
+
+(d) OGB-Arxiv 
+
+Figure 3. Dynamics of the average performance during continual adaptation on evolving OOD graphs. 
+
+ages past insights for improved adaptation but also enriches the training process, boosting the model’s adaptability and robustness across evolving domains. DANN achieves rela-tively high performance among the baselines as it uses the source graph to guide the adaptation, while others only use the target graph data. Notably, our method surpasses DANN in four datasets, particularly in AP. This improvement is attributed to GCAL’s enhanced ability to adapt effectively to new target domains, leverage knowledge from past ex-periences for better adaptation, and maintain performance on previously encountered domains, all without the need for complete retraining. This novel approach significantly bolsters the model’s performance and adaptability. 4.2.2. I N-D EPTH ANALYSIS OF CONTINUOUS 
+
+PERFORMANCE .(RQ2) This experiment aims to answer: How does GCAL’s fine-grained performance evolve after continuously learning each domain? To present a more fine-grained demonstration of the model’s performance in continual adaptive learning on graphs, we analyzed the average performance across all previously encountered domains each time a new do-main was learned. The comparative results of Test, DANN, GCAL, and the top-performing baseline are depicted in Fig-ure 3. The curve represents the model’s performance after t
+
+in terms of AP on all previous t tasks. Also, we visualize the accuracy matrices of GCAL and CoTTA on the Twitch and Elliptic datasets. The results are presented in Figure 4. In these matrices, each row represents the performance across all domains upon learning a new one, while each column captures the evolving performance of a specific domain as all domains are learned sequentially. In the visual repre-sentation, darker shades signify better performance, while lighter hues indicate inferior outcomes. From the results, we observed that as the number of do-mains increases, the learning objectives grow increasingly complex, resulting in a reduction in performance across all examined methods. That is because as domains accumulate and the learning objectives become multifaceted, it becomes challenging for models to maintain optimal performance across all domains. Notably, most baselines experienced a substantial decline, with the model collapsing with the arrival of merely a few new domains, demonstrating that catastrophic forgetting occurs almost immediately when the model fails to access previous domain data. This rein-forces the need for effective continual learning techniques on the sequential graphs where new domains frequently emerge. While the performance drop was observed across all methods, GCAL demonstrated resilience and outper-formed the top-performing baseline CoTTA. Also, GCAL predominantly displays lighter shades across the majority of blocks compared to CoTTA in Figure 4. Moreover, its 7GCAL: Adapting Graph Models to Evolving Domain Shifts 1 2 3 4 5 6 7
+
+> Domains
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> Domains
+> 0.48
+> 0.50
+> 0.52
+> 0.54
+> 0.56
+> 0.58
+
+(a) Twitch-CoTTA 1 2 3 4 5 6 7 
+
+> Domains
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> Domains
+> 0.48
+> 0.50
+> 0.52
+> 0.54
+> 0.56
+> 0.58
+
+(b) Twitch-GCAL 10 20 30 40  
+
+> Domains
+> 10 20 30 40
+> Domains
+> 0.40
+> 0.45
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+
+(c) Elliptic-CoTTA 10 20 30 40  
+
+> Domains
+> 10 20 30 40
+> Domains
+> 0.40
+> 0.45
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+
+(d) Elliptic-GCAL 
+
+Figure 4. Performance matrices of GCAL and CoTTA in different datasets. 
+
+Table 3. The results of the ablation study. 
+
+Methods Twitch-explicit Facebook-100 Elliptic OGB-Arxiv w/o LReg & LGen 54.03 ±2.63 52.05 ±0.31 46.53 ±0.01 44.70 ±0.06 w/o LReg 55.34 ±0.41 52.37 ±0.56 55.23 ±0.32 44.76 ±0.48 w/o LGen 55.37 ±0.33 52.14 ±0.32 55.64 ±0.57 44.91 ±0.11 w/o EMA 54.79 ±0.04 47.66 ±0.06 53.83 ±0.20 43.19 ±0.08 GCAL 55.65 ±0.09 52.72 ±0.36 56.57 ±0.14 45.22 ±0.17 
+
+competitive performance in specific datasets signifies its robustness and capability. This could be attributed to the ”adapt and generate memory” framework, which not only re-tains critical knowledge from previous tasks but also adapts to new ones. 4.2.3. A BLATION STUDIES .(RQ3) This experiment aims to answer: Do all the proposed compo-nents of GCAL contribute effectively to continual adaptation on graphs? For that, we design four variant methods for GCAL to verify the EMA in the model parameter updat-ing module, regularization loss, and generation loss in the variational memory graph generation module: w/o LReg &
+
+LGen , w/o LReg , w/o LGen , and w/o EMA, where ”w/o” means ”without” the corresponding losses or components in model continual adapting. The results are presented in Table 3. Firstly, we can observe that when each of the losses or components is removed, the model’s performance de-creases across all datasets; while combining all modules, the method achieves the best results, providing straightforward evidence that all the proposed techniques contribute to our method. For w/o LGen the generation loss, the method still achieves remarkable results, primarily due to regularization loss and EMA updates. These components help optimize the latent space representation and ensure smooth model updates, thereby enhancing generalization across diverse data distributions. 4.2.4. H YPERPARAMETER EXPERIMENTS .(RQ4) This experiment aims to answer: How do synthetic ra-tio impact the performance of GCAL? With the Varia-tional Memory Generator, we generate synthesized graphs 0.09 0.10 0.11 0.12 0.13 
+
+> Prompt Ratio
+> 55.00
+> 55.20
+> 55.40
+> 55.60
+> 55.80
+> 56.00
+> Average AUC
+
+(a) Twitch-explicit 0.01 0.03 0.05 0.07 0.09  
+
+> Prompt Ratio
+> 50.00
+> 51.00
+> 52.00
+> 53.00
+> 54.00
+> Average ACC
+
+(b) Facebook-100 0.01 0.02 0.03 0.04 0.05 
+
+> Prompt Ratio
+> 54.00
+> 55.00
+> 56.00
+> 57.00
+> 58.00
+> Average F1
+
+(c) Elliptic 0.01 0.03 0.05 0.07 0.09  
+
+> Prompt Ratio
+> 44.00
+> 44.50
+> 45.00
+> 45.50
+> 46.00
+> Average ACC
+
+(d) OGB-Arxiv 
+
+Figure 5. The model performance with different synthetic ratios. 
+
+with K nodes for memory replay, where K is much less than the number of nodes in the initial graph. Thus, we set K as 0.01 , 0.03 , 0.05 , 0.07 , 0.09 of the num-ber of nodes for the datasets Facebook-100 and OGB-Arxiv , and as 0.01 , 0.02 , 0.03 , 0.04 , 0.05 for Elliptic, and 
+
+0.09 , 0.10 , 0.11 , 0.12 , 0.13 for Twitch, respectively. From the results in Figure 5, we observe that even with a low ratio of synthetic nodes, our model performs well across all datasets. In particular, for Facebook-100 and OGB-Arxiv, which have a larger number of nodes, the model continues to achieve promising results even at lower synthetic node ratios. This demonstrates that our method effectively preserves the information from previous source distributions, as captured by μ and σ, highlighting its efficiency and robustness. 
+
+## 5. Conclusion 
+
+In conclusion, GCAL addresses the critical challenge of un-supervised continual adaptation to out-of-distribution graph sequences. By employing a bilevel optimization strategy, GCAL effectively manages domain shifts and prevents catas-trophic forgetting. The method fine-tunes models on new 8GCAL: Adapting Graph Models to Evolving Domain Shifts 
+
+domain graphs while reinforcing past memories through the adaptation phase, and generates informative and relevant memory graphs guided by a theoretical framework rooted in information bottleneck theory. Experimental results indicate significant improvements over existing methods in terms of adaptability and knowledge retention, enhancing model sus-tainability and adaptability. A potential limitation of GCAL is its lack of improvement in the graph model architecture itself. This could potentially hinder performance when the base model itself is less capable or inadequate for complex graph data scenarios. 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning, with a particular focus on model trans-fer learning under continual distribution shifts in structured data. There are many potential societal consequences of our work, none of which we feel must be specifically highlighted here. This research has been conducted with a commitment to ethical standards and presents no ethical concerns. 
+
+## Acknowledgments 
+
+The work is partially supported by the National Natural Science Foundation of China (No. 62406056), the Guang-dong Basic and Applied Basic Research Foundation (No. 2024A1515140114, No. 2023B1515120057), the Beijing Natural Science Foundation (No. 4254089), the National Key R&D Program of China (No. 2023YFF0725001), the National Natural Science Foundation of China (No. 92370204), and Guangzhou-HKUST(GZ) Joint Funding Program (No. 2023A03J0008), Education Bureau of Guangzhou Municipality. The computational resources are supported by SongShan Lake HPC Center (SSL-HPC) in Great Bay University. 
+
+## References 
+
+Cai, J., Wang, X., Guan, C., Tang, Y., Xu, J., Zhong, B., and Zhu, W. Multimodal continual graph learning with neural architecture search. In Proceedings of the ACM Web Conference 2022 , pp. 1292–1300, 2022. Dai, Q., Wu, X.-M., Xiao, J., Shen, X., and Wang, D. Graph transfer learning via adversarial domain adaptation with graph convolution. IEEE Transactions on Knowledge and Data Engineering , 2022. Dan, J., Liu, W., Xie, C., Yu, H., Dong, S., and Tan, Y. Tfgda: Exploring topology and feature alignment in semi-supervised graph domain adaptation through robust clus-tering. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024. Ding, Z., Li, S., Shao, M., and Fu, Y. Graph adaptive knowledge transfer for unsupervised domain adaptation. In Proceedings of the European Conference on Computer Vision (ECCV) , pp. 37–52, 2018. D ¨obler, M., Marsden, R. A., and Yang, B. Robust mean teacher for continual and gradual test-time adaptation. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 7704–7714, 2023. Dong, H., Ning, Z., Wang, P., Qiao, Z., Wang, P., Zhou, Y., and Fu, Y. Adaptive path-memory network for tempo-ral knowledge graph reasoning. In Proceedings of the Thirty-Second International Joint Conference on Artifi-cial Intelligence , pp. 2086–2094, 2023. Dziugaite, G. K., Roy, D. M., and Ghahramani, Z. Training generative neural networks via maximum mean discrep-ancy optimization. arXiv preprint arXiv:1505.03906 ,2015. Gan, Y., Bai, Y., Lou, Y., Ma, X., Zhang, R., Shi, N., and Luo, L. Decorate the newcomers: Visual domain prompt for continual test time adaptation. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 37, pp. 7595–7603, 2023. Ganin, Y., Ustinova, E., Ajakan, H., Germain, P., Larochelle, H., Laviolette, F., March, M., and Lempitsky, V. Domain-adversarial training of neural networks. Journal of ma-chine learning research , 17(59):1–35, 2016. Gao, X., Chen, T., Zang, Y., Zhang, W., Nguyen, Q. V. H., Zheng, K., and Yin, H. Graph condensation for inductive node representation learning. In 2024 IEEE 40th Inter-national Conference on Data Engineering (ICDE) , pp. 3056–3069. IEEE, 2024. Hamilton, W., Ying, Z., and Leskovec, J. Inductive repre-sentation learning on large graphs. Advances in neural information processing systems , 30, 2017. Hashemi, M., Gong, S., Ni, J., Fan, W., Prakash, B. A., and Jin, W. A comprehensive survey on graph reduc-tion: Sparsification, coarsening, and condensation. arXiv preprint arXiv:2402.03358 , 2024. He, X., Deng, K., Wang, X., Li, Y., Zhang, Y., and Wang, M. Lightgcn: Simplifying and powering graph convolution network for recommendation. In Proceedings of the 43rd International ACM SIGIR conference on research and development in Information Retrieval , pp. 639–648, 2020. Hu, W., Fey, M., Zitnik, M., Dong, Y., Ren, H., Liu, B., Catasta, M., and Leskovec, J. Open graph benchmark: Datasets for machine learning on graphs. Advances in neural information processing systems , 33:22118–22133, 2020. 9GCAL: Adapting Graph Models to Evolving Domain Shifts 
+
+Huang, X., Ma, Z., Meng, D., Liu, Y., Ruan, S., Sun, Q., Zheng, X., and Qiao, Z. Praga: Prototype-aware graph adaptive aggregation for spatial multi-modal omics anal-ysis. In AAAI 2025 , 2024. Jin, W., Zhao, L., Zhang, S., Liu, Y., Tang, J., and Shah, N. Graph condensation for graph neural networks. arXiv preprint arXiv:2110.07580 , 2021. Jin, W., Zhao, T., Ding, J., Liu, Y., Tang, J., and Shah, N. Empowering graph representation learning with test-time graph transformation. In The Eleventh International Conference on Learning Representations , 2022. Kipf, T. N. and Welling, M. Semi-supervised classifica-tion with graph convolutional networks. arXiv preprint arXiv:1609.02907 , 2016. Li, J., Wang, Y., Zhu, P., Lin, W., and Hu, Q. What mat-ters in graph class incremental learning? an information preservation perspective. In The Thirty-eighth Annual Conference on Neural Information Processing Systems ,2024. Li, Y., Wang, N., Shi, J., Liu, J., and Hou, X. Revisit-ing batch normalization for practical domain adaptation. 
+
+arXiv preprint arXiv:1603.04779 , 2016. Liang, J., Hu, D., and Feng, J. Do we really need to access the source data? source hypothesis transfer for unsuper-vised domain adaptation. In International conference on machine learning , pp. 6028–6039. PMLR, 2020. Liu, H., Yang, Y., and Wang, X. Overcoming catastrophic forgetting in graph neural networks. In Proceedings of the AAAI conference on artificial intelligence , volume 35, pp. 8653–8661, 2021. Liu, M., Li, S., Chen, X., and Song, L. Graph condensation via receptive field distribution matching. arXiv preprint arXiv:2206.13697 , 2022. Liu, S., Li, T., Feng, Y., Tran, N., Zhao, H., Qiu, Q., and Li, P. Structural re-weighting improves graph domain adap-tation. In International Conference on Machine Learning ,pp. 21778–21793. PMLR, 2023a. Liu, Y., Qiu, R., and Huang, Z. Cat: Balanced continual graph learning with graph condensation. In 2023 IEEE International Conference on Data Mining (ICDM) , pp. 1157–1162. IEEE, 2023b. Liu, Y., Qiu, R., Tang, Y., Yin, H., and Huang, Z. Puma: Ef-ficient continual graph learning with graph condensation. 
+
+arXiv preprint arXiv:2312.14439 , 2023c. Ma, X., Zhang, T., and Xu, C. Gcan: Graph convolutional adversarial network for unsupervised domain adaptation. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition , pp. 8266–8276, 2019. Maddison, C., Mnih, A., and Teh, Y. The concrete dis-tribution: A continuous relaxation of discrete random variables. In Proceedings of the international conference on learning Representations . International Conference on Learning Representations, 2017. Niu, C., Pang, G., Chen, L., and Liu, B. Replay-and-forget-free graph class-incremental learning: A task profiling and prompting approach. In The Thirty-eighth Annual Conference on Neural Information Processing Systems .Niu, S., Wu, J., Zhang, Y., Chen, Y., Zheng, S., Zhao, P., and Tan, M. Efficient test-time model adaptation with-out forgetting. In International conference on machine learning , pp. 16888–16905. PMLR, 2022. Pareja, A., Domeniconi, G., Chen, J., Ma, T., Suzumura, T., Kanezashi, H., Kaler, T., Schardl, T., and Leiserson, C. Evolvegcn: Evolving graph convolutional networks for dynamic graphs. In Proceedings of the AAAI confer-ence on artificial intelligence , volume 34, pp. 5363–5370, 2020. Qiao, Z., Fu, Y., Wang, P., Xiao, M., Ning, Z., Zhang, D., Du, Y., and Zhou, Y. Rpt: toward transferable model on heterogeneous researcher data via pre-training. IEEE Transactions on Big Data , 9(1):186–199, 2022. Qiao, Z., Luo, X., Xiao, M., Dong, H., Zhou, Y., and Xiong, H. Semi-supervised domain adaptation in graph trans-fer learning. In Proceedings of the Thirty-Second Inter-national Joint Conference on Artificial Intelligence , pp. 2279–2287, 2023. Qiao, Z., Xiao, M., Guo, W., Luo, X., and Xiong, H. Infor-mation filtering and interpolating for semi-supervised graph domain adaptation. Pattern Recognition , 153: 110498, 2024. Qiao, Z., Xiao, J., Sun, Q., Xiao, M., Luo, X., and Xiong, H. Towards continuous reuse of graph models via holistic memory diversification. In The Thirteenth International Conference on Learning Representations , 2025. Rozemberczki, B., Allen, C., and Sarkar, R. Multi-scale at-tributed node embedding. Journal of Complex Networks ,9(2):cnab014, 2021. Sener, O. and Savarese, S. Active learning for convolutional neural networks: A core-set approach. arXiv preprint arXiv:1708.00489 , 2017. Song, J., Lee, J., Kweon, I. S., and Choi, S. Ecotta: Memory-efficient continual test-time adaptation via self-distilled 10 GCAL: Adapting Graph Models to Evolving Domain Shifts 
+
+regularization. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition , pp. 11920–11929, 2023. Sun, L., Ye, J., Peng, H., Wang, F., and Philip, S. Y. Self-supervised continual graph learning in adaptive rieman-nian spaces. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 37, pp. 4633–4642, 2023a. Sun, Q., Chen, Z., Yang, B., Ji, C., Fu, X., Zhou, S., Peng, H., Li, J., and Philip, S. Y. Gc-bench: An open and unified benchmark for graph condensation. In The Thirty-eight Conference on Neural Information Processing Systems Datasets and Benchmarks Track .Sun, Q., Li, J., Peng, H., Wu, J., Fu, X., Ji, C., and Philip, S. Y. Graph structure learning with variational informa-tion bottleneck. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 36, pp. 4165–4174, 2022. Sun, Q., Chen, C., Qiao, Z., Zheng, X., and Wang, K. Single-view graph contrastive learning with soft neighborhood awareness. In AAAI 2025 , 2024. Sun, X., Cheng, H., Li, J., Liu, B., and Guan, J. All in one: Multi-task prompting for graph neural networks. In 
+
+Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pp. 2120–2131, 2023b. Sun, X., Zhang, J., Wu, X., Cheng, H., Xiong, Y., and Li, J. Graph prompt learning: A comprehensive survey and beyond. arXiv preprint arXiv:2311.16534 , 2023c. Traud, A. L., Mucha, P. J., and Porter, M. A. Social structure of facebook networks. Physica A: Statistical Mechanics and its Applications , 391(16):4165–4180, 2012. Tzeng, E., Hoffman, J., Saenko, K., and Darrell, T. Adver-sarial discriminative domain adaptation. In Proceedings of the IEEE conference on computer vision and pattern recognition , pp. 7167–7176, 2017. Veli ˇckovi ´c, P., Cucurull, G., Casanova, A., Romero, A., Lio, P., and Bengio, Y. Graph attention networks. arXiv preprint arXiv:1710.10903 , 2017. Wang, D., Shelhamer, E., Liu, S., Olshausen, B., and Darrell, T. Tent: Fully test-time adaptation by entropy minimiza-tion. In International Conference on Learning Represen-tations , 2021. URL https://openreview.net/ forum?id=uXl3bZLkr3c .Wang, L., Zhang, X., Su, H., and Zhu, J. A comprehen-sive survey of continual learning: theory, method and application. IEEE Transactions on Pattern Analysis and Machine Intelligence , 2024a. Wang, Q., Fink, O., Van Gool, L., and Dai, D. Continual test-time domain adaptation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pp. 7201–7211, 2022. Wang, Q., Sun, X., and Cheng, H. Does graph prompt work? a data operation perspective with theoretical analysis. 
+
+arXiv preprint arXiv:2410.01635 , 2024b. Wang, X., Duan, M., Li, J., Ma, A., Xin, G., Xu, D., Li, Z., Liu, B., and Ma, Q. Marsgt: Multi-omics analysis for rare population inference using single-cell graph transformer. 
+
+Nature Communications , 15(1):338, 2024c. Wu, M., Pan, S., Zhou, C., Chang, X., and Zhu, X. Unsu-pervised domain adaptive graph convolutional networks. In Proceedings of The Web Conference 2020 , pp. 1457– 1467, 2020a. Wu, M., Pan, S., and Zhu, X. Attraction and repulsion: Unsupervised domain adaptive graph contrastive learn-ing network. IEEE Transactions on Emerging Topics in Computational Intelligence , 2022a. Wu, M., Zheng, X., Zhang, Q., Shen, X., Luo, X., Zhu, X., and Pan, S. Graph learning under distribution shifts: A comprehensive survey on domain adaptation, out-of-distribution, and continual learning. arXiv preprint arXiv:2402.16374 , 2024a. Wu, Q., Zhang, H., Yan, J., and Wipf, D. Handling distribu-tion shifts on graphs: An invariance perspective. Interna-tional Conference on Learning Representations , 2022b. Wu, T., Ren, H., Li, P., and Leskovec, J. Graph information bottleneck. Advances in Neural Information Processing Systems , 33:20437–20448, 2020b. Wu, W., Wang, C., Shen, D., Qin, C., Chen, L., and Xiong, H. Afdgcf: Adaptive feature de-correlation graph collab-orative filtering for recommendations. In Proceedings of the 47th International ACM SIGIR Conference on Re-search and Development in Information Retrieval , pp. 1242–1252, 2024b. Xiao, J., Dai, Q., Xie, X., Dou, Q., Kwok, K.-W., and Lam, J. Domain adaptive graph infomax via conditional adversarial networks. IEEE Transactions on Network Science and Engineering , 2022. Xu, Y., Zhang, Y., Guo, W., Guo, H., Tang, R., and Coates, M. Graphsail: Graph structure aware incremental learn-ing for recommender systems. In Proceedings of the 29th ACM International Conference on Information & Knowledge Management , pp. 2861–2868, 2020. 11 GCAL: Adapting Graph Models to Evolving Domain Shifts 
+
+Zhang, P., Yan, Y., Li, C., Wang, S., Xie, X., Song, G., and Kim, S. Continual learning on dynamic graphs via param-eter isolation. In Proceedings of the 46th International ACM SIGIR Conference on Research and Development in Information Retrieval , pp. 601–611, 2023a. Zhang, W., Ouyang, W., Li, W., and Xu, D. Collaborative and adversarial network for unsupervised domain adapta-tion. In Proceedings of the IEEE conference on computer vision and pattern recognition , pp. 3801–3809, 2018. Zhang, X., Song, D., and Tao, D. Hierarchical prototype net-works for continual graph representation learning. IEEE Transactions on Pattern Analysis and Machine Intelli-gence , 45(4):4622–4636, 2022a. Zhang, X., Song, D., and Tao, D. Sparsified subgraph memory for continual graph representation learning. In 
+
+2022 IEEE International Conference on Data Mining (ICDM) , pp. 1335–1340. IEEE, 2022b. Zhang, X., Song, D., and Tao, D. Ricci curvature-based graph sparsification for continual graph representation learning. IEEE Transactions on Neural Networks and Learning Systems , 2023b. Zhang, X., Song, D., Chen, Y., and Tao, D. Topology-aware embedding memory for learning on expanding graphs. 
+
+arXiv preprint arXiv:2401.13200 , 2024. Zhao, H., Chen, A., Sun, X., Cheng, H., and Li, J. All in one and one for all: A simple yet effective method towards cross-domain graph pretraining. In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pp. 4443–4454, 2024. Zheng, X., Zhang, M., Chen, C., Nguyen, Q. V. H., Zhu, X., and Pan, S. Structure-free graph condensation: From large-scale graphs to condensed graph-free data. Ad-vances in Neural Information Processing Systems , 36, 2024. Zhou, F. and Cao, C. Overcoming catastrophic forgetting in graph neural networks with experience replay. In Proceed-ings of the AAAI Conference on Artificial Intelligence ,volume 35, pp. 4714–4722, 2021. 12 GCAL: Adapting Graph Models to Evolving Domain Shifts 
+
+## A. Proof of Theorem 3.1. 
+
+In the section of Variational Memory Graph Generation, we give Theorem 1 to define a lower bound of the information bottleneck for generating memory graphs bGt from the original graph Gt:
+
+Theorem A.1. Let bGt be a generated graph conditioned on the latent representation Zt of the original graph Gt. Suppose 
+
+Q( bGt) is a variational approximation of the true posterior P ( bGt), Then, the following lower bound on the optimization objective for Φ holds: 
+
+L(Φ) ≥ E[log Pf ( bYt| bGt)] − βE[KL (Pg ( bGt|Gt, Z t) ∥ Q( bGt))] + βE[log( Pg ( bGt|Gt, Z t))] (16) 
+
+Here, KL (· ∥ · ) indicates the Kullback-Leibler divergence. Pf is considered as the classifier f (Θ t).
+
+Here we provide the proof of Theorem 3.1: 
+
+Proof. We start by decomposing the objective function L(Φ) in 4 and using variational approximations and known inequalities to make the optimization tractable. First, the mutual information term I( bGt; bYt) quantifies the information shared between bGt and bYt, which is defined as: 
+
+I( bGt; bYt) = E bGt, bYt
+
+"
+
+log P ( bYt| bGt)
+
+P ( bYt)
+
+#
+
+. (17) Expanding and simplifying this using the definitions of expectation and entropy, we get the following: 
+
+I( bGt; bYt) = E bGt, bYt [log P ( bYt| bGt)] − EbYt [log P ( bYt)] = E bGt, bYt [log P ( bYt| bGt)] + H( bYt)
+
+≥ E bGt, bYt [log Pf ( bYt| bGt)] .
+
+(18) The inequality holds because H( bYt), the entropy of bYt, is always non-negative. Second, the mutual information I( bGt; Gt, Z t) measures the amount of information gained about bGt by observing Gt and 
+
+Zt. It is defined as: 
+
+I( bGt; Gt, Z t) = E bGt,G t,Z t
+
+"
+
+log P ( bGt|Gt, Z t)
+
+P ( bGt)
+
+#
+
+. (19) We introduce a variational approximation Q( bGt) to the true posterior P ( bGt). Then, the negative mutual information is defined as: 
+
+−I( bGt; Gt, Z t) = − E bGt,G t,Z t
+
+"
+
+log P ( bGt|Gt, Z t)
+
+Q( bGt)
+
+#
+
++ KL (P ( bGt) ∥ Q( bGt)) 
+
+≥ − E bGt,G t,Z t
+
+"
+
+log P ( bGt|Gt, Z t)
+
+Q( bGt)
+
+#
+
+= − E[KL (Pg ( bGt|Gt, Z t) ∥ Q( bGt))] .
+
+(20) Third, the conditional mutual information I( bGt; Zt|Gt) quantifies the additional information about bGt obtained from Zt
+
+given Gt. It is defined by the equation: 
+
+I( bGt; Zt|Gt) = E bGt,Z t,G t
+
+"
+
+log P ( bGt, Z t|Gt)
+
+P ( bGt|Gt)P (Zt|Gt)
+
+#
+
+= E bGt,Z t,G t
+
+"
+
+log P ( bGt|Zt, G t)
+
+P ( bGt|Gt)
+
+#
+
+= E bGt,Z t,G t
+
+h
+
+log P ( bGt|Zt, G t)
+
+i
+
++ H( bGt|Gt)
+
+≥ E bGt,Z t,G t
+
+h
+
+log P ( bGt|Zt, G t)
+
+i
+
+.
+
+(21) 13 GCAL: Adapting Graph Models to Evolving Domain Shifts 
+
+The inequality holds because the entropy H( bGt|Gt) is always non-negative. By combining these results, we can derive the lower bound for the objective L(Φ) :
+
+L(Φ) ≥ E[log Pf ( bYt| bGt)] − βE[KL (Pg ( bGt|Gt, Z t) ∥ Q( bGt))] + βE[log( Pg ( bGt|Gt, Z t))] (22) This completes the proof. 
+
+## B. Detialed Experimental Setup 
+
+B.1. Datasets 
+
+Our paper involves two primary categories of graph datasets, Regional Shifts and Temporal Shifts, utilizing continual learning principles to effectively manage adaptations across different regions and temporal variations. The datasets used include Facebook-100(Traud et al., 2012), Twitch-Explicit(Rozemberczki et al., 2021), OGB-Arxiv(Hu et al., 2020), and Elliptic(Pareja et al., 2020). The statistical details of the datasets are shown in Table 1. 
+
+Regional Shifts : The Facebook-100 dataset comprises 100 snapshots of Facebook friendship networks from 2005, each representing users from a specific American university. These networks vary greatly in size, density, and degree distribution. Additionally, the Twitch-Explicit dataset includes seven networks, where nodes are Twitch users and edges denote mutual friendships. Each network originates from one of the following regions: DE, ENGB, ES, FR, PTBR, RU, and TW. 
+
+Temporal Shifts : The OGB-Arxiv dataset contains 169,343 Arxiv CS papers from 40 subject areas, detailing their citation relationships, and is suitable for analyzing the evolution of scientific collaboration networks. The Elliptic dataset includes 49 sequential graph snapshots of Bitcoin transaction networks, where nodes represent transactions and edges represent payment flows. Around 20% of transactions are labeled as licit or illicit, with the objective of detecting future illegal transactions. 
+
+B.2. Baselines 
+
+We evaluate the performance of our continual adaptive learning framework against a diverse set of baseline methods. Test employs a pretrained graph model to perform direct inference on the target dataset without any adaptation, serving as the lower bound. DANN (Ganin et al., 2016), a traditional domain adaptation method, utilizes the source graph and adversarial training to minimize domain discrepancies at each step. The category ”No Rehearsal Based Test-Time Adaptation” comprises one-step test-time adaptation methods. Tent (Wang et al., 2021), which minimizes entropy of test samples; BN Stats Adapt (Li et al., 2016), which adjusts network weights and Batch Normalization statistics based on current input data for prediction; EERM (Wu et al., 2022b), tailored for graph datasets, maximizing risk variance to manage domain shifts and out-of-distribution challenges; and GTRANS (Jin et al., 2022), enhancing test-time performance by refining graph structure and node features through a contrastive surrogate loss. The category ”Continual Test Time Adaptation” is continual test-time training methods, including CoTTA and EATA. CoTTA (Wang et al., 2022) combines weight-averaged predictions with partial neuron restoration to mitigate error accumulation and catastrophic forgetting. EATA (Niu et al., 2022) enhances adaptation efficiency through entropy minimization and employs a Fisher-based regularizer to maintain performance across domain shifts. For baselines not originally designed for graphs, their architectures have been adapted to GCNs to ensure consistency in evaluation. 
+
+B.3. Experimental Setting 
+
+To effectively evaluate our model’s adaptability across varying domains and over time, we have introduced a continual adaptive learning framework across evolving graph data. For academic and social networks, initial training is conducted on three university graphs from the Facebook-100 dataset: Amherst41, Caltech36, and Johns Hopkins55. We continually extend the domain adaptation to the remaining eleven university graphs without labels. This data selection sequence requires the model to handle different graph structures from training/validation to testing data(Wu et al., 2022b). For Twitch-explicit, the model is initially trained on the DE network and later tested for adaptability across regional networks, including ENGB, ES, FR, PTBR, RU, and TW, also without labels. In addressing temporal shifts, the OGB-Arxiv dataset is employed, using data prior to 2011 to pretrain the model, while data from 2011 and later is used for continual adaptation, exposing the model to evolving scientific collaborations. For the Elliptic dataset, we utilize snapshots 7 through 9 for initial training, avoiding the first six due to their extreme class imbalance, with the remaining data employed for continual adaptation. This approach 14 GCAL: Adapting Graph Models to Evolving Domain Shifts Original Graph Original Graph Original Graph Original Graph Original Graph Original Graph Synthetic Graph 
+
+(a) Twitch-ENGB Synthetic Graph (b) Twitch-ES Synthetic Graph (c) Twitch-FR Synthetic Graph (d) Twitch-PTBR Synthetic Graph (e) Twitch-RU Synthetic Graph (f) Twitch-TW 
+
+Figure 6. Visualized comparison of the original graphs (the first line) and generative graphs (the second line) of GCAL in the Twitch dataset. 
+
+reflects the dynamic and challenging nature of financial transactions. Our training strategy begins by pretraining the model on selected graphs from each dataset, then continually adapting to the remaining unlabeled graph datasets in an online manner. We use a 2-layer GCN as the backbone for three datasets, except for OGB-Arxiv, where we use GraphSAGE (Hamilton et al., 2017). The training, validation, and test rates for pretrain datasets are set at 60%, 20%, and 20% respectively. During the train and adapt periods, the learning rates and weight decays are set as follows: lr = 0 .0001 and wd = 5 × 10 −4 for training, and lr = 0 .001 and wd = 5 × 10 −4 for adaptation. The number of epochs for pre-training is set between 100 and 200, while the adaptation phase involves a relatively smaller number of epochs, ranging from 1 to 10, for these four datasets. The detailed hyper-parameter settings are provided in the accompanying code. For the evaluation metric, we present the accuracy matrix Macc ∈ RT ×T , which is a lower triangular matrix where Macc,i,j (for i ≥ j) represents the accuracy on the domain j after training on the domain i. Specifically, similar to (Jin et al., 2022; Wu et al., 2022b), for the Twitch-Explicit and Facebook-100 datasets, the results are measured using ROC-AUC and Accuracy, respectively. For the Elliptic dataset, the metric used is the F1 Score, while for the OGB-Arxiv dataset, Accuracy is used. To compute a single numeric value upon completing all domains, we calculate the Average Performance (AP) as 1
+
+> T
+
+PTi=1 M acc 
+
+> T,i
+
+, primarily assessing adaptation ability, and the Average Forgetting (AF) as 1 
+
+> T−1
+
+PT −1 
+
+> i=1
+
+(M acc  
+
+> T,i
+
+− M acc  
+
+> i,i
+
+), primarily evaluating the ability to avoid forgetting. Each experiment is repeated five times, with results reported as the mean and standard deviation. 
+
+## C. Additional Experiments 
+
+C.1. Visualization of Generated Memory Graph. 
+
+This experiment aims to answer: How do the structure of memory graphs generated by GCAL look like compared with the original ones? To demonstrate the effectiveness of the memory graphs we generated, we conducted an experiment to visualize the graph structures. The experimental results are shown in Figure 6, where we used the networks python library as a tool on the Twitch dataset to display the generated effects on six continuous domain graphs. The top row shows the original graphs, while the bottom row displays the generated graphs. From this, we can observe that (1) the generated memory graphs significantly reduce the number and density of the graphs, making them more lightweight, and (2) the structure of the generated graphs is not random but shows a coherent structure, verifying the reliability and authenticity of the generated graphs. This visualization confirms the capability of GCAL to produce streamlined yet structurally meaningful graphs. 
+
+C.2. Performance Matrices. 
+
+To present a more fine-grained demonstration of the model’s performance in continual adaptive learning on graphs, we analyzed the average performance across all previously encountered domains each time a new domain was learned. We have visualized the performance matrix of the Twitch and Elliptic datasets in Figure. 4. Here, we further report the results 15 GCAL: Adapting Graph Models to Evolving Domain Shifts 1 2 3 4 5 6 7 8 9 10 11 12 
+
+> Domains
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> 11
+> 12
+> Domains
+> 0.400
+> 0.425
+> 0.450
+> 0.475
+> 0.500
+> 0.525
+> 0.550
+> 0.575
+> 0.600
+
+(a) Facebook-100-CoTTA 1 2 3 4 5 6 7 8 9 10 11 12  
+
+> Domains
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> 11
+> 12
+> Domains
+> 0.400
+> 0.425
+> 0.450
+> 0.475
+> 0.500
+> 0.525
+> 0.550
+> 0.575
+
+(b) Facebook-100-GCAL 1 2 3 4 5 6 7 8 9 10 11  
+
+> Domains
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> 11
+> Domains
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+
+(c) ogbn-arxiv-CoTTA 1 2 3 4 5 6 7 8 9 10 11  
+
+> Domains
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> 11
+> Domains
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+
+(d) ogbn-arxiv-GCAL 
+
+Figure 7. Performance matrices of GCAL and CoTTA in different datasets. GCN GSAGE GAT GIN 
+
+> 50
+> 52
+> 54
+> 56
+> 58
+> 60
+> Average AUC
+> Test
+> GCAL
+
+(a) Twitch-explicit GCN GSAGE GIN  
+
+> 50.0
+> 50.5
+> 51.0
+> 51.5
+> 52.0
+> 52.5
+> 53.0
+> 53.5
+> 54.0
+> Average ACC
+> Test
+> GCAL
+
+(b) Facebook-100 GCN GSAGE GAT GIN  
+
+> 50
+> 55
+> 60
+> 65
+> 70
+> 75
+> Average F1
+> Test
+> GCAL
+
+(c) Elliptic GCN GSAGE GAT GIN  
+
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Average ACC
+> Test
+> GCAL
+
+(d) OGB-Arxiv 
+
+Figure 8. The model performance with different GNN backbones. 
+
+of the Facebook and Ogbn-arxiv datasets in Figure 7. In these matrices, each row represents the performance across all domains upon learning a new one, while each column captures the evolving performance of a specific domain as all domains are learned sequentially. In the visual representation, darker shades signify better performance, while lighter hues indicate inferior outcomes. GCAL predominantly displays lighter shades across the majority of blocks compared to CoTTA in Figure 7, which has similar experimental phenomena as before, further proving the effectiveness of GCAL in the continual graph model adaptation problem. 
+
+C.3. Backbone Analysis. 
+
+This experiment aims to answer: How do different GNN backbones compare within GCAL for continual adaptation? We select representative GNN models, including GCN, GSAGE, GAT, and GIN. These GNN models serve as the foundational backbones for integrating with GCAL. The results are presented in Figure 8. We compare the results of incorporating these GNN backbones within our framework versus utilizing them individually as standalone models. Using our framework demonstrates remarkable enhancements, showing the effectiveness of our proposed techniques. Lastly, it is important to note that the consistent use of different backbones significantly enhances results, thereby demonstrating the robustness and adaptability of our proposed method across various datasets. This is in contrast to the Test method, which directly infers from subsequent data without continuous domain adaptation. For Facebook-100, the GAT model encounters an Out Of Memory (OOM) issue and is therefore not included in the backbone comparison for this dataset. 
+
+## D. Related Work 
+
+D.1. Graph Continual Learning. 
+
+Existing graph continual learning (GCL) methodologies are typically divided into three main categories: regularization, parameter isolation, and memory replay approaches. Regularization-based methods primarily aim to preserve parameters crucial to previous tasks, thereby minimizing disruptions (Cai et al., 2022; Liu et al., 2021; Sun et al., 2023a; Xu et al., 2020). Examples include topology-aware weight preserving (TWP) (Liu et al., 2021) and RieGrace (Sun et al., 2023a), which focus on maintaining essential parameters and structural topologies. Parameter isolation techniques allocate distinct parameters for new tasks to maintain those relevant to prior tasks (Niu et al.; Zhang et al., 2023a; 2022a), as seen in HPNs (Zhang et al., 2022a). In contrast, memory replay strategies(Li et al., 2024; Qiao et al., 2025) archive and revisit representative data from past tasks to alleviate the critical issue of catastrophic forgetting, as exemplified by ER-GNN (Zhou & Cao, 2021), SSM (Zhang et al., 2022b), SEM-curvature (Zhang et al., 2023b), PDGNNs (Zhang et al., 2024), and CaT (Liu et al., 2023b). 16 GCAL: Adapting Graph Models to Evolving Domain Shifts 
+
+GCL has garnered increasing interest due to its practical applications, with each approach offering distinct strategies for handling task progression in graph-based models(Wu et al., 2024a). Our approach, which belongs to the memory replay category, uniquely preserves critical topological structures while minimizing memory usage. Notably, while existing GCL methods are confined to supervised learning settings, our work introduces an unsupervised approach to graph continual learning, marking a pioneering step in this direction. 
+
+D.2. Graph Domain Adaptation. 
+
+Unlike traditional domain adaptation, which typically assumes a static target domain, Continual Domain Adaptation addresses evolving target data. Traditional methods, including Maximum Mean Discrepancy (MMD) (Dziugaite et al., 2015) and adversarial techniques (Dan et al., 2024; Qiao et al., 2023; Tzeng et al., 2017; Zhang et al., 2018), form the basis of this field. In graph-based domain adaptation, a variety of methods have been proposed (Ding et al., 2018; Jin et al., 2022; Liu et al., 2023a; Ma et al., 2019; Qiao et al., 2024; Wu et al., 2022a; Xiao et al., 2022). For instance, UDA-GCN (Wu et al., 2020a) and AdaGCN (Dai et al., 2022) leverage graph topology to improve adaptability, reducing discrepancies between source and target graphs via local and global consistencies and a graph domain discriminated loss, respectively. Continual Test-Time Adaptation (CTTA), a critical facet of Continual Domain Adaptation, addresses the unique demands of non-static domains. Unlike traditional Test-Time Adaptation (TTA), CTTA incorporates advanced strategies such as bi-average pseudo labels and stochastic weight resets, as implemented in CoTTA (Wang et al., 2022). Innovations like VDP (Gan et al., 2023), with visual domain prompts to counter error accumulation, and RMT (D ¨obler et al., 2023), which employs symmetric cross-entropy for enhanced robustness, further refine CTTA. Additional strategies, including entropy minimization by Tent and EATA (Niu et al., 2022) and meta-networks in EcoTTA (Song et al., 2023), contribute to improved model normalization and adaptability. Despite these advancements, challenges such as noisy pseudo-labels and calibration issues persist, and a notable gap remains in unsupervised graph continual domain adaptation research. 
+
+D.3. Graph Condensation 
+
+Graph condensation(Sun et al.) has become increasingly prominent for its ability to create compact synthetic datasets that closely approximate the performance of full datasets (Hashemi et al., 2024). Classical techniques like GCond (Jin et al., 2021) and MCond (Gao et al., 2024) utilize gradient alignment to synthesize representative samples that maintain the statistical properties of the original data, drawing from principles of traditional sampling (Sener & Savarese, 2017). Among recent innovations, GCDM (Liu et al., 2022), introduce graph-specific distribution alignment to enhance condensation effectiveness. SFGC (Zheng et al., 2024) further refines this by distilling large graphs into structure-free node sets using meta-matching and dynamic feature scoring, resulting in compact, highly generalizable data. Additionally, techniques such as CaT (Liu et al., 2023b) and PUMA (Liu et al., 2023c) extend graph condensation to continual learning, demonstrating these methods’ adaptability for dynamic graph-based applications. In parallel, Graph prompt learning based method(Sun et al., 2023b;c; Wang et al., 2024b; Zhao et al., 2024) also condenses knowledge into a compact graph-based prompt, which is typically used to fine-tune pre-trained graph models on specific downstream tasks. However, most of these method rely on supervised signals for knowledge condensation. In contrast, our work addresses a more challenging task by condensing graphs into memory in an unsupervised manner. 17

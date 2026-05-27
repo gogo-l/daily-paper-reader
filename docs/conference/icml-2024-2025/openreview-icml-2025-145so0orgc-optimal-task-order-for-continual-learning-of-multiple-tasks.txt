@@ -1,0 +1,2939 @@
+Title: Optimal Task Order for Continual Learning of Multiple Tasks
+
+URL Source: https://openreview.net/pdf?id=145So0OrGC
+
+Number of Pages: 26
+
+Markdown Content:
+# Optimal Task Order for Continual Learning of Multiple Tasks 
+
+Ziyan Li 1 Naoki Hiratani 2
+
+## Abstract 
+
+Continual learning of multiple tasks remains a major challenge for neural networks. Here, we investigate how task order influences continual learning and propose a strategy for optimizing it. Leveraging a linear teacher-student model with latent factors, we derive an analytical expression relating task similarity and ordering to learning performance. Our analysis reveals two principles that hold under a wide parameter range: (1) tasks should be arranged from the least representative to the most typical, and (2) adjacent tasks should be dissimilar. We validate these rules on both synthetic data and real-world image classification datasets (Fashion-MNIST, CIFAR-10, CIFAR-100), demonstrating consistent performance im-provements in both multilayer perceptrons and convolutional neural networks. Our work thus presents a generalizable framework for task-order optimization in task-incremental continual learn-ing. 
+
+## 1. Introduction 
+
+The ability to learn multiple tasks continuously is a hallmark of general intelligence. However, deep neural networks and its applications, including large language models, struggle with continual learning and often suffer from catastrophic forgetting of previously acquired knowledge (McCloskey & Cohen, 1989; French, 1999; Hadsell et al., 2020; Luo et al., 2023). Although extensive work has been done to identify when forgetting is most prevalent (Ramasesh et al.; Lee et al., 2021) and how to mitigate it (French, 1991; Robins, 1995; Kirkpatrick et al., 2017; Shin et al., 2017; Serra et al., 2018; Rolnick et al., 2019), it remains unclear how to pre-vent forgetting while simultaneously promoting knowledge transfer across tasks (Ke et al., 2020; Lin et al., 2022; Ke     
+
+> 1Department of Physics, Washington University in St Louis, St Louis, USA 2Department of Neuroscience, Washington University in St Louis, St Louis, USA. Correspondence to: Naoki Hiratani
+> <hiratani@wustl.edu >.
+> Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s).
+
+et al.; Kontogianni et al., 2024). One important yet relatively underexplored aspect of con-tinual learning is task-order dependence. Previous work has revealed that the order in which tasks are presented can sig-nificantly influence continual learning performance and also explored various approaches to optimize task order (Lad et al., 2009; Pentina et al., 2015; Guo et al., 2018; Bell & Lawrence, 2022; Lin et al., 2023; Singh et al., 2023). How-ever, we still lack clear understanding on how ordering of tasks influences the learning performance and how to order tasks to achieve optimal performance. Figure 1 illustrates this problem using a continual binary image classification example, where a neural network is trained on three tasks: A
+
+(Cat vs. Ship), B (Frog vs. Truck), and C (Horse vs. Deer). Learning one task can influence performance on the others in a complex manner (Figs. 1a and 1b). Consequently, in this example, the C→B→A task order achieves a higher average performance after training than the A→B→C or-der (Fig. 1c). The goal of this work is to understand this task-order dependence in continual learning. Task-order optimization requires some amount of knowl-edge on all tasks beforehand, making it infeasible in a strictly online learning setting. Nevertheless, it remains highly relevant for many learning problems. One scenario is when data acquisition and training need to be conducted in parallel, which may occur in the training of self-driving algorithms (Verwimp et al., 2023) or medical image analysis (Kumari et al., 2023). In this setting, it is beneficial to first collect a small pilot dataset across all underlying tasks and then determine the optimal order of data acquisition and training to maximize knowledge transfer while minimizing forgetting across tasks. To demonstrate the potential appli-cability of our theory to this problem, we provide numerical evidence that, in continual visual recognition benchmarks, an optimal task order estimated from just 1% of the data significantly outperforms a random task order. Moreover, in robotics applications (Lesort et al., 2020; Ibarz et al., 2021), switching between tasks often involves phys-ically rearranging objects around the robot, which is both time-consuming and labor-intensive. As a result, switching tasks on a trial-by-trial basis is often infeasible, necessitating block-wise training. In this scenario, optimizing task order could help maximize average performance across all tasks. 1Optimal Task Order for Continual Learning of Multiple Tasks        
+
+> Figure 1. Schematic figure of the task-order dependence. a, b) Continual learning of binary classification with two different task orders.
+> c) Average test accuracy on the three classification tasks at the end of learning under task orders depicted in panels aand b. Error bars represent the standard error of mean over 10 random seeds.
+
+Similar constraints arise in designing of machine-learning-based teaching curricula for schools or professional training where learners need to study multiple subjects sequentially (Rafferty et al., 2016; Singh et al., 2023). Furthermore, even in a more traditional continual learning task, if the current task creates unfavorable conditions, systems can postpone its learning to a more suitable time. Understanding how the order of tasks impacts learning can also serve as a tool for predicting the difficulty of online learning given a data stream. Lastly, large language models are typically trained in an online fashion because the size of the training corpus is so vast that multiple epochs of training over the entire dataset is infeasible (Hoffmann et al., 2022; Chowdhery et al., 2023). In such cases, how the corpus is organized for training can significantly impact learning efficiency, sup-porting the importance of optimizing task/corpus order. To explore the basic principle of task order optimization, here we analyze the task-order dependence of continual learning using a linear teacher-student model with latent factors. First, we derive an analytical expression for the average error after continual learning as a function of task similarity for an arbitrary number of tasks. Our theory shows that this error inevitably depends on the task order because it is a function of the upper-triangular components of the task similarity matrix, rather than of the entire matrix. We then investigate how the similarity between tasks, when placed in various positions within the task order, affects the overall error. Through linear perturbation analysis, we find that the task-order effect decomposes into two factors. The first is absolute order dependence: similarity between two tasks influences the error differently depending on whether these tasks appear near the beginning or near the end of the sequence. We demonstrate that when tasks are on average positively correlated, the least representative tasks should be learned first, while the most typical task should be learned last (periphery-to-core rule). The second factor is relative order dependence: the effect of task similarity on the error differs depending on whether two tasks are adjacent in the sequence or far apart. We show that a task order maximizing the path length in the task dissimilarity graph outperforms one that minimizes this path length (max-path rule), consis-tent with previous empirical observations (Bell & Lawrence, 2022). We illustrate these two rules by applying them to tasks with simple similarity structures forming chain, ring, and tree graphs, revealing the presence of non-trivial task orders that robustly achieve the optimal learning performance, given a graph structure. Moreover, we apply these rules to con-tinual image classification tasks using the Fashion-MNIST, CIFAR-10, and CIFAR-100 datasets. We estimate task simi-larity by measuring the zero-shot transfer performance be-tween tasks, and then implement the task-ordering rules based on these estimates. Our results show that both the periphery-to-core rule and the max-path rule hold robustly in both multilayer perceptrons and convolutional neural networks. Moreover, using ∼ 1% of the data for the task similarity and order estimation was sufficient to achieve a significant improvement over random ordering. This work thus provides a simple and generalizable theory to task-order optimization in task-incremental continual learning. 
+
+## 2. Related Work 
+
+The effects of curriculum learning have been extensively studied in the reinforcement learning (RL) literature (El-man, 1993; Krueger & Dayan, 2009; Narvekar et al., 2020). However, these studies primarily focus on learning a single challenging task by sequentially training on simpler tasks, leaving open the question of how to design a curriculum for learning multiple tasks of similar difficulty. A limited number of works have explored task-order optimization for continual/lifelong learning across multiple tasks by contrast. Lad et al. (2009) demonstrated that ordering tasks based on pairwise order preferences can lead to better classifica-tion performance compared to random task ordering. More recently, Bell & Lawrence (2022) investigated task-order optimization by examining Hamiltonian paths on a task dissimilarity graph (see Sec. 4 for details). They hypothe-2Optimal Task Order for Continual Learning of Multiple Tasks 
+
+sized that the shortest Hamiltonian path would be optimal but instead found that the longest Hamiltonian path signif-icantly outperformed both random task ordering and the shortest path in continual image classification tasks. Our work provides analytical insights into when and why this is the case. Lin et al. (2023) analyzed generalization error and task-order optimization in continual learning for linear regression. Our work advances this theoretical framework in several important ways. First, we introduce a latent struc-ture model for considering the effect of input similarity and reveal how tasks’ relative positions—not just their absolute positions as in Lin et al. (2023)’s Equation 10—influence the model’s final performance. We validate this theoretical finding through experiments on both synthetic data and im-age classification tasks. Furthermore, we extend beyond the synthetic task settings of Lin et al. (2023) by demonstrating these effects in a general continual learning framework us-ing data-driven similarity estimation. Task-order effects on continual learning have also been analyzed in (Pentina et al., 2015; Evron et al., 2023; Singh et al., 2023). The linear teacher-student model used in this work is a widely adopted framework for analyzing the average prop-erties of neural networks by explicitly modeling the data generation process through a teacher model (Gardner & Derrida, 1989; Zdeborov ´a & Krzakala, 2016; Bahri et al., 2020). Due to their analytical tractability, these models have offered deep insights into various aspects of statistical learn-ing problems, including generalization (Seung et al., 1992; Advani et al., 2020), learning dynamics (Saad & Solla, 1995; Werfel et al., 2003; Saxe et al., 2014), and representation learning (Saxe et al., 2019; Tian et al., 2021). Many studies have also applied this framework to explore various aspects of continual learning (Asanuma et al., 2021; Lee et al., 2021; Evron et al., 2022; Goldfarb & Hand, 2023; Li et al., 2023; Lin et al., 2023; Goldfarb et al.; Hiratani; Mori et al.). 
+
+## 3. Task-order Dependence 
+
+3.1. Model Setting 
+
+Let us consider a sequence of P tasks, where the inputs 
+
+x ∈ RNx and the target output y∗ ∈ RNy of the μ-th task is generated by 
+
+s ∼ N (0 , I ) , x = Aμs, y∗ = Bμs. (1) Here, s ∈ RNs is the latent factor that underlies both x
+
+and y∗, I is the identity matrix, and Aμ ∈ RNx×Ns and 
+
+Bμ ∈ RNy ×Ns are the mixing matrices that generate the input x and the target y∗ from the latent s (Fig. 2a). Below we focus on Nx ≫ Ns regime. The introduction of this low-dimensional latent factor s is motivated by the presence of low-dimensional latent structures in many real-world datasets (Yu et al., 2017; Cohen et al., 2020). We sample elements of {Aμ, B μ}Pμ=1 from a corre-lated Gaussian distribution. Denoting a vector con-sists of the ( i, j )-th elements of A1, .., A P by aij ≡
+
+[A1,ij , A 2,ij , ...., A P,ij ]T , we sample aij ∈ RP from 
+
+aij ∼ N 
+
+
+
+0, 1 
+
+> Ns
+
+Cin 
+
+(2) where Cin is a P × P matrices that specify input corre-lation between tasks. Similarly, we sample the ( i, j )-th elements of B1, .., B P , bij ≡ [B1,ij , B 2,ij , ...., B P,ij ]T ,by bij ∼ N (0, 1 
+
+> Ns
+
+Cout ). Note that here correlation is introduced across tasks in an element-wise manner while keeping elements of each mixing matrix independent (i.e. 
+
+Aμij Aνkl A = δik δjl Cin μν  
+
+> Ns
+
+), where δik represents the Kro-necker delta. Here we generate the model from the task similarity matrices {Cin , C out } because previous work sug-gests the crucial impact of task similarity on continual learn-ing (Ramasesh et al.; Lee et al., 2021). In section 5, we consider the estimation of task similarity from datasets to ensure the applicability of our framework. Let us consider the training of a linear network, y = W x,in this set of P tasks. We evaluate the performance of the network for the μ-th task using the mean squared error: 
+
+ϵμ[W ] ≡
+
+D
+
+∥y∗ − y∥2E
+
+> s
+
+= ∥Bμ − W A μ∥2 
+
+> F
+
+, (3) where ⟨·⟩ s represents expectation over latent s ∼ N (0, I ).In a task-incremental continual learning task (Van de Ven & Tolias, 2019), we are mainly concerned with minimizing the total error on all tasks after learning all tasks. Denoting the network parameter after learning of the last, P -th, task by WP , the final error is defined by 
+
+ϵf ≡ 1
+
+NyPX
+
+> μ=1
+
+ϵμ[WP ]. (4) Below, we take the expectation over randomly generated mixing matrices {Aμ, B μ}Pμ=1 and derive the average final error ¯ϵf ≡ ⟨ ϵf ⟩{Aμ,B μ} as a function of the input and output correlation matrices Cin and Cout . Subsequently, we ana-lyze how the task order influences ¯ϵf and how to optimize the order. 
+
+3.2. Analysis of the Final Error ϵf
+
+We consider task incremental continual learning where P
+
+tasks are learned in sequence one by one. Let us denote the weight after training on the (μ − 1) -th task as Wμ−1.Considering learning of the μ-th task from W = Wμ−1 us-ing gradient descent on task-specific loss ϵμ[W ], the weight after training follows (see Appendix A.2) 
+
+Wμ = Wμ−1
+
+ I − UμU Tμ
+
+ + BμA+ 
+
+> μ
+
+, (5) 3Optimal Task Order for Continual Learning of Multiple Tasks 
+
+Figure 2. a) Schematic of the teacher-student model. b) Comparison between the analytical and numerical evaluations of the error ϵf
+
+under various number of tasks. Each point represents the errors under a randomly sampled task similarity matrices (Cin , C out ) (see Appendix C for implementation details). c) Optimal task order for three task learning. In the white regions, Cin is not a positive-definite matrix, hence the tasks are not well-defined. 
+
+where Uμ is defined by singular value decomposition (SVD) of Aμ, Aμ = UμΛμV Tμ , and A+ is the pseudo-inverse of A.Applying it recursively while assuming that W is initialized as a zero matrix prior to the first task, we have 
+
+Wμ =
+
+> μ
+
+X
+
+> ν=1
+
+(Bν A+ 
+
+> ν
+
+)
+
+> μ
+
+Y
+
+> ρ=ν+1
+
+(I − UρU Tρ ). (6) If Nx ≫ Ns, pseudo-inverse A+ 
+
+> μ
+
+is approximated by a scaled transpose γA Tμ , and UμU Tμ approximately follows 
+
+UμU Tμ ≈ γA μATμ with γ = Ns 
+
+> Nx
+
+(see Appendix A.4). Thus, under Ns 
+
+> Nx
+
+≪ 1, we have 
+
+Wμ ≈ γ
+
+> μ
+
+X
+
+> ν=1
+
+(Bν ATν )
+
+> μ
+
+Y
+
+> ρ=ν+1
+
+(I − γA ρATρ ). (7) Under this approximation, there exists a simple expression of the final error as below (see Appendix A.3 for the proof). 
+
+Theorem 3.1. At Ns 
+
+> Nx
+
+→ 0 limit, the final error asymptoti-cally satisfies 
+
+¯ϵf = (Cout )1/2  I − (I + Cin,U )−1Cin  2
+
+> F
+
+, (8) 
+
+where Cin,U is the strictly upper-triangle matrix generated from the input correlation matrix Cin (see eq. 34). 
+
+Importantly, the dependence on the upper-triangular com-ponents in Eq. 3.1 implies that ¯ϵf is not permutation-invariance, and thus depends on the task-order. 
+
+3.3. Numerical Evaluation 
+
+To check this analytical result, in Fig. 2b, we compared ¯ϵf
+
+estimated from Eq. 8 with its numerical estimation through learning via gradient descent, under various choices of the number of tasks P and task correlation matrices Cin and 
+
+Cout (each point in Fig. 2b represents the errors under one randomly sampled {Cin , C out } pair). This result indicates that our simple analytical expression robustly captures the performance of continual learning in a linear teacher-student model under arbitrary task similarity and the number of tasks. To explore how task order influences the continual learning performance, we next calculated the optimal task order of three tasks under various input correlation Cin using Eq. 8 (Fig. 2c). Here, we set the output correlation Cout μν = 1 for all task pairs (μ, ν ) for simplicity, and parameterized the input correlation between tasks A, B, and C by 
+
+Cin =
+
+
+
+1 ρAB ρCA 
+
+ρAB 1 ρBC 
+
+ρCA ρBC 1
+
+ . (9) Here, tasks A, B, and C are linear regression tasks with partial overlap in the input domain. If ρAB = 1 , the input subspace for tasks A and B are the same, while they are independent if ρAB = 0 . Figure 2c revealed that the optimal task order depends on the combination of task similarity 
+
+(ρAB , ρ BC , ρ CA ) in a rich and complex manner. Some of the phase shifts represent trivial mirror symmetry (e.g., x =
+
+y line), but many of them are non-trivial. To further gain insights into this complex task-order dependence, below, we consider the linear perturbation limit. 4Optimal Task Order for Continual Learning of Multiple Tasks 
+
+Figure 3. Linear perturbation analysis of task order dependence. a) Decomposition of the contribution of task similarity to the final error under ρo = 1 , m = 0 .3. b) Schematic representations of periphery-to-core ordering and core-to-periphery ordering. Circles A, B, ..., I represent tasks and their spatial positions represent similarity between tasks. Here, tasks A-C are central whereas tasks D-I are periphery. 
+
+c) Schematic of minimum and maximum paths on a task dissimilarity graph. d) G+ 
+
+> μν
+
+as a function of m under P = 7 . Colors indicate the indices such that the purple line on the top corresponds to G+1,2, while the yellow line at the bottom corresponds to G+6,7. e) Relative error of core-to-periphery and periphery-to-core rules under various average task correlation m at P = 7 . Error bars represent the standard error over random seeds (see Appendix C for details). f) Coefficient α− under P = 3 , 5, 7. Dark gray line corresponds to α− at P → ∞ 
+
+limit. g) Relative error of min-path and max-path task orders under P = 7 . Here we took average over two task orders that follows the minimum pathway to estimate the error of min-path. The error of max-path was estimated in the same manner. 
+
+## 4. Task-order Optimization 
+
+4.1. Linear Perturbation Theory 
+
+Theorem 3.1 revealed a simple relationship between the task similarity and the final error of continual learning, but it remains unclear how to optimize the task order for continual learning. To gain insight into this question, we next add a small perturbation to the input similarity matrix and examine how the change in the similarity between various task pairs modifies the error. We parameterize the input correlation matrix by a combination of a constant factor and a small perturbation. 
+
+Cin μν =
+
+(
+
+1 (if μ = ν)
+
+m + δM μν (otherwise ). (10) Here, we set the constant factor m to be the same across all tasks for the analytical tractability of the matrix inversion, and perturbation δM is constrained to the ones that keep 
+
+Cin to a correlation matrix. Similarly, we restricted the target output correlation matrix to be Cout μν = ρo for all non-diagonal components. In this setting, the error has the following decomposition. 
+
+Theorem 4.1. Let us suppose that all elements of matrix 
+
+δM satisfies, |δM μν | < δ m, where δm is a positive constant. Then, the final error is written as below: 
+
+¯ϵf [Cin , C out ] = ¯ ϵf [m, ρ o] + 
+
+> P
+
+X
+
+> μ=1
+> P
+
+X
+
+> ν=μ+1
+
+Gμν δM μν + O(δ2
+
+> m
+
+),
+
+(11) 
+
+where ¯ϵf [m, ρ o] is the error in the absence of perturbation, and Gμν is a function of m, ρo, and P (see Eqs. 57 in Ap-pendix). At ρo = 1 , Gμν has a following simple expression: 
+
+Gμν = G+ 
+
+> μν
+
++ G− 
+
+> μν
+
+, (12a) 
+
+G+ 
+
+> μν
+
+≡ − (1 − m)P +μ−1 − (1 − m)P +ν−1
+
++ 3−m 
+
+> 2−m
+
+(1 − m)μ+ν−1, (12b) 
+
+G− 
+
+> μν
+
+≡ − 
+
+
+
+1 − (1 − m)P  mP  
+
+> 1−m
+
++ 3−m
+
+> 2−m
+
+ 
+
+(1 − m)P −(ν−μ).
+
+(12c) Note that, P × P matrix G specifies the contribution of 
+
+(μ, ν )-th task similarity to the final error. The proof of the theorem is provided in Appendix B.2. Fig. 3a describes an example of Gμν (here P = 7 and m = 0 .3). In this case, G12 is positive while G17 is negative, meaning that if you increase the similarity between the first and the second tasks while keeping the rest the same, the total error ¯ϵf goes up, but if you increase the similarity between the first and the last tasks, the error instead decreases. To understand this task order dependence, we next analyze G+ and G−
+
+separately. 5Optimal Task Order for Continual Learning of Multiple Tasks 
+
+4.2. Impact of Task Typicality 
+
+Let us first consider the contribution of G+ 
+
+> μν
+
+term. Denoting 
+
+α+ ≡ 2−m 
+
+> 3−m
+
+(1 − m)P , G+ 
+
+> μν
+
+is rewritten as 
+
+G+ 
+
+> μν
+
+= 3−m
+
+> (2 −m)(1 −m)
+
+ (1 − m)μ − α+   (1 − m)ν − α+
+
+− α+(1 − m)P −1, (13) If 1 > m > 0, 3−m 
+
+> (2 −m)(1 −m)
+
+> 0 and (1 − m)μ ≥
+
+(1 − m)P > α + for μ = 1 , 2, ..., P . Therefore, G+ 
+
+> μν
+
+is a monotonically decreasing function of both μ and ν under 
+
+1 > m > 0 (Fig. 3d). This means that, to minimize the error contributed from G+ 
+
+> μν
+
+, δϵ + 
+
+> f
+
+≡ P 
+
+> μ,ν
+
+G+ 
+
+> μν
+
+δM μν , the tasks should be ordered in a way that the residual similarity 
+
+δM μν takes a small (preferably negative) value for early task pairs and a large value for later task pairs. In other words, earlier pairs should be relatively dissimilar to each other, while later pairs should be more similar. One heuristic way to achieve this task order is to put the most atypical task at the beginning and the most typical one at the end. Denoting the relative typicality of the task by 
+
+δt μ = P  
+
+> ν̸=μ
+
+δM νμ , if we arrange tasks as δt 1 ≤ δt 2 ≤
+
+... ≤ δt P , on average, earlier pairs are dissimilar to each other while the latter ones are similar. Below, we denote this ordering as a periphery-to-core rule, as less representative periphery tasks are learned first and more central core tasks are learned later under this principle (Fig. 4b). Under a randomly generated input correlation matrix Cin , periphery-to-core task order robustly outperformed both random and core-to-periphery order, when the average correlation is large positive value (red vs black and blue line in Fig. 3e). This was not the case when the average correlation is a small positive value potentially due to contribution from 
+
+G− factor. Note that, a similar rule was derived by Lin et al. (2023) based on their analysis of linear regression model, where they proved that when there is one outlier task, the outlier task should be learned in the first half of the task sequence. 
+
+4.3. Impact of Hamiltonian Path Length 
+
+Let us next focus on G− 
+
+> μν
+
+term that governs the contribution of the relative distance between tasks in the task sequence. The error originating from this term is written as 
+
+δϵ − 
+
+> f
+
+= α− 
+
+> P−1
+
+X
+
+> d=1
+
+(1 − m)P −dP −dX
+
+> μ=1
+
+δM μ,μ +d, (14) where α− ≡ − 1+(1 −m)P
+
+ mP  
+
+> 1−m
+
++ 3−m
+
+> 2−m
+
+
+
+is a coefficient. 
+
+α− is negative if 1 > m > 0 and P is sufficiently large (Fig. 4f). Thus, to minimize the error δϵ − 
+
+> f
+
+, the tasks should be arrange in a way that δM μ,μ +d is small for small d, while 
+
+δM μ,μ +d is large for large d. In other words, tasks following one another in the task order sequence should be dissimilar to each other, while distant pairs should be similar. Given a set of tasks, let us define a task dissimilarity graph by setting each task as a node and dissimilarity between two tasks as the weight of the edge between corresponding nodes (Fig. 4c). Then, a task order that learns each task only once forms a Hamiltonian path on the graph, a path that visits all nodes once but only once. We can then construct a heuristic solution for minimizing δϵ − 
+
+> f
+
+by selecting a task order that yields the longest Hamiltonian path. When tasks have the same similarity with each other in terms of Cout ,their similarity depends solely on Cin , allowing us to define dissimilarity as dμν ≡ 1 − Cin μν . Thus, the total length of the Hamiltonian path induced by a given task order follows 
+
+DH = PP −1 
+
+> μ=1
+
+dμ,μ +1 . Consequently, δϵ − 
+
+> f
+
+is rewritten as 
+
+δϵ − 
+
+> f
+
+= −α−
+
+(1 − m)P −1DH
+
++ 
+
+> P−1
+
+X
+
+> d=2
+
+(1 − m)P −dP −dX
+
+> μ=1
+
+dμ,μ +d
+
+
+
++ const. (15) Because −α− is non-negative, small task dissimilarity dμν 
+
+(i.e., large task correlation Cin μν ) generally helps minimiz-ing the error. Moreover, we have 0 ≤ (1 − m)P −1 <
+
+(1 − m)P −d for d = 2 , 3, ... , indicating DH term has the smallest impact on the error. Therefore, by choosing the largest dμν for DH , we can make δϵ − 
+
+> f
+
+small on average. We observed this trend robustly even when we sampled 
+
+{Cin , C out } randomly (Fig. 3g). Our work thus provides theoretical insights on why the maximum Hamiltonian path provides a preferable task order, strengthening previous em-pirical finding (Bell & Lawrence, 2022). We call this rule as max-path rule below. 
+
+4.4. Application to Tasks Having Simple Graph Structures 
+
+The analyses above elucidated two principles underlying task order optimization. To illustrate these principles, we next examine task order optimization for a set of tasks with a simple task similarity structure. Figure 4a depicts the total error estimated using Eq. 8 in a continual learning scenario involving five tasks with a chain-like similarity. We configure the input correlation matrix 
+
+Cin such that tasks A and B are directly correlated, while A
+
+and C are correlated only indirectly through B. Specifically, denoting the similarity between neighboring tasks on the task dissimilarity graph as a, we set Cin AB = Cin BC = a,
+
+Cin AC = a2, and so on (see Appendix C). Here, tasks ex-hibit significant overlap when a ≲ 1, while tasks become independent in the limit a → 0 (x-axis of Figure 4a). We set Cout to one for all task pairs. Each line in Figure 4a 6Optimal Task Order for Continual Learning of Multiple Tasks              
+
+> Figure 4. Optimal task orders for tasks with simple graph-like similarity structures. a,b) Total error ϵfunder all task orders when the similarity structure of five tasks follows chain (a) and ring (b) structures. Each gray line represents one of 120 (=5!) task order, while red, orange, and blue lines highlight three representative task orders depicted on the right. Thick black line is the average error over ordering.
+> c) Numerically-estimated learning dynamics of the network when tasks have a chain-graph structure. Red and blue lines represents
+> A→B→C→D→Eand A→E→C→D→Borders depicted in the insets. Black line is the average learning trajectory under random task ordering. d,e) The same as panels a and b but for tasks with similarity matrices having tree (d), and tree-leaves similarity structure (e), respectively. f) The same as panel c, but for tasks having tree-graph-like similarity structure.
+
+represents the error under a specific task order. For example, the A→B→C→D→E task order, depicted by the red line, consistently performed among the worst, regardless of the similarity a between neighboring tasks. Surprisingly, sev-eral task orders robustly outperformed the others, such as 
+
+A→C→E→D→B (orange line) and A→E→C→D→B (blue line). These task orders align with the two principles de-scribed earlier. First, the periphery-to-core rule suggests that the initial task should either be A or E, as these tasks are the least typical. 1 Second, the max-path rule indicates that subsequent tasks should be as dissimilar as possible. For instance, if the first task is A, selecting E as the second task, as in the blue line, maximizes the distance. Notably, there was approximately a seven-fold difference in performance between the best and worst task orders, underscoring the critical importance of task order in continual learning. We observed analogous trends when applying the same anal-ysis to tasks with ring, tree, and leaves structures (Figs. 4b, 4d, and 4e, respectively). For tasks with a tree-like similarity structure, as shown in Figure 4d, the error was minimized when tasks corresponding to leaf nodes were learned first, followed by tasks associated with root nodes (the orange and blue trees in Fig. 4d). This result aligns with the periphery-to-core rule. When only the leaf nodes were considered as tasks, as illustrated in Figure 4e, the optimal task order exhibited a complex pattern of hopping across tasks (blue tree in Fig. 4e), consistent with the max-path rule.    
+
+> 1Due to mirror symmetry, the E→A→C→B→Dorder exhibits equivalent performance to A→E→C→D→B.
+
+Numerical simulations validated the analytical results (Figs. 4c and 4f) and further revealed intricate learning dynamics. In Figure 4f, the red task order initially outper-formed the black line representing the average performance, while the blue task order performed worse. However, this trend reversed around the fourth task. These findings indi-cate that the optimal task order is often non-trivial, and a greedy approach optimizing task-by-task error may lead to suboptimal performance. 
+
+## 5. Application to Image Classification Tasks 
+
+Our analytical investigation in the linear teacher-student setting highlighted two principles for task order optimiza-tion: the periphery-to-core rule and the max-path rule. To evaluate the potential applicability of these principles to more general settings, we next explore continual learning of image classification tasks. 
+
+5.1. Empirical Estimation of Task Similarity 
+
+To apply these principles, it is necessary to first measure the similarity between tasks. Here, we estimate the similarity between tasks A and B by measuring the zero-shot transfer performance between them (Fig. 8). Specifically, we train a network for task A, obtaining the learned weights WA. We then measure the error of this trained network on task B,denoted as ϵB [WA]. Since the transfer performance from task A to B generally differs from that of B to A we take 7Optimal Task Order for Continual Learning of Multiple Tasks         
+
+> Figure 5. Task order preference in continuous image classification tasks. a–f) Continual learning performance, defined as the average test accuracy across all the tasks after learning, under various task orders. Panels (a, c, e) compare the periphery-to-core rule against the core-to-periphery rule, whereas panels (b, d, f) compare the max-path rule with the min-path rule. g, h) The ratio of task sets where the periphery-to-core rule outperforms the core-to-periphery rule (g), and where the max-path rule outperforms the min-path rule (h), under CIFAR-100. Different colors represent results for different numbers of tasks ( P= 3 ,5,7). See Appendix C.3 for details.
+
+the mean of both directions and define the similarity ρAB :
+
+ρAB = 1 − 12
+
+s
+
+ϵB [WA]
+
+ϵB,sf [WA] +
+
+s
+
+ϵA[WB ]
+
+ϵA,sf [WB ]
+
+!
+
+. (16) Here, ϵB,sf [WA] represents the error on task B with label shuffling, which serves as the chance-level error. The square root is taken because the error scales with the squared value of task correlation in our linear model (see Appendix C.4). Although this method requires training the network on all 
+
+P tasks, the computational complexity of training is O(P ),which is significantly smaller than the naive task order opti-mization that requires a computational cost of O(P !) . Fur-thermore, this method only requires the inputs and outputs of the trained network, making it applicable even in situa-tions where the model’s internal details are inaccessible. 
+
+5.2. Numerical Results 
+
+We estimated the performance of the periphery-to-core rule and max-path rule in task-incremental continual learning using Fashion-MNIST (Xiao et al., 2017), CIFAR-10, and CIFAR-100 dataset (Krizhevsky et al., 2009) (see Appendix C for the details). For the Fashion-MNIST and CIFAR-10 datasets, we randomly generated five binary image classi-fication tasks by dividing 10 labels into 5 pairs without re-placement. In the case of CIFAR-100, we selected 10 labels out of 100 labels randomly and generated 5 binary classi-fications. For Fashion-MNIST, we trained a multi-layered perceptron with two hidden layers, while for CIFAR-10/100, we used a convolutional neural network with two convolu-tional layers and one dense layer, to explore robustness against the model architecture. We found that the final performance was modulated by the estimated average similarity among tasks, ¯ρ =  
+
+> 1
+> P(P−1)
+
+P 
+
+> μ̸=ν
+
+ρμν , we thus plotted the performance of each task-order rule as a function of the average similarity (Fig. 5). In all three settings, we found that the periphery-to-core rule robustly outperforms the core-to-periphery rule and average performance over random ordering (Fig. 5a,c,e). Similarly, the max-path rule outperformed both the min-path rule and the random ordering (Fig. 5b,d,e; see also Bell & Lawrence (2022)). Moreover, we observed consistent results under a continual learning of a multi-class classifica-tion (Fig.7a and b). The periphery-to-core rule outperformed the max-path rule on average, but the difference was small (red lines in Fig. 5 top vs bottom). When we increased the number of binary classification tasks from 3 to 7 using CIFAR-100, the performance advantage periphery-to-core over core-to-periphery increased (Fig. 5g) as expected from the linear model (Fig. 6c). This was not evident for max-path and min-path rules potentially because the difference was already high under P = 3 (Fig. 5h). We also investigated the inference of task similarity and ordering from a small subset of training data. This exten-sion is crucial, as it demonstrates the practical relevance of our theory to real-world machine learning settings where full access to all training data upfront is often unrealistic (in contrast, when complete data is available, naive multi-task learning may suffice). When we reduced the number of training samples used to estimate task similarity across tasks 8Optimal Task Order for Continual Learning of Multiple Tasks 
+
+in CIFAR-10, the relative advantage of both the periphery-to-core rule and the max-path rule over a random task order remained robust. Even when only 1% of the training data was used for estimating task similarity, we observed a per-formance gain comparable to that in the full data scenario (Panels c and d vs. g and h in Fig. 9). However, when the amount of data was reduced to 0.1% (approximately 10 sam-ples per task), the performance gain became non-significant. We observed similar trends with both the Fashion-MNIST and CIFAR-100 datasets, although the results for CIFAR-100 were less robust, particularly in the negative similarity regime (Fig. 10). These results suggest the robustness of the task order optimization principles found in our simple analysis. 
+
+## 6. Discussion 
+
+In this work, we derived a simple analytical expression to explain how task similarity and ordering influence continual learning performance in a linear model with latent struc-ture. Based on this result, we proposed two principles for task order optimization: the periphery-to-core rule and the max-path rule, the latter of which was predicted by Bell & Lawrence (2022). We validated these principles in task-incremental continual image classification tasks using both multi-layer perceptrons and convolutional neural networks. Thus, this work proposes basic principles for task order op-timization in the context of continual learning for multiple tasks. 
+
+Limitations 
+
+Our theoretical results were derived in a linear model under the assumption of random task generation, which limits their direct applicability. However, we numerically confirmed that the proposed ordering rules hold in both convolutional neural networks and multi-layer perceptrons trained for con-tinual image recognition tasks. Future work should further evaluate these rules in domains closer to real-world appli-cations, including deep-RL, robotics, and language models. Additionally, in this work, we restricted the model setting to scenarios where each task is learned only once and trained to convergence. The first assumption can be readily re-laxed as long as the total number of tasks remains small (see Appendix A.4). Relaxing the second assumption is an important direction for future work. 
+
+## Acknowledgements 
+
+This work was partially supported by McDonnell Center for Systems Neuroscience. 
+
+## Impact Statement 
+
+Task order optimization for continual learning of multi-ple tasks may potentially contribute beyond the field of machine learning from school curriculum design (Rafferty et al., 2016; Zhu et al., 2018) to animal training protocol in neuroscience experiments (Krueger & Dayan, 2009). Nev-ertheless, due to theoretical nature of this work, there are no specific societal consequence that we feel must be high-lighted here. 
+
+## References 
+
+Advani, M. S., Saxe, A. M., and Sompolinsky, H. High-dimensional dynamics of generalization error in neural networks. Neural Networks , 132:428–446, 2020. Asanuma, H., Takagi, S., Nagano, Y., Yoshida, Y., Igarashi, Y., and Okada, M. Statistical mechanical analysis of catastrophic forgetting in continual learning with teacher and student networks. Journal of the Physical Society of Japan , 90(10):104001, 2021. Bahri, Y., Kadmon, J., Pennington, J., Schoenholz, S. S., Sohl-Dickstein, J., and Ganguli, S. Statistical mechanics of deep learning. Annual Review of Condensed Matter Physics , 11:501–528, 2020. Bell, S. J. and Lawrence, N. D. The effect of task ordering in continual learning. arXiv preprint arXiv:2205.13323 ,2022. Chowdhery, A., Narang, S., Devlin, J., Bosma, M., Mishra, G., Roberts, A., Barham, P., Chung, H. W., Sutton, C., Gehrmann, S., et al. Palm: Scaling language modeling with pathways. Journal of Machine Learning Research ,24(240):1–113, 2023. Cohen, U., Chung, S., Lee, D. D., and Sompolinsky, H. Separability and geometry of object manifolds in deep neural networks. Nature communications , 11(1):746, 2020. Elman, J. L. Learning and development in neural networks: The importance of starting small. Cognition , 48(1):71–99, 1993. Evron, I., Moroshko, E., Ward, R., Srebro, N., and Soudry, D. How catastrophic can catastrophic forgetting be in linear regression? In Conference on Learning Theory , pp. 4028–4079. PMLR, 2022. Evron, I., Moroshko, E., Buzaglo, G., Khriesh, M., Mar-jieh, B., Srebro, N., and Soudry, D. Continual learning in linear classification on separable data. In Interna-tional Conference on Machine Learning , pp. 9440–9484. PMLR, 2023. 9Optimal Task Order for Continual Learning of Multiple Tasks 
+
+French, R. M. Using semi-distributed representations to overcome catastrophic forgetting in connectionist net-works. In Proceedings of the 13th annual cognitive sci-ence society conference , volume 1, pp. 173–178, 1991. French, R. M. Catastrophic forgetting in connectionist net-works. Trends in cognitive sciences , 3(4):128–135, 1999. Gardner, E. and Derrida, B. Three unfinished works on the optimal storage capacity of networks. Journal of Physics A: Mathematical and General , 22(12):1983, 1989. Goldfarb, D. and Hand, P. Analysis of catastrophic forget-ting for random orthogonal transformation tasks in the overparameterized regime. In International Conference on Artificial Intelligence and Statistics , pp. 2975–2993. PMLR, 2023. Goldfarb, D., Evron, I., Weinberger, N., Soudry, D., and HAnd, P. The joint effect of task similarity and overpa-rameterization on catastrophic forgetting—an analytical model. In The Twelfth International Conference on Learn-ing Representations .Guo, M., Haque, A., Huang, D.-A., Yeung, S., and Fei-Fei, L. Dynamic task prioritization for multitask learning. In 
+
+Proceedings of the European conference on computer vision (ECCV) , pp. 270–287, 2018. Hadsell, R., Rao, D., Rusu, A. A., and Pascanu, R. Embrac-ing change: Continual learning in deep neural networks. 
+
+Trends in cognitive sciences , 24(12):1028–1040, 2020. Heek, J., Levskaya, A., Oliver, A., Ritter, M., Rondepierre, B., Steiner, A., and van Zee, M. Flax: A neural network library and ecosystem for JAX, 2024. URL http:// github.com/google/flax .Helias, M. and Dahmen, D. Statistical field theory for neural networks , volume 970. Springer, 2020. Hiratani, N. Disentangling and mitigating the impact of task similarity for continual learning. In The Thirty-eighth Annual Conference on Neural Information Processing Systems .Hoffmann, J., Borgeaud, S., Mensch, A., Buchatskaya, E., Cai, T., Rutherford, E., de Las Casas, D., Hendricks, L. A., Welbl, J., Clark, A., et al. Training compute-optimal large language models. In Proceedings of the 36th International Conference on Neural Information Processing Systems , pp. 30016–30030, 2022. Ibarz, J., Tan, J., Finn, C., Kalakrishnan, M., Pastor, P., and Levine, S. How to train your robot with deep reinforce-ment learning: lessons we have learned. The International Journal of Robotics Research , 40(4-5):698–721, 2021. Ke, Z., Liu, B., Xiong, W., Celikyilmaz, A., and Li, H. Sub-network discovery and soft-masking for continual learning of mixed tasks. In The 2023 Conference on Empirical Methods in Natural Language Processing .Ke, Z., Liu, B., and Huang, X. Continual learning of a mixed sequence of similar and dissimilar tasks. Advances in neural information processing systems , 33:18493–18504, 2020. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Des-jardins, G., Rusu, A. A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the national academy of sciences , 114(13):3521–3526, 2017. Kontogianni, T., Yue, Y., Tang, S., and Schindler, K. Is con-tinual learning ready for real-world challenges? CoRR ,2024. Krizhevsky, A., Hinton, G., et al. Learning multiple layers of features from tiny images. 2009. Krueger, K. A. and Dayan, P. Flexible shaping: How learn-ing in small steps helps. Cognition , 110(3):380–394, 2009. Kumari, P., Chauhan, J., Bozorgpour, A., Azad, R., and Merhof, D. Continual learning in medical imaging analy-sis: A comprehensive review of recent advancements and future prospects. CoRR , 2023. Lad, A., Ghani, R., Yang, Y., and Kisiel, B. Toward optimal ordering of prediction tasks. In Proceedings of the 2009 SIAM International Conference on Data Mining , pp. 884– 893. SIAM, 2009. Lee, S., Goldt, S., and Saxe, A. Continual learning in the teacher-student setup: Impact of task similarity. In 
+
+International Conference on Machine Learning , pp. 6109– 6119. PMLR, 2021. Lesort, T., Lomonaco, V., Stoian, A., Maltoni, D., Filliat, D., and D ´ıaz-Rodr ´ıguez, N. Continual learning for robotics: Definition, framework, learning strategies, opportunities and challenges. Information fusion , 58:52–68, 2020. Li, C., Huang, Z., Zou, W., and Huang, H. Statistical mechanics of continual learning: Variational principle and mean-field potential. Physical Review E , 108(1): 014309, 2023. Lin, S., Yang, L., Fan, D., and Zhang, J. Beyond not-forgetting: Continual learning with backward knowledge transfer. Advances in Neural Information Processing Systems , 35:16165–16177, 2022. 10 Optimal Task Order for Continual Learning of Multiple Tasks 
+
+Lin, S., Ju, P., Liang, Y., and Shroff, N. Theory on forget-ting and generalization of continual learning. In Inter-national Conference on Machine Learning , pp. 21078– 21100. PMLR, 2023. Luo, Y., Yang, Z., Meng, F., Li, Y., Zhou, J., and Zhang, Y. An empirical study of catastrophic forgetting in large language models during continual fine-tuning. arXiv preprint arXiv:2308.08747 , 2023. McCloskey, M. and Cohen, N. J. Catastrophic interfer-ence in connectionist networks: The sequential learning problem. In Psychology of learning and motivation , vol-ume 24, pp. 109–165. Elsevier, 1989. Mori, F., Mannelli, S. S., and Mignacco, F. Optimal pro-tocols for continual learning via statistical physics and control theory. In NeurIPS 2024 Workshop on Mathemat-ics of Modern Machine Learning .Narvekar, S., Peng, B., Leonetti, M., Sinapov, J., Taylor, M. E., and Stone, P. Curriculum learning for reinforce-ment learning domains: A framework and survey. Journal of Machine Learning Research , 21(181):1–50, 2020. Peng, L., Giampouras, P., and Vidal, R. The ideal continual learner: An agent that never forgets. In International Con-ference on Machine Learning , pp. 27585–27610. PMLR, 2023. Pentina, A., Sharmanska, V., and Lampert, C. H. Curriculum learning of multiple tasks. In Proceedings of the IEEE conference on computer vision and pattern recognition ,pp. 5492–5500, 2015. Rafferty, A. N., Brunskill, E., Griffiths, T. L., and Shafto, P. Faster teaching via pomdp planning. Cognitive science ,40(6):1290–1332, 2016. Ramasesh, V. V., Dyer, E., and Raghu, M. Anatomy of catastrophic forgetting: Hidden representations and task semantics. In International Conference on Learning Rep-resentations .Robins, A. Catastrophic forgetting, rehearsal and pseudore-hearsal. Connection Science , 7(2):123–146, 1995. Rolnick, D., Ahuja, A., Schwarz, J., Lillicrap, T., and Wayne, G. Experience replay for continual learning. 
+
+Advances in neural information processing systems , 32, 2019. Saad, D. and Solla, S. A. On-line learning in soft committee machines. Physical Review E , 52(4):4225, 1995. Saxe, A., McClelland, J., and Ganguli, S. Exact solutions to the nonlinear dynamics of learning in deep linear neural networks. In Proceedings of the International Conference on Learning Represenatations , 2014. Saxe, A. M., McClelland, J. L., and Ganguli, S. A mathe-matical theory of semantic development in deep neural networks. Proceedings of the National Academy of Sci-ences , 116(23):11537–11546, 2019. Serra, J., Suris, D., Miron, M., and Karatzoglou, A. Over-coming catastrophic forgetting with hard attention to the task. In International conference on machine learning ,pp. 4548–4557. PMLR, 2018. Seung, H. S., Sompolinsky, H., and Tishby, N. Statistical mechanics of learning from examples. Physical review A ,45(8):6056, 1992. Shin, H., Lee, J. K., Kim, J., and Kim, J. Continual learning with deep generative replay. Advances in neural informa-tion processing systems , 30, 2017. Singh, P., Li, Y., Sikarwar, A., Lei, S. W., Gao, D., Talbot, M. B., Sun, Y., Shou, M. Z., Kreiman, G., and Zhang, M. Learning to learn: How to continuously teach humans and machines. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 11708–11719, 2023. Tian, Y., Chen, X., and Ganguli, S. Understanding self-supervised learning dynamics without contrastive pairs. In International Conference on Machine Learning , pp. 10268–10278. PMLR, 2021. Van de Ven, G. M. and Tolias, A. S. Three scenarios for continual learning. arXiv preprint arXiv:1904.07734 ,2019. Verwimp, E., Yang, K., Parisot, S., Hong, L., McDonagh, S., P ´erez-Pellitero, E., De Lange, M., and Tuytelaars, T. Clad: A realistic continual learning benchmark for autonomous driving. Neural Networks , 161:659–669, 2023. Werfel, J., Xie, X., and Seung, H. Learning curves for stochastic gradient descent in linear feedforward net-works. Advances in neural information processing sys-tems , 16, 2003. Xiao, H., Rasul, K., and Vollgraf, R. Fashion-mnist: a novel image dataset for benchmarking machine learning algorithms. arXiv preprint arXiv:1708.07747 , 2017. Yu, X., Liu, T., Wang, X., and Tao, D. On compressing deep models by low rank and sparse decomposition. In 
+
+Proceedings of the IEEE conference on computer vision and pattern recognition , pp. 7370–7379, 2017. Zdeborov ´a, L. and Krzakala, F. Statistical physics of infer-ence: Thresholds and algorithms. Advances in Physics ,65(5):453–552, 2016. Zhu, X., Singla, A., Zilles, S., and Rafferty, A. N. An overview of machine teaching. arXiv preprint arXiv:1801.05927 , 2018. 11 Optimal Task Order for Continual Learning of Multiple Tasks 
+
+## A. Analysis of the Impact of Task Similarity on Continual Learning 
+
+A.1. Model Setting 
+
+Below, we analyze task-order dependence of continual learning using linear teacher-student models with a latent factor. In teacher-student models, the generative model of the task parameterized explicitly by the teacher model, making the learning dynamics and the performance analytically tractable (Gardner & Derrida, 1989; Saad & Solla, 1995; Zdeborov ´a & Krzakala, 2016). Here, the generative model for input x ∈ RNx and the target output y ∈ RNy is constructed as 
+
+s ∼ N (0 , I ) , x = Aμs, y∗ = Bμs, (17) where s ∈ RNs is the latent variable that underlies x and y∗, I is the identity matrix, and Aμ ∈ RNx×Ns and Bμ ∈ RNy ×Ns
+
+are mixing matrices for the input and the target output at task μ = 1 , ..., P , respectively. We generate matrices {Aμ, B μ}Pμ=1 randomly but with task-to-task correlation. We specify the element-wise correlation among input generation matrices {Aμ}Pμ=1 by a P × P correlation matrix Cin and specify the correlation among the target output generation matrices {Bμ}Pμ=1 by another P × P correlation matrix Cout . Cin and Cout are constrained to be correlation matrices, but arbitrary otherwise. For all 1 ≤ i ≤ Nx and 1 ≤ j ≤ Ns, we generate (i, j )-th elements of matrices A1, ..., A P by jointly sampling them from a Gaussian distribution with mean zero and covariance 1 
+
+> Ns
+
+Cin :
+
+
+
+A1
+
+> ij
+
+...
+
+APij 
+
+ ∼ N 
+
+
+
+0, 1 
+
+> Ns
+
+Cin 
+
+. (18) Similarly, we generate (i, j )-th elements of matrices B1, ..., B P by (B1 
+
+> ij
+
+, ..., B Pij )T ∼ N 
+
+
+
+0, 1 
+
+> Ns
+
+Cout 
+
+
+
+. Note that, under this construction, two different elements in a matrix Aμ are independent with each other, but the same element in matrices for two different tasks are correlated with each other. Although the random task generation assumption limits direct applicability of our theory, it enables us to obtain insights into how task similarity influences the overall performance and optimal task order. Moreover, our analytical results up to Eq. 28 hold for arbitrary mixing matrices {Aμ, B μ}, as they don’t assume the expectation over {Aμ, B μ}.The student network that learns the task is specified to be a linear network: 
+
+y = W x, (19) where W ∈ RNy ×Nx is the trainable weight. The mean-squared error between the output of the student network y and the target for the μ-th task y∗ is given by 
+
+ϵμ[W ] ≡ 1
+
+> Ny
+
+D
+
+∥y − y∗∥2E
+
+> s
+
+= 1 
+
+> Ny
+
+∥Bμ − W A μ∥2 
+
+> F
+
+(20) The second equality follows from the Gaussianity of s. We consider task-incremental continual learning (Van de Ven & Tolias, 2019) where the network is trained for task μ = 1 , ..., P in sequence. During the training for the μ-th task, weight 
+
+W is updated by gradient descent on error ϵμ:
+
+W ← W − η ∂ϵ μ[W ]
+
+∂W = W − 2ηNy
+
+(Bμ − W A μ)ATμ . (21) We denote the weight after training on task μ as Wμ. The total error on all tasks at the end of all P task learning becomes: 
+
+ϵf ≡
+
+> P
+
+X
+
+> μ=1
+
+ϵμ[WP ] = 1
+
+NyPX
+
+> μ=1
+
+∥Bμ − WP Aμ∥2 
+
+> F
+
+. (22) To uncover how similarity between tasks influences the final error, in this work, we focus on the average performance over randomly generated mixing matrices {Aμ, B μ}Pμ=1 under a fixed pair of task correlation matrices Cin , C out . We define the average of the final error ϵf over generative models {Aμ, B μ}Pμ=1 by 
+
+¯ϵf ≡ ⟨ ϵf ⟩A,B . (23) Below, we first derive the analytical expression of Wμ then estimate the total final error ¯ϵf .12 Optimal Task Order for Continual Learning of Multiple Tasks 
+
+A.2. The Weight after Continual Learning of P Tasks 
+
+Considering the gradient flow limit of learning dynamics, the weight update (Eq. 21) is rewritten as 
+
+dW dt = −(Bμ − W A μ)ATμ . (24) Let us denote singular value decomposition (SVD) of Aμ by Aμ = UμΛμV Tμ , where Uμ ∈ RNx×No and Vμ ∈ RNs×No
+
+are semi-orthonormal matrices (i.e., U T U = V T V = I) and Λμ ∈ RNo×No is a non-negative diagonal matrix. Then, at any point during learning, there exists a matrix Q(t) ∈ RNy ×No such that W (t) is written as W (t) = Wμ−1 + Q(t)U Tμ
+
+because weight change during learning of the μ-th task is constrained to the space spanned by U Tμ . Thus, at the convergence of learning, dW dt = 0 , we have 
+
+ Bμ − [Wμ−1 + QμU Tμ ]Aμ
+
+ ATμ = 0 . (25) Solving this equation with respect to Qμ, we get Qμ = BμVμΛ−1 
+
+> μ
+
+− Wμ−1Uμ. Therefore, the weight after training on the 
+
+μ-th task becomes 
+
+Wμ = Wμ−1(I − UμU Tμ ) + BμA+ 
+
+> μ
+
+, (26) where A+ 
+
+> μ
+
+is the pseudo-inverse of Aμ (A+ 
+
+> μ
+
+= VμΛ−1 
+
+> μ
+
+U Tμ ). By applying this result iteratively from zero initialization, Wμ is rewritten as 
+
+Wμ =
+
+> μ
+
+X
+
+> ν=1
+
+(Bν A+ 
+
+> ν
+
+)
+
+> μ
+
+Y
+
+> ρ=ν+1
+
+(I − UρU Tρ ), (27) where Qμρ=ν+1 (I − UρU Tρ ) is the identity matrix if μ = ν, otherwise, 
+
+> μ
+
+Y
+
+> ρ=ν+1
+
+(I − UρU Tρ ) = ( I − Uν+1 U Tν+1 )( I − Uν+2 U Tν+2 ) · · · (I − UμU Tμ ). (28) To further investigate how task similarity impacts continual learning performance, below we focus on the large Nx regime, and analyze the learning behavior at Ns 
+
+> Nx
+
+→ 0 limit. This assumption of the presence of low-dimensional latent factor is consistent with many real-world datasets (Yu et al., 2017; Cohen et al., 2020). If Aμ is a very-tall random matrix (i.e., Nx ≫ Ns), pseudo-inverse A+ 
+
+> μ
+
+is approximated by a scaled transpose γA Tμ , and UμU Tμ approximately follows 
+
+UμU Tμ ≈ γA μATμ , where γ = Ns 
+
+> Nx
+
+(see Appendix A.4). Thus, we have 
+
+Wμ ≈ γ
+
+> μ
+
+X
+
+> ν=1
+
+(Bν ATν )
+
+> μ
+
+Y
+
+> ρ=ν+1
+
+(I − γA ρATρ ). (29) Using the approximation from Eq. 29, the error on the μ-th task after training on ν-th task, ϵμ[Wν ], is 
+
+ϵμ[Wν ] = ∥Bμ − Wν Aμ∥2 
+
+> F
+
+≈ Bμ − γ
+
+> ν
+
+X
+
+> ρ=1
+
+(BρATρ )
+
+> ν
+
+Y
+
+> σ=ρ+1
+
+(I − γA σ ATσ )Aμ
+
+> 2
+> F
+
+. (30) 
+
+A.3. Proof of Theorem 3.1 
+
+Substituting WP with Eq. 29, at Ns 
+
+> Nx
+
+→ 0 limit, ¯ϵf is rewritten as 
+
+¯ϵf = 1
+
+NyPX
+
+> μ=1
+
+*
+
+Bμ − γ
+
+> P
+
+X
+
+> ρ=1
+
+BρATρPY
+
+> σ=ρ+1
+
+(I − γA σ ATσ )Aμ
+
+> 2
+> F
+
++
+
+= 1
+
+NyPX
+
+> μ=1
+
+D
+
+∥Bμ∥2
+
+> F
+
+E
+
+− 2γNyPX
+
+> μ=1
+> P
+
+X
+
+> ρ=1
+
+*
+
+tr 
+
+"
+
+BTμ BρATρPY
+
+> σ=ρ+1
+
+(I − γA σ ATσ )Aμ
+
+#+ 
+
++ γ2
+
+NyPX
+
+> μ=1
+
+* PX
+
+> ρ=1
+
+BρATρPY
+
+> σ=ρ+1
+
+(I − γA σ ATσ )Aμ
+
+> 2
+> F
+
++
+
+(31) 13 Optimal Task Order for Continual Learning of Multiple Tasks 
+
+Taking expectation over {Aμ, B μ}Pμ=1 , the first term is 
+
+D
+
+∥Bμ∥2
+
+> F
+
+E
+
+= Ny . The second term is rewritten as 
+
+γNyPX
+
+> μ=1
+> P
+
+X
+
+> ρ=1
+
+*
+
+tr 
+
+"
+
+BTμ BρATρPY
+
+> σ=ρ+1
+
+(I − γA σ ATσ )Aμ
+
+#+ 
+
+= 1
+
+NxPX
+
+> μ=1
+> P
+
+X
+
+> ρ=1
+
+Cout μρ tr ATρ (I − γA ρ+1 ATρ+1 ) · · · (I − γA P ATP )Aμ
+
+
+
+= 1
+
+NxPX
+
+> μ=1
+> P
+
+X
+
+> ρ=1
+
+Cout μρ 
+
+*
+
+tr [ATρ Aμ] − γ
+
+> P
+
+X
+
+> σ1=ρ+1
+
+tr [ATρ Aσ1 ATσ1 Aμ] + γ2 
+
+> P−1
+
+X
+
+> σ1=ρ+1
+> P
+
+X
+
+> σ2=σ1+1
+
+tr [ATρ Aσ1 ATσ1 Aσ2 ATσ2 Aμ] − ... 
+
++
+
+= 1
+
+NxPX
+
+> μ=1
+> P
+
+X
+
+> ρ=1
+
+Cout μρ P −ρX
+
+> k=0
+
+(−γ)k X 
+
+> ρ<σ 1<...<σ k≤P
+
+tr ATρ Aσ1 ATσ1 ...A σk ATσk Aμ
+
+ . (32) In the first line, we took expectation over {Bμ}, which yields γNy tr [BTμ BρM ] B = Ns/N x  
+
+> Ny
+> NyCBμρ
+> Ns
+
+tr [M ] = CBμρ  
+
+> Nx
+
+tr [M ] for arbitrary matrix M . In the third line, we rearranged the terms inside the trace based on γ dependence. The summation P  
+
+> ρ<σ 1<...<σ k≤P
+
+in the last line is summation over a set of indices σ1, σ2, ..., σk that satisfy ρ < σ 1 < σ 2 < ... < σ k ≤ P
+
+condition. Under Nx ≫ Ns, the expectation term in the equation above follows (see Appendix A.4) 
+
+γktr ATρ Aσ1 ATσ1 ...A σk ATσk Aμ
+
+ = Nx
+
+
+
+Cin ρσ 1 Cin σ1σ2 ...C in σk μ + O
+
+ Ns
+
+> Nx
+
+ 
+
+. (33) Moreover, if we define an upper-triangle matrix Cin,U ∈ RP ×P by 
+
+Cin,U =
+
+(
+
+Cin μν (if μ < ν )0 (otherwise ) , (34) we have 
+
+X 
+
+> ρ<σ 1<...<σ k≤P
+
+tr ATρ Aσ1 ATσ1 ...A σk ATσk Aμ
+
+ = X 
+
+> ρ<σ 1<...<σ k≤P
+
+Cin ρσ 1 Cin σ1σ2 ...C in σk μ + O
+
+ Ns
+
+> Nx
+
+
+
+=
+
+h Cin,U k Cin i
+
+> ρμ
+
++ O
+
+ Ns
+
+> Nx
+
+
+
+(35) The last line follows because the upper triangle matrix Cin,U satisfies 
+
+> P
+
+X
+
+> σ1=1
+> P
+
+X
+
+> σ2=1
+
+... 
+
+> P
+
+X 
+
+> σk=1
+
+Cin,U ρσ 1 Cin,U σ1σ2 ...C in,U σk−1σk Cin σk μ =
+
+> P
+
+X
+
+> σ1=ρ+1
+> P
+
+X
+
+> σ2=σ1+1
+
+... 
+
+> P
+
+X 
+
+> σk=σk−1+1
+
+Cin,U ρσ 1 Cin,U σ1σ2 ...C in,U σk−1σk Cin σk μ
+
+= X 
+
+> ρ<σ 1<...<σ k≤P
+
+Cin ρσ 1 Cin σ1σ2 ...C in σk−1σk Cin σk μ. (36) Moreover, because (Cin,U )k 
+
+> ρν
+
+= 0 for any ν if ρ satisfies ρ ≥ P − k + 1 , we have  
+
+> P−ρ
+
+X
+
+> k=0
+
+h Cin,U k Cin i
+
+> ρμ
+
+=
+
+> P
+
+X
+
+> k=0
+
+h Cin,U k Cin i
+
+> ρμ
+
+(37) 14 Optimal Task Order for Continual Learning of Multiple Tasks 
+
+Therefore, taking Ns
+
+Nx → 0 limit, it follows that 
+
+1
+
+NxPX
+
+μ=1 
+
+PX
+
+ρ=1 
+
+Cout μρ ν−ρX
+
+k=0 
+
+(−γ)k X
+
+ρ<σ 1<...<σ k ≤P
+
+tr ATρ Aσ1 ATσ1 ...A σk ATσk Aμ
+
+
+
+≈
+
+PX
+
+μ=1 
+
+PX
+
+ρ=1 
+
+Cout μρ PX
+
+k=0 
+
+(−1) k h Cin,U k Cin i
+
+ρμ 
+
+=
+
+PX
+
+μ=1 
+
+PX
+
+ρ=1 
+
+Cout μρ 
+
+h I + Cin,U −1 Cin i
+
+ρμ 
+
+= tr 
+
+h
+
+Cout  I + Cin,U −1 Cin i
+
+. (38) In the third line, we used 
+
+(I + Cin,U )
+
+PX
+
+k=0 
+
+(−1) k  Cin,U k = I + ( −1) P  Cin,U P +1 = I. (39) We can evaluate the third term of Eq. 31 in an analogous manner: 
+
+γ2
+
+NyPX
+
+μ=1 
+
+* PX
+
+ρ=1 
+
+BρATρPY
+
+σ=ρ+1 
+
+(I − γA σ ATσ )Aμ
+
+2
+
+F
+
++
+
+= γ2
+
+NyPX
+
+μ=1 
+
+PX
+
+ρ=1 
+
+PX
+
+ρ′=1 
+
+*
+
+tr 
+
+BTρ′ BρATρPY
+
+σ=ρ+1 
+
+(I − γA σ ATσ )Aμ
+
+ATρ′
+
+PY
+
+σ′=ρ′+1 
+
+(I − γA σ′ ATσ′ )Aμ
+
+
+
+T +
+
+= Ns
+
+N 2
+
+xPX
+
+μ=1 
+
+PX
+
+ρ=1 
+
+PX
+
+ρ′=1 
+
+Cout ρρ ′ tr ATρ (I − γA ρ+1 ATρ+1 )... (I − γA P ATP )AμATμ (I − γA P ATP )... (I − γA ρ′+1 ATρ′+1 )Aρ′
+
+ .
+
+(40) The term inside the trace can be expanded as 
+
+tr ATρ (I − γA ρ+1 ATρ+1 )... (I − γA P ATP )AμATμ (I − γA P ATP )... (I − γA ρ′+1 ATρ′+1 )Aρ′
+
+
+
+=
+
+P −ρX
+
+k=1 
+
+P −ρ′
+
+X
+
+k′=1 
+
+X
+
+ρ<σ 1<...<σ k ≤P
+
+X
+
+ρ′<σ ′
+
+> 1
+
+<...<σ ′ 
+
+> k
+
+≤P
+
+(−γ)k+k′ D
+
+tr 
+
+h
+
+ATρ Aσ1 ATσ1 ...A σk ATσk AμATμ Aσ′ 
+
+> k
+
+ATσ′
+
+> k
+
+...A σ′ 
+
+> 1
+
+ATσ′ 
+
+> 1
+
+Aρ′
+
+iE 
+
+, (41) and the expectation over {Aμ} follows (Appendix A. 4) 
+
+γk+k′ D
+
+tr 
+
+h
+
+ATρ Aσ1 ATσ1 ...A σk ATσk AμATμ Aσ′ 
+
+> k
+
+ATσ′
+
+> k
+
+...A σ′ 
+
+> 1
+
+ATσ′ 
+
+> 1
+
+Aρ′
+
+iE 
+
+= N 2
+
+x
+
+Ns
+
+
+
+Cin ρσ 1 Cin σ1σ2 ...C in σk μCin μσ ′ 
+
+> k′
+
+...C in σ′
+
+> 2
+
+σ′ 
+
+> 1
+
+Cin σ′
+
+> 1
+
+ρ′ + O
+
+ Ns
+
+Nx
+
+ 
+
+.
+
+(42) Therefore, at Ns
+
+Nx → 0 limit, the squared term is evaluated as 
+
+γ2
+
+NyPX
+
+μ=1 
+
+* PX
+
+ρ=1 
+
+BρATρPY
+
+σ=ρ+1 
+
+(I − γA σ ATσ )Aμ
+
+2
+
+F
+
++
+
+=
+
+PX
+
+μ=1 
+
+PX
+
+ρ=1 
+
+PX
+
+ρ′=1 
+
+Cout ρρ ′
+
+
+
+P −ρX
+
+k=0 
+
+(−1) k X
+
+ρ<σ 1<...<σ k ≤P
+
+Cin ρσ 1 ...C in σk μ
+
+
+
+P −ρ′
+
+X
+
+k′=0 
+
+(−1) k′ X
+
+ρ′<σ ′
+
+> 1
+
+<...<σ ′ 
+
+> k′
+
+≤P
+
+Cin ρ′σ′ 
+
+> 1
+
+...C in σ′ 
+
+> k′
+
+μ
+
+
+
+=
+
+PX
+
+μ=1 
+
+PX
+
+ρ=1 
+
+PX
+
+ρ′=1 
+
+Cout ρρ ′
+
+(I + Cin,U )−1Cin 
+
+ρμ 
+
+(I + Cin,U )−1Cin 
+
+ρ′μ
+
+= tr 
+
+h
+
+Cout (I + Cin,U )−1Cin  (I + Cin,U )−1Cin T i
+
+. (43) 15 Optimal Task Order for Continual Learning of Multiple Tasks 
+
+Noticing that the first term of Eq. 31 is rewritten as 
+
+1
+
+NyPX
+
+> μ=1
+
+D
+
+∥Bμ∥2
+
+> F
+
+E
+
+= P = tr [Cout ], (44) at Ns 
+
+> Nx
+
+→ 0 limit, the final error ¯ϵf is written as 
+
+¯ϵf = tr [Cout ] − 2tr [Cout (I + Cin,U )−1Cin ] + tr 
+
+h
+
+Cout (I + Cin,U )−1Cin  (I + Cin,U )−1Cin T i
+
+=  Cout 1/2  I − (I + Cin,U )−1Cin  2
+
+> F
+
+. (45) Thus, we obtained the equality in Theorem 3.1. Note that because Cout is a correlation matrix, there exists a matrix 
+
+(Cout )1/2 such that (Cout )1/2 (Cout )1/2 = Cout . Because Cin = I + Cin,U + ( Cin,U )T , ¯ϵf is also written as 
+
+¯ϵf =  Cout 1/2 (I + Cin,U )−1  Cin,U T 2
+
+> F
+
+. (46) Note that, if Cin = I, the error is zero. This is consistent with previous results showing that in the absence of overlap between tasks, continual learning doesn’t suffer from forgetting (Ramasesh et al.; Lee et al., 2021; Peng et al., 2023). Additionally, Eq. 33 requires P ≪ Nx 
+
+> Ns
+
+(see Appendix A).4 below), thus the obtained expression doesn’t hold when the number of tasks is comparable to the network size. 
+
+A.4. Expectation over Random Correlated Matrices {Aμ}
+
+We first show that A+ 
+
+> μ
+
+→ γA Tμ and UμU Tμ → γA μATμ at Ns 
+
+> Nx
+
+→ 0, where γ = Ns 
+
+> Nx
+
+and Uμ is defined by SVD of Aμ,
+
+Aμ = UμΛμV Tμ . If Λμ = 1√γ I, then we have AμATμ = UμΛ2
+
+> μ
+
+U Tμ = 1 
+
+> γ
+
+UμU Tμ , and 
+
+A+ 
+
+> μ
+
+= VμΛ−1 
+
+> μ
+
+U Tμ = √γ  UμV Tμ
+
+T = γ
+
+ 1√γ UμV Tμ
+
+T
+
+= ATμ . (47) Thus, it is sufficient to show that Λμ → 1√λ I at Ns 
+
+> Nx
+
+→ 0. The mean and variance of Ns × Ns matrix ATμ Aμ over randomly sampled Aμ obey 
+
+ATμ Aμ A = Nx 
+
+> Ns
+
+I
+
+D
+
+[ATμ Aμ − 1 
+
+> γ
+
+I] ⊙ [ATμ Aμ − 1 
+
+> γ
+
+I]
+
+E
+
+= Nx 
+
+> N2
+> s
+
+ I + 11 T  , (48) where 1 is a all-one vector and ⊙ represents Hadamard product, indicating that the standard deviation of ATμ Aμ shows 
+
+O
+
+ Ns
+
+> Nx
+
+
+
+scaling with respect to the mean. Thus, γA Tμ Aμ → I at Ns 
+
+> Nx
+
+→ 0, implying Λμ → 1√λ I at Ns 
+
+> Nx
+
+→ 0.Regarding expectation over A in Eq. 33, expanding the equation up to the next to the leading order, we have 
+
+tr ATρ Aσ1 ATσ1 ...A σk ATσk Aμ
+
+
+
+= X
+
+> i0,...,i k
+
+X
+
+> j0,...,j k
+
+D
+
+Aρi0j0 Aσ1 
+
+> i0j1
+
+Aσ1 
+
+> i1j1
+
+Aσ2 
+
+> i1j2
+
+Aσ1 
+
+> i2j2
+
+...A σk 
+
+> ik−1jk
+
+Aσk  
+
+> ikjk
+
+Aμik j0
+
+E
+
+= X
+
+> i0,...,i k
+
+X
+
+> j0,...,j k
+
+
+
+δj0,j 1,j 2,...,j k
+
+ 1
+
+> Ns
+
+k+1 
+
+Cin ρσ 1 Cin σ1σ2 ...C in σk μ
+
++ X
+
+> l
+
+δil−1il δj0,j 1,...,j l−1,j l+1 ,...,j k
+
+ 1
+
+> Ns
+
+k+1 
+
+Cin ρσ 1 Cin σ1σ2 ...C in σl−2σl−1 Cin σl−1σl+1 Cin σlσl Cin σl+1 σl+2 ...C in σk μ + ... 
+
+
+
+= Nx
+
+ Nx
+
+> Ns
+
+k
+
+Cin ρσ 1 Cin σ1σ2 ...C in σk μ + Ns
+
+ Nx
+
+> Ns
+
+k X
+
+> l
+
+Cin ρσ 1 Cin σ1σ2 ...C in σl−1σl+1 Cin σlσl ...C in σk μ + O
+
+ Nx
+
+> Ns
+
+k
+
+= γ−kNx
+
+
+
+Cin ρσ 1 Cin σ1σ2 ...C in σk μ + O
+
+ Ns
+
+> Nx
+
+ 
+
+(49) 16 Optimal Task Order for Continual Learning of Multiple Tasks 
+
+δj0,j 1,...,j k in the third line is the Kronecker delta function that returns 1 if j0 = j1 = ... = jk, otherwise returns 0. The third line follows from Isserlis’ theorem, which states that the expectation over multivariate normal variables can be decomposed into summation over all pair-wise partitions (Helias & Dahmen, 2020). In the equation above, the partition that pairs neighboring matrices takes O(N k+1  
+
+> x
+
+) value, while all other partitions yield O(N kx ) value at most because of indices mismatch. Note that, the number of second order terms depends on P , as suggested by the summation over l in the third line. Thus, we expect that our theory hold only when P satisfies P ≪ Nx 
+
+> Ns
+
+.From a parallel argument with the one above, the expectation in Eq. 42 is evaluated as 
+
+γk+k′ D
+
+tr 
+
+h
+
+ATρ Aσ1 ATσ1 ...A σk ATσk AμATμ Aσ′ 
+
+> k
+
+ATσ′
+
+> k
+
+...A σ′ 
+
+> 1
+
+ATσ′ 
+
+> 1
+
+Aρ′
+
+iE 
+
+=
+
+ Ns
+
+> Nx
+
+k+k′  Nx
+
+> Ns
+
+k+k′+2 
+
+Ns
+
+
+
+Cin ρσ 1 Cin σ1σ2 ...C in σk μCin μσ ′ 
+
+> k′
+
+...C in σ′ 
+
+> 2σ′
+> 1
+
+Cin σ′ 
+
+> 1ρ′
+
++ O( Ns 
+
+> Nx
+
+)
+
+
+
+= N 2
+
+> x
+
+Ns
+
+
+
+Cin ρσ 1 Cin σ1σ2 ...C in σk μCin μσ ′ 
+
+> k′
+
+...C in σ′ 
+
+> 2σ′
+> 1
+
+Cin σ′ 
+
+> 1ρ′
+
++ O
+
+ Ns
+
+> Nx
+
+ 
+
+. (50) 
+
+## B. Analysis of the Impact of Task Order on Continual Learning 
+
+B.1. Linear Perturbation Analysis of the Order Dependence 
+
+To further investigate the order-dependence of the final error ¯ϵf , we aim to decompose the error into interpretable features of task similarity matrix. To this end, we further constrain the input similarity matrix Cin to 
+
+Cin ij =
+
+(
+
+1 (if i = j)
+
+m + δM ij (otherwise ), (51) where m is a constant satisfying −1 < m < 1. Here, δM ij is a small element-wise perturbation added in such a way that 
+
+Cin is a correlation matrix. We define an upper-triangular matrix that consists of the constant component as ¯M . (i, j )-th element of ¯M takes ¯Mij = m if j > i , but ¯Mij = 0 otherwise. This constant ¯M assumption enables us to evaluate the effect of inverse matrix term in ¯ϵf analytically owing to the following lemma: 
+
+Lemma B.1. For any m satisfying −1 < m < 1, an upper-triangle matrix ¯M satisfies 
+
+(I + ¯M )−1 
+
+> ij
+
+= δij − m[j > i ]+(1 − m)j−i−1, (52) 
+
+where [X]+ is the indicator function that returns 1 if X is true, but returns 0 otherwise. Proof. 
+
+[( I + ¯M )( I + ¯M )−1]ij =
+
+> P
+
+X
+
+> k=1
+
+(δik + m[k > i ]+)  δkj − m[j > k ]+(1 − m)j−k−1
+
+= δij + [ j > i ]+ −m(1 − m)j−i−1 + m − m2
+
+> j−1
+
+X
+
+> k=i+1
+
+(1 − m)j−k−1
+
+!
+
+= δij + [ j > i ]+
+
+ −m(1 − m)j−i−1 + m − m 1 − (1 − m)j−i−1 
+
+= δij . (53) Let us consider the case when the output similarity is the same across all the tasks for simplicity. Then, Cout is written as 
+
+Cout = ρo11 T + [1 − ρo]I. (54) In this problem setting, assuming that δM is sufficiently small compared to ¯M , we can rewrite the error ¯ϵf as a linear function of δM , which enables us to interpret the contribution of different pairwise similarities to the final error. The following theorem describes the exact decomposition of the impact of task order in this linear perturbation limit. 17 Optimal Task Order for Continual Learning of Multiple Tasks 
+
+Theorem B.2. Let us suppose that all elements of a upper-triangle matrix with zero-diagonal components δM ij satisfies, 
+
+|δM ij | < δ m, where δm is a positive constant. Then, the error ¯ϵf is rewritten as below: 
+
+¯ϵf = ¯ ϵf [m, ρ o] + 
+
+> P
+
+X
+
+> i=1
+> P
+
+X
+
+> j=i+1
+
+Gij δM ij + O(δ2
+
+> m
+
+), (55) 
+
+where 
+
+¯ϵf [m, ρ o] ≡  ρo11 T + [1 − ρo]I1/2 (I + ¯M )−1 ¯M T 2
+
+> F
+
+(56a) 
+
+Gij ≡ go(i) + go(j) + g+(j + i) + g−(j − i), (56b) 
+
+and functions go, g −, g + : Z → R that constitute the coefficient G are defined by 
+
+go(k) ≡ (1 −ρo)m 
+
+> 2−m
+
+(1 − m)P −k −
+
+
+
+ρo − (1 −ρo)m
+
+> 2−m
+
+
+
+(1 − m)P +k−1, (57a) 
+
+g+(s) ≡
+
+
+
+ρo − (1 −ρo)m
+
+> 2−m
+
+ 3−m 
+
+> 2−m
+
+(1 − m)s−1 − (1 −ρo)m
+
+> 2−m
+
+
+
+P m + 2(1 − m) − (1 −m)2
+
+> 2−m
+
+
+
+(1 − m)2P −s, (57b) 
+
+g−(d) ≡ (1 −ρo)m 
+
+> 2−m
+> 12−m
+
+(1 − m)d−1 −
+
+h 
+
+ρo − (1 −ρo)m
+
+> 2−m
+
+  
+
+1 − (1 − m)P  mP  
+
+> 1−m
+
++ 3−m
+
+> 2−m
+
+ 
+
+− (1 −ρo)m
+
+> 2−m
+> 11−m
+
+i
+
+(1 − m)P −d.
+
+(57c) Matrix G specifies the relative contribution of each task-to-task similarity to the final error. Notably, ¯ϵf [m, ρ o] term is permutation invariant by construction. Thus, task-order dependence stems from the δM -dependent terms. Inserting ρo = 1 into Eqs. 57, you get Theorem 4.1 in the main text. 
+
+B.2. Proof of Theorem B.2 
+
+The inverse of (I + ¯M + δM ) is rewritten as 
+
+(I + ¯M + δM )−1 = ( I + ¯M )−1 − (I + ¯M )−1δM (I + ¯M )−1 + O(δM 2). (58) Thus, up to the leading order with respect to δM , we have 
+
+¯ϵf =  ρo11 T + [1 − ρo]I1/2  I + ¯M + δM −1 ( ¯M + δM )T 2
+
+> F
+
+=  ρo11 T + [1 − ρo]I1/2 (I + ¯M )−1 ¯M T 2
+
+> F
+
++ 2 tr 
+
+h ¯M (I + ¯M )−T  Cout 1/2 (I + ¯M )−1  δM T − δM (I + ¯M )−1 ¯M T i
+
++ O(δM 2). (59) The first term corresponds to ¯ϵf [ ¯M , C out ], thus it is enough to show that the coefficients of δM is written as Eqs. 56b and 57. 
+
+¯M (I + ¯M )−T term is rewritten as 
+
+[ ¯M (I + ¯M )−T ]ij =
+
+> P
+
+X
+
+> k=1
+
+m[k > i ]+
+
+ δjk − m[k > j ]+(1 − m)k−j−1
+
+= m[j > i ]+ − m  (1 − m)kij −j−1 − (1 − m)P −j 
+
+= [ j > i ]+m  1 − [1 − (1 − m)P −j ] − m[j ≤ i]+
+
+ (1 − m)i−j − (1 − m)P −j 
+
+= m(1 − m)P −j − m[j ≤ i]+(1 − m)i−j . (60) In the second line, we defined kji by kji ≡ max( i + 1 , j + 1) . For the ease of notation, let us denote the last term in the equation above as 
+
+vji ≡ m(1 − m)P −j − m[j ≤ i]+(1 − m)i−j . (61) 18 Optimal Task Order for Continual Learning of Multiple Tasks 
+
+Next,  ρo11 T + [ I − ρo]I (I + ¯M )−1 term becomes 
+
+  ρo11 T + [ I − ρo]I (I + ¯M )−1
+
+> ij
+
+= X
+
+> k
+
+(ρo + (1 − ρo)δik )  δkj − m[j > k ]+(1 − m)j−k−1
+
+= ρo 1 − X
+
+> k
+
+m[j > k ]+(1 − m)j−k−1
+
+!
+
++ (1 − ρo)  δij − m[j > i ]+(1 − m)j−i−1
+
+= ρo(1 − m)j−1 + (1 − ρo)δij − (1 − ρo)m[j > i ]+(1 − m)j−i−1 (62) In the last line, we used P 
+
+> k
+
+m[j > k ]+(1 − m)j−k−1 = 1 − (1 − m)j−1. As before, let us denote the coefficient by 
+
+uij ≡ ρo(1 − m)j−1 − (1 − ρo)m[j > i ]+(1 − m)j−i−1. (63) Then, the first-order term with respect to δM follows tr  ¯M (I + ¯M )−T  ρo11 T + (1 − ρo)I (I + ¯M )−1  δM T − δM (I + ¯M )−1 ¯M T  
+
+= X
+
+> ijk
+
+ ¯M (I + ¯M )−T 
+
+> ij
+
+  ρo11 T + [ I − ρo]I (I + ¯M )−1 
+
+> jk
+
+δM ik − X
+
+> l
+
+δM kl 
+
+ ¯M (I + ¯M )−T 
+
+> il
+
+!
+
+= X
+
+> ijk
+
+vji ((1 − ρo)δjk + ujk ) δM ik − X
+
+> l
+
+δM kl vli 
+
+!
+
+= X
+
+> kl
+
+δM kl 
+
+X
+
+> ij
+
+vji (δik [(1 − ρo)δjl + ujl ] − vli [(1 − ρo)δjk + ujk ]) = X
+
+> kl
+
+δM kl Gkl , (64) where the coefficient of (k, l )-th element is defined by 
+
+Gkl ≡ X
+
+> ij
+
+vji (δik [(1 − ρo)δjl + ujl ] − vli [(1 − ρo)δjk + ujk ]) . (65) 
+
+Gkl is decomposed into 
+
+Gkl = (1 − ρo)vlk + X
+
+> j
+
+vjk ujl − (1 − ρo) X
+
+> i
+
+vki vli − X
+
+> ij
+
+vji vli ujk . (66) The first term (1 − ρo)vlk is rewritten as 
+
+(1 − ρo)vlk = (1 − ρo)m(1 − m)P −l − m[l ≤ k]+(1 − m)k−l
+
+= (1 − ρo)m(1 − m)P −l. (67) Here, we dropped the second term, because δM kl = 0 when l ≤ k.19 Optimal Task Order for Continual Learning of Multiple Tasks 
+
+Regarding the second term, summation over j is evaluated as 
+
+> P
+
+X
+
+> j=1
+
+vji ujk = X
+
+> j
+
+ m(1 − m)P −j − m[j ≤ i]+(1 − m)i−j    ρo(1 − m)k−1 − (1 − ρo)m[k > j ]+(1 − m)k−j−1
+
+= ρo(1 − m)k−1
+
+m
+
+> P
+
+X
+
+> j=1
+
+(1 − m)P −j − m
+
+> i
+
+X
+
+> j=1
+
+(1 − m)i−j
+
+
+
+− (1 − ρo)m2
+
+
+
+> k−1
+
+X
+
+> j=1
+
+(1 − m)(P −j)+( k−j−1) −
+
+> jik
+
+X
+
+> j=1
+
+(1 − m)(i−j)+( k−j−1) 
+
+
+
+= ρo(1 − m)k−1  (1 − m)i − (1 − m)P 
+
+− (1 − ρo)m
+
+2 − m
+
+h 
+
+(1 − m)P −(k−1) − (1 − m)P +( k−1) i
+
+− (1 − m)i+k−1−2jik − (1 − m)i+k−1
+
+=
+
+
+
+ρo − (1 − ρo)m
+
+2 − m
+
+  (1 − m)i+k−1 − (1 − m)P +k−1 + (1 − ρo)m
+
+2 − m
+
+
+
+(1 − m)i+k−1−2jik − (1 − m)P −(k−1) 
+
+.
+
+(68) In the third line, we defined jik as jik ≡ min( k − 1, i ). Thus, the second, P 
+
+> j
+
+vjk ujl , term becomes 
+
+X
+
+> j
+
+vjk ujl = −
+
+ 
+
+ρo − (1 − ρo)m
+
+2 − m
+
+
+
+(1 − m)P +l−1 + (1 − ρo)m
+
+2 − m (1 − m)P −l+1 
+
+
+
++
+
+
+
+ρo − (1 − ρo)m
+
+2 − m
+
+
+
+(1 − m)k+l−1 + (1 − ρo)m
+
+2 − m (1 − m)l−k−1. (69) The third term is, from a similar calculation, rewritten as 
+
+X
+
+> i
+
+vli vki 
+
+= X
+
+> i
+
+ m(1 − m)P −l − m[l ≤ i]+(1 − m)i−l   m(1 − m)P −k − m[k ≤ i]+(1 − m)i−k
+
+= P m 2(1 − m)2P −(k+l) − m2 (1 − m)P −kPX
+
+> i=l
+
+(1 − m)i−l + (1 − m)P −lPX
+
+> i=k
+
+(1 − m)i−k
+
+!
+
++ m2
+
+> P
+
+X
+
+> i=l
+
+(1 − m)2i−(k+l)
+
+=
+
+
+
+P m 2 + 2 m(1 − m) − m(1 − m)2
+
+2 − m
+
+
+
+(1 − m)2P −(k+l) − m  (1 − m)P −k + (1 − m)P −l + m
+
+2 − m (1 − m)l−k.
+
+(70) The last term is a little more complicated, so let us divide it into two terms: 
+
+X
+
+> i
+
+vli 
+
+X
+
+> j
+
+vji ujk =
+
+
+
+ρo − (1 − ρo)m
+
+2 − m
+
+
+
+T1 + (1 − ρo)m
+
+2 − m T2, (71) where 
+
+T1 = m(1 − m)P −lPX
+
+> i=1
+
+ (1 − m)i+k−1 − (1 − m)P +k−1 − m
+
+> P
+
+X
+
+> i=l
+
+(1 − m)i−l  (1 − m)i+k−1 − (1 − m)P +k−1 ,T2 = m(1 − m)P −lPX
+
+> i=1
+
+
+
+(1 − m)i+k−1−2jik − (1 − m)P −(k−1) 
+
+− m
+
+> P
+
+X
+
+> i=l
+
+(1 − m)i−l 
+
+(1 − m)i−(k−1) − (1 − m)P −(k−1) 
+
+.
+
+(72a) 20 Optimal Task Order for Continual Learning of Multiple Tasks 
+
+Taking summation over index i, T1 and T2 are rewritten as 
+
+T1 = m(1 − m)P −l
+
+ (1 − m)k
+
+m
+
+1 − (1 − m)P  − P (1 − m)P +k−1
+
+
+
+−
+
+ 12 − m
+
+h
+
+(1 − m)l+k−1 − (1 − m)2P +1+( k−l)i
+
+− (1 − m)P +k−1 1 − (1 − m)P +1 −l
+
+=
+
+
+
+1 − (1 − m)P
+
+
+
+2 + mP 
+
+1 − m − 1 − m
+
+2 − m
+
+ 
+
+(1 − m)P −(l−k) − 12 − m (1 − m)l+k−1 + (1 − m)P +k−1. (73) 
+
+T2 = (1 − m)P −l 
+
+[1 − (1 − m)k−1] + [(1 − m) − (1 − m)P +2 −k] − mP (1 − m)P −(k−1) 
+
+−
+
+ 12 − m [(1 − m)l−k+1 − (1 − m)2P +3 −(l+k)] − [1 − (1 − m)P +1 −l](1 − m)P −(k−1) 
+
+
+
+= − 1 − m
+
+2 − m (1 − m)l−k − 11 − m (1 − m)P −(l−k) +  (2 − m)(1 − m)P −l + (1 − m)P −k+1 
+
+− (1 − m)2P −(k+l)
+
+
+
+mP (1 − m) + 2(1 − m)2 − (1 − m)3
+
+2 − m
+
+
+
+. (74) The results above show that Gkl is decomposed into four components: 
+
+Gkl = g−(l − k) + g+(l + k) + gL(k) + gR(l). (75) Summing over the terms that only depends on k, we have 
+
+gL(k) = −(1 − ρo)  −m(1 − m)P −k −
+
+
+
+ρo − (1 −ρo)m
+
+> 2−m
+
+
+
+(1 − m)P +k−1 − (1 −ρo)m 
+
+> 2−m
+
+(1 − m)P −k+1 
+
+= (1 −ρo)m 
+
+> 2−m
+
+(1 − m)P −k −
+
+
+
+ρo − (1 −ρo)m
+
+> 2−m
+
+
+
+(1 − m)P +k−1 (76) Similarly, the terms that only depend on l are summed up to: 
+
+gR(l) = (1 − ρo)m(1 − m)P −l −
+
+h 
+
+ρo − (1 −ρo)m
+
+> 2−m
+
+i
+
+(1 − m)P +l−1 + (1 −ρo)m 
+
+> 2−m
+
+(1 − m)P −l+1 
+
+− (1 − ρo)  −m(1 − m)P −l − (1 −ρo)m 
+
+> 2−m
+
+(2 − m)(1 − m)P −l
+
+= (1 −ρo)m 
+
+> 2−m
+
+(1 − m)P −l −
+
+
+
+ρo − (1 −ρo)m
+
+> 2−m
+
+
+
+(1 − m)P +l−1. (77) Therefore, gL and gR have the same form. We denote this function as go below. 
+
+g+(l + k) term has a slightly more complicated expression: 
+
+g+(l + k) = 
+
+
+
+ρo − (1 −ρo)m
+
+> 2−m
+
+
+
+(1 − m)k+l−1 − (1 − ρo)m
+
+
+
+P m + 2(1 − m) − (1 −m)2
+
+> 2−m
+
+
+
+(1 − m)2P −(k+l)
+
++
+
+
+
+ρo − (1 −ρo)m
+
+> 2−m
+
+ 12−m (1 − m)l+k−1 + (1 −ρo)m 
+
+> 2−m
+
+(1 − m)
+
+
+
+P m + 2(1 − m) − (1 −m)2
+
+> 2−m
+
+
+
+(1 − m)2P −(k+l)
+
+=
+
+
+
+ρo − (1 −ρo)m
+
+> 2−m
+
+ 3−m 
+
+> 2−m
+
+(1 − m)l+k−1 − (1 −ρo)m
+
+> 2−m
+
+
+
+P m + 2(1 − m) − (1 −m)2
+
+> 2−m
+
+
+
+(1 − m)2P −(k+l). (78) Lastly, g−(l − k) term becomes 
+
+g−(l − k)= (1 −ρo)m 
+
+> 2−m
+
+(1 − m)l−k−1 − (1 −ρo)m 
+
+> 2−m
+
+(1 − m)l−k −
+
+
+
+ρo − (1 −ρo)m
+
+> 2−m
+
+  
+
+1 − (1 − m)P 
+
+2 + mP  
+
+> 1−m
+
+− 1−m
+
+> 2−m
+
+ 
+
+(1 − m)P −(l−k)
+
++ (1 −ρo)m
+
+> 2−m
+
+ 1−m 
+
+> 2−m
+
+(1 − m)l−k + 11−m (1 − m)P −(l−k)
+
+= (1 −ρo)m 
+
+> 2−m
+> 12−m
+
+(1 − m)l−k−1 −
+
+h 
+
+1 − (1 − m)P  mP  
+
+> 1−m
+
++ 3−m
+
+> 2−m
+
+ 
+
+− (1 −ρo)m
+
+> 2−m
+> 11−m
+
+i
+
+(1 − m)P −(l−k). (79) We thus obtain Eq. 57. If we set ρo = 1 , we recover Theorem 4.1. In Theorem 4.1, G+ is defined as G+ 
+
+> ij
+
+= g+(i + j) + 
+
+gL(i) + gR(j).21 Optimal Task Order for Continual Learning of Multiple Tasks 
+
+Figure 6. a, b) The same as Fig. 3e and g, but without normalization. The average correlation dominates the error ϵf , but the order dependence is observed robustly. c) The ratio of networks where the periphery-to-core order outperforms core-to-periphery order. As before, we generated 1000 samples of Cin matrices randomly while fixing Cout to be all one, then binned Cin based on the average off-diagonal correlation. For each average correlation value m, we then calculated the ratio of networks in which the periphery-to-core order achieved smaller error than the core-to-periphery order. d) The same as panel c, but the ratio of random seeds where the max-path orders achieved the better performance than the min-path orders. 
+
+B.3. The Impact of Task Typicality 
+
+We can further analyze the impact of task typicality on the task order discuss in the main text. Let us define ¯g by 
+
+¯g ≡ 1
+
+P
+
+> P
+
+X
+
+> μ=1
+
+(1 − m)μ = 1
+
+mP 
+
+ (1 − m) − (1 − m)P +1  , (80) then G+ 
+
+> μν
+
+is rewritten as 
+
+G+ 
+
+> μν
+
+=
+
+h (3 −m)¯ g 
+
+> (2 −m)(1 −m)
+
+− (1 − m)P −1i
+
+[(1 − m)μ + (1 − m)ν ]+ 3−m 
+
+> (2 −m)(1 −m)
+
+((1 − m)μ − ¯g) ((1 − m)ν − ¯g) − (3 −m)¯ g2 
+
+> (2 −m)(1 −m)
+
+. (81) Thus, the corresponding error term δ¯ϵ+ 
+
+> f
+
+becomes 
+
+δ¯ϵ+ 
+
+> f
+
+=
+
+> P
+
+X
+
+> μ=1
+> P
+
+X
+
+> ν=μ+1
+
+G+ 
+
+> μν
+
+δM μν 
+
+= P
+
+h (3 −m)¯ g 
+
+> (2 −m)(1 −m)
+
+− (1 − m)P −1i PX
+
+> μ=1
+
+(1 − m)μδt μ
+
++ 3−m
+
+> (2 −m)(1 −m)
+> P
+
+X
+
+> μ=1
+> P
+
+X
+
+> ν=μ+1
+
+((1 − m)μ − ¯g) ((1 − m)ν − ¯g) δM μν + const. (82) If (3 −m)¯ g 
+
+> (2 −m)(1 −m)
+
+> (1 − m)P −1, from the rearrangement inequality, the first term is minimized under δt 1 ≤ δt 2 ≤ ... ≤ δt P
+
+ordering. However, the second term may not be minimized under this task order. 
+
+## C. Implementation Details 
+
+Source codes for all the numerical experiments are available at https://github.com/ziyan-li-code/ optimal-learn-order .
+
+C.1. Linear Teacher-student Model with Latent Variables 
+
+In the simulations depicted in Figs. 2b, 3eg, and 4ef, we set the latent vector size Ns = 30 , input layer size Nx = 3000 ,and the output layer size Ny = 10 . We initialized the weight matrix W as the zero matrix, and then updated the weight using gradient descent (Eq. 21) with learning rate η = 0 .001 for 100 iterations per task. In Fig. 2b, the input correlation matrix Cin ∈ RP ×P was generated randomly in the following manner. First, we generated a strictly upper-triangular matrix 22 Optimal Task Order for Continual Learning of Multiple Tasks           
+
+> Figure 7. Task order preference in continuous image classification tasks. a,b) Average classification performance after continual learning of CIFAR-100 where each task consists of 5 label classifications. Here, we randomly picked 25 labels from CIFAR-100 dataset and generated 5 tasks each requiring classification of 5 labels. c,d) Average classification performance after continual learning on CIFAR-10. Task similarity was estimated by evaluating zero-shot generalization performance from task Ato B, using the training data of Binstead of the test data (see Appendix C.4 for details).
+
+Cin,U by sampling each element independently from a continuous uniform distribution between 0 and 1, U[0 ,1] . We then generated the full matrix Cin by Cin = Cin,U + ( Cin,U )T + I. If the resultant Cin is a positive semi-definite matrix, we accepted the matrix, otherwise, we generated Cin in the same manner, until we obtain a positive semi-definite matrix. Here, we limited the correlation to be positive mainly because continual learning is typically impractical when there exists a large negative correlation between tasks. We generated Cout using the same method. In Fig. 2c, we estimated the final error 
+
+¯ϵf using Eq. 8 for each triplet (ρAB , ρ BC , ρ CA ). We calculated the error for all six task orders and plotted the order that yielded the minimum error. In Figs. 3e and g, we generated input correlation matrix Cin using the same method with Fig. 2b, but we instead sampled the elements from a uniform distribution between -1 and 1, U[−1,1] . The average correlation m was defined by the average of the off-diagonal components of Cin . The output correlation matrix Cout was set to be the all one matrix (i.e. Cout μν = 1 for all (μ, ν ) pairs) which corresponds to the ρo = 1 scenario. We estimated the error under each task order for 1000 randomly generated input correlation matrices and binned the performance by the average correlation. The average performance (black lines in Figs. 3e and g) were estimated by taking the average over randomly sampled 100 task orders. The error bars, representing the standard error of mean, are larger for larger average correlation because we didn’t generated many Cin 
+
+with a large average correlation under our random generation method. Because there are two task sequence that provides the max-path due to symmetry (e.g. A→C→E→B→D and D→B→E→C→A in Fig. 3c), we defined the error of the max-path rule as the average over these two task orders. 
+
+C.2. Generation of Input Similarity Matrices Having Simple Graph Structures 
+
+In Fig. 4, we introduced simple graph structures to the task similarity matrices. To this end, we first generated an unweighted bidirectional adjacency matrix Adj ∈ { 0, 1}P ×P given a graph structure, then calculated distance between nodes on the graph specified by Adj , which we denote as D. From this distance matrix D, we generated the input similarity matrix Cin 
+
+by Cin ij = aDij for each task pairs (i, j ). Here, a is the constant that controls overall task similarity. a ≈ 1 means that inputs for all tasks are highly correlated, whereas a ≈ 0 means that they are mostly independent. For instance, in the case of chain graph, the adjacency matrix is given by Adj,ij = 1 if j = i ± 1 else Adj,ij = 0 . Thus, the distance between nodes D follows Dij = |i − j| and the input correlation matrix becomes Cin ij = a|i−j|. In the ring graph, the distance between node is instead given by Dij = min {| i − j|, P − | i − j|} . For the tree graph, we used a tree where each non-leaf node has exactly two children nodes. The same structure was assumed for the leaves graph, except that we only used leaf nodes for constructing the task similarity matrix. 
+
+C.3. Convolutional and Multi-layered Non-linear Neural Networks for Image Classification 
+
+We used convolutional neural networks (CNNs) for numerical experiments with the CIFAR-10 and CIFAR-100 datasets. The network consisted of two convolutional layers and one dense layer, followed by an output layer. The first convolutional layer had 32 filters with 3 × 3 kernels. The output was passed through a Rectified Linear Unit (ReLU) activation function and then downsampled using average pooling with a window size of 2 × 2 and a stride of 2. The second convolutional layer was similar to the first, except that we used 64 filters. The dense layer following the two convolutional layers had 256 23 Optimal Task Order for Continual Learning of Multiple Tasks               
+
+> Figure 8. Schematic of the task similarity estimation. From the error in zero-shot transfer ϵμ[Wν](left), we estimated task similarity ρμν
+> (right).
+> Figure 9. Task order preference estimated from various fraction of training data under CIFAR-10 task. For instance, in 0.1% data results depicted in panels a and b, we first used 0.1% of training data ( ∼10 images) for training the network with one task and used 0.1% of training data from another task to evaluate the zero-shot transfer performance. We then estimated the task similarity as before. Panels g and h are the same with panels c and d in Fig. 7. We used the same set of parameters with the results depicted in the main figure (see Appendix C for details).
+
+neurons, with ReLU as the activation function. For classification, we used a softmax activation function in the last layer. The weights of both convolutional and dense layers were initialized with LeCun normal initializers. For the Fashion-MNIST dataset, we used multi-layer perceptrons (MLPs) to evaluate the robustness of our findings against the neural architecture. The MLP model had two hidden layers with 128 and 64 neurons, respectively. We used ReLU as the activation function for the hidden layers and softmax for the output layer. In both CNN and MLP models, we studied binary classification with two output neurons, except in Figure 7a and b, where we considered a classification of 5 labels with five output neurons. All tasks were implemented as single-head continual learning where the output nodes are shared across tasks. The performance was evaluated by the average classification accuracy on the test datasets for all the tasks at the end of the entire training. The networks were trained by minimizing the cross-entropy loss using the Adam optimizer with a learning rate of 10 −3 for five epochs per task. We set the batch size to 4 due to GPU memory constraints. The models were implemented using Flax (Heek et al., 2024), a JAX neural network library, and were trained on NVIDIA Tesla V100 GPUs In both Figures 5 and 7, we generated 100 task sets by randomly dividing 10 labels into a set of five binary classification tasks. In the case of CIFAR-100, we initially sampled 10 labels randomly, then partitioned them into five binary classification. We binned the task sets by the average similarity estimated from Eq. 16, then plotted the mean performance and the standard error of mean for each bin. The black lines representing the average performance of random task order were estimated by 24 Optimal Task Order for Continual Learning of Multiple Tasks         
+
+> Figure 10. Task order preference in continuous image classification tasks where the task similarity was estimated from 1% of training data, as opposed to Fig. 5 where 100% of data was used. a–f) Continual learning performance, defined as the average test accuracy across all the tasks after learning, under various task orders. g, h) The ratio of task sets where the periphery-to-core rule outperforms the core-to-periphery rule (g), and where the max-path rule outperforms the min-path rule (h), under CIFAR-100 with different numbers of tasks ( P= 3 ,5,7). Panels c and d were replicated from Fig. 9 for completeness. Note that task-order effects were smaller in CIFAR-100 because the number of training images per label is fewer in CIFAR-100 than in CIFAR-10 and Fashion-MNIST.
+
+taking the mean of the classification performance under 30 random task orders for each task set. Because there are two task orders that provides the max-path by construction, we define the performance of the max-path rule as the mean of performance under these two task orders. 
+
+C.4. Estimation of Task Similarity 
+
+In the main text, we inferred similarity between two tasks A and B using zero-shot transfer performance between the two tasks. Previous work on linear model indicates that, if the output similarity is one, the pairwise transfer performance 
+
+∆ϵT F [ν → μ] ≡ ϵμ[Wν ] − ϵμ[Wo] is written as (Hiratani) 
+
+∆ϵT F [ν → μ] = ρin μν (2 − ρin μν ), (83) indicating that the input similarity between two tasks can be inferred as 
+
+ρin μν = 1 − p1 − ∆ϵT F [ν → μ]. (84) Motivated by this relationship, we defined similarity between tasks in general nonlinear networks by Eq. 16. A similar approach was implemented in (Lad et al., 2009). Notably, this method only requires inputs/outputs of the trained network, and thus applicable to situation where the model details are inaccessible (e.g., human and animal brains, closed-LLM). We implemented the evaluation the zero-shot transfer performance from task A to B as follows: First, we trained a network on task A for 5 epochs from a random initialization using the Adam optimizer on the cross-entropy loss with learning rate 
+
+10 −3 as above. We then measured the cross-entropy loss on the test dataset of task B, ϵB [WA], where WA represents the weight after 5 epochs of training on task A. To normalize the accuracy, we divided the obtained loss by the loss on task 
+
+B under a label shuffling, ϵB,sf [WA]. The resultant value ϵB [WA]  
+
+> ϵB,sf [WA]
+
+characterizes how well the network transfer to task B
+
+compared to a random task with the same input statistics. Since evaluating similarity using the transfer performance on the test data may potentially introduce bias, in Fig. 7c and d, we estimated the transfer performance ∆ϵB [WA] using the training dataset for task B. Even in this setting, we found results nearly identical to those in Fig. 5c and d, confirming the robustness of our findings with respect to the details of the similarity evaluation method. In the task similarity and order estimation from sparse data shown in Figs. 9 and 10, we estimated task similarity in the same manner as described above, but using subsampled training data. For example, in the 1% data scenario, we used 1% of 25 Optimal Task Order for Continual Learning of Multiple Tasks 
+
+the training data for task A to calculate the weights after learning task A, denoted as WA. As before, we trained the network using the Adam optimizer on the cross-entropy loss for 5 epochs from random initialization except that we only used 1% of training data at each epoch. We then estimated the transfer performance to task B, ϵB [WA], using 1% of the training data for task B. The task similarity between tasks A and B was then computed using Eq. 16, as in the full data setting. 26

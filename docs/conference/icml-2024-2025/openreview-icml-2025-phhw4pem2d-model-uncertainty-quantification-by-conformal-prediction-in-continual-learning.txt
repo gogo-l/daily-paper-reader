@@ -1,0 +1,1347 @@
+Title: Model Uncertainty Quantification by Conformal Prediction in Continual Learning
+
+URL Source: https://openreview.net/pdf?id=PHhW4PEm2D
+
+Number of Pages: 17
+
+Markdown Content:
+# Model Uncertainty Quantification by Conformal Prediction in Continual Learning 
+
+Rui Gao 1 Weiwei Liu 1
+
+## Abstract 
+
+Continual learning has attracted increasing re-search attention in recent years due to its promis-ing experimental results in real-world applica-tions. In this paper, we study the issue of calibra-tion in continual learning which reliably quantifies the uncertainty of model predictions. Conformal prediction (CP) provides a general framework for model calibration, which outputs prediction in-tervals or sets with a theoretical high coverage guarantee as long as the samples are exchange-able. However, the tasks in continual learning are learned in sequence, which violates the principle that data should be exchangeable. Meanwhile, the model learns the current task with limited or no access to data from previous tasks, which is not conducive to constructing the calibration set. To address these issues, we propose a CP -based method for model uncertainty quantification in 
+
+continual learning (CPCL), which also reveals the connection between prediction interval length and forgetting. We analyze the oracle prediction inter-val in continual learning and theoretically prove the asymptotic coverage guarantee of CPCL. Fi-nally, extensive experiments on simulated and real data empirically verify the validity of our proposed method. 
+
+## 1. Introduction 
+
+As vast amounts of data are produced, the number of new tasks is increasing overwhelmingly (Zou & Liu, 2023b; Liu et al., 2019; Gong et al., 2023b; Chen & Liu, 2023). Con-sequently, learning systems are required to rapidly adapt to the continuously emerging tasks (Gong et al., 2023a; 2021;     
+
+> 1School of Computer Science, National Engineering Research Center for Multimedia Software, Institute of Artificial Intelligence and Hubei Key Laboratory of Multimedia and Network Communi-cation Engineering, Wuhan University, Wuhan, China. Correspon-dence to: Weiwei Liu <liuweiwei863@gmail.com >.
+> Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s).
+
+2022; Xu & Liu, 2022; Zou & Liu, 2023a). Continual learn-ing (CL)—also referred to as lifelong learning (Chen & Liu, 2018; Gao & Liu, 2025b), sequential learning (Aljundi et al., 2019), and incremental learning (Aljundi et al., 2018)—is a paradigm that enables a model to learn a large number of tasks sequentially, where data from previous tasks are no longer accessible during the training of new tasks. A signifi-cant challenge in continual learning is catastrophic forget-ting (Kumaran et al., 2016), where standard deep learning methods tend to rapidly forget previously acquired knowl-edge when learning new tasks (Kirkpatrick et al., 2017). Most works of continual learning have concentrated on mit-igating this issue. For example, the regularization-based methods such as EWC (Kirkpatrick et al., 2017) and MAS (Aljundi et al., 2018) measure the parameter importance and introduce a regularization term in the loss function to con-solidate previous knowledge; replay-based methods such as iCaRL (Rebuffi et al., 2017) and GEM (Lopez-Paz & Ran-zato, 2017) try to replay the knowledge of previous tasks by storing samples or generating pseudo-samples, and then provide these replayed knowledge to the model while a new task is being learned; parameter isolation methods such as PackNet (Mallya & Lazebnik, 2018) and HAT (Serr `a et al., 2018) dedicate different model parameters to each task so as to prevent any possible forgetting. Overall, these works mitigate catastrophic forgetting of model in continual learn-ing, which is often reflected as improved accuracy of model on previous tasks. However, existing works to date have ignored the issue of calibration in continual learning. Calibration is often deemed as important as the standard criterion of accuracy in statistics and machine learning (Thelen et al., 2022; Park et al., 2024). A well-calibrated model can reliably quantify the uncertainty of its prediction (Guo et al., 2017; Hermans et al., 2021). Model uncertainty quantification is crucial in many applications of continual learning. For example, in medical imaging, advancements in technology or changes in diagnostic procedures result in continuous variations in image appearance (Hofmanninger et al., 2020; Ghesu et al., 2021). In this context, the model must provide critical information to doctors, enabling them to understand the un-certainty in model predictions and make informed decisions regarding patient care. 1Model Uncertainty Quantification by Conformal Prediction in Continual Learning 
+
+Among various uncertainty quantification techniques, we specifically concentrate on conformal prediction (CP) (Vovk et al., 2005; Ndiaye, 2022; Fisch et al., 2022; Qian et al., 2024) in this paper. CP provides a general framework for model calibration, which is model-agnostic, nonparametric and distribution-free (the coverage guarantee holds for any distribution). CP takes in three components: a black-box predictive model, an input feature and a potential output. It requires the design of a score function to measure how non-conforming the potential output is and to calculate scores on a calibration set. In regression tasks, CP outputs prediction intervals while in classification tasks, it produces prediction sets. These prediction intervals or sets can theoretically guarantee high coverage probability as long as the sam-ples are exchangeable (Shafer & Vovk, 2008)—a weaker requirement than the standard i.i.d. assumption. However, uncertainty quantification using CP poses significant chal-lenges in continual learning. As illustrated in Figure 1, tasks are learned by a single model in sequence. Some works have shown that changing the order of tasks significantly af-fect the performance of model in continual learning (Lange et al., 2022). This violates the principle of data exchange-ability. Meanwhile, samples from previous tasks are limited or inaccessible, resulting in a restricted calibration set for CP. Therefore, effective use of CP for model uncertainty quantification in continual learning requires further investi-gation. In this paper, we consider the regression setting and con-struct prediction intervals for continual learning with a asymptotic coverage guarantee. Our main contributions can be summarized as follows: • We propose a CP -based method for model uncertainty quantification in continual learning, termed CPCL .CPCL constructs a new dataset which takes the depen-dencies among original data into count and defines the prediction interval by a conditional quantile estimator. Additionally, CPCL reveals the inherent connection between prediction interval length and forgetting. • We analyze the oracle prediction interval in continual learning and provide the asymptotic coverage guaran-tee of the prediction interval of CPCL. • Extensive experimental results on simulated and real data demonstrate the validity of CPCL. 
+
+## 2. Related Work 
+
+Continual learning. Continual learning consists of a se-quence of disjoint tasks that are sequentially learned one at a time. After sequentially learning all tasks, continual learning wants the model to perform well on all seen tasks. Existing research on continual learning focuses primarily on ×
+
+> Unexchangeable
+
+Data: 
+
+Task: 
+
+Model:  
+
+> A union task contains knowledge of all seen tasks
+> Test
+> Figure 1. A general framework of continual learning.
+
+how to solve the catastrophic forgetting of accuracy. Some surveys (Parisi et al., 2019; Lesort et al., 2019; Pf ¨ulb & Gepperth, 2019; Farquhar & Gal, 2018) have shown that existing continual learning works can be broadly divided into three categories: (i) replay methods, (ii) regularization-based methods and (ii) parameter isolation methods. Replay methods generally have two ways to replay in arti-ficial neural networks: partial replay (PR) and generative replay (GR) (Hayes et al., 2021; Gao & Liu, 2023). Replay methods store samples or generate pseudo-samples using a generative model, and these samples are replayed while a new task is being learned (Rebuffi et al., 2017; Lopez-Paz & Ranzato, 2017; Rolnick et al., 2019; Ayub & Wagner, 2021). PR stores either all or a subset of previously learned inputs in a replay buffer and mixes these inputs with new samples to train the classifier (Rebuffi et al., 2017; Lopez-Paz & Ranzato, 2017; Rolnick et al., 2019; Ayub & Wagner, 2021) while GR generates synthetic samples for previous tasks. For example, iCaRL (Rebuffi et al., 2017) selects and stores samples (exemplars) closest to the feature mean of each class by assuming fixed allocated memory; DER (Buzzega et al., 2020) mixes rehearsal with knowledge dis-tillation and regularization and matches the network’s logits sampled throughout the optimization trajectory to promot consistency with its past; DGR (Shin et al., 2017) uses GAN to to generate previous samples for data replaying. In addi-tion to previous task samples, graph-based replay (Tang & Matteson, 2021) have been proven to be efficient. Regularization-based methods add an extra regularization term to the loss function and penalize changes to impor-tant parameters of model for previous tasks (Kirkpatrick et al., 2017; Zenke et al., 2017; Aljundi et al., 2018; Lee et al., 2017; Gao & Liu, 2025a). For example, EWC (Kirk-patrick et al., 2017) uses the Fisher Information Matrix to measure the importance of parameters; IMM (Lee et al., 2Model Uncertainty Quantification by Conformal Prediction in Continual Learning 
+
+2017) estimates Gaussian posteriors for task parameters, in the same vein as EWC, but inherently differs in its use of model merging; MAS (Aljundi et al., 2018) measures the importance according to the gradients of the squared 
+
+L2-norm of learned network output function. Other kinds of regularization-based methods are also efficient, such as functional regularization (Pan et al., 2020; Benjamin et al., 2019), node importance (Jung et al., 2020) and uncertainty regularization (Ahn et al., 2019). Parameter isolation methods dedicate different model pa-rameters to each task to prevent any possible forgetting (Xu & Zhu, 2018; Mallya & Lazebnik, 2018; Serr `a et al., 2018). PackNet (Mallya & Lazebnik, 2018) iteratively assigns pa-rameter subsets to consecutive tasks by constituting binary masks. HAT (Serr `a et al., 2018) incorporates task-specific embeddings for attention masking where the per-layer em-beddings are gated through a Sigmoid to attain unit-based attention masks in the forward pass. 
+
+Conformal prediction. As introduced in Section 1, CP is a model-agnostic, nonparametric and distribution-free framework for the calibration of models. It designs a score function which measures how non-conforming the potential output is and evaluates these scores on a hold-out calibra-tion set. CP produces prediction intervals (or sets) where data is assumed to be exchangeable. Under the assump-tion of exchangeable data, CP has be successful in many applications. For example, Wisniewski et al. (2020) focus on the application of conformal prediction interval estima-tions to provide financial Market Makers (MMs) with some “meaningful” forecasts relating to their future short-term po-sition in a given financial market; (Huang et al., 2023) pro-pose conformalized GNN, extending conformal prediction to graph-based models for guaranteed uncertainty estimates; Gui et al. (2023) adapt the framework of conformal pre-diction to propose a distribution-free method for predictive inference in the matrix completion problem. Some works consider the situations in which the data exchangeability is not satisfied (Tibshirani et al., 2019; Gendler et al., 2022; Xu & Xie, 2023a). Tibshirani et al. (2019) show that a weighted version of conformal prediction can be used to compute distribution-free prediction intervals for problems in which the test and training covariate distributions differ. Gendler et al. (2022) consider that the test data may be adversarially attacked where the exchangeability assumption is grossly violated. Xu & Xie (2023a) develop the general framework for constructing prediction intervals for time series. Com-pared to time series, continual learning has the following differences when studying CP. First, in time series, samples from previous time points are available, while in continual learning, only samples from the current task are available, and samples from previous tasks are not accessible. This means that a complete calibration set can be naturally con-structed in time series, while the calibration set in continual learning is limited to the current task. Second, time series fo-cuses on the model’s performance on data arriving at future time points, whereas the core concern of continual learn-ing is the catastrophic forgetting regarding previous tasks. The connection between the prediction intervals (sets) con-structed by CP and the catastrophic forgetting in continual learning requires further research. Overall, it is necessary to study CP in continual learning. 
+
+## 3. Preliminaries 
+
+We mainly follow the continual learning setting of (Delange et al., 2021) and conformal prediction setting of (Xu & Xie, 2023b). In this paper, we consider a regression setup. Given an unknown model, f : Rd → R, each observation 
+
+Z = ( X, Y ) is generated according to the following model 
+
+Y = f (X) + μ (1) where μ is distributed following a continuous cumulative distribution function (CDF) F , Y is a continuous scalar variable, X ∈ Rd denotes the feature and d is the dimension of the feature vector. 
+
+Continual learning. There are Nτ disjoint tasks 
+
+(τ1, τ 2, ..., τ Nτ ) that are learned sequentially. The dataset of task τt is given by {Ztn = ( Xtn, Y tn )}Nn=1 , where N is the number of samples for each task. Each observation 
+
+Ztn = ( Xtn, Y tn ) for task τt is generated according to Eq.(1) where μtn is distributed according to F t. In continual learn-ing, the model is trained on the current task while access to data from previous tasks is limited. The goal of continual learning is to control the statistical risk of the model across all previously seen tasks: 
+
+> Nτ
+
+X
+
+> t=1
+
+E(Xt,Y t)[ℓ(h(Xt; θ), Y t)] (2) where ℓ is the loss function and h is the predictor with parameter θ.
+
+Conformal prediction. In the context of CP, there are 
+
+Ncal observable samples {Zi = ( Xi, Y i)}Ncal  
+
+> i=1
+
+which are generated according to Eq.(1). The goal of CP is to con-struct a sequence of prediction intervals that are as narrow as possible while ensuring a certain coverage guarantee. Given a user-specified prediction algorithm, we use the observed samples to obtain a trained model represented by ˆf . Sub-sequently, we construct a prediction interval bCαtest for Ytest 
+
+of a test sample, where α is the significance level. CP con-siders two types of coverage guarantees. The conditional coverage guarantee ensures that the prediction interval bCαtest 
+
+satisfies: 
+
+P (Ytest ∈ bCαtest |Xtest ) ≥ 1 − α. (3) 3Model Uncertainty Quantification by Conformal Prediction in Continual Learning 
+
+The second type is the marginal coverage guarantee: 
+
+P (Ytest ∈ bCαtest ) ≥ 1 − α. (4) It is noteworthy that Eq.(3) is significantly stronger than Eq.(4). As established by split conformal prediction (SCP) (Papadopoulos et al., 2007), the marginal coverage guaran-tee holds whenever data are exchangeable (Definition 1). 
+
+Definition 1. (Exchangeability (Shafer & Vovk, 2008)) The random variables V1, V 2, . . . , V n are exchangeable if for any permutation γ of integers 1, 2, . . . , n , the variables 
+
+V 1, V 2, . . . , V n, where V i = Vγ(i), have the same joint probability distribution as V1, V 2, . . . , V n.
+
+In this paper, we aim to construct prediction intervals with a conditional coverage guarantee through CP in con-tinual learning setting. We consider Nτ disjoint tasks 
+
+(τ1, τ 2, ..., τ Nτ ). The dataset for task τt is {Ztn =(Xtn, Y tn )}Nn=1 . As the goal of continual learning is to con-trol the statistical risk across all seen tasks (i.e. Eq.(2)), the test sample should derive from a union task that en-compasses all knowledge from previous tasks. Our work replaces the test sample Ztest = ( Xtest , Y test ) with Zut =(Xut , Y ut ) for convenience, where Zut = ( Xut , Y ut ) repre-sents the test sample from a union task that contains knowl-edge from all seen tasks. After sequentially learning all tasks using any continual learning algorithm (which can be viewed as the user-specified prediction algorithm), we obtain a trained model. Given Xut , we quantify the un-certainty of the trained model by constructing a prediction interval bCαut for the output, ensuring that Yut ∈ bCαut with probability 1 − α. In light of this, some natural challenges arise: • The samples from previous tasks are limited when learning the current task τT . This limitation implies that the calibration set reserved by typical conformal prediction methods (such as SCP) is also restricted. • Some works have shown that changing the order of tasks significantly affect the performance of model in continual learning (Lange et al., 2022). Therefore, the principle that data should be exchangeable is violated in continual learning. In this case, the courage of typi-cal conformal prediction methods (such as SCP) cannot be guaranteed (Zou & Liu, 2024). To address these challenges, we demonstrate how to quantify model uncertainty using conformal prediction for continual learning in Section 4. Additionally, we establish asymptotic conditional validity of our proposed method in Section 5. 
+
+## 4. Uncertainty Quantification in Continual Learning 
+
+Inspired by Xu & Xie (2023a), we show how to quantify model uncertainty by CP for continual learning in this sec-tion. We focus on the current task τT . After sequentially learning the first T tasks, we obtain a trained model ˆfT . For a given input XTut , we mainly construct a prediction interval 
+
+bCαut to effectively qualify the potential prediction. 
+
+Calibration set. As discussed in Section 3, the calibration set is limited at the current task τT (i.e., we only have ac-cess to data of current task to construct the calibration set). Inspired by the replay-based methods in continual learning (Rebuffi et al., 2017; Lopez-Paz & Ranzato, 2017; Rolnick et al., 2019; Ayub & Wagner, 2021), we try to replay the samples of previous tasks to construct the calibration set. For simplicity, we maintain a buffer to store Ncal samples from each previous task. While other replay techniques could be considered, we do not develop them in this paper. Overall, by the replay, we collect the calibration set defined as STt=1 {Zti = ( Xti , Y ti )}Ncal  
+
+> i=1
+
+.
+
+Nonconformity score function. For each observation 
+
+Zti = ( Xti , Y ti ) in the calibration set, we define the pre-diction error as 
+
+ˆμti = Y ti − ˆfT (Xti ). (5) Then we define the nonconformity score function as 
+
+s(Xti , Y ti ) = 11 + e− ˆμti
+
+(6) which ensures that the scores range in (0 , 1) . We intro-duce this nonconformity score function for two reasons. First, the range of sigmoid-based nonconformity score func-tion is (0 , 1) . Our method is involved with the training of Quantile Regression Forests which requires to construct trees. This process asks us to define that the score func-tion ranges in (0 , 1) for rigorous proof. Second, this non-conformity score function is invertible, which helps us to rewrite the prediction interval. Details of reasons can be found in Appendix B. We leverage Eq.(6) to calculate the non-conformity scores for all observations in calibration set STt=1 {Zti = ( Xti , Y ti )}Ncal  
+
+> i=1
+
+. This results in the score set 
+
+STt=1 {Sti }Ncal  
+
+> i=1
+
+, where Sti = s(Xti , Y ti ). It is noteworthy that the nonconformity score function defined in this paper is independent of the calibration set. Since observations in continual learning are not exchangeable, the calibration set exhibits inherent dependencies among its observations. Consequently, the scores in STt=1 {Sti }Ncal  
+
+> i=1
+
+should be se-quentially dependent because of the independence of the nonconformity score function and the inherent dependen-cies among calibration observations. To account for these dependencies in the scores, we train a quantile estimator 
+
+ˆQT (x; α) on STt=1 {Sti }Ncal  
+
+> i=1
+
+rather than using the empirical quantile directly. 
+
+Quantile regression forests (QRF) (Meinshausen, 2006). 
+
+In this paper, we utilize QRF to achieve the quantile esti-4Model Uncertainty Quantification by Conformal Prediction in Continual Learning 
+
+mator ˆQT (x; α). Considering the dependencies over scores, we aim to reconstruct a new dataset based on the score set to train QRF. In this new dataset, each input should encap-sulate the knowledge of dependencies over scores and each prediction should represent the conditional quantile of the scores from the union task. Specifically, we define the re-constructed dataset as DRT = {(XRi , Y Ri )}Ncal −1 
+
+> i=1
+
+, where 
+
+XRi = [ S1 
+
+> i
+
+, S 2 
+
+> i
+
+, . . . , S Ti ] and Y Ri is an approximation of the true score STut of the observation (XTut , Y Tut ) from the union task which contains knowledge from all seen tasks. It is noteworthy that XRi contains T sequential scores which are effective to predict the condition quantile of true score STut .We train QRF on the reconstructed dataset 
+
+{(XRi , Y Ri )}Ncal −1 
+
+> i=1
+
+. After training QRF, we grow 
+
+K trees. For each tree with separate parameter ζk, there are 
+
+L leaves, where every leaf l is associated with a rectangular subspace Rl ⊂ B. These subspaces are disjoint and cover the entire space B, i,.e. for any x ∈ B, there is one and only one leaf which is denoted as Rl(x,ζ k ).Based on the trained QRF, we then leverage XRNcal =[S1 
+
+> Ncal
+
+, S 2 
+
+> Ncal
+
+, . . . , S TNcal ] to predict the conditional quantile of STut . Given the reconstructed dataset {(XRi , Y Ri )}Ncal −1 
+
+> i=1
+
+,the trained QRF and XRNcal ∈ B, we can obtain the esti-mated conditional distribution function ˆF (yRNcal |XRNcal ) as follows: 
+
+pi(XRNcal , ζ k) = 
+
+I(XRi ∈ Rl(XRNcal ,ζ k ))
+
+|{ j ∈ [Ncal −1] |XRj ∈ Rl(XRNcal ,ζ k )}| (7) 
+
+pi(XRNcal ) = 
+
+> K
+
+X
+
+> k=1
+
+pi(XRNcal , ζ k)/K (8) 
+
+ˆF (yRNcal |XRNcal ) = 
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(XRNcal )I(Y Ri ≤ yRNcal ) (9) where [Ncal − 1] represents the set {1, 2, . . . , N cal − 1}.
+
+Rl(XRNcal ,ζ k ) is the leaf of tree ζk that contains the input 
+
+XRNcal . If this leaf also contains the observation XRi from the reconstructed dataset, then I(XRi ∈ Rl(XRNcal ,ζ k )) is equal to 1; otherwise, it is equal to 0. |{ j ∈ [Ncal −
+
+1] |XRj ∈ Rl(XRNcal ,ζ k )}| represents the number of observa-tions included in this leaf from the reconstructed dataset. 
+
+pi(XRNcal , ζ k) measures the weight of observation XRi ,while pi(XRNcal ) further measures the weight over K trees. In practice, we implement the above fitting and prediction process by Python according to (Meinshausen, 2006). 
+
+Prediction interval. Based on the estimated conditional distribution function ˆF (yRNcal |XRNcal ), we define the condi-tional quantile estimator ˆQT (x = XRNcal ; α) as 
+
+ˆQT (x = XRNcal ;α) = inf {s∈ (0 ,1) : ˆF (s|XRNcal ) ≥ α}. (10) Then the prediction interval with significance level α is 
+
+bCαut = {Y Tut : ˆQT(XRNcal ; ˆβ) ≤ s ≤ ˆQT (XRNcal ;1 −α+ˆβ)} (11) where s = s(XTut , Y Tut ). For convenience, we define 
+
+ˆQT(XRNcal ;α) = ˆ sα. Recalling the nonconformity score function in Eq.(6), we can rewrite the prediction interval as 
+
+bCαut =[ ˆfT (Xti )−ln ( 1ˆs ˆβ
+
+−1) , ˆfT (Xti )−ln ( 1ˆs1−α+ ˆβ
+
+−1)] . (12) 
+
+ˆβ = argmin 
+
+> β∈[0 ,α ]
+
+(ln ( 1ˆs ˆβ
+
+−1) − ln ( 1ˆs1−α+ ˆβ
+
+−1)) (13) 
+
+Connection between intervals and forgetting. As the number of tasks increases, the phenomenon of forgetting becomes more pronounced. The model’s test error on previ-ous tasks rises (Eq.(5)), while the error on the current task remains low. This leads to an increased difference between our estimated ˆs ˆβ and ˆs1−α+ ˆβ . According to Eq.(12), we can conclude that the length of the prediction intervals will also increase, which is verified by Figure 3 in Section 6.2. 
+
+Conformal prediction for continual learning. Overall, we propose a CP -based method for model uncertainty quan-tification in continual learning, termed CPCL . Specifically, when learning current task τT , we first obtain a trained model ˆfT using a specific continual learning method. Then we construct the calibration set by replaying samples of previous tasks. We collect score set by calculating non-conformity scores on calibration set. Following that, we reconstruct a new dataset based on the score set. Since the union task contains knowledge from all seen tasks, we select one entry Sji of XRi which is multiplied by a coefficient ω,and set Y Ri = Sji . We then train QRF on this reconstructed dataset to obtain conditional quantile estimator. Finally, for any test input XTut , we produce the prediction interval which comprises the conditional quantile estimator. Details of CPCL are shown in Algorithm 1. In practice, we consider 
+
+Ntest test samples and obtain intervals based on these test samples. 
+
+## 5. Theory Analysis 
+
+In this section, we first analyze the oracle prediction interval in continual learning. Inspired by Meinshausen (2006); Xu & Xie (2023a), we then demonstrate that the conditional distribution function estimated by our proposed CPCL (i.e., Eq.(9)) converges to true conditional distribution function. Finally, we prove that this convergence of distribution func-tion results in the convergence of quantile estimates, indi-cating asymptotic conditional validity of CPCL. For conve-nience, we let T = Nτ represent the scenario where all Nτ
+
+tasks in continual learning have been learned. 5Model Uncertainty Quantification by Conformal Prediction in Continual Learning 
+
+Algorithm 1 CP -based method for model uncertainty quan-tification in continual learning (CPCL). 
+
+Input: (τ1, τ 2, ..., τ Nτ ): all training tasks; Nτ : total num-ber of tasks; {Ztn = ( Xtn, Y tn )}Nn=1 : the dataset of task 
+
+τt; N : the number of samples for each tasks; T : the index of current task; Ncal : the number of samples from each task in the calibration set; CLM : a certain continual learning method. 
+
+1: Initialization: RB = ∅
+
+2: for T ∈ [1 , . . . , N τ ] do 
+
+3: Obtain ˆfT from a certain continual learning method 
+
+CLM .
+
+4: Collect {ZTn = ( XTn , Y Tn )}Ncal  
+
+> n=1
+
+from task τT .
+
+5: RB = RB ∪ { ZTn = ( XTn , Y Tn )}Ncal  
+
+> n=1
+
+.
+
+6: Construct STt=1 {Sti }Ncal  
+
+> i=1
+
+on RB by Eq.(6). 
+
+7: Reconstruct DRT = {(XRi , Y Ri )}Ncal −1 
+
+> i=1
+
+.
+
+8: Fit QRF on DRT and obtain the conditional quantile estimator by Eq.(10). 
+
+9: Construct the prediction interval bCαut,T for any test input XTut with significance level α by Eqs.(11), (12) and (13). 
+
+10: end for Output: ( bCαut, 1, bCαut, 2, . . . , bCαut,N τ )
+
+5.1. Oracle Prediction Interval in Continual Learning 
+
+Here we discuss the oracle prediction interval in continual learning, which includes Y Nτ 
+
+> ut
+
+with an exact conditional coverage of 1 − α. We first define Zt = ( Xt, Y t) as the data originating from task τt. The oracle prediction assumes perfect knowledge of f in Eq.(1). Given XNτ 
+
+> ut
+
+, and since Nτ
+
+tasks are learned in sequence during continual learning, the prediction of Y Nτ 
+
+> ut
+
+is conditioned on XNτ 
+
+> ut
+
+and the sequence 
+
+ZNτ 
+
+> 1
+
+= [ Z1, Z 2, . . . , Z Nτ ]. Therefore, the goal of CP in continual learning centers around the CDF of Y Nτ 
+
+> ut
+
+condi-tioning on XNτ 
+
+> ut
+
+and the sequence ZNτ 
+
+> 1
+
+, which is defined as: 
+
+Fut (y) = P(Y Nτ 
+
+> ut
+
+≤ y|XNτ 
+
+> ut
+
+, ZNτ 
+
+> 1
+
+)= P(μNτ 
+
+> ut
+
+≤ y − f (XNτ 
+
+> ut
+
+)|ZNτ 
+
+> 1
+
+) (14) where Y Nτ 
+
+> ut
+
+= f (XNτ 
+
+> ut
+
+) + μNτ 
+
+> ut
+
+and μNτ 
+
+> ut
+
+is distributed fol-lowing F Nτ 
+
+> ut
+
+. According to Eqs.(5) and (6), our designed score function s(·) is dependent of the data sequence ZNτ 
+
+> 1
+
+.
+
+SNτ 
+
+> 1
+
+is defined as the score sequence in which St = s(Zt).In this case, the dependence among SNτ 
+
+> 1
+
+arises from ZNτ 
+
+> 1
+
+.Therefore, the conditional CDF in Eq.(14) is equivalent to the following CDF based on the score sequence 
+
+Fut (s|SNτ 
+
+> 1
+
+) = P(SNτ 
+
+> ut
+
+≤ s|SNτ 
+
+> 1
+
+). (15) We define the true conditional quantile as 
+
+QNτ (α) = inf {s : Fut (s|SNτ 
+
+> 1
+
+) ≥ α}. (16) For any β ∈ [0 , α ], we derive that 
+
+P(SNτ 
+
+> ut
+
+∈ [QNτ (β), QNτ (β +1 −α)] |SNτ 
+
+> 1
+
+) = 1 −α. (17) According to Eq.(6), we define the inverse of the score function as μ(v) = s−1(v). For any α ∈ [0 , 1] , we have 
+
+yα = f (XNτ 
+
+> ut
+
+) + μ(QNτ (α)) . (18) Then the oracle prediction interval in continual learning with the narrowest width is defined as 
+
+Cαut =[ y ˆβ , y ˆβ+1 −α]. (19) 
+
+ˆβ = argmin 
+
+> β∈[0 ,α ]
+
+(μ(QNτ (β + 1 − α)) − μ(QNτ (β))) . (20) For convenience, above discussion directly assumes that the score function is the one designed by our work. The above analysis indicates that the estimated quantile ˆQ and model 
+
+ˆf determine how closely the estimated prediction interval approximates the oracle prediction interval. In continual learning, ˆf is the output model whose uncertainty we aim to quantify. So we focus on analyzing the estimated condi-tional quantile presented in this paper, i.e. Eq.(10). In this work, we want to seek the asymptotic coverage guarantee of the prediction interval of CPCL, which is defined as 
+
+P(Y Nτ 
+
+> ut
+
+∈ bCαut |XNτ 
+
+> ut
+
+, ZNτ 
+
+> 1
+
+) → 1 − α (21) with Ncal → ∞ .Therefore, proving Eq.(21) is equivalent to prove that for any α ∈ [0 , 1] , we have 
+
+ˆQNτ (x;α) → Q Nτ (α) as Ncal → ∞ , (22) where ˆQNτ (x;α) is the estimated conditional quantile of CPCL and QNτ (α) is the true conditional quantile. In Eq.(10), we have x = XRNcal which corresponds to the score sequence SNτ 
+
+> 1
+
+. In Section 5.2, we prove Eq.(22) for any x ∈ B.
+
+5.2. Asymptotic Coverage Guarantee 
+
+Here we prove that Eq.(22) holds for any α ∈ [0 , 1] and 
+
+x ∈ B. As stated in (Xu & Xie, 2023b), it is impossible to prove the conditional coverage guarantee without further assumptions. We first provide some necessary theoretical assumptions and briefly explain them. 
+
+Assumption 1. The true conditional CDF in Eq.(15) is Lipschitz continuous with parameter L, i.e. for any x, x ′ ∈
+
+B,
+
+sup 
+
+> s
+
+|F (s|x) − F (s|x′)| ≤ L∥x − x′∥1, (23) 
+
+where x, x ′ correspond to the score sequence. 
+
+Assumption 2. The true conditional CDF F (s|x) is con-tinuous and strictly monotonously increasing in s, for any 
+
+x ∈ B.
+
+6Model Uncertainty Quantification by Conformal Prediction in Continual Learning 
+
+Assumptions 1 and 2 make assumptions on the condi-tional CDF. The conditional distribution function is assumed to be Lipschitz continuous in Assumption 1 and strictly monotonously increasing in Assumption 2. These assump-tions are reasonably mild and don’t require a particular parametric. 
+
+Assumption 3. For any x ∈ B, pi(x) in Eq.(8) satisfies that 
+
+pi(x) = o(1) .
+
+Assumption 4. For any x ∈ B, the rectangular subspace 
+
+Rl(x,ζ k ) ⊆ (0 , 1) Nτ of leaf l(x, ζ k) of tree ζk is defined by the intervals I(x, m, ζ k) ⊆ (0 , 1) , i.e. Rℓ(x,ζ k ) =
+
+⊗Nτ
+
+> m=1
+
+I(x, m, ζ k), where ⊗ means direct sum. We assume that max m |I(x, m, ζ k)| = op(1) for Ncal → ∞ . op(1) 
+
+indicates that max m |I(x, m, ζ k)| converges in probability to zero. 
+
+Assumptions 3 and 4 focus on the actual construction of trees. We refer to Meinshausen (2006) and provide two examples. Assumption 3 represents the case of Example 1. Assumption 4 indicates that the size of each interval is vanishing for large Ncal and represents the case of Example 2. 
+
+Example 1. The minimal number of observations in a node is growing for large Ncal , i.e., 1/ min l,ζ k wζk (l) = 
+
+o(1) , N cal → ∞ ..
+
+Example 2. This example consists of three situations. In situation 1, the proportion of observations in a node, rel-ative to all observations, is vanishing for large Ncal i.e., 
+
+max l,ζ k wζk (l) = o(Ncal ), N cal → ∞ . In situation 2, when finding a variable for a splitpoint, the probability that variable m = 1 , ..., N τ is chosen for the splitpoint is bounded from below for every node by a positive constant. In situation 3, if a node is split, the split is chosen so that each of the resulting sub-nodes contains at least a propor-tion γ of the observations in the original node, for some 
+
+0 < γ ≤ 0.5.
+
+Discussion of Examples 1 and 2 can be found in Appendix C. Based on Assumptions 1 - 4, we prove that for any x ∈ B,the conditional CDF ˆF (s|x) of CPCL converges in proba-bility to the true conditional CDF F (s|x) as Ncal → ∞ .
+
+Theorem 1. Under Assumptions 1, 2, 3 and 4, for any 
+
+s ∈ (0 , 1) and x ∈ B, the conditional CDF ˆF (s|x) of CPCL (Eq.(9)) converges in probability to the true conditional CDF F (s|x) as Ncal → ∞ , i.e. 
+
+| ˆF (s|x) − F (s|x)| → p 0 Ncal → ∞ (24) 
+
+holds pointwise for any s ∈ (0 , 1) and x ∈ B.
+
+The proof of Theorem 1 can be found in Appendix D. 
+
+Remark 1. Theorem 1 represents a crucial step toward establishing the asymptotic coverage guarantee of the pre-diction interval of CPCL. This theorem demonstrates the consistency of CPCL, showing that the error between the approximation of conditional distribution by CPCL and the true conditional distribution converges uniformly in proba-bility to zero as Ncal → ∞ . Consequently, CPCL serves as a consistent method for estimating conditional distributions. 
+
+Based on Theorem 1, we prove that for any α ∈ [0 , 1] , the estimated conditional quantile of CPCL converges to the true conditional quantile. Theorem 2 shows this theoretical result. We rewrite QNτ (α) as QNτ (x; α) for convenience. 
+
+Theorem 2. Under the same conditions as Theorem 1, for any α ∈ [0 , 1] and x ∈ B, the estimated conditional quan-tile ˆQNτ (x;α) of CPCL converges to the true conditional quantile QNτ (x; α) as Ncal → ∞ , i.e. 
+
+ˆQNτ (x;α) → Q Nτ (x; α) Ncal → ∞ (25) 
+
+holds for any α ∈ [0 , 1] and x ∈ B.
+
+The proof of Theorem 2 can be found in Appendix E. 
+
+Remark 2. Theorem 2 is sufficient to establish the asymp-totic coverage guarantee of the prediction interval of CPCL. Specifically, Y Nτ 
+
+> ut
+
+∈ bCαut |XNτ 
+
+> ut
+
+, ZNτ 
+
+> 1
+
+is equivalent to SNτ 
+
+> ut
+
+∈ [ ˆQNτ (X′
+
+; β), ˆQNτ (X′
+
+; β + 1 − α)] |SNτ 
+
+> 1
+
+where 
+
+X′
+
+= XNτ 
+
+> ut
+
+. According to Theorem 2, we know that 
+
+P(SNτ 
+
+> ut
+
+∈ [ ˆQNτ (X′
+
+; β), ˆQNτ (X′
+
+; β + 1 − α)] |SNτ 
+
+> 1
+
+) con-verges to P(SNτ 
+
+> ut
+
+∈ [QNτ (X′
+
+; β), QNτ (X′
+
+; β+1 −α)] |SNτ 
+
+> 1
+
+)
+
+as Ncal → ∞ . Based on Eq.(17), we then conclude that 
+
+P(Y Nτ 
+
+> ut
+
+∈ bCαut |XNτ 
+
+> ut
+
+, ZNτ 
+
+> 1
+
+) → 1 − α as Ncal → ∞ .This establishes the asymptotic coverage guarantee of the prediction interval for CPCL 
+
+## 6. Experiments 
+
+In this section, we use simulated and real-world data to verify the validity of the prediction interval of CPCL. We consider typical continual learning methods, including SI (Zenke et al., 2017), EWC (Kirkpatrick et al., 2017), MAS (Aljundi et al., 2018), DGR (Shin et al., 2017)) and Fine-tuning on real-world data to explore the effect of continual learning methods. More details of these continual learning methods are in Appendix A. 
+
+6.1. Simulation 
+
+We follow the work of Zou & Liu (2024) to generate simu-lated data. In our setup, we consider two regression tasks within the continual learning process, setting X = Rd,
+
+Y = R. Define the oracle linear predictor G : X → Y as 
+
+G(x) = ⟨w⋆, x ⟩ + b⋆, where w⋆ ∈ Rd and b⋆ ∈ R. We define the marginal distribution of X for tasks τ1 and τ2 as 
+
+F1X = N (u1, σ 2
+
+> x
+
+Id), F2X = N (u2, σ 2
+
+> x
+
+Id), (26) respectively, where u1, u 2 ∈ Rd are the mean vectors, 
+
+σ2 
+
+> x
+
+> 0 is a scalar and Id ∈ Rd×d is the identity matrix 7Model Uncertainty Quantification by Conformal Prediction in Continual Learning SI EWC MAS Finetuning 
+
+> CL methods + CPCL
+> 0.925
+> 0.950
+> 0.975
+> 1.000
+> Coverage %
+
+(a) α = 0 .05 SI EWC MAS Finetuning  
+
+> CL methods + CPCL
+> 0.875
+> 0.900
+> 0.925
+> 0.950
+> Coverage %
+
+(b) α = 0 .1SI EWC MAS Finetuning  
+
+> CL methods + CPCL
+> 0.825
+> 0.850
+> 0.875
+> 0.900
+> Coverage %
+
+(c) α = 0 .15 SI EWC MAS Finetuning 
+
+> CL methods + CPCL
+> 0.775
+> 0.800
+> 0.825
+> 0.850
+> Coverage %
+
+(d) α = 0 .2SI EWC MAS Finetuning  
+
+> CL methods + CPCL
+> 0.725
+> 0.750
+> 0.775
+> 0.800
+> Coverage %
+
+(e) α = 0 .25 SI EWC MAS Finetuning  
+
+> CL methods + CPCL
+> 0.675
+> 0.7000
+> 0.725
+> 0.750
+> Coverage %
+
+(f) α = 0 .3
+
+Figure 2. The violin plots illustrate the coverage for 100 experimental runs on the simulated data. The red lines indicate the marginal coverage guarantees we aim to achieve. In each violin, the white median line represents the median, while the endpoints of the thick line denote the 0.25 quantile and the 0.75 quantile. We present results for α = {0.05 , 0.1, 0.15 , 0.2, 0.25 , 0.3}.
+
+of dimension d × d. We define the conditional distribu-tion Y given X as FY = N (G(x), σ 2 
+
+> y
+
+) for both tasks τ1
+
+and τ2. We draw 5000 samples from the above distribu-tion to construct the train dataset for each task. We define the trained model as a linear predictor ˆG(x) = ⟨ ˆw, x ⟩ + ˆb,where ˆw ∈ Rd and ˆb ∈ R. We draw 1000 samples from the distribution of task τ1 and another 1000 samples from the distribution of task τ2 to construct the test dataset. We set 
+
+Ncal = 1000 which is the number of samples for each task to construct the calibration set. After sequentially learning tasks τ1 and τ2, we quantify the uncertainty of the trained model ˆG(x) using CPCL. The evaluation metric is the cover-age which is the ratio between the number of test examples such that yi ∈ bCαut (xi) (Eq.(12)) and the size of the test dataset. We set the significance level α to values in 
+
+{0.05 , 0.1, 0.15 , 0.2, 0.25 , 0.3} and conduct 100 runs with different random seeds. Figure 2 shows the results of experiments on simulated data using CPCL. From the figure, we observe that the violins for CPCL with different continual learning methods are over the desired coverage lines. For example, the coverage results evaluated by CPCL exceed 0.95% when we use EWC as the continual learning method and α = 0.05 . These experiment results demonstrate the validity of our proposed CPCL on simulated data. We further study the effect of continual learning method with more tasks using real-world data. 
+
+6.2. Real-world Data 
+
+We conduct experiments using Tiny ImageNet, a subset of 200 classes from ImageNet (Deng et al., 2009), rescaled to an image size of 64 × 64 . We perform 20 runs with different random seeds, randomly selecting 5 classes to form 5 tasks each time. In this case, there are 5 regression tasks in con-tinual learning process. For each task, we have 500 samples belonging to one class, subdivided into training (80%) and calibration sets (20%) along with 50 samples for testing. We utilize a pretrained AlexNet (Krizhevsky et al., 2012) (denoted as AN (·), modified by replacing final layer with a linear layer suitable for regression) to define conditional dis-tribution Y given X as FY = N (AN (x), σ 2 
+
+> y
+
+). The trained model here is ResNet-18 (He et al., 2016) which is also modified for regression. After sequentially learning T tasks, we quantify the uncertainty of the trained model by CPCL. We evaluate the results by calculating the coverage, utilizing testing samples from all T previous tasks, as described in Section 6.1. While calculating the coverage, we also col-lect the length of each prediction interval and calculate the average prediction interval length over all seen test samples. We set the significance level α to values in {0.1, 0.2, 0.3}.Figure 3 shows the results of experiments on real-world data using CPCL. From Figures 3(a), 3(b) and 3(c), we observe that the most swarms with different continual learn-ing methods are over the desired coverage lines. These 8Model Uncertainty Quantification by Conformal Prediction in Continual Learning 2 3 4 5
+
+> Task
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> Coverage %
+> SI
+> EWC
+> MAS
+> DGR
+> Finetuning
+
+(a) α = 0 .1, coverage 2 3 4 5 
+
+> Task
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> Coverage %
+> SI
+> EWC
+> MAS
+> DGR
+> Finetuning
+
+(b) α = 0 .2, coverage 2 3 4 5 
+
+> Task
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> Coverage %
+> SI
+> EWC
+> MAS
+> DGR
+> Finetuning
+
+(c) α = 0 .3, coverage 2 3 4 5
+
+> Task
+> 4
+> 12
+> Average Length
+> SI
+> EWC
+> MAS
+> DGR
+> Finetuning
+
+(d) α = 0 .1, length 2 3 4 5 
+
+> Task
+> 3
+> 9
+> Average Length
+> SI
+> EWC
+> MAS
+> DGR
+> Finetuning
+
+(e) α = 0 .2, length 2 3 4 5 
+
+> Task
+> 3
+> 7
+> Average Length
+> SI
+> EWC
+> MAS
+> DGR
+> Finetuning
+
+(f) α = 0 .3, length 
+
+Figure 3. The swarm and box plots illustrate the coverage and average interval length from the 20 experimental runs on real-world data. In Figures 3(a), 3(b) and 3(c), the red lines indicate the marginal coverage guarantees we aim to achieve. In Figures 3(d), 3(e) and 3(f), the median line represents the median, while the two edges of the box correspond to the 0.25 quantile and the 0.75 quantile. Different colors represent different continual learning methods. We present results for α = {0.1, 0.2, 0.3}.
+
+demonstrate the validity of our proposed CPCL on real-world data. Figures 3(d), 3(e) and 3(f) show the average interval length. As the number of learning tasks increases, we find that the average interval length based on any con-tinual learning method tends to increase. For example, the average length of the prediction interval can reach 9 after learning task 5, while it remains below 8 after learning task 2, when we us EWC as the continual learning method and 
+
+α = 0 .1. This phenomenon results from catastrophic for-getting. Although continual learning methods are effective in mitigating catastrophic forgetting, some forgetting still occurs as the number of learning tasks increases. Eq.(12) shows that the prediction interval is based on the resulted model ˆfT . Consequently, an increasing prediction interval length indicates model forgetting. Therefore, our proposed CPCL effectively reflects the phenomenon of forgetting and measures the performance of continual learning methods. 
+
+## 7. Conclusion 
+
+In this paper, we propose a CP -based method for model un-certainty quantification in continual learning, termed CPCL .CPCL collects the calibration set through replay and de-signs a nonconformity score function to construct a score set, where scores are sequentially dependent. It accounts for these dependencies by reconstructing a new dataset based on score set. CPCL trains QRF using reconstructed dataset and defines the prediction interval by the conditional quantile es-timator derived from the trained QRF. Then we analyze the oracle prediction interval in continual learning and provide the asymptotic coverage guarantee for the prediction inter-val of CPCL. Finally, extensive experiments on simulated and real data empirically verify the validity of CPCL. 
+
+## Acknowledgements 
+
+This work is supported by the Key R&D Program of Hubei Province under Grant 2024BAB038, the National Key R&D Program of China under Grant 2023YFC3604702, the Fun-damental Research Funds for the Central Universities under Grant 2042025kf0045. 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none which we feel must be specifically highlighted here. 9Model Uncertainty Quantification by Conformal Prediction in Continual Learning 
+
+## References 
+
+Ahn, H., Cha, S., Lee, D., and Moon, T. Uncertainty-based continual learning with adaptive regularization. In 
+
+NeurIPS , pp. 4394–4404, 2019. Aljundi, R., Babiloni, F., Elhoseiny, M., Rohrbach, M., and Tuytelaars, T. Memory aware synapses: Learning what (not) to forget. In ECCV , volume 11207, pp. 144–161, 2018. Aljundi, R., Rohrbach, M., and Tuytelaars, T. Selfless sequential learning. In ICLR , 2019. Ayub, A. and Wagner, A. R. EEC: learning to encode and regenerate images for continual learning. In ICLR , 2021. Benjamin, A. S., Rolnick, D., and K ¨ording, K. P. Measuring and regularizing networks in function space. In ICLR ,2019. Buzzega, P., Boschini, M., Porrello, A., Abati, D., and Calderara, S. Dark experience for general continual learn-ing: a strong, simple baseline. In NeurIPS , 2020. Chen, Y. and Liu, W. A theory of transfer-based black-box attacks: Explanation and implications. In NeurIPS , 2023. Chen, Z. and Liu, B. Lifelong Machine Learning, Second Edition . 2018. Delange, M., Aljundi, R., Masana, M., Parisot, S., Jia, X., Leonardis, A., Slabaugh, G., and Tuytelaars, T. A contin-ual learning survey: Defying forgetting in classification tasks. IEEE Transactions on Pattern Analysis and Ma-chine Intelligence , 2021. Deng, J., Dong, W., Socher, R., Li, L., Li, K., and Fei-Fei, L. Imagenet: A large-scale hierarchical image database. In CVPR , pp. 248–255, 2009. Farquhar, S. and Gal, Y. Towards robust evaluations of continual learning. CoRR , abs/1805.09733, 2018. Fisch, A., Schuster, T., Jaakkola, T. S., and Barzilay, R. Conformal prediction sets with limited false positives. In 
+
+ICML , pp. 6514–6532, 2022. Gao, R. and Liu, W. DDGR: continual learning with deep diffusion-based generative replay. In ICML , pp. 10744– 10763, 2023. Gao, R. and Liu, W. Defying catastrophic forgetting via influence function. Artif. Intell. , 339:104261, 2025a. Gao, R. and Liu, W. Red alarm: Controllable backdoor at-tack in continual learning. Neural Networks , 188:107479, 2025b. Gendler, A., Weng, T., Daniel, L., and Romano, Y. Adver-sarially robust conformal prediction. In ICLR , 2022. Ghesu, F. C., Georgescu, B., Mansoor, A., Yoo, Y., Gibson, E., Vishwanath, R. S., Balachandran, A., Balter, J. M., Cao, Y., Singh, R., Digumarthy, S. R., Kalra, M. K., Grbic, S., and Comaniciu, D. Quantifying and leverag-ing predictive uncertainty for medical image assessment. 
+
+Medical Image Anal. , 68:101855, 2021. Gong, X., Yuan, D., and Bao, W. Understanding partial multi-label learning via mutual information. In NeurIPS ,pp. 4147–4156, 2021. Gong, X., Yuan, D., and Bao, W. Partial label learning via label influence function. In ICML , pp. 7665–7678, 2022. Gong, X., Yuan, D., and Bao, W. Discriminative metric learning for partial label learning. IEEE Trans. Neural Networks Learn. Syst. , 34(8):4428–4439, 2023a. Gong, X., Yuan, D., Bao, W., and Luo, F. A unifying probabilistic framework for partially labeled data learn-ing. IEEE Trans. Pattern Anal. Mach. Intell. , 45(7):8036– 8048, 2023b. Gui, Y., Barber, R., and Ma, C. Conformalized matrix completion. In NeurIPS , 2023. Guo, C., Pleiss, G., Sun, Y., and Weinberger, K. Q. On calibration of modern neural networks. In ICML , pp. 1321–1330, 2017. Hayes, T. L., Krishnan, G. P., Bazhenov, M., Siegelmann, H. T., Sejnowski, T. J., and Kanan, C. Replay in deep learning: Current approaches and missing biological ele-ments. Neural Comput. , 33(11):2908–2950, 2021. He, K., Zhang, X., Ren, S., and Sun, J. Deep residual learning for image recognition. In CVPR , pp. 770–778, 2016. Hermans, J., Delaunoy, A., Rozet, F., Wehenkel, A., and Louppe, G. Averting A crisis in simulation-based infer-ence. CoRR , abs/2110.06581, 2021. Hofmanninger, J., Perkonigg, M., Brink, J. A., Pianykh, O. S., Herold, C., and Langs, G. Dynamic memory to alleviate catastrophic forgetting in continuous learning settings. In MICCAI , pp. 359–368, 2020. Huang, K., Jin, Y., Cand `es, E. J., and Leskovec, J. Uncer-tainty quantification over graph with conformalized graph neural networks. In NeurIPS , 2023. Jung, S., Ahn, H., Cha, S., and Moon, T. Continual learn-ing with node-importance based adaptive group sparse regularization. In NeurIPS , 2020. 10 Model Uncertainty Quantification by Conformal Prediction in Continual Learning 
+
+Kirkpatrick, J., Pascanu, R., Rabinowitz, N. C., Veness, J., Desjardins, G., Rusu, A. A., Milan, K., Quan, J., Ra-malho, T., Grabska-Barwinska, A., Hassabis, D., Clopath, C., Kumaran, D., and Hadsell, R. Overcoming catas-trophic forgetting in neural networks. Proceedings of the national academy of sciences , 114(13):3521–3526, 2017. Krizhevsky, A., Sutskever, I., and Hinton, G. E. Imagenet classification with deep convolutional neural networks. In NeurIPS , 2012. Kumaran, D., Hassabis, D., and McClelland, J. L. What learning systems do intelligent agents need? complemen-tary learning systems theory updated. Trends in cognitive sciences , 20(7):512–534, 2016. Lange, M. D., Aljundi, R., Masana, M., Parisot, S., Jia, X., Leonardis, A., Slabaugh, G. G., and Tuytelaars, T. Acontinual learning survey: Defying forgetting in classifi-cation tasks. IEEE Trans. Pattern Anal. Mach. Intell. , 44 (7):3366–3385, 2022. Lee, S., Kim, J., Jun, J., Ha, J., and Zhang, B. Overcoming catastrophic forgetting by incremental moment matching. In NeurIPS , pp. 4652–4662, 2017. Lesort, T., Lomonaco, V., Stoian, A., Maltoni, D., Filliat, D., and Rodr ´ıguez, N. D. Continual learning for robotics. 
+
+CoRR , abs/1907.00182, 2019. Liu, W., Shen, X., Du, B., Tsang, I. W., Zhang, W., and Lin, X. Hyperspectral imagery classification via stochastic hhsvms. IEEE Trans. Image Process. , 28(2):577–588, 2019. Lopez-Paz, D. and Ranzato, M. Gradient episodic memory for continual learning. In NeurIPS , pp. 6467–6476, 2017. Mallya, A. and Lazebnik, S. Packnet: Adding multiple tasks to a single network by iterative pruning. In CVPR , pp. 7765–7773, 2018. Meinshausen, N. Quantile regression forests. J. Mach. Learn. Res. , 7:983–999, 2006. Ndiaye, E. Stable conformal prediction sets. In ICML , pp. 16462–16479, 2022. Pan, P., Swaroop, S., Immer, A., Eschenhagen, R., Turner, R. E., and Khan, M. E. Continual deep learning by func-tional regularisation of memorable past. In NeurIPS ,2020. Papadopoulos, H., Vovk, V., and Gammerman, A. Con-formal prediction with neural networks. In ICTAI , pp. 388–395, 2007. Parisi, G. I., Kemker, R., Part, J. L., Kanan, C., and Wermter, S. Continual lifelong learning with neural networks: A review. Neural Networks , 113:54–71, 2019. Park, S., Cohen, K. M., and Simeone, O. Few-shot calibra-tion of set predictors via meta-learned cross-validation-based conformal prediction. IEEE Trans. Pattern Anal. Mach. Intell. , 46(1):280–291, 2024. Pf ¨ulb, B. and Gepperth, A. A comprehensive, application-oriented study of catastrophic forgetting in dnns. In ICLR ,2019. Qian, W., Zhao, C., Li, Y., Ma, F., Zhang, C., and Huai, M. Towards modeling uncertainties of self-explaining neural networks via conformal prediction. In AAAI , pp. 14651–14659, 2024. Rebuffi, S., Kolesnikov, A., Sperl, G., and Lampert, C. H. icarl: Incremental classifier and representation learning. In CVPR , pp. 5533–5542, 2017. Rolnick, D., Ahuja, A., Schwarz, J., Lillicrap, T. P., and Wayne, G. Experience replay for continual learning. In 
+
+NeurIPS , pp. 348–358, 2019. Serr `a, J., Suris, D., Miron, M., and Karatzoglou, A. Over-coming catastrophic forgetting with hard attention to the task. In ICML , volume 80, pp. 4555–4564, 2018. Shafer, G. and Vovk, V. A tutorial on conformal prediction. 
+
+J. Mach. Learn. Res. , 9:371–421, 2008. Shin, H., Lee, J. K., Kim, J., and Kim, J. Continual learning with deep generative replay. In NeurIPS , pp. 2990–2999, 2017. Tang, B. and Matteson, D. S. Graph-based continual learn-ing. In ICLR , 2021. Thelen, A., Zhang, X., Fink, O., Lu, Y., Ghosh, S., Youn, B. D., Todd, M. D., Mahadevan, S., Hu, C., and Hu, Z. A comprehensive review of digital twin - part 2: Roles of uncertainty quantification and optimization, a battery digital twin, and perspectives. CoRR , abs/2208.12904, 2022. Tibshirani, R. J., Barber, R. F., Cand `es, E. J., and Ramdas, A. Conformal prediction under covariate shift. In NeurIPS ,pp. 2526–2536, 2019. Vovk, V., Gammerman, A., and Shafer, G. Algorithmic learning in a random world , volume 29. Springer, 2005. Wisniewski, W., Lindsay, D., and Lindsay, S. Application of conformal prediction interval estimations to market makers’ net positions. In COPA , pp. 285–301, 2020. 11 Model Uncertainty Quantification by Conformal Prediction in Continual Learning 
+
+Xu, C. and Xie, Y. Sequential predictive conformal infer-ence for time series. In ICML , pp. 38707–38727, 2023a. Xu, C. and Xie, Y. Conformal prediction for time series. 
+
+IEEE Trans. Pattern Anal. Mach. Intell. , 45(10):11575– 11587, 2023b. Xu, J. and Liu, W. On robust multiclass learnability. In 
+
+NeurIPS , 2022. Xu, J. and Zhu, Z. Reinforced continual learning. In 
+
+NeurIPS , pp. 907–916, 2018. Zenke, F., Poole, B., and Ganguli, S. Continual learning through synaptic intelligence. In ICML , volume 70, pp. 3987–3995, 2017. Zou, X. and Liu, W. On the adversarial robustness of out-of-distribution generalization models. In NeurIPS , 2023a. Zou, X. and Liu, W. Generalization bounds for adversarial contrastive learning. J. Mach. Learn. Res. , 24:114:1– 114:54, 2023b. Zou, X. and Liu, W. Coverage-guaranteed prediction sets for out-of-distribution data. In AAAI , pp. 17263–17270, 2024. 12 Model Uncertainty Quantification by Conformal Prediction in Continual Learning 
+
+## A. Additional Experimental Setting 
+
+Here, we provide more information about continual learning methods. There are five methods in our paper. We give some descriptions of these baselines. 
+
+SI: The synaptic state tracks the past and current parameter value, and maintains an online estimate of the synapse’s importance toward solving problems encountered in the past. 
+
+MAS: Redefines the parameter importance measure to an unsupervised setting and obtains gradients of the squared L2-norm of the learned network output function. 
+
+EWC: EWC introduces network parameter uncertainty in the Bayesian framework; the true posterior is estimated using a Laplace approximation with precision, determined by the Fisher Information Matrix (FIM), which shows equivalence to the positive semi-definite second order derivative of the loss near a minimum. 
+
+DGR: DGR consists of a deep generative model (“generator”) and a task solving model (“solver”). DGR trains a deep generative model in the generative adversarial networks (GANs) framework to mimic previous data. Generated data are then paired with corresponding response from the previous task solver to represent old tasks. Called the scholar model, the generator-solver pair can produce fake data and desired target pairs as much as needed, and when presented with a new task, these produced pairs are interleaved with new data to update the generator and solver networks. 
+
+Finetuning: Finetuning greedily trains each task without considering previous task performance—hence introducing catastrophic forgetting—and represents the minimum desired performance. 
+
+## B. Discussion of Nonconformity Score Function 
+
+We introduce the sigmoid-based nonconformity score function for two reasons. (1) The range of sigmoid-based noncon-formity score function is (0 , 1) . We train QRF on the reconstructed dataset DRT = {(XRi , Y Ri )}Ncal −1 
+
+> i=1
+
+, where each entry 
+
+Sti in XRi is the calculated score. The training of QRF requires to construct trees. This process involves the intervals 
+
+I(x, m, ζ k) ⊆ (0 , 1) . The interval I(x, m, ζ k) is used to determine whether XRi is in the node corresponding to I(x, m, ζ k),i.e., if Smi ∈ I(x, m, ζ k), then XRi is in the corresponding node. Since I(x, m, ζ k) ⊆ (0 , 1) , we need to define that the score function ranges in (0 , 1) for rigorous proof. (2) Sigmoid-based nonconformity score function is invertible. In Eq.(11) we present the prediction interval in terms of scores. The invertible function helps us to rewrite the prediction interval which is shown in Eq.(12). A typical score function in CP is s(Xti , Y ti ) = | ˆμti| where ˆμti = Y ti − ˆfT (Xti ). It is not invertible and the corresponding range is not (0 , 1) . Therefore, it is not suitable in this paper. 
+
+## C. Examples 
+
+We refer to Meinshausen (2006) and provide two examples. Assumption 3 represents the case of Example 1. Assumption 4 indicates that the size of each interval is vanishing for large Ncal and represents the case of Example 2. For each tree with separate parameter ζk, there are L leaves, where every leaf l is associated with a rectangular subspace 
+
+Rl ⊂ B. These subspaces are disjoint and cover the entire space B, i,.e. for any x ∈ B, there is one and only one leaf which corresponds to Rl(x,ζ k ). Denote the node-sizes of the leaves l of a tree by wζk (l) = ∥
+
+i ∈ { 1, . . . , N cal − 1} : Xi ∈ Rl(x,ζ k )∥. Xi ∈ (0 , 1) Nτ is the observation to train QRF. We discuss Assumption 3 by Example 1: The minimal number of observations in a node is growing for large Ncal , i.e., 
+
+1/ min l,ζ k wζk (l) = o(1) , N cal → ∞ .. Recalling pi(x) = PKk=1 pi(x, ζ k)/K , we have 0 ≤ pi(x) ≤ 1/ min l,ζ k wζk (l) = 
+
+o(1) , which means that pi(x) = o(1) for any x ∈ B. Therefore, Assumption 3 represents the case of Example 1. We discuss Assumption 4 by Example 2 which consists of three situations. In situation 1, the proportion of observations in a node, relative to all observations, is vanishing for large Ncal i.e., max l,ζ k wζk (l) = o(Ncal ), N cal → ∞ . In situation 2, when finding a variable for a splitpoint, the probability that variable m = 1 , ..., N τ is chosen for the splitpoint is bounded from below for every node by a positive constant. In situation 3, if a node is split, the split is chosen so that each of the resulting sub-nodes contains at least a proportion γ of the observations in the original node, for some 0 < γ ≤ 0.5.As any x ∈ B is dropped down a tree, several nodes are passed. Denote by S(x, m, ζ k) the number of times that these nodes contain a splitpoint on variable m. The total number of nodes that x passes through is denoted by S(x, ζ k) = 
+
+13 Model Uncertainty Quantification by Conformal Prediction in Continual Learning 
+
+PNτ 
+
+> m=1
+
+S(x, m, ζ k). Using situation 3, the maximal number of observations in any leaf, max l wζk (l) is bounded (for every tree) from below by Ncal γSmin (ζk ) where Smin (ζk) = min x∈B S(x, ζ k). Using situation 1, max l wζk (l) is on the other hand bounded from above by an o(Ncal )-term. Putting together, we conclude that γSmin (ζk ) = o(1) for Ncal → ∞ . Hence there exists a sequence sNcal with sNcal → ∞ for Ncal → ∞ such that Smin (ζk) ≥ sNcal . As the probability of splitting on variable m = 1 , ..., N τ is bounded from below by a positive constant, by situation 2, there exists a sequence gNcal with 
+
+gNcal → ∞ for Ncal → ∞ such that P {min m S(x, m, ζ k) > g Ncal } → 1 Ncal → ∞ . Using situation 3, we obtain that |{ i ∈ { 1, . . . , N cal − 1} : Xi,m ∈ I(x, m, ζ k)}| /(Ncal − 1) ≤ (1 − γ)S(x,m,ζ k ). Putting together, we conclude that 
+
+max m |{ i ∈ { 1, ..., N cal − 1} : Xi,m ∈ I(x, m, ζ k)}| /(Ncal − 1) = op(1) which indicates max m |I(x, m, ζ k)| = op(1) 
+
+for Ncal → ∞ . Therefore, Assumption 4 represents the case of Example 2. 
+
+## D. Proof of Theorem 1 
+
+Theorem 1 shows that the conditional CDF ˆF (s|x) of CPCL converges in probability to the true conditional CDF F (s|x) as 
+
+Ncal → ∞ . We recall Theorem 1 and prove it. 
+
+Theorem 1. Under Assumptions 1, 2, 3 and 4, for any s ∈ (0 , 1) and x ∈ B, the conditional CDF ˆF (s|x) of CPCL converges in probability to the true conditional CDF F (s|x) as Ncal → ∞ , i.e. 
+
+| ˆF (s|x) − F (s|x)| → p 0 Ncal → ∞ (D.1) 
+
+holds pointwise for any s ∈ (0 , 1) and x ∈ B.Proof. For each observation in {(XRi , Y Ri )}Ncal −1 
+
+> i=1
+
+, we define 
+
+Ui = F (Y Ri |XRi ) (D.2) as the quantile of the i-th empirical score Y Ri (corresponding to s in CDF). We replace Y Ri with SRi for convenience in this proof. It is noteworthy that Ui ∼ Unif[0 , 1] due to the assumption of continuous distribution function in Assumption 2. We then derive the point-wise difference between the conditional CDF ˆF (s|x) of CPCL and the true conditional CDF F (s|x).
+
+ˆF (s|x) − F (s|x) = 
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)I(SRi ≤ s) − F (s|x) (D.3) Under Assumption 2, we know that {SRi ≤ s} is identical to {Ui ≤ F (s|XRi )}. Therefore, we derive that 
+
+ˆF (s|x) − F (s|x) = 
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)I(Ui ≤ F (s|XRi )) − F (s|x)=
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)I(Ui ≤ F (s|x)) − F (s|x) + 
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)( I(Ui ≤ F (s|XRi )) − I(Ui ≤ F (s|x))) 
+
+(D.4) Taking the absolute value of both sides of Eq.(D.4), we derive that 
+
+| ˆF (s|x) − F (s|x)| ≤ | 
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)I(Ui ≤ F (s|x)) − F (s|x)| + |
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)( I(Ui ≤ F (s|XRi )) − I(Ui ≤ F (s|x))) |
+
+(D.5) The first term of right side of Eq.(D.5) is a variance-type part, while the second term of that reflects the change in the underlying distribution. For the first term, we derive the expectation: 
+
+E[
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)I(Ui ≤ F (s|x))] = 
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)E[I(Ui ≤ F (s|x))] (D.6) Due to Ui ∼ Unif[0 , 1] , we conclude that E[I(Ui ≤ F (s|x))] = F (s|x)) . According to Eq.(8) of Section 4, we know that 
+
+PNcal −1 
+
+> i=1
+
+pi(x) = 1 . Therefore, we derive that 
+
+E[
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)I(Ui ≤ F (s|x))] = 
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)F (s|x) = F (s|x) (D.7) 14 Model Uncertainty Quantification by Conformal Prediction in Continual Learning 
+
+Based on Eq.(D.7), we rewrite the first term of right side of Eq.(D.5) as 
+
+|
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)I(Ui ≤ F (s|x)) − F (s|x)| = |
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)I(Ui ≤ F (s|x)) − E[
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)I(Ui ≤ F (s|x))] | (D.8) By Chebyshev inequality, for any ϵ > 0, we have 
+
+P(|
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)I(Ui ≤ F (s|x)) − F (s|x)| ≥ ϵ)= P(|
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)I(Ui ≤ F (s|x)) − E[
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)I(Ui ≤ F (s|x))] | ≥ ϵ)
+
+≤ V ar (
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)I(Ui ≤ F (s|x))) /ϵ 2
+
+(D.9) Due to the way of constructing {(XRi , Y Ri )}Ncal −1 
+
+> i=1
+
+, we let Ui for i = 1 , . . . , N cal − 1 independent. Therefore, we have 
+
+V ar (
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)I(Ui ≤ F (s|x))) =
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)2V ar (I(Ui ≤ F (s|x))) =
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)2(E[I(Ui ≤ F (s|x))] − E[I(Ui ≤ F (s|x))] 2)=
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)2(F (s|x) − F 2(s|x)) 
+
+<
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)2.
+
+(D.10) By Assumption 3 and Eq.(8), we have 0 < p i(x) = o(1) and PNcal −1 
+
+> i=1
+
+pi(x) = 1 . Therefore, for any x ∈ B, we derive that 
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)2 → 0 Ncal → ∞ . (D.11) Combining Eqs.(D.9), (D.10) and (D.11), we derive that the first term of right side of Eq.(D.5) converges to 0 as Ncal → ∞ ,i.e. 
+
+|
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)I(Ui ≤ F (s|x)) − F (s|x)| → p 0 Ncal → ∞ . (D.12) holds for any s ∈ (0 , 1) and x ∈ B. Then we turns attention to the second term of right side of Eq.(D.5). We define H(Ui)
+
+as 
+
+H(Ui) = 
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)( I(Ui ≤ F (s|XRi )) − I(Ui ≤ F (s|x))) . (D.13) 15 Model Uncertainty Quantification by Conformal Prediction in Continual Learning 
+
+Due to all Ui are uniform over [0,1], it holds that 
+
+E[H(Ui)] = E[
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)( I(Ui ≤ F (s|XRi )) − I(Ui ≤ F (s|x)))] =
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)E[I(Ui ≤ F (s|XRi )) − I(Ui ≤ F (s|x))] =
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)[ F (s|XRi ) − F (s|x)] 
+
+(D.14) By Chebyshev inequality, for any ϵ > 0, we have 
+
+P(|H(Ui) − E[H(Ui)] | ≥ ϵ) ≤ V ar (H(Ui)) /ϵ 2. (D.15) Similar to the proof process of Eq.(D.10), we derive that 
+
+V ar (H(Ui)) = V ar (
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)( I(Ui ≤ F (s|XRi )) − I(Ui ≤ F (s|x)))) =
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)2V ar (I(Ui ≤ F (s|XRi )) − I(Ui ≤ F (s|x))) =
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)2(E[I(Ui ≤ F (s|XRi )) − I(Ui ≤ F (s|x))] − E[I(Ui ≤ F (s|XRi )) − I(Ui ≤ F (s|x))] 2)=
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)2(F (s|XRi ) − F (s|x) − (F (s|XRi ) − F (s|x)) 2)
+
+≤
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)2
+
+(D.16) Combining Eqs.(D.11) and (D.16), we derive that H(Ui) →p E[H(Ui)] as Ncal → ∞ . Therefore, we have 
+
+|
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)( I(Ui ≤ F (s|XRi )) − I(Ui ≤ F (s|x))) | → p |
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)( F (s|XRi ) − F (s|x)) | as Ncal → ∞ .
+
+(D.17) According to Assumption 1, we derive that 
+
+|
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)( F (s|XRi ) − F (s|x)) | ≤ 
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)|F (s|XRi ) − F (s|x)|≤
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x) sup 
+
+> s
+
+|(F (s|XRi ) − F (s|x)) |≤
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)L∥XRi − x∥1
+
+(D.18) By Assumption 4, we have max m |I(x, m, ζ k)| = op(1) for Ncal → ∞ and any x ∈ B, which suffices to show that 
+
+> Ncal −1
+
+X
+
+> i=1
+
+pi(x)L∥XRi − x∥1 = op(1) . (D.19) We therefore conclude that the second term of right side of Eq.(D.5) converges to 0 as Ncal → ∞ . Overall, we prove that under Assumptions 1, 2, 3 and 4, for any s ∈ (0 , 1) and x ∈ B, the conditional CDF ˆF (s|x) of CPCL converges in 16 Model Uncertainty Quantification by Conformal Prediction in Continual Learning 
+
+probability to the true conditional CDF F (s|x) as Ncal → ∞ , i.e. 
+
+| ˆF (s|x) − F (s|x)| → p 0 Ncal → ∞ (D.20) holds pointwise for any s ∈ (0 , 1) and x ∈ B. Xu & Xie (2023a) provide a similar proof which can also be referred to. 
+
+## E. Proof of Theorem 2 
+
+Theorem 2 shows that the estimated conditional quantile ˆQNτ (x;α) of CPCL converges to the true conditional quantile 
+
+QNτ (x; α) as Ncal → ∞ . We recall Theorem 2 and prove it. 
+
+Theorem 2. Under the same conditions as Theorem 1, for any α ∈ [0 , 1] and x ∈ B, the estimated conditional quantile 
+
+ˆQNτ (x;α) of CPCL converges to the true conditional quantile QNτ (x; α) as Ncal → ∞ , i.e. 
+
+ˆQNτ (x;α) → Q Nτ (x; α) Ncal → ∞ (E.21) 
+
+holds for any α ∈ [0 , 1] and x ∈ B.Proof. Proving Eq.(E.21) is identical to prove that 
+
+| ˆQNτ (x;α) − Q Nτ (x; α)| → 0 Ncal → ∞ (E.22) holds for any x ∈ B and α ∈ [0 , 1] . Recall that 
+
+QNτ (x; α) = inf {s : F (s|x) ≥ α}. (E.23) By Assumption 2, we know that F (s|x) is continuous and strictly monotonously increasing in s. We consider a small perturbation of QNτ (x; α), which results in the changes of the conditional distribution function, i.e. |F (QNτ (x; α)−ϵ|x)−α|
+
+and |F (QNτ (x; α) + ϵ|x) − α|. We define this changes as δ = min( |F (QNτ (x; α) − ϵ|x) − α|, |F (QNτ (x; α) + ϵ|x) − α|).Therefore, we consider the estimated quantile ˆQNτ (x;α) as the perturbation of QNτ (x; α). When the | ˆQNτ (x;α) −QNτ (x; α)| > ϵ , the change of F (s|x) is more than δ, i.e. |F ( ˆQNτ (x;α) − α| > δ . Then we derive that 
+
+P(| ˆQNτ (x;α) − Q Nτ (x; α)| > ϵ ) = P(|F ( ˆQNτ (x;α) − α| > δ )= P(|F ( ˆQNτ (x;α) − ˆF ( ˆQNτ (x;α)| > δ ) (E.24) According to the consistency in Theorem 1, we have 
+
+P(|F ( ˆQNτ (x;α) − ˆF ( ˆQNτ (x;α)| > δ ) → 0 as Ncal → ∞ . (E.25) Combining Eqs.(E.24) and (E.25), we derive that 
+
+P(| ˆQNτ (x;α) − Q Nτ (x; α)| > ϵ ) → 0 as Ncal → ∞ . (E.26) This means that 
+
+| ˆQNτ (x;α) − Q Nτ (x; α)| → 0 as Ncal → ∞ . (E.27) Overall, we prove that the estimated conditional quantile ˆQNτ (x;α) of CPCL converges to the true conditional quantile 
+
+QNτ (x; α) as Ncal → ∞ .17

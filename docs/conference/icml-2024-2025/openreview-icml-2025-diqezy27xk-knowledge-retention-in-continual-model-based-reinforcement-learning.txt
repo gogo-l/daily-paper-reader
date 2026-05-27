@@ -1,0 +1,855 @@
+Title: Knowledge Retention in Continual Model-Based Reinforcement Learning
+
+URL Source: https://openreview.net/pdf?id=DiqeZY27XK
+
+Number of Pages: 20
+
+Markdown Content:
+# Knowledge Retention in Continual Model-Based Reinforcement Learning 
+
+Haotian Fu * 1 Yixiang Sun * 1 Michael Littman 1 George Konidaris 1
+
+## Abstract 
+
+We propose DRAGO, a novel approach for contin-ual model-based reinforcement learning aimed at improving the incremental development of world models across a sequence of tasks that differ in their reward functions but not the state space or dy-namics. DRAGO comprises two key components: 
+
+Synthetic Experience Rehearsal , which leverages generative models to create synthetic experiences from past tasks, allowing the agent to reinforce previously learned dynamics without storing data, and Regaining Memories Through Exploration ,which introduces an intrinsic reward mechanism to guide the agent toward revisiting relevant states from prior tasks. Together, these components enable the agent to maintain a comprehensive and continually developing world model, facil-itating more effective learning and adaptation across diverse environments. Empirical evalua-tions demonstrate that DRAGO is able to preserve knowledge across tasks, achieving superior per-formance in various continual learning scenarios. 
+
+## 1. Introduction 
+
+Model-based Reinforcement Learning (MBRL) aims to en-hance decision-making by developing a world model that captures the underlying dynamics of the environment. A robust world model allows an agent to predict future states, plan actions, and adapt to new situations with minimal real-world trial and error. For MBRL to be effective in dynamic, real-world applications, the world model must incrementally learn and adapt, continually integrating new information as the agent encounters diverse environments and tasks. Imagine an agent initially exploring a small, confined part of a complex world, like a home-assistance robot learning to navigate a kitchen. At first, the robot masters dynamics           
+
+> *Equal contribution 1Brown University. Correspon-dence to: Haotian Fu <hfu@cs.brown.edu >,Yixiang Sun
+> <ysun133@cs.brown.edu >.
+> Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s).
+
+specific to that environment, such as avoiding countertops and maneuvering around chairs. When deployed to a new household, it must adapt to unfamiliar layouts while retain-ing its understanding of prior environments. Over time, as the robot encounters diverse settings—homes with vary-ing furniture arrangements, hospitals with strict privacy constraints, or factories with evolving machinery—it must incrementally integrate new dynamics without forgetting earlier knowledge. This process aligns with the principles of 
+
+continual learning , where agents progressively acquire new skills across tasks while preserving past experiences (Lange et al., 2022). However, real-world constraints often pro-hibit storing raw interaction data from prior tasks due to: 
+
+1. Storage limitations : Robots or embodied agents cannot indefinitely retain growing datasets (Hadsell et al., 2020). 2. Privacy regulations : Healthcare or service robots handling sensitive data may be restricted from archiving task-specific interactions (Kemker et al., 2018). 3. On-device deploy-ment : Deployed AI systems (e.g., smartphones) often rely on pre-trained models where the original training data is proprietary or privacy-sensitive. In principle, continual MBRL would enable agents to learn a generalizable world model supporting a universal set of tasks. If data from all previous tasks are available, multi-task learning strategies (Fu et al., 2022) could solve this by leveraging shared dynamics. However, in storage- or privacy-constrained settings, agents lack access to prior task data , rendering such approaches infeasible. In practice, we actually always have bounded storage. If we consider the hardest case, where no previous data is available: as shown in Figure 1 and our experiments, naive MBRL suf-fers catastrophic forgetting, overwriting critical dynamics (e.g., a robot forgetting kitchen layouts after learning living rooms). To address this, we need strategies that retain essen-tial knowledge without storing past data, enabling agents to build increasingly complete world models across tasks. Specifically, we propose DRAGO, a novel continual MBRL approach designed to address catastrophic forgetting and incomplete world models in the absence of prior task data. DRAGO consists of two key components: Synthetic Expe-rience Rehearsal and Regaining Memories Through Explo-ration. Synthetic Experience Rehearsal uses a continually learned generative model to enable the agent to simulate and learn from synthetic experiences that resemble those 1Knowledge Retention in Continual Model-Based Reinforcement Learning Task 1 Task 2    
+
+> Task 3 Task 4
+> Naive continual model-based RL Continual model-based RL without fo rgetting
+> Task 1 Task 2
+> Task 3 Task 4
+
+Figure 1. Comparison between the world model learned by naive continual MBRL and MBRL without forgetting. Each task requires the agent to move from the corner of one room to a specific point in the same room. Shaded areas represent the world model’s coverage after finishing each task. Naively continually training MBRL ( Left ) tends to suffer the catastrophic forgetting problem—the agent forgets almost everything about the first room after training in the second room (our experimental results support this claim). Our project identifies a method ( Right ) that helps the world model preserve the knowledge of previous tasks even when the old data is no longer available. 
+
+from prior tasks. This process allows the agent to synthesize representative transitions that resemble prior experience, reinforcing its understanding of previously learned dynam-ics without requiring access to past data. In the Regaining Memories Through Exploration component, we introduce an intrinsic reward mechanism that encourages the agent to actively explore states where the previous transition model performs well. This exploration bridges the gap between tasks by discovering connections within the environment, leading to a more comprehensive and cohesive world model. To sum up, we make the following contributions: 1. We introduce DRAGO, a new approach for contin-ual model-based reinforcement learning that addresses catastrophic forgetting while incrementally learning a world model across sequential tasks without retaining any past data. 2. We propose a generative replay mechanism that synthe-sizes “old” transitions using a learned generative model alongside a frozen copy of the previously trained world model. 3. We design an intrinsic reward signal that nudges the agent toward revisiting states that the old model ex-plained well—effectively “reconnecting” current expe-riences with previously learned transitions. 4. Through experiments on MiniGrid and DeepMind Con-trol Suite domains, we show that DRAGO substan-tially improves knowledge retention compared to stan-dard continual MBRL baselines and achieves higher transfer performance, allowing faster adaptation to en-tirely new (but related) tasks. Code is available at 
+
+https://github.com/YixiangSun/drago .
+
+## 2. Background 
+
+In reinforcement learning, an agent interacts with an envi-ronment modeled as a Markov Decision Process (MDP). An MDP is defined by a tuple < S, A, T, r, γ > , where S is the state space, A is the action space, T (s′ | s, a ) represents the transition dynamics, r(s, a ) is the reward function, and 
+
+γ ∈ [0 , 1) denotes the discount factor. Throughout this paper, T is the parametric transition model (the learned dy-namics predictor) and p denotes a probability or distribution. In continual model-based reinforcement learning, the agent is presented with a sequence of tasks T1, T2, . . . , Tn. We as-sume the agent knows when the task switches. Each task Ti
+
+is associated with its own MDP, Mi = ( S, A, T, r i, ρ i, γ ),where ri(s, a ) is the task-specific reward function, and ρi(s)
+
+denotes the initial state distribution for task Ti. Importantly, all tasks share the same transition function T (s′ | s, a ),which defines the probability of reaching state s′ ∈ S from state s ∈ S after taking action a ∈ A . In this paper, we consider the case where, in each task, the agent tends to be exposed to distinct aspects of the transition dynamics and different termination states. The objective in continual MBRL is to efficiently solve the sequence of tasks, while learning a world model Tψ (s′ |
+
+s, a ), parameterized by ψ, that captures the shared dynamics across all tasks, allowing the agent to adapt to the task-specific objectives defined by ri and ρi. A challenge arises because, during training on a new task Ti, the agent in our setting only has access to the replay buffer Bi = {(s, a, s ′)}.2Knowledge Retention in Continual Model-Based Reinforcement Learning 
+
+## 3. DRAGO 
+
+The central question in this paper is: how do we aggregate the knowledge from previous tasks and learn a increasingly complete world model without forgetting, while trying to solve a sequence of tasks using MBRL? As shown in pre-vious works (Fu et al., 2022), the agent can easily learn a general world model in a multitask/meta-learning way as long as the access to previous tasks’ memories is given. Thus, a straightforward way is to figure out an approach that is able to regain the old memories that had to be discarded. We propose DRAGO, a continual MBRL approach is com-posed of two main components: dreaming and rehearsing old memories while training on new tasks (§3.1), and re-gaining memories via actively exploration (§3.2). Then we introduce the overall algorithm in §3.3. 
+
+3.1. Synthetic Experience Rehearsal 
+
+To help the agent retain knowledge from previous tasks with-out direct access to past data, we introduce a method called 
+
+Synthetic Experience Rehearsal . This approach enables the agent to internally generate and learn from synthetic ex-periences that resemble those from prior tasks, effectively reinforcing its understanding of the environment’s dynamics and mitigating catastrophic forgetting. The concept of Synthetic Experience Rehearsal draws inspi-ration from how humans and animals replay and consolidate memories during sleep (Wilson & McNaughton, 1994). Just as dreaming allows for the consolidation of memories and learning in biological systems, our method helps the agent retain and reinforce knowledge of previous dynamics by generating and learning from synthetic experiences. Imag-ine a robot that has navigated through several rooms in a building. As it progresses to new rooms, it may begin to for-get the layouts and navigation strategies of earlier ones due to limited memory capacity and the inability to revisit those rooms. By internally generating and rehearsing synthetic experiences that mimic its interactions in earlier rooms, the robot can maintain and reinforce its knowledge of how to navigate them. This internal rehearsal helps it integrate past experiences with new ones, ensuring a more comprehensive understanding of the entire environment. Our method leverages a generative model (which is also continually learned) to produce synthetic data that aids in training the dynamics model, thereby preventing forgetting of previously learned dynamics. Note that for real-world tasks, retaining the model (neural nets) usually costs much less than retaining all the training transitions , es-pecially when the task number grows larger and larger. Specifically, we employ a generative model G that encodes and decodes both states and actions, capturing the joint dis-tribution of state-action pairs encountered in previous tasks. Including actions is crucial, especially in continuous action spaces where randomly sampled actions may not correspond to meaningful behaviors. Throughout the continual learning process, we also keep one copy of the old world model learned after finishing the last task ( one for all previous tasks, not one for each ). Then after generating the state-action pair, we feed it into this frozen old model Told and generate a synthetic next state. The synthetic data used for training the model is generated through the following steps:          
+
+> ˆs′=Told (ˆ s, ˆa),(ˆ s, ˆa)∼pG(s, a ;θ),(1)
+
+where pG(s, a ; θ) is the distribution modeled by the gener-ative model Gθ with parameters θ. Told is the frozen old world model, capturing the dynamics up to a previous task. We can express the likelihood of the entire dataset, including both real data Di for current task Ti and synthetic data ˆD,given the parameters ψ and θ, as follows:              
+
+> p(Di,ˆD | ψ, θ ) =
+> Y
+> (s,a,s ′)∈D i
+> p(s′|s, a ;ψ)Y
+> (ˆ s, ˆa, ˆs′)∈ˆD
+> pG(ˆ s, ˆa;θ)p(ˆ s′|ˆs, ˆa;ψ),
+> (2)
+
+where p(s′ | s, a ; ψ) is the likelihood of observing s′ given 
+
+s and a under the transition model Tψ , pG(ˆ s, ˆa; θ) is the likelihood of generating synthetic state-action pairs from the generative model Gθ . This joint likelihood captures the dependencies of the synthetic data on both the generative model parameters θ and the frozen transition model Told .The posterior distribution over the transition model param-eters ψ and the generative model parameters θ is given by Bayes’ theorem:          
+
+> p(ψ, θ | D i,ˆD)∝p(Di,ˆD | ψ, θ )p(ψ)p(θ),(3)
+
+where p(ψ) and p(θ) are the prior distributions over the parameters. Taking the negative logarithm of the posterior (and ignoring constants independent of ψ and θ), we obtain the joint loss function:                                       
+
+> Ltotal (ψ, θ ) = −log p(Di,ˆD | ψ, θ )−log p(ψ)−log p(θ)=−log p(ψ)−log p(θ)−X
+> (s,a,s ′)∈D i
+> log p(s′|s, a ;ψ)
+> |{z }
+> Loss on current task data
+> −X
+> (ˆ s, ˆa)
+> log pG(ˆ s, ˆa;θ)−X
+> (ˆ s, ˆa)
+> log p(ˆ s′|ˆs, ˆa;ψ)
+> |{z }
+> Synthetic data likelihood
+> .
+> (4)
+
+The dynamics model is trained by minimizing the prediction loss over the combined dataset: 
+
+Ldyn (ψ) = E(s,a,s ′)∼D i
+
+h
+
+∥s′ − Ti(s, a ; ψ)∥2i
+
++λE(ˆ s, ˆa)∼pG(s,a ;θ)
+
+h
+
+∥Told (ˆ s, ˆa) − Ti(ˆ s, ˆa; ψ)∥2i
+
+,
+
+(5) 3Knowledge Retention in Continual Model-Based Reinforcement Learning 
+
+where λ is a weighting factor controlling the importance of the synthetic data loss. While this enables the agent to learn from synthetic old experience, the generative model itself (minimizing − P log pG(ˆ s, ˆa; θ) in Eqn 4) also requires accumulating the knowledge of different tasks as the training goes on. Retaining such a generative model for every task will also introduces huge additional cost. 
+
+Continual learning for the generative model. To prevent forgetting within the generative model itself, we adopt a continual training strategy. We generate synthetic state-action pairs using the previous generative model Gi−1:
+
+(˜ s, ˜a) = Gi−1(˜ z), ˜z ∼ p(z),
+
+and combine these with real data from the current task to form the training dataset for the new generative model: 
+
+Dgen = Di ∪ ˜D, where ˜D = {(˜ s, ˜a)}. The new gen-erative model Gi — we use Variational AutoEncoder (VAE) (Kingma & Welling, 2014) — is then trained by minimizing the loss over Dgen :            
+
+> Lgen (θi) = E(s,a )∼D gen
+> h
+> −Ez∼qθi(z|s,a )[log pθi(s, a |z)] + KL ( qθi(z|s, a )∥p(z))
+> i
+> .
+> (6)
+
+This continual learning procedure ensures that the genera-tive model retains its ability to produce state-action pairs representative of all previous tasks. Our method is general and can be applied with other types of generative models. Additionally, integrating more sophis-ticated generative models, such as diffusion models, could further enhance the quality of synthetic experiences and improve knowledge retention in high-dimensional environ-ments. We leave this for future work. 
+
+3.2. Regaining Memories Through Exploration 
+
+While generating synthetic data via a generative model helps mitigate forgetting, it may not fully capture the richness of real experiences and it is subject to model error. In the meantime, to eventually build a complete world model, we would like to find a way that can “connect” knowledge gained from different tasks if they are disjoint . Thus, to further enhance the agent’s retention of prior knowledge and make the world model more complete, we propose an intrinsic reward mechanism that encourages the agent to actively explore states where the previous transition model performs well, effectively “regaining” forgotten memories through real interaction with the environment, and fill in the gap between knowledge of different tasks. Our approach is inspired by the need to complement the generation-based rehearsal method with actual exploration that bridges the gap between different tasks. The generative model can produce states from prior tasks, but these imag-ined states might not be naturally encountered or connected within the current task. Consider the earlier example of a robot exploring different rooms within a building. The method introduced in the last section can generate imagined states from previously visited rooms, but without actual ex-ploration, the robot might not find the doorways or corridors connecting these rooms to its current location. Our intrinsic reward incentivizes the robot to search for these connections, enabling it to discover pathways that link the new room to the old ones. Without exploring the actual environment to find these connections, the agent’s world model remains fragmented, lacking a cohesive understanding of how differ-ent regions relate. To overcome this, we propose an intrinsic reward that guides the agent to: • Revisit Familiar States : Encourage exploration of states where the previous model Ti−1 predicts accu-rately, indicating familiarity from earlier tasks. • Discover New Connections : Incentivize the agent to find paths that connect current and previous task envi-ronments, enriching the world model’s completeness. • Balance Learning Dynamics : Deter the agent from spending excessive time in regions where the current model Ti already performs well. Specifically, during training on task Ti, we introduce an intrinsic reward ri 
+
+> cont
+
+designed to guide the agent towards states that are familiar to the previous transition model Ti−1
+
+(trained and froze after task Ti−1) but less familiar to the current model Ti. The intrinsic reward is defined as: 
+
+ri
+
+> cont
+
+(st, a t, s t+1 ) := σ (− log |Ti−1(st, a t) − st+1 |)
+
+− α · σ (− log |Ti(st, a t) − st+1 |) , (7) where σ denotes the sigmoid function, and α is a weighting coefficient that balances the two terms. Intuitively the first term assigns higher rewards when the previous transition model Ti−1 predicts the next state st+1 
+
+accurately. This incentivizes the agent to revisit states that were well-understood in previous tasks. The second term penalizes the agent for visiting states where the current model Ti already has low prediction error. This encourages the agent to explore less familiar areas to improve the current model’s understanding. By actively exploring and connecting different regions, the agent’s world model becomes more comprehensive, captur-ing the dynamics across tasks more effectively. Revisiting familiar states reinforces prior knowledge, reducing the ten-dency of the model to forget previously learned information. This approach complements the synthetic data generation in Section 3.1 by providing actual experience that reinforces the agent’s knowledge. 4Knowledge Retention in Continual Model-Based Reinforcement Learning Step 1:                                
+
+> Synthetic Experience Rehearsal
+> Step 2:
+> Regaining Memories through
+> Exploration
+> ri
+> cont(st,at,st+1):=
+> −α⋅σ(−log |Ti(st,at)−st+1|)̂
+> s′=Told(̂s,̂a),(̂s,̂a)∼pG(s,a;θ),
+> σ(−log |Ti−1(st,at)−st+1|)
+
+Figure 2. The two-step process of how DRAGO retain and aggregate the knowledge learned from prior tasks for the world model. Step 1 involves Synthetic Experience Rehearsal , where synthetic state-action pairs are generated from the previous tasks’ generative model 
+
+Gi−1(z), and next states ˆs′ are predicted using the previous transition model Ti−1. Step 2 introduces Regaining Memories through Exploration , where an intrinsic reward ri 
+
+> cont
+
+encourages the agent to explore states where the previous transition model Ti−1 performs well, while penalizing states that the current model Ti already predicts accurately. Together, these components allow the agent to retain and transfer knowledge across tasks. 
+
+3.3. Overall Algorithm 
+
+We implement DRAGO on top of TDMPC (Hansen et al., 2022) and the overall algorithm is described in Algorithm 1. Compared to regular TDMPC algorithm, we additionally train an encoder and decoder for the state-action pair as part of the generative model in §3.1. To integrate the intrinsic reward for regaining memories proposed in §3.2, we train an additional reward model, value model, and policy as a “reviewer” that aims to maximize the cumulative intrinsic reward, besides the original “learner” that aims to maximize the cumulative environmental reward. Note that the reviewer and the learner share the same world model, which is also trained using data from both. During the inference step, DRAGO leverages Model Pre-dictive Path Integral (Williams et al., 2015) as the planning method. Given an initial state and task Ti, DRAGO samples 
+
+N trajectories with the world model Ti and estimates the total return Jτ of each sampled trajectory τ as: 
+
+Jτ := Eτ [
+
+> H−1
+
+X
+
+> t=0
+
+γtRst,a t +γH Q(sH , a H )] , s t+1 ∼ Ti(st, a t; ψ),
+
+(8) 
+
+where Q(·) is the learned value function. Then a trajectory with the highest return is picked and the agent will execute the first action in the trajectory. During training, the dynamics model and the generative model are trained together with the reward&value predic-tion of the learner and reviewer. At the beginning of each new task, for each new test task, we randomly initial-ize the reward, policy and value models and reuse only the world model (dynamics). . Moreover, unlike TDMPC, the gradients from updating Q function and reward model are detached for updating the dynamics model in DRAGO. More implementation details can be found in the appendix. Cheetah run  Cheetah jump         
+
+> Cheetah jump2run
+> Cheetah jump&run
+> Cheetah backward
+> Cheetah jump2back
+> Walker run Walker walk Walker walk2run Walker backward Walker run2back
+> Walker back2run
+> Walker stand
+> Cheetah jump&back
+> Walker stand2run
+> Continual Learning
+> MiniGrid Room 1 MiniGrid Room 2 MiniGrid Room 3 Room1to2 Room1to3 MiniGrid Room 4
+> Room1to3
+> Room3to4
+
+Figure 3. Visualization of the evaluated domains. Task names in Blue denote the continual training tasks; Task names in Red denote the test tasks. We train and test all the tasks in the order of left to right as in the figure. E.g., we train the cheetah agent in the order of run, jump and backward. And after training on jump, we test on jump2run and jump&run. 
+
+## 4. Experiments 
+
+We evaluated DRAGO on three continual learning domains. For each domain, we let the agent train on a sequence of tasks, where the tasks share the same transition dynamics but different reward functions. Although the transition dy-namics are the same, the training tasks are designed in a way such that to solve each task only part of the state space’s transition dynamics needs to be learned and different tasks involve learning transition dynamics corresponding to dif-ferent parts of the state space with a small overlap . We evaluate the agent’s continual learning performance on test tasks by measuring the agent’s training performance on them, using the retained world model as an initiation. The test tasks requires the combination of knowledge from more than one previously learned tasks. For example, to better transfer on Cheetah jump2run the agent is expected to still remember the knowledge learned in Cheetah run even after continual training on Cheetah jump . These transfer tasks 5Knowledge Retention in Continual Model-Based Reinforcement Learning 
+
+are designed to test the agent’s ability to retain knowledge from previous tasks, as solving them requires understanding multiple tasks. 
+
+MiniGrid. We evaluated the performance of DRAGO in the MiniGrid (Chevalier-Boisvert et al., 2023) domain using a sequence of four tasks, each set in one of the four rooms of a 27 × 27 gridworld. In each task, the agent starts from a fixed corner of one room, with the objective of reaching a specified goal position within that room. The obstacles vary across tasks and the agent can only access other rooms by passing through a door located at the center of the grid-world, which creates a bottleneck that the agent must learn to navigate effectively in transfer tasks. Each task requires exploring a small and mostly non-overlapping portion of the world, ensuring that knowledge from one task does not directly overlap with others. To assess transfer performance, we evaluated the models learned at different stages of the continual learning process (i.e., after completing 2, 3, and 4 tasks). The evaluation was conducted on four new tasks that require the agent to move between different rooms (e.g., start in room 1 and move to the goal position in room 2). The tasks are designed such that solving them requires un-derstanding multiple rooms. 
+
+Deepmind Control Suite. We also evaluated the perfor-mance of DRAGO in the Cheetah and Walker domains from the Deepmind Control Suite (Tassa et al., 2018). For each domain, we define a sequence of tasks that share the same dynamics but with different task goals, which requires the agent to learn different parts of the state space of dynamics. Similarly, to assess transfer performance, we evaluated the models learned at different stages of the continual learning process. The evaluation was conducted on several new tasks that require the agent to quickly change to different locomo-tion modes from another mode (jump, run, etc.), except for two tasks: jump and runforward & jump and runbackward ,where the agent will get the maximum reward if it runs forward/backward and jumps at the same time. We compared to baselines including: Training TDMPC from scratch for each task, continual TDMPC , where we initialize the world model with the one learned in the previ-ous task at the beginning of the new task and train it with the task reward, and EWC , a regularization-based contin-ual learning method as we introduced in the related work section. We use TDMPC as the base model-based reinforce-ment learning (MBRL) algorithm for all the baselines. More experimental results can be found in appendix E & D. 
+
+4.1. Qualitative Results 
+
+In Figure 4, we also visualize the prediction accuracy of the learned world models across the whole gridworld, com-paring just naively continually training TDMPC and our method. The prediction score is calculated based on the states predictions’ mean square error (MSE). The results are aligned with our intuition. Without other counter-forgetting techniques, world models easily forget almost everything learned in previous tasks and are only accurate in the transi-tion space related to the current task. By contrast, DRAGO is able to retain most of the knowledge learned in previ-ous tasks and have a increasingly complete world model as training continues, leading to the performance gain on new tasks shown in Figure 5. Note that DRAGO’s performance without Synthetic Experience Rehearsal (so only has the Re-gaining Memories Through Exploration Component) drops a bit compared to the full version, but it still exhibits better knowledge retention to some extent in post-task3 and post-task4, compared to naive continual TDMPC. As we also show in the ablation study, combining two components of DRAGO eventually achieves the best overall performance. 
+
+4.2. Overall Performance 
+
+As shown in Figure 5, we find that the proposed method DRAGO achieves the best overall performance compared to all the other approaches across three domains. The results demonstrate its advantage in continual learning settings by effectively retaining knowledge from previous tasks and transferring it to new ones. We can also see that naively continual Model-based RL may suffer from severe plasticity loss: Continual TDMPC constantly performs worse than learning from scratch baseline. Equipped with EWC, it can achieve better overall performance but still not as good as DRAGO. But DRAGO does not fully alleviate the plasticity loss, in Cheetah Jump and runbackward (Last plot in the mid row of Figure 5), learning from scratch still has the best performance, but we can see that DRAGO still improves a lot compared to Continual TDMPC. 
+
+4.3. Ablation Study 
+
+This section evaluates the essentiality of DRAGO’s compo-nents. Specifically, we evaluate DRAGO’s performance without Synthetic Experience Rehearsal and Regaining Memories Through Exploration (reviewer) separately in four transfer tasks of Cheetah and MiniGrid. As we show in Fig-ure 7, while DRAGO w/o. Rehearsal achieves similar perfor-mance with the full version in Cheetah-jumpandrunforward ,the full DRAGO still has the best overall performance across domains. If we compare the performance with Contin-ual TDMPC shown in Figure 5, one single component of DRAGO consistently improves continual learning perfor-mance. These results highlight the complementary roles of both components and demonstrate that each contributes significantly to mitigating forgetting and enhancing transfer capabilities in continual model-based RL settings. 6Knowledge Retention in Continual Model-Based Reinforcement Learning Continual    
+
+> TDMPC
+> DRAGO
+> Post-task1 Post-task2 Post-task3 Post-task4
+> DRAGO
+> w/o.
+> Rehearsal
+
+Figure 4. DRAGO reduces the catastrophic forgetting from previous tasks , illustrated bt the prediction score of the learned world models across the entire gridworld after each task. Light color indicates higher prediction accuracy. The heatmaps compare the performance of naive continual training of TDMPC (top row), DRAGO without Synthetic Experience Rehearsal (mid row), with our proposed full DRAGO method (bottom row) after Tasks 1 to 4. The results show that continual MBRL suffers from significant forgetting, maintaining accuracy only in regions relevant to the current task, whereas DRAGO effectively retains knowledge from previous tasks. 
+
+Figure 5. We evaluate the continual learning transfer performance on 12 tasks (3 domains, 4 tasks each) that are not seen during the agent’s previous training. Each plot corresponds to a single test task, and the agent’s performance is tracked as it learns that task from scratch, using the retained world model. For each test task of MiniGrid, the agent starts in one room and have to move to the goal in another room. E.g., Transfer 3to4 after 4 means that after sequentially training on four tasks, the agent is tested on a new task where it starts in room 3 and the target position is in room 4. For each test task of Cheetah & Walker, the agent has to start from a state in one locomotion mode and the goal is to switch to another mode. E.g., Jump2runforward after Jump means that after training on Cheetah-Jump, the agent is tested on a new task where it starts in one state of the jumping mode, and the goal is to run forward. 
+
+7Knowledge Retention in Continual Model-Based Reinforcement Learning 0 50000 100000 150000 200000             
+
+> Steps
+> 0
+> 20
+> 40
+> 60
+> 80
+> Average Reward
+> MiniGrid Transfer 1to3 after 4 050000 100000 150000 200000
+> Steps
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Average Reward
+> MiniGrid Transfer 1to2 after 2 050000 100000 150000 200000
+> Steps
+> 0
+> 20
+> 40
+> 60
+> 80
+> Average Reward
+> MiniGrid Transfer 1to3 after 3
+> DRAGO
+> Replay-based MBRL
+> Pseudo-rehearsal MBRL 050000 100000 150000 200000
+> Steps
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> Average Reward
+> MiniGrid Transfer 3to4 after 4
+
+Figure 6. Comparison of DRAGO with (1) Replay-based MBRL, which stores a bounded replay buffer for past tasks (using the same memory size as DRAGO’s generative model), and (2) Pseudo-rehearsal MBRL (Ketz et al., 2019), which generates old data via a pretrained VAE model, without continual training of the generative model as well as our intrinsic reward mechanism. Each plot shows Minigrid transfer performance (average return vs. environment steps) on a new task after sequentially training on earlier tasks. DRAGO consistently achieves higher or faster-improving returns, suggesting stronger knowledge retention and quicker adaptation to the transfer tasks. 
+
+Figure 7. Ablation study results on four transfer tasks in the Cheetah and MiniGrid domains, comparing the performance of DRAGO without individual components ( Synthetic Experience Rehearsal and Regaining Memories Through Exploration ) to the full method. While removing Rehearsal results in competitive performance in the Cheetah-jumpandrunforward task, the full version of DRAGO achieves superior overall performance across all tasks. 
+
+4.4. Few-shot Transfer Performance 
+
+We also evaluated the agent’s few-shot transfer performance during the continual learning process and compared the results of DRAGO with the other baselines. The setting is useful and common in real world tasks, especially for robotics, where the number of steps to interact with the envi-ronment is limited. Specifically, for each test task in Cheetah and Walker domains, we let the agent train by interacting with the environment for only 20 episodes and evaluate its average cumulative reward after training. As shown in Ta-ble 1, DRAGO outperforms the other baselines in 6 out of 8 tasks. In the two tasks where DRAGO does not outper-form, it remains competitive, highlighting its robustness and efficiency in continual learning scenarios. 
+
+## 5. Related Work 
+
+Continual reinforcement learning (CRL) aims to develop agents that can learn from a sequence of tasks, retaining knowledge from previous tasks while efficiently adapting to new ones (Khetarpal et al., 2022; Abel et al., 2023; Anand & Precup, 2023; Baker et al., 2023). Many recent papers investigate the plasticity loss in continual learning (Lyle et al., 2023; Abbas et al., 2023; Dohare et al., 2024). This paper focuses more on how we better retain and aggre-gate knowledge learned from previous tasks in Continual MBRL, which is related to another central challenge in CRL, catastrophic forgetting, where learning new tasks causes the agent’s performance on earlier tasks to degrade due to the overwriting of important knowledge (McCloskey & Cohen, 1989). To address catastrophic forgetting, several strategies have been proposed: Regularization-Based Methods (Kirk-patrick et al., 2016; Li & Hoiem, 2016; Zenke et al., 2017; Nguyen et al., 2017; Yu et al., 2020a): these approaches introduce constraints during training to prevent significant changes to parameters important for previous tasks. Elastic Weight Consolidation (EWC) (Kirkpatrick et al., 2016) is a prominent example that uses the Fisher Information Ma-trix to estimate parameter importance and penalize updates accordingly. However regularization-based methods often struggles in practice, especially in reinforcement learning scenarios, due to challenges in accurately estimating pa-rameter importance and scalability issues with large neural networks (Husz ´ar, 2017; Farquhar & Gal, 2018). Replay-Based methods (Riemer et al., 2019; Rolnick et al., 2019; Oh et al., 2022; Henning et al., 2021; Lampinen et al., 2021): these methods typically assume unbounded storage, which is usually not feasible in practice. Our work is therefore focused on the hardest case — alleviating the catastrophic forgetting problem and learn a complete world model with-out prior data. Generative replay-based methods (Shin et al., 2017; Triki et al., 2017; Rao et al., 2019) share some similar high-level idea with our work. However, none of them has been applied on MBRL or World Models. In terms of Con-tinual MBRL specifically, Fu et al. (2022) show that the 8Knowledge Retention in Continual Model-Based Reinforcement Learning Average Reward DRAGO EWC Continual TDMPC Scratch                                                                                                  
+
+> Cheetah jump2run 106 .78 ±32 .01 54 .72 ±62 .72 93 .96 ±39 .29 26 .54 ±2.67
+> Cheetah jump&run 248 .92 ±15 .38 156 .98 ±99 .68 128 .58 ±100 .14 182 .77 ±28 .58
+> Cheetah jump2back 331 .85 ±11 .05 29 .93 ±7.15 73 .98 ±38 .45 45 .15 ±4.92
+> Cheetah jump&back 147 .30 ±34 .29 117 .92 ±1.20 140 .82 ±28 .00 129 .75 ±20 .44
+> Walker walk2run 332 .38 ±20 .07 287 .02 ±37 .80 229 .14 ±33 .71 52 .11 ±3.41
+> Walker run2back 145 .98 ±17 .96 150 .19 ±2.77 128 .56 ±9.47 60 .49 ±9.40
+> Walker back2run 229 .79 ±9.77 254 .09 ±70 .29 241 .39 ±42 .64 40 .76 ±18 .34
+> Walker stand2run 265 .50 ±8.40 177 .02 ±62 .48 182 .71 ±30 .74 64 .02 ±31 .54
+> Table 1. Comparison of few-shot transfer performance on eight test tasks in Cheetah and Walker. We report the mean and standard deviation of the cumulative reward at the end of training. Bold value indicates the best result.
+
+agent can benefit from a joint world model for adapting to new individual tasks. Similarly, Nagabandi et al. (2019) pro-pose a meta-learning approach where a dynamics model is trained to adapt quickly to new tasks by learning a prior over models. Hypernetwork-based methods (Huang et al., 2021) have been proposed to minimize forgetting while learning task-specific parameters in the multitask setting. Liu et al. (2024) introduces locality-sensitive sparse encoding to learn world models incrementally in a single task online setting. Kessler et al. (2023) investigate how different experience replay methods will affect the performance of MBRL. Re-lated work for model-based RL in general can be found in Appendix B. 
+
+## 6. Conclusion 
+
+We proposed DRAGO, a novel approach for continual MBRL that effectively mitigates catastrophic forgetting and enhances the transfer of knowledge across sequential tasks. By integrating Synthetic Experience Rehearsal and Regain-ing Memories Through Exploration , DRAGO retains and consolidates knowledge from previous tasks without requir-ing access to past data, resulting in a progressively more complete world model. Our empirical evaluations demon-strate that DRAGO performs well in terms of knowledge retention and transferability, making it a promising solution for complex continual learning scenarios. Future work will explore extending DRAGO to larger-scale environments and more diverse task distributions. 
+
+## 7. Limitations 
+
+We only maintain one generative model throughout the con-tinual training process, and this could potentially have mode collapse problem as the number of the tasks grows. The generative model is expected to capture the distribution of all prior tasks, which also relies on its own generated data. Thus the forgetting issue of the generative model will ap-pear as its memory becomes “blurry” when the task number grows. To some extent, mixing the synthetic data with real world data will help mitigate this (note that the real world data can also come from the data collected by our reviewer, which connects to the previous tasks), but the question of how we can better do continual learning for generative mod-els remains and we leave it for future works. The current tasks tested in the paper are not highly complex, and there is a limited number of tasks, which can be the reason why we do not observe this problem in our setting. Developing continual generative models can be much more challenging, but also rewarding towards the goal of real continual agent. 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none of which we feel must be specifically highlighted here. 
+
+## Acknowledgement 
+
+This work was supported by the Office of Naval Research (ONR) under grant #N00014-22-12592. Partial funding was also provided by The Robotics and AI Institute. The authors would like to thank David Abel, Lijing Yu, and Jingwen Zhang for their help and feedbacks on this project. This work was conducted using computational resources and services at the Center for Computation and Visualization, Brown University. 
+
+## References 
+
+Abbas, Z., Zhao, R., Modayil, J., White, A., and Machado, M. C. Loss of plasticity in continual deep reinforcement learning. In Conference on Lifelong Learning Agents, 22-25 August 2023 , volume 232 of Proceedings of Machine Learning Research , pp. 620–636. PMLR, 2023. Abel, D., Barreto, A., Roy, B. V., Precup, D., van Hasselt, H. P., and Singh, S. A definition of continual reinforce-ment learning. In Oh, A., Naumann, T., Globerson, A., Saenko, K., Hardt, M., and Levine, S. (eds.), Advances in Neural Information Processing Systems 36: Annual Conference on Neural Information Processing Systems 2023, NeurIPS 2023 , 2023. 9Knowledge Retention in Continual Model-Based Reinforcement Learning 
+
+Anand, N. and Precup, D. Prediction and control in con-tinual reinforcement learning. In Oh, A., Naumann, T., Globerson, A., Saenko, K., Hardt, M., and Levine, S. (eds.), Advances in Neural Information Processing Sys-tems 36: Annual Conference on Neural Information Pro-cessing Systems 2023, NeurIPS 2023 , 2023. Baker, M. M., New, A., Aguilar-Simon, M., Al-Halah, Z., Arnold, S. M. R., Ben-Iwhiwhu, E., Brna, A. P., Brooks, E. A., Brown, R. C., Daniels, Z. A., Daram, A. R., De-lattre, F., Dellana, R., Eaton, E., Fu, H., Grauman, K., Hostetler, J., Iqbal, S., Kent, C., Ketz, N. A., Kolouri, S., Konidaris, G. D., Kudithipudi, D., Learned-Miller, E. G., Lee, S., Littman, M. L., Madireddy, S., Mendez, J. A. M., Nguyen, E. Q., Piatko, C. D., Pilly, P. K., Raghavan, A., Rahman, A., Ramakrishnan, S. K., Ratzlaff, N., Soltog-gio, A., Stone, P., Sur, I., Tang, Z., Tiwari, S., Vedder, K., Wang, F., Xu, Z., Yanguas-Gil, A., Yedidsion, H., Yu, S., and Vallabha, G. K. A domain-agnostic approach for characterization of lifelong learning systems. Neural networks : the official journal of the International Neural Network Society , 160:274–296, 2023. Chevalier-Boisvert, M., Dai, B., Towers, M., de Lazcano, R., Willems, L., Lahlou, S., Pal, S., Castro, P. S., and Terry, J. Minigrid & miniworld: Modular & customizable reinforcement learning environments for goal-oriented tasks. CoRR , abs/2306.13831, 2023. Chua, K., Calandra, R., McAllister, R., and Levine, S. Deep reinforcement learning in a handful of trials using proba-bilistic dynamics models. In Bengio, S., Wallach, H. M., Larochelle, H., Grauman, K., Cesa-Bianchi, N., and Gar-nett, R. (eds.), Advances in Neural Information Process-ing Systems 31: Annual Conference on Neural Informa-tion Processing Systems 2018, NeurIPS 2018 , pp. 4759– 4770, 2018. Dohare, S., Hernandez-Garcia, J. F., Lan, Q., Rahman, P., Mahmood, A. R., and Sutton, R. S. Loss of plasticity in deep continual learning. Nat. , 632(8026):768–774, 2024. Ebert, F., Finn, C., Dasari, S., Xie, A., Lee, A. X., and Levine, S. Visual foresight: Model-based deep reinforce-ment learning for vision-based robotic control. CoRR ,abs/1812.00568, 2018. Farquhar, S. and Gal, Y. Towards robust evaluations of continual learning. CoRR , abs/1805.09733, 2018. Fu, H., Yu, S., Littman, M., and Konidaris, G. Model-based lifelong reinforcement learning with bayesian exploration. In Koyejo, S., Mohamed, S., Agarwal, A., Belgrave, D., Cho, K., and Oh, A. (eds.), Advances in Neural Infor-mation Processing Systems 35: Annual Conference on Neural Information Processing Systems 2022, NeurIPS 2022 , 2022. Ha, D. and Schmidhuber, J. Recurrent world models fa-cilitate policy evolution. In Bengio, S., Wallach, H. M., Larochelle, H., Grauman, K., Cesa-Bianchi, N., and Gar-nett, R. (eds.), Advances in Neural Information Process-ing Systems 31: Annual Conference on Neural Informa-tion Processing Systems 2018, NeurIPS 2018 , pp. 2455– 2467, 2018. Hadsell, R., Rao, D., Rusu, A. A., and Pascanu, R. Embrac-ing change: Continual learning in deep neural networks. 
+
+Trends in Cognitive Sciences , 24:1028–1040, 2020. Hafner, D., Lillicrap, T. P., Fischer, I., Villegas, R., Ha, D., Lee, H., and Davidson, J. Learning latent dynamics for planning from pixels. In Chaudhuri, K. and Salakhut-dinov, R. (eds.), Proceedings of the 36th International Conference on Machine Learning, ICML 2019 , volume 97 of Proceedings of Machine Learning Research , pp. 2555– 2565. PMLR, 2019. Hafner, D., Lillicrap, T. P., Ba, J., and Norouzi, M. Dream to control: Learning behaviors by latent imagination. In 
+
+ICLR . OpenReview.net, 2020. Hafner, D., Lillicrap, T. P., Norouzi, M., and Ba, J. Master-ing atari with discrete world models. In 9th International Conference on Learning Representations, ICLR 2021 .OpenReview.net, 2021. Hafner, D., Pasukonis, J., Ba, J., and Lillicrap, T. P. Mas-tering diverse domains through world models. CoRR ,abs/2301.04104, 2023. Hansen, N., Su, H., and Wang, X. Temporal difference learning for model predictive control. In Chaudhuri, K., Jegelka, S., Song, L., Szepesv ´ari, C., Niu, G., and Sabato, S. (eds.), International Conference on Machine Learning, ICML 2022, 17-23 July 2022 , volume 162 of Proceedings of Machine Learning Research , pp. 8387–8406. PMLR, 2022. Hansen, N., Su, H., and Wang, X. TD-MPC2: scalable, ro-bust world models for continuous control. In The Twelfth International Conference on Learning Representations, ICLR 2024 . OpenReview.net, 2024. Henning, C., Cervera, M. R., D’Angelo, F., von Oswald, J., Traber, R., Ehret, B., Kobayashi, S., Grewe, B. F., and Sacramento, J. Posterior meta-replay for continual learning. In Ranzato, M., Beygelzimer, A., Dauphin, Y. N., Liang, P., and Vaughan, J. W. (eds.), Advances in Neural Information Processing Systems 34: Annual Conference on Neural Information Processing Systems 2021, NeurIPS 2021 , pp. 14135–14149, 2021. 10 Knowledge Retention in Continual Model-Based Reinforcement Learning 
+
+Huang, Y., Xie, K., Bharadhwaj, H., and Shkurti, F. Con-tinual model-based reinforcement learning with hypernet-works. In IEEE International Conference on Robotics and Automation, ICRA 2021 , pp. 799–805. IEEE, 2021. Husz ´ar, F. Note on the quadratic penalties in elastic weight consolidation. Proceedings of the National Academy of Sciences , 115:E2496 – E2497, 2017. Janner, M., Fu, J., Zhang, M., and Levine, S. When to trust your model: Model-based policy optimization. In 
+
+NeurIPS , pp. 12498–12509, 2019. Kaiser, L., Babaeizadeh, M., Milos, P., Osinski, B., Camp-bell, R. H., Czechowski, K., Erhan, D., Finn, C., Koza-kowski, P., Levine, S., Mohiuddin, A., Sepassi, R., Tucker, G., and Michalewski, H. Model based reinforce-ment learning for atari. In ICLR . OpenReview.net, 2020. Kemker, R., McClure, M., Abitino, A., Hayes, T. L., and Kanan, C. Measuring catastrophic forgetting in neural net-works. In McIlraith, S. A. and Weinberger, K. Q. (eds.), 
+
+Proceedings of the Thirty-Second AAAI Conference on Artificial Intelligence, (AAAI-18), the 30th innovative Ap-plications of Artificial Intelligence (IAAI-18), and the 8th AAAI Symposium on Educational Advances in Artifi-cial Intelligence (EAAI-18), 2018 , pp. 3390–3398. AAAI Press, 2018. Kessler, S., Ostaszewski, M., Bortkiewicz, M. P., Zarski, M., Wolczyk, M., Parker-Holder, J., Roberts, S. J., and Milos, P. The effectiveness of world models for continual reinforcement learning. In Chandar, S., Pascanu, R., Sedghi, H., and Precup, D. (eds.), Conference on Lifelong Learning Agents, 22-25 August 2023, McGill University, Montr ´eal, Qu ´ebec, Canada , volume 232 of Proceedings of Machine Learning Research , pp. 184–204. PMLR, 2023. Ketz, N., Kolouri, S., and Pilly, P. K. Using world mod-els for pseudo-rehearsal in continual learning. CoRR ,abs/1903.02647, 2019. Khetarpal, K., Riemer, M., Rish, I., and Precup, D. To-wards continual reinforcement learning: A review and perspectives. J. Artif. Intell. Res. , 75:1401–1476, 2022. Kingma, D. P. and Welling, M. Auto-encoding variational bayes. In Bengio, Y. and LeCun, Y. (eds.), 2nd Interna-tional Conference on Learning Representations, ICLR 2014 , 2014. Kirkpatrick, J., Pascanu, R., Rabinowitz, N. C., Veness, J., Desjardins, G., Rusu, A. A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., Hassabis, D., Clopath, C., Kumaran, D., and Hadsell, R. Overcom-ing catastrophic forgetting in neural networks. CoRR ,abs/1612.00796, 2016. Lampinen, A. K., Chan, S. C. Y., Banino, A., and Hill, F. To-wards mental time travel: a hierarchical memory for rein-forcement learning agents. In Ranzato, M., Beygelzimer, A., Dauphin, Y. N., Liang, P., and Vaughan, J. W. (eds.), 
+
+Advances in Neural Information Processing Systems 34: Annual Conference on Neural Information Processing Systems 2021, NeurIPS 2021 , pp. 28182–28195, 2021. Lange, M. D., Aljundi, R., Masana, M., Parisot, S., Jia, X., Leonardis, A., Slabaugh, G. G., and Tuytelaars, T. Acontinual learning survey: Defying forgetting in classifi-cation tasks. IEEE Trans. Pattern Anal. Mach. Intell. , 44 (7):3366–3385, 2022. Li, Z. and Hoiem, D. Learning without forgetting. In Leibe, B., Matas, J., Sebe, N., and Welling, M. (eds.), Computer Vision - ECCV 2016 - 14th European Conference , volume 9908 of Lecture Notes in Computer Science , pp. 614–629. Springer, 2016. Liu, Z., Du, C., Lee, W. S., and Lin, M. Locality sensitive sparse encoding for learning world models online. In The Twelfth International Conference on Learning Represen-tations, ICLR 2024 . OpenReview.net, 2024. Lowrey, K., Rajeswaran, A., Kakade, S. M., Todorov, E., and Mordatch, I. Plan online, learn offline: Efficient learning and exploration via model-based control. In 
+
+ICLR (Poster) . OpenReview.net, 2019. Lyle, C., Zheng, Z., Nikishin, E., Pires, B. ´A., Pascanu, R., and Dabney, W. Understanding plasticity in neural networks. In Krause, A., Brunskill, E., Cho, K., Engel-hardt, B., Sabato, S., and Scarlett, J. (eds.), International Conference on Machine Learning, ICML 2023 , volume 202 of Proceedings of Machine Learning Research , pp. 23190–23211. PMLR, 2023. McCloskey, M. and Cohen, N. J. Catastrophic interfer-ence in connectionist networks: The sequential learning problem. Psychology of Learning and Motivation , 24: 109–165, 1989. Nagabandi, A., Clavera, I., Liu, S., Fearing, R. S., Abbeel, P., Levine, S., and Finn, C. Learning to adapt in dynamic, real-world environments through meta-reinforcement learning. In 7th International Conference on Learning Representations, ICLR 2019 . OpenReview.net, 2019. Nguyen, C. V., Li, Y., Bui, T. D., and Turner, R. E. Varia-tional continual learning. CoRR , abs/1710.10628, 2017. Nguyen, T. D., Shu, R., Pham, T., Bui, H., and Ermon, S. Temporal predictive coding for model-based planning in latent space. In ICML , volume 139 of Proceedings of Machine Learning Research , pp. 8130–8139. PMLR, 2021. 11 Knowledge Retention in Continual Model-Based Reinforcement Learning 
+
+Oh, Y., Shin, J., Yang, E., and Hwang, S. J. Model-augmented prioritized experience replay. In The Tenth International Conference on Learning Representations, ICLR 2022 . OpenReview.net, 2022. Pong, V., Gu, S., Dalal, M., and Levine, S. Temporal dif-ference models: Model-free deep RL for model-based control. In ICLR (Poster) . OpenReview.net, 2018. Rao, D., Visin, F., Rusu, A. A., Teh, Y. W., Pascanu, R., and Hadsell, R. Continual unsupervised representation learn-ing. In Neural Information Processing Systems , 2019. Riemer, M., Cases, I., Ajemian, R., Liu, M., Rish, I., Tu, Y., and Tesauro, G. Learning to learn without forgetting by maximizing transfer and minimizing interference. In 7th International Conference on Learning Representations, ICLR 2019 . OpenReview.net, 2019. Rolnick, D., Ahuja, A., Schwarz, J., Lillicrap, T. P., and Wayne, G. Experience replay for continual learning. In Wallach, H. M., Larochelle, H., Beygelzimer, A., d’Alch ´e-Buc, F., Fox, E. B., and Garnett, R. (eds.), Advances in Neural Information Processing Systems 32: Annual Conference on Neural Information Processing Systems 2019, NeurIPS 2019 , pp. 348–358, 2019. Rubinstein, R. Y. Optimization of computer simulation mod-els with rare events. European Journal of Operational Research , 99:89–112, 1997. Schrittwieser, J., Antonoglou, I., Hubert, T., Simonyan, K., Sifre, L., Schmitt, S., Guez, A., Lockhart, E., Hassabis, D., Graepel, T., Lillicrap, T. P., and Silver, D. Mastering atari, go, chess and shogi by planning with a learned model. Nat. , 588(7839):604–609, 2020. Sekar, R., Rybkin, O., Daniilidis, K., Abbeel, P., Hafner, D., and Pathak, D. Planning to explore via self-supervised world models. In ICML , volume 119 of Proceedings of Machine Learning Research , pp. 8583–8592. PMLR, 2020. Shin, H., Lee, J. K., Kim, J., and Kim, J. Continual learn-ing with deep generative replay. In Neural Information Processing Systems , 2017. Sutton, R. S. Dyna, an integrated architecture for learning, planning, and reacting. SIGART Bull. , 2(4):160–163, 1991. Tassa, Y., Doron, Y., Muldal, A., Erez, T., Li, Y., de Las Casas, D., Budden, D., Abdolmaleki, A., Merel, J., Lefrancq, A., Lillicrap, T. P., and Riedmiller, M. A. Deepmind control suite. CoRR , abs/1801.00690, 2018. Triki, A., Aljundi, R., Blaschko, M. B., and Tuytelaars, T. Encoder based lifelong learning. 2017 IEEE International Conference on Computer Vision (ICCV) , pp. 1329–1337, 2017. Williams, G., Aldrich, A., and Theodorou, E. A. Model predictive path integral control using covariance variable importance sampling. CoRR , abs/1509.01149, 2015. Wilson, M. and McNaughton, B. L. Reactivation of hip-pocampal ensemble memories during sleep. Science , 265 5172:676–9, 1994. Yu, T., Kumar, S., Gupta, A., Levine, S., Hausman, K., and Finn, C. Gradient surgery for multi-task learning. In Larochelle, H., Ranzato, M., Hadsell, R., Balcan, M., and Lin, H. (eds.), Advances in Neural Information Process-ing Systems 33: Annual Conference on Neural Informa-tion Processing Systems 2020, NeurIPS 2020 , 2020a. Yu, T., Thomas, G., Yu, L., Ermon, S., Zou, J. Y., Levine, S., Finn, C., and Ma, T. MOPO: model-based offline policy optimization. In NeurIPS , 2020b. Zenke, F., Poole, B., and Ganguli, S. Continual learning through synaptic intelligence. In Precup, D. and Teh, Y. W. (eds.), Proceedings of the 34th International Con-ference on Machine Learning, ICML 2017 , volume 70 of 
+
+Proceedings of Machine Learning Research , pp. 3987– 3995. PMLR, 2017. Zhang, M., Vikram, S., Smith, L. M., Abbeel, P., Johnson, M. J., and Levine, S. SOLAR: deep structured latent representations for model-based reinforcement learning. 
+
+CoRR , abs/1808.09105, 2018. Zhang, R., Fu, H., Miao, Y., and Konidaris, G. Model-based reinforcement learning for parameterized action spaces. In Forty-first International Conference on Machine Learn-ing, ICML 2024 . OpenReview.net, 2024. 12 Knowledge Retention in Continual Model-Based Reinforcement Learning 
+
+Algorithm 1 DRAGO (Training process for each task) 
+
+Require: ψ, ψ −, θ, ϕ, ϕ −: randomly initialized network parameters 
+
+Told , E old , G old : transition network and VAE up to the previous task 
+
+η, τ, λ, Bl, Br : learning rate, coefficients, learner buffer, reviewer buffer  
+
+> 1:
+
+Tψ ← Told {load transition model from the previous task } 
+
+> 2:
+
+Eθ ← Eold {load VAE encoder from the previous task } 
+
+> 3:
+
+Gθ ← Gold {load VAE decoder from the previous task } 
+
+> 4:
+
+while not tired do  
+
+> 5:
+
+// Collect episode with learner and reviewer models from s0 ∼ p0: 
+
+> 6:
+
+for step t = 0 , . . . , τ do  
+
+> 7:
+
+at ∼ Πlθ (·| st) {Sample with learner model } 
+
+> 8:
+
+(st+1 , r t) ∼ EN V (st, a t) {Step environment } 
+
+> 9:
+
+Bl ← B l ∪ (st, a t, r t, s t+1 ) {Add to learner buffer } 
+
+> 10:
+
+end for  
+
+> 11:
+
+for step t = 0 , . . . , τ do  
+
+> 12:
+
+at ∼ Πrθ (·| st) {Sample with reviewer model } 
+
+> 13:
+
+(st+1 , ) ∼ EN V (st, a t) {Step environment } 
+
+> 14:
+
+rt = calculate intrinsic reward( st, a t, s t+1 ) {Equation 7 } 
+
+> 15:
+
+Br ← B r ∪ (st, a t, r t, s t+1 ) {Add to reviewer buffer } 
+
+> 16:
+
+end for  
+
+> 17:
+
+update learner and reviewer( Bl, Br , θ, ϕ, ψ, η, τ, λ ) {Algorithm 2 } 
+
+> 18:
+
+update vae( θ, G old , Bl) {Algorithm 3 } 
+
+> 19:
+
+update transition from synthetic data( ψ, T old , G old ) {Algorithm 4 } 
+
+> 20:
+
+end while 
+
+## A. Algorithm Details 
+
+The DRAGO algorithm combines synthetic experience rehearsal and exploration-driven memory regaining to facilitate continual learning in model-based reinforcement learning (MBRL). This section provides a detailed, step-by-step breakdown of DRAGO, outlining how it maintains and updates both the dynamics and generative models throughout a sequence of tasks. For the first task, DRAGO exclusively trains the learner model and the rehearsal encoder-decoder pair using only online data. A.0.1. I NITIALIZATION 
+
+For each task Ti, DRAGO begins by randomly initializing the policy networks πl,r i, the Q networks Ql,r i , and the reward networks Rl,r i for both the learner and reviewer models. These components are initialized separately, but they share a common transition network Ti.The transition network Ti, along with the synthetic experience rehearsal encoder Ei and decoder Gi, are initially randomly initialized for the first task. For subsequent tasks, these networks are loaded with the weights from the previous task’s networks ( Ti−1, Ei−1, and Di−1). Notably, these previously trained components ( Ti−1, Ei−1, and Di−1) are employed as fixed modules for generating synthetic data, thereby supporting the rehearsal process without further updates. A.0.2. D ATA COLLECTION 
+
+During each episode, both the learner agent and reviewer agent interact with the environment for the same number of time steps. The experiences (s, a, s ′, r ) encountered by each agent are stored in separate replay buffers: Bli for the learner and Bri
+
+for the reviewer. While the learner agent’s rewards are directly sourced from the environment, the reviewer agent’s intrinsic rewards are computed using the methodology outlined in Equation 7. This intrinsic reward mechanism drives the reviewer’s exploration and memory regaining. 13 Knowledge Retention in Continual Model-Based Reinforcement Learning 
+
+Algorithm 2 update learner and reviewer 
+
+Require: Bl, Br : Learner and reviewer buffers 
+
+ψ, ψ −, θ, ϕ, ϕ −: Network parameters 
+
+η, τ, λ : Learning rate, coefficients 
+
+1: {slt, a lt, r lt, s lt+1 }t:t+H ∼ B l {Sample trajectory from learner buffer }
+
+2: {srt , a rt , r rt , s rt+1 }t:t+H ∼ B r {Sample trajectory from reviewer buffer }
+
+3: rl′ 
+
+> t:t+H
+
+← calculate reviewer reward (rlt:t+H )
+
+4: Jθ , J ϕ, J ψ ← 0, 0, 0 {Initialize loss accumulation }
+
+5: ˆql 
+
+> 1
+
+= Qlθ (sl
+
+> 1
+
+, a l
+
+> 1
+
+)
+
+6: ˆqr 
+
+> 1
+
+= Qrθ (sr
+
+> 1
+
+, a r
+
+> 1
+
+)
+
+7: ˆql′ 
+
+> 1
+
+= Qrθ (sl
+
+> 1
+
+, a l
+
+> 1
+
+)
+
+8: LQ = Lvalue (ˆ ql
+
+> 1
+
+) + Lvalue (ˆ qr 
+
+> 1
+
+) + Lvalue (ˆ ql′ 
+
+> 1
+
+) {Calculate value loss at the first observation }
+
+9: ˆrl 
+
+> 1
+
+= Rlϕ(ˆ sl
+
+> 1
+
+, a l
+
+> 1
+
+)
+
+10: ˆrr 
+
+> 1
+
+= Rrϕ(ˆ sr
+
+> 1
+
+, a r
+
+> 1
+
+)
+
+11: ˆrl′ 
+
+> 1
+
+= Rrϕ(ˆ sl
+
+> 1
+
+, a l
+
+> 1
+
+)
+
+12: LR = Lreward (ˆ rl
+
+> 1
+
+) + Lreward (ˆ rr 
+
+> 1
+
+) + Lreward (ˆ rl′ 
+
+> 1
+
+) {Calculate reward loss at the first observation }
+
+13: Jθ ← Jθ + LQ + LR {Only update reward and value functions at the first step }
+
+14: ˆsl 
+
+> 1
+
+= sl
+
+> 1
+
+, ˆsr 
+
+> 1
+
+= sr 
+
+> 1
+
+{Initialize the estimated first observations }
+
+15: for i = t, . . . , t + H do 
+
+16: ˆsli+1 = tψ (ˆ sli, a li)
+
+17: ˆsri+1 = tψ (ˆ sri , a ri )
+
+18: ˆali = πlϕ(ˆ sli, s li)
+
+19: ˆari = πrϕ(ˆ sri , s ri )
+
+20: Jϕ ← Jϕ + λi−t(Lπ (ˆ ali) + Lπ (ˆ ari )) 
+
+21: Jψ ← Jψ + λi−t(Ldynamics (ˆ sli+1 ) + Ldynamics (ˆ sri+1 )) 
+
+22: end for 
+
+23: ϕ ← ϕ − ηH ∇ϕJϕ {Update online network }
+
+24: ψ ← ψ − ηH ∇ψ Jψ {Update online network }
+
+25: ϕ− ← (1 − τ )ϕ− + τ ϕ {Update target network }
+
+26: ψ− ← (1 − τ )ψ− + τ ψ {Update target network }
+
+Algorithm 3 update vae 
+
+Require: θ: VAE parameters 
+
+Gold : Previously trained VAE decoder 
+
+Bl: Replay buffer of the learner 
+
+1: h ∼ N (0 , 1) 
+
+2: (ssynth , a synth ) ← Gold (h) {Generate synthetic observations and actions }
+
+3: hsynth ← Eθ (ssynth , a synth )
+
+4: (ˆ ssynth , ˆasynth ) ← Gθ (hsynth ) {reconstruct synthetic observation and action }
+
+5: {slt, a lt, r lt, s lt+1 }t:t+H ∼ B l
+
+6: h ← Eθ (sl
+
+> 1
+
+, a l
+
+> 1
+
+)
+
+7: (ˆ s, ˆa) ← Gθ (h) {reconstruct sampled observation and action }
+
+8: Jθ = Jθ + Lgen (ˆ s, ˆa) + Lgen (ˆ ssynth , ˆasynth )
+
+9: θ ← θ − ηH ∇θ Jθ {update VAE parameters }
+
+14 Knowledge Retention in Continual Model-Based Reinforcement Learning 
+
+Algorithm 4 update transition from synthetic data 
+
+Require: ψ: Transition network parameters 
+
+Told : Previously trained transition network 
+
+Gold : Previously trained VAE decoder  
+
+> 1:
+
+h ∼ N (0 , 1)  
+
+> 2:
+
+(ssynth , a synth ) ← Gold (h) {Generate synthetic observations and actions } 
+
+> 3:
+
+s′ = T old (ssynth , a synth ) {generate next observation from old transition model } 
+
+> 4:
+
+ˆs′ = Tψ (ssynth , a synth ) 
+
+> 5:
+
+Jψ ← Jψ + Ldynamics ( ˆ s′, s ′) 
+
+> 6:
+
+ψ ← ψ − ηH ∇θ Jψ {Update online network }
+
+A.0.3. I NFERENCE 
+
+The inference process in DRAGO is inspired by TD-MPC (Hansen et al., 2022), utilizing the Cross-Entropy Method (CEM) (Rubinstein, 1997) for action selection. During this process, a fixed number of trajectories of predetermined length are sampled and simulated using the current transition model Ti. For each trajectory, the cumulative return is calculated. The trajectories with the highest returns, referred to as elite trajectories, are selected to reshape the distribution of the initial actions. This iterative process is repeated for a fixed number of iterations, ultimately yielding a refined distribution over actions, which informs the final action selection. All the hyperparameters releated to the CEM algorithms is the same with TD-MPC (Hansen et al., 2022). A.0.4. U PDATING 
+
+DRAGO updates after each episode of rollouts for the same iterations as the number of rollout time-steps The updates tries to minimize the training objective, which is the sum of several losses wegihted temporally by a discount factor λ. Below is a detailed description of the loss functions used in the updates: The transition model is updated using data from both the learner agent and the reviewer agent, as well as the synthetic observation-action pairs generated by the previous VAE decoder ( Gi−1) and the subsequent observations generated by the previous transition model ( Ti−1). This process maintains the transition model’s accuracy for transitions encountered in previous tasks, thereby mitigating catastrophic forgetting of the world model. Given an observation s, an action a, and a target next state s′, the loss function calculates the mse between the predicted next observation using the transition model T
+
+and the next state provided: 
+
+Ldynamics = c1∥Tψ (s, a ) − s′∥22
+
+However, synthetic data updates for Ti only occur at fixed intervals of steps to cope with the noise arising from inaccuracies in Gi−1 and Ti−1. This periodic updating strategy helps avoid noisy updates that can result from relying on outdated or inaccurate synthetic data. Continual learning of the VAE ( Ei and Gi) occurs concurrently with the agent’s updates. Data for this learning comes from both the state-action pairs obtained from the learner model’s rollouts and the generated state-action pairs from Gi−1. The associated loss function for the VAE Lgen is shown in Equation 6. The reward function R which estimates the immediate reward from a given observation. The reward model enables the agent to estimate total return from a trajectory, and stabilizes the update for Q functions. It is updated using the following loss function: 
+
+Lreward = c2∥Rϕ(zi, a i) − ri∥22
+
+Additionally, the Q functions for both agents are updated using the TD-objective shown as follows: 
+
+Lvalue = c3∥Qϕ(si, a i) − (ri + γQ ϕ− (si+1 , π ϕ(si+1 ))) ∥22
+
+Q and R update only using the first steps of the horizons sampled, rather than using the complete horizon as in the original TD-MPC algorithm. This reduces the risk of noisy updates resulting from inaccuracies in the initial transition model. The policy networks for both learner and reviewer agents are updated to maximize the expected Q value using 
+
+Lπ = −Qϕ(s, π ϕ(s)) 
+
+15 Knowledge Retention in Continual Model-Based Reinforcement Learning 
+
+In the above loss functions, c1, c 2, c 3 are hyper parameters as weights for each losses. 
+
+A.1. Hyperparameters Hyperparameter Value (minigrid, cheetah, walker) 
+
+action repeat 1, 4, 2 discount factor 0.99 batch size 512 maximum steps 100, 1000, 1000 planning horizon 10, (25, 15), 15 policy fraction 0.05 temperature 0.5 momentum 0.1 reward loss coef 0.5 value coef 0.1 consistency loss coef 2vae recon loss coef 1vae kl loss coef 0.02 temporal loss discount ( ρ) 0.5 learning rate 1e-3 sampling technique PER(0.6, 0.4) target networks update freq 40, 2, 2 temperature ( τ ) 0.01 cost coef for reviewer reward ( α) 0.5 vae latent dim 64, 256, 256 vae encoding dim 128 mlp latent dim 512 gumble softmax temp 1.0 steps per synthetic data rehearsal 10, 20  
+
+> Table 2. Here we list the hyperparameters used for MiniGrid World, DM-Control cheetah, and DM-Control walker. Unlisted hyperparam-eters are all identical to the default parameters in TD-MPC.
+
+## B. Related Work (Model-Based Reinforcement Learning) 
+
+Model-based reinforcement learning (MBRL) focuses on learning a predictive model of the environment’s dynamics (Sutton, 1991). Learning world models (Ha & Schmidhuber, 2018; Hafner et al., 2019) specifically enables agents to accumulate knowledge about the environment’s dynamics and generalize to new tasks or situations. By utilizing this model to simulate future states, agents can plan and make informed decisions without excessive real-world interactions. Most MBRL approaches can be categorized into two main categories in terms of how the learned model is used. The first category consists of methods that use the learned model to generate additional data and explicitly train a policy (Sutton, 1991; Pong et al., 2018; Ha & Schmidhuber, 2018; Sekar et al., 2020; Hafner et al., 2020; 2021; 2023), these approaches leverage the learned dynamics model to simulate experiences, which are then used to augment real data for policy optimization; the second category includes methods that learn the dynamics model and use it directly for planning to assign credit to actions (Ebert et al., 2018; Zhang et al., 2018; Janner et al., 2019; Hafner et al., 2019; Lowrey et al., 2019; Kaiser et al., 2020; Yu et al., 2020b; Schrittwieser et al., 2020; Nguyen et al., 2021; Zhang et al., 2024). These methods perform online planning by simulating future trajectories using the learned model to select actions without explicitly learning a policy. Recent approaches (Hansen et al., 2022; 2024) combine both techniques and achieves superior performance on various continuous control tasks. TD-MPC2 (Hansen et al., 2024) especially demonstrates the possibility of train a single world model on multiple tasks at once using MBRL. 
+
+## C. Tasks Specifications 
+
+Here we describe the specifications of the tasks included in this paper: 16 Knowledge Retention in Continual Model-Based Reinforcement Learning 
+
+For MiniGrid World domain, all the tasks are to reach a goal. The pre-training tasks are dense-reward, and all fine-tuning tasks are sparse-reward. • Room1to2 : In this task we initialize the agent inside room 1 (top left, [11, 8]) and the goal inside room 2 (top right, [14, 9]). • Room1to3 : In this task we initialize the agent inside room 1 (top left, [8, 11]) and the goal inside room 3 (bottom left, [9, 14]). • Room3to4 : In this task we initialize the agent inside room 3 (bottom left, [11, 18]) and the goal inside room 4 (bottom right, [14, 17]). For Deep Mind Control domain, all the pre-training tasks are from TD-MPC2 (Hansen et al., 2024), and the new fine-tune tasks are described below: • cheetah jump2run : In this task we initialize the observation as a random state when the agent is performing the task ”jump”, then initialize the objective to be ”cheetah run”. • cheetah jump2back : In this task, we initialize the observation as a random state when the agent is performing ”jump”, then initialize the objective to be ”cheetah run backwards”. • walker walk2run : In this task, we initialize the observation as a random state when the agent is performing the task ”walk”, then initialize the objective to be ”walker run”. • walker run2back : In this task, we initialize the observation as a random state when the agent is performing the task ”run,” then initialize the objective to be ”walker run backwards”. • walker back2run : In this task, we initialize the observation as a random state when the agent is performing ”run backwards”, then initialize the objective to be ”walker run”. • walker stand2run : In this task, we initialize the observation as a random state when the agent is performing the task ”stand”, then initialize the objective to be ”walker run”. • cheetah jump&run In this tasks we encourage the agent to move forward in a high speed while their feet are both above the ground for a longer period of time. We averaged the rewards from cheetah run and cheetah jump with a lower threshold for speed and height. • cheetah jump&back In this tasks we encourage the agent to move backwards in a high speed while their feet are both above the ground for a longer period of time. We averaged the rewards from cheetah run backwards and cheetah jump with a lower threshold for speed and height. 17 Knowledge Retention in Continual Model-Based Reinforcement Learning 
+
+## D. Additional Results of Continual Training 
+
+We investigate whether the two components we proposed have side effect on the continual training tasks, where each two of them has relatively small overlap of transition dynamics and covers different state space. As shown in Table 3, DRAGO achieves similar performance with Continual TDMPC in all the training tasks, which is the MBRL baseline it is built upon, demonstrating that the proposed approaches will not deteriorate the training performance or induce more plasticity loss. 
+
+Episode Reward Cheetah run Cheetah jump Cheetah backward 
+
+DRAGO 652 .53 587 .24 624 .09 
+
+Continual TDMPC 675 .31 646 .30 580 .59 
+
+Walker run Walker walk Walker backward Walker stand 
+
+708 .74 954 .56 953 .8 972 .46 693 .61 959 .31 956 .42 982 .69 
+
+Table 3. Average Episode Return of the Continual training tasks after training for 1M steps. 
+
+## E. More Ablation Study Results 
+
+When trying the continual learning version for TDMPC, we find two interesting results. As shown in Figure 8 left, since we only transfer the dynamics model not the Q function, we thought excluding the Q value estimation in the planning process may yield better transfer results, but the result is the opposite. Without using the Q value in the planning process causes a performance drop. Moreover, in the original TDMPC implementation, a multi-step ahead prediction loss is used for updating the Q function and reward model, in the continual learning setting, we find that one-step prediction is better in complex environments like Deep Mind Control Suite as shown in the results of Cheetah-jump , which is the second one in Cheetah’s continual training tasks. We also investigate the influence of the frequency of synthetic experience rehearsal , the results are shown in Figure 8’s second subfigure (from left to right). In Figure 8’s third subfigure, we show that if we also load Cheetah run’s policy&value&reward, our method can reach even better results. However, this in practice requires prior knowledge that jump2run’s reward function is similar to that of cheetah run. So it’s not a scalable approach for now. In Figure 8’s last subfigure, we show a comparison of the effect of the planning horizon to the performance of DRAGO on Cheetah jump2back. 0.0 0.2 0.4 0.6 0.8 1.0                   
+
+> Steps 1e6
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> 700
+> Average Reward
+> Cheetah-Jump
+> Continual TDMPC
+> planning without Q
+> Multistep ahead prediction 0.0 0.2 0.4 0.6 0.8 1.0
+> Steps 1e6
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> Average Reward
+> Cheetah-Run
+> vae update freq = 10
+> vae update freq = 3
+> vae update freq = 1 0100000 200000 300000 400000 500000 600000
+> Steps
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> Average Reward
+> Cheetah-Jump2runforward after Jump
+> DRAGO
+> DRAGO w. pretrained value&reward&policy
+> Continual TDMPC 0100000 200000 300000 400000 500000
+> Steps
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> Average Reward
+> Cheetah-Jump2runback after runback
+> DRAGO horizon 25
+> DRAGO horizon 15
+> DRAGO horizon 5
+
+Figure 8. More ablation study results for continual TDMPC and DRAGO. 
+
+In Table 4, we compare with another baseline: Continual TDMPC + Curiosity, where we add the curiosity-based intrinsic reward to the continual TDMPC policy to increase exploration. We can see that DRAGO still outperforms this new continual MBRL baseline in all the four tasks. We should note that while this is a reasonable baseline, the comparison is a little unfair for our method as DRAGO can also be combined with any exploration method in a straightforward way. Specifically, while we have a separate reviewer model that aims to maximize our proposed intrinsic reward, our learner model that aims to solve each specific task can also be directly added with any intrinsic reward method like curiosity to encourage exploration, which does not contradict with the intrinsic reward of the separate reviewer. We also try directly calculating the intrinsic reward of the reviewer and adding to the total reward of the learner, thus we do not need an additional reviewer model. As shown in Table 5, we see a large drop of performance for the continual training 18 Knowledge Retention in Continual Model-Based Reinforcement Learning                                                                  
+
+> Average Reward DRAGO Curiosity + Continual TDMPC EWC Continual TDMPC Scratch
+> Cheetah jump2run 106 .78 ±32 .01 88 .36 ±25 .81 54 .72 ±62 .72 93 .96 ±39 .29 26 .54 ±2.67
+> Cheetah jump&run 248 .92 ±15 .38 165 .35 ±67 .01 156 .98 ±99 .68 128 .58 ±100 .14 182 .77 ±28 .58
+> Cheetah jump2back 331 .85 ±11 .05 133 .81 ±23 .07 29 .93 ±7.15 73 .98 ±38 .45 45 .15 ±4.92
+> Cheetah jump&back 147 .30 ±34 .29 138 .77 ±45 .55 117 .92 ±1.20 140 .82 ±28 .00 129 .75 ±20 .44
+
+Table 4. Comparison of few-shot transfer performance on four test tasks in Cheetah. We report the mean and standard deviation of the cumulative reward at the end of training. 
+
+tasks, and this performance gap becomes larger and larger as the agent encounters more tasks, since it is encouraged to visit more and more possibly irrelevant states. Directly adding our intrinsic reward to the external reward and training only one single learner model makes it hard for the agent to complete the original task goal. If we only have one agent model (one policy), the intrinsic reward can have a side effect that 1. discourages the agent to visit places that it is already familiar with, thus hinders it to find the optimal solution to solve the task. 2. Encourages it to visit places that the previous mode is familiar with, which could be completely irrelevant for solving the current task. By having a separate reviewer policy that maximizes the intrinsic reward, we decouple the objectives. The learner policy focuses on maximizing the external reward to solve the current task effectively, while the reviewer policy explores states that help in retaining knowledge and connecting different regions of the state space. This separation allows both policies to operate without hindering each other’s performance. 
+
+Figure 9. Prediction score heatmaps for replay-based method (limited storage ). The heatmaps illustrates the accuracy of the dynamics model during continual learning by keeping a fixed part of the previous replay buffer (capped to a similar memory size as our generative model). Compared to DRAGO’s performance in Figure 4, this method does not achieve the same qualitative result. Episode Reward Cheetah run Cheetah jump Cheetah backward 
+
+DRAGO 652 .53 587 .24 624 .09 
+
+DRAGO (Learner w. reviewer reward) 583 .13 403 .70 330 .73 
+
+Table 5. Average Episode Return of the Continual training tasks after training for 1M steps. 
+
+While in all our experiments above we evaluated DRAGO using TDMPC as the MBRL baseline, we also tried to combine DRAGO with another popular model-based RL baseline PETS (Chua et al., 2018), and show the preliminary results on the same MiniGrid tasks but with dense reward (we are not able to make PETS work on sparse reward settings unfortunately) in Table 7. DRAGO-PETS outperforms the baseline in 3 out of 4 tested tasks. Although we select finetune tasks that encourage the agent to perform in the union of sub observation spaces it has seen in previous tasks, we want to showcase the ability of DRAGO to retain knowledge by also comparing the few shot performance of pretrain tasks from only loading the world models of DRAGO and naive continual learning. Here, both world models are from a continual training of all four tasks in the Walker environment, in the order of Walker-Run, Walker-Walk, Walker-Stand, and Walker-Walk-Backwards. 19 Knowledge Retention in Continual Model-Based Reinforcement Learning Average Reward (Dense) DRAGO-PETS Continual PETS 
+
+MiniGrid1to3 after3 233 .21 ± 21 .07 150 .84 ± 62 .37 
+
+MiniGrid1to2 after2 101 .03 ± 116 .21 161 .70 ± 44 .31 
+
+MiniGrid1to3 after4 138 .26 ± 99 .05 43 .04 ± 111 .93 
+
+MiniGrid3to4 after4 234 .65 ± 41 .71 147 .80 ± 105 .84 
+
+Table 6. Comparison of few-shot transfer performance of PETS based methods on four test tasks in MiniGrid. We report the mean and standard deviation of the cumulative reward at the end of training. 
+
+Average Reward DRAGO Naive TDMPC 
+
+walker-run 371 .46 ± 12 .79 300 .52 ± 27 .07 
+
+walker-walk 740 .89 ± 54 .90 685 .66 ± 43 .05 
+
+walker-stand 871 .17 ± 55 .07 463 .60 ± 107 .12 
+
+Table 7. Comparison of few-shot performance of DRAGO and naive TDMPC continual learning by loading the world model at the end of pretraining on Walker tasks. We report the mean and standard deviation of the reward at 40k steps into the training. 
+
+20

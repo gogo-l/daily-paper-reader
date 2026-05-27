@@ -1,0 +1,1424 @@
+Title: An Effective Dynamic Gradient Calibration Method for Continual Learning
+
+URL Source: https://openreview.net/pdf?id=q14AbM4kdv
+
+Number of Pages: 18
+
+Markdown Content:
+# An Effective Dynamic Gradient Calibration Method for Continual Learning 
+
+Weichen Lin * 1 Jiaxiang Chen * 1 Ruomin Huang 2 Hu Ding 3
+
+# Abstract 
+
+Continual learning (CL) is a fundamental topic in machine learning, where the goal is to train a model with continuously incoming data and tasks. Due to the memory limit, we cannot store all the historical data, and therefore confront the “catas-trophic forgetting” problem, i.e., the performance on the previous tasks can substantially decrease because of the missing information in the latter period. Though a number of elegant methods have been proposed, the catastrophic forgetting phenomenon still cannot be well avoided in prac-tice. In this paper, we study the problem from the gradient perspective, where our aim is to develop an effective algorithm to calibrate the gradient in each updating step of the model; namely, our goal is to guide the model to be updated in the right direction under the situation that a large amount of historical data are unavailable. Our idea is partly inspired by the seminal stochastic variance reduction methods (e.g., SVRG and SAGA) for reducing the variance of gradient estimation in stochastic gradient descent algorithms. Another benefit is that our approach can be used as a gen-eral tool, which is able to be incorporated with several existing popular CL methods to achieve better performance. We also conduct a set of ex-periments on several benchmark datasets to evalu-ate the performance in practice. 
+
+# 1. Introduction 
+
+In the past years, Deep Neural Networks (DNNs) demon-strate remarkable performance for many different tasks in artificial intelligence, such as image generation (Ho et al., 2020; Goodfellow et al., 2014a), classification (Liu et al.,        
+
+> *Equal contribution 1School of Data Science, University of Science and Technology of China, Anhui, China. 2Duke Univer-sity 3School of Computer Science and Technology, University of Science and Technology of China, Anhui, China. Correspondence to: Hu Ding <huding@ustc.edu.cn >.
+> Proceedings of the 41 st International Conference on Machine Learning , Vienna, Austria. PMLR 235, 2024. Copyright 2024 by the author(s).
+
+2021; He et al., 2016), and pattern recognition (Bai et al., 2021; Zhu et al., 2016). Usually we assume that the whole training data is stored in our facility and the DNN models can be trained offline by using Stochastic Gradient Descent (SGD) algorithms (Bottou et al., 1991; 2018). However, real-world applications often require us to consider training lifelong models, where the tasks and data are accumulated in a streaming fashion (Van de Ven & Tolias, 2019; Parisi et al., 2019). For example, with the popularity of smart devices, a large amount of new data is generated every day. A model needs to make full use of these new data to im-prove its performance while keeping old knowledge from being forgotten. Those applications motivate us to study the problem of continual learning (CL) (Kirkpatrick et al., 2017; Li & Hoiem, 2017), where its goal is to develop effec-tive method for gleaning insights from current data while retaining information from prior training data. A significant challenge that CL encounters is “ catastrophic forgetting ” (Kirkpatrick et al., 2017; McCloskey & Cohen, 1989; Goodfellow et al., 2014b), wherein the exclusive focus on the current set of examples could result in a dramatic deterioration in the performance on previously learned data. This phenomenon is primarily attributed to limited storage and computational resources during the training process; otherwise, one could directly train the model from scratch using all the saved data. To address this issue, we need to develop efficient algorithm for training neural networks from a continuous stream of non-i.i.d. samples, with the goal of mitigating catastrophic forgetting while effectively managing computational costs and memory footprint. A number of elegant CL methods have been proposed to alleviate the catastrophic forgetting issue (Wang et al., 2023; De Lange et al., 2021; Mai et al., 2022). One representative CL approach is referred to as “Experience Replay (ER)” (Ratcliff, 1990; Chaudhry et al., 2019b), which has shown promising performance in several continual learning scenar-ios (Prabhu et al., 2023; Arani et al., 2022; Farquhar & Gal, 2018). Roughly speaking, the ER method utilizes reservoir sampling (Vitter, 1985) to maintain historical data in the buffer, then extract new incoming training data with random samplings for learning the current task. Though the intu-ition is simple, the ER method currently is one of the most popular CL approaches that incurs moderate computational and storage demands. Moreover, several recently proposed 1An Effective Dynamic Gradient Calibration Method for Continual Learning 
+
+approaches suggest that the ER method can be combined with knowledge distillation to further improve the perfor-mance; for example, the methods of DER/DER++ (Buzzega et al., 2020) and X-DER (Boschini et al., 2022) preserve previous training samples alongside their logits in the model as the additional prior knowledge. Besides the ER methods, there are also several other types of CL techniques proposed in recent years, and please refer to Section 1.2 for a detailed introduction. 
+
+1.1. Our Main Ideas and Contributions 
+
+Though existing CL methods can alleviate the catastrophic forgetting issue from various aspects, the practical perfor-mances in some scenarios are still not quite satisfying (Yu et al., 2023; Tiwari et al., 2022; Ghunaim et al., 2023). In this paper, we study the continual learning problem from the gradient perspective, and the rationality behind is as fol-lows. In essence, an approach for avoiding the catastrophic forgetting issue in CL, e.g., the replay mechanisms or the regularization strategies, ultimately manifests its influence on the gradient directions during model updating (Wang et al., 2023). If all the historical data are available, one could compute the gradient by using the stochastic gradient descent method and obviously the catastrophic forgetting phenomenon cannot happen. The previous methodologies aim to approximate the gradient by preserving additional information and incorporating it as a constraint to model updates, thereby retaining historical knowledge. However, the replay-based methods in practice are often limited by storage capacity, which leads to a substantial loss of histori-cal data information and inaccurate estimation of historical gradients (Yan et al., 2021). Therefore, our goal is to de-velop a more accurate gradient calibration algorithm in each step of the continual learning procedure, which can directly enhance the training quality. We are aware of several existing CL methods that also take into account of the gradients (Liu & Liu, 2022; Tiwari et al., 2022; Farajtabar et al., 2020), but our idea proposed here is fundamentally different. We draw inspiration from the seminal stochastic variance reduction methods (e.g., SVRG from Johnson & Zhang (2013) and SAGA from Defazio et al. (2014)), which are originally designed to reduce the gradient variance so that the estimated gradient can closely align with the true full gradient over the entire dataset (including the current and historical data). These variance reduction methods have been extensively studied in the line of the research on stochastic gradient descent method (Jin et al., 2019; Babanezhad Harikandeh et al., 2015; Lei et al., 2017); their key idea is to leverage the additional saved full gradient information to calibrate the gradient in the current training step, which leads to significantly reduced gradient variance comparing with the standard SGD method. This intuition also inspires us to handle the CL problem. In a standard SGD method, the variance between the obtained gradient and the full gradient is due to the “batch size limit” (if the batch size has no bound, we can simply compute the full gradient). Recall that the challenge of CL is due to the “buffer size limit”, which impedes the use of full historical data (this is similar with the dilemma encountered by SGD with the “batch size limit”). So an interesting question is 
+
+Can the calibration idea for “batch size limit” be modi-fied to handle “buffer size limit”? Specifically, is it possi-ble to develop an effecitve method to compute a SVRG (or SAGA)-like calibration for the gradient in CL scenarios? 
+
+Obviously, it is challenging to directly implement the SVRG or SAGA algorithms in continual learning because of the missing historical data. Note that Frostig et al. (2015) pro-posed a streaming SVRG (SSVRG) method that realizes the SVRG method within a given fixed buffer, but unfortunately it does not perform quite well in the CL scenarios (as shown in our experimental section). One possible reason is that SSVRG can only leverage information within the buffer and fails to utilize all historical information. In this paper, we aim to apply the intuition of SVRG to handle the “buffer size limit” in CL, and our contributions can be summarized as follows: • First, we propose a novel two-level dynamic algo-rithm, named Dynamic Gradient Calibration (DGC) ,to maintain a gradient calibration in continual learn-ing. DGC can effectively tackle the storage limit and leverage historical data to calibrate the gradient of the model at each current stage. Moreover, our theoretical analysis shows that our DGC based CL algorithm can achieve a linear convergence rate. • Second, our method can be conveniently integrated with most existing reservoir sampling-based contin-ual learning approaches (e.g., ER (Ratcliff, 1990), DER/DER++ (Buzzega et al., 2020), XDER (Boschini et al., 2022), and Dynamic ER (Yan et al., 2021)), where this hybrid framework can induce a significant enhancement to the overall model performance. Note that storing the gradient calibrator can cause an extra memory footprint; so a key question is whether such an extra memory footprint can yield a larger marginal benefit than simply taking more samples to fill the ex-tra memory? In Fig 1, we illustrate a brief example to answer this question in the affirmative; more detailed evaluations are shown in the experimental part. • Finally, we conduct a set of comprehensive ex-periments on the popular datasets S-CIFAR10, S-CIFAR100 and S-TinyImageNet; the experimental re-sults suggest that our method can improve the final Average Incremental Accuracy (FAIA) in several CL 2An Effective Dynamic Gradient Calibration Method for Continual Learning  
+
+> Figure 1. Performance comparison of the ER method and our pro-posed DGC-ER method with increasing storage memory size on CIFAR100. The x-axis denotes the actual memory footprint (MB) and the y-axis denotes the final Average Incremental Accuracy (FAIA) (Hou et al., 2019; Douillard et al., 2020) (the formal def-inition is shown in Section 4). The curves in the figure indicate that although ER outperforms DGC-ER at low MB, as MB in-creases, the dynamic gradient calibration method can achieve a larger marginal benefit than simply increasing the sample size of ER.
+
+scenarios by more than 6% . Moreover, our improve-ment for a larger number of tasks is more significant than that for a smaller number. Furthermore, our adop-tion of the SVRG-inspired DGC calibration method leads to enhanced stability in minimizing the loss func-tion throughout the parameter optimization process. 
+
+1.2. Related Work 
+
+We briefly overview existing important continual learning approaches (except for the ones mentioned before). We also refer the reader to the recent surveys (Wang et al., 2023; De Lange et al., 2021; Mai et al., 2022) for more details. A large number of CL methods are replay based, where they often keep a part of previous data through approaches like reservoir sampling (Chaudhry et al., 2019a; Riemer et al., 2019). Several more advanced data selection strategies fo-cus on optimizing the factors like the sample diversity of parameter gradients or the similarity to previous gradients on passed data, e.g., GSS (Aljundi et al., 2019b) and GCR (Tiwari et al., 2022). Experience replay can be effectively combined with knowledge distillation. For example, Hu et al. (2021) proposed to distill colliding effects from the fea-tures for new coming tasks, and ICARL (Rebuffi et al., 2017) proposed to take account of the data representation trained on old data. MOCA (Yu et al., 2023) improves replay-based methods by diversifying representations in the space. An-other replay-based approach is based on generative replay, which obtains replay data by generative models (Shin et al., 2017; Gao & Liu, 2023; Wu et al., 2018). Another way for solving continual learning is through some deliberately designed optimization procedures. For example, the methods GEM (Lopez-Paz & Ranzato, 2017), AGEM (Chaudhry et al., 2019a), and MER (Riemer et al., 2019) re-strict parameter updates to align with the experience replay direction, and thereby preserve the previous input and gradi-ent space with old training samples. Different from saving old training samples, Farajtabar et al. (2020) proposed to adapt parameter updates in the orthogonal direction of the previously saved gradient. The method AOP (Guo et al., 2022) projects the gradient in the direction orthogonal to the subspace spanned by all previous task inputs, therefore it only keeps an orthogonal projector rather than storing previous data. To mitigate the problem of forgetting, we can also augment the model capacity for learning new tasks. Xu & Zhu (2018) tried to enhance model performance by employing meta-learning techniques when dynamically extending the model. The method ANCL (Kim et al., 2023) proposes to utilize an auxiliary network to achieve a trade-off between plasticity and stability. Dynamic ER (Yan et al., 2021) introduces a novel two-stage learning method that employs a dynam-ically expandable representation for learning knowledge incrementally. 
+
+# 2. Preliminaries 
+
+We consider the task of training a soft-classification function 
+
+f (·; θ): X → Y , where X and Y respectively represent the space of data and the set of labels, and θ is the param-eter to optimize. Without loss of generality, we assume 
+
+Y = {1, 2, · · · , K }. So f (·; θ) maps each x ∈ X to some 
+
+f (x; θ) ∈ RK . To find an appropriate θ, the classifica-tion function f is usually equipped with a loss function 
+
+ℓ(f (x; θ), y ), which is differentiable for the variables x and 
+
+θ (e.g., cross-entropy loss). To simplify the notation, we use ℓ(x, y, θ ) to denote ℓ(f (x; θ), y ). Given a set of data 
+
+P = {(xi, y i) | 1 ≤ i ≤ n} = XP × Y P ⊂ X × Y , the training process is to find a θ such that the empirical risk of 
+
+ℓ(x, y, θ ), i.e., Pni=1 ℓ(xi, y i, θ ), is minimized. We define the full gradient of ℓ(x, y, θ ) on P as 
+
+G(P, θ ) ≜ ∇θ ℓ(XP , YP , θ ) = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∇θ ℓ(xi, y i, θ ). (1) 
+
+2.1. Continual Learning Models 
+
+In this paper, we focus on two popular CL models: Class-Incremental Learning ( CIL ) (Hsu et al., 2018) and Task-Free Continual Learning ( TFCL ) (Aljundi et al., 2019a). In the setting of CIL, the training tasks come in a sequence 
+
+{T 1, T2, · · · , TT } with disjoint label space; each time spot 
+
+t ∈ { 1, 2, · · · , T } corresponds to the task Tt with a training dataset {(xit, y it) | 1 ≤ i ≤ nt}. With a slight abuse of notations, we also use Tt to denote its training dataset. Also, we use Yt to denote the corresponding set of labels {yit |
+
+3An Effective Dynamic Gradient Calibration Method for Continual Learning 
+
+1 ≤ i ≤ nt}. Although the training data for individual tasks 
+
+Tt is independently and identically distributed (i.i.d.), it is worth noting that the overall task stream {T 1, T2, · · · , TT }
+
+does not adhere to the i.i.d. assumption due to the evolving label space over time. We define the overall risk under this CL setting at the current time spot t as follows: 
+
+ℓtCL (θ) ≜ 1
+
+t
+
+> t
+
+X
+
+> c=1
+
+E
+
+> (x,y )∼T c
+
+[ℓ(x, y, θ )] . (2) The setting of TFCL is similar to CIL, where the major difference is that the task identities are not provided in neither the training nor testing procedures. So the TFCL setting is more challenging than CIL because the algorithm is unaware of task changes and the current task identity. In the main part of our paper, we present our results in CIL; in our supplement, we explain how to extend our results to TFCL. 
+
+2.2. Variance Reduction Methods 
+
+A comprehensive introduction to variance reduction meth-ods is provided in (Gower et al., 2020). Here we particu-larly introduce one representative variance reduction method 
+
+SVRG (Johnson & Zhang, 2013) , which is closely related to our proposed CL approach. The high-level idea of SVRG is to construct a calibration term to reduce the variance in the gradient estimate. The complete optimization process can be segmented into a sequence of stages. We denote the training data as P =
+
+{(xi, y i)}ni=1 ⊂ X × Y , and denote the parameter at the beginning of each stage as ˜θ. The key part of SVRG is to minimize the variance in SGD optimization by computing an additional term ˜μ:
+
+˜μ ≜ G(P, ˜θ) = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+∇θ ℓ(xi, y i, ˜θ). (3) In each stage, SVRG applies the standard SGD with the term 
+
+˜μ to update the parameter θ: randomly sample an index ik
+
+from {1, 2, ..., n }, and let 
+
+vk = ∇θ ℓ(xi, y i, θ k) − (∇θ ℓ(xik , y ik , ˜θ) − ˜μ), (4) 
+
+θk+1 = θk − ηv k, (5) where (xi, y i) ∈ P is the sampled training data, θk repre-sents the parameter at the k-th step of SGD, and η is the learning rate. Since E[∇θ ℓ(xik , y ik , ˜θk)] = ˜ μ, vk is an un-biased estimate of the gradient G(P, θ k). Subsequently, the term “ ∇θ ℓ(xik , y ik , ˜θ) − ˜μ” in Eq (4) can be regarded as a 
+
+calibrator to reduce the variance of gradient estimation and achieve a linear convergence rate (Johnson & Zhang, 2013), which is faster than directly using ∇θ ℓ(xi, y i, θ k).
+
+# 3. Our Proposed Method 
+
+In this section, we propose the Dynamic Gradient Calibra-tion (DGC) approach which maintains a gradient calibration during the learning process. A highlight of DGC is that it utilizes the whole historical information to obtain a more precise gradient estimation, and consequently relieves the negative impact of catastrophic forgetting. In Section 3.1, we introduce ER and analyze the obstacle if we directly combine ER with SVRG. In Section 3.2, we present our DGC method for addressing the issues discussed in Sec-tion 3.1. In Section 3.3, we explain how to integrate DGC with other CL techniques. 
+
+3.1. Experience Replay Revisited and SVRG 
+
+First, we overview the classical ER (Ratcliff, 1990; Chaudhry et al., 2019b) method as a baseline for the CIL setting. ER employs the reservoir sampling algorithm to dynamically manage a buffer (denoted as Mt) at time t,which serves to store historical data. At each time spot t (and assume the current updating step number of the optimiza-tion is k), ER updates the model parameter θkt following the standard gradient descent method: 
+
+θk+1  
+
+> t
+
+= θkt − η · vkt , (6) where η is the learning rate and vkt is the calculated gradient. If not using any replay strategy, vkt is usually calculated on a randomly sampled training data (xkt , y kt ) ∈ T t. It is easy to see that this simple strategy can cause the forgetting issue for shifting data stream since it does not contain any information from the previous data. Hence the classical ER algorithm takes a random sample (¯ xkt , ¯ykt ) from the aforementioned buffer Mt (who contains a subset of historical data via reservoir sampling), and computes the gradient: 
+
+vkt = 1
+
+t ∇θ ℓ(xkt , y kt , θ kt ) + t − 1
+
+t ∇θ ℓ(¯ xkt , ¯ykt , θ kt ). (7) 
+
+Remark 3.1 . (1) For simplicity, we assume that the data sets of all the tasks have the same size. So the obtained vkt in (7) is an unbiased estimation of the full gradient G(Stc=1 Tc, θ )
+
+at the current time spot t. If they have different sizes, we can simply replace the coefficients “ 1 
+
+> t
+
+” and “ t−1 
+
+> t
+
+” by “ |T t|  
+
+> Ptc=1 |T c|
+
+”and “    
+
+> Pt−1
+> c=1 |T c|
+> Ptc=1 |T c|
+
+”, respectively. (2) Also, we assume that the batch sizes of the random samples from Tt and Mt are both “1”, i.e., we only take single item (xkt , y kt ) and (¯ xkt , ¯ykt ) from each of them. Actually, we can also take larger batch sizes and then the Eq (7) can be modified correspondingly by taking their average gradients. Now we attempt to apply the SVRG method to Eq (7). Our objective is to identify a more accurate unbiased estimate of the gradient at the current time spot t so as to determine the updating direction. At first glance, one possible solution is 4An Effective Dynamic Gradient Calibration Method for Continual Learning 
+
+to adapt the streaming SVRG method (Frostig et al., 2015) to the CL scenario. We treat Mt as the static data set in our memory, and apply the SVRG technique to calibrate the gradient “ ∇θ ℓ(xkt , y kt , θ kt )” and “ ∇θ ℓ(¯ xkt , ¯ykt , θ kt )” in Eq (7). Similar to the procedure introduced in Section 2.2, we denote the parameter at the beginning of the current stage s
+
+as ˜θt,s . For simplicity, when we consider the update within stage s, we just use ˜θt to denote ˜θt,s . Similar with Eq (3), we define the terms 
+
+˜μ ≜ G(Mt, ˜θt), ˜v ≜ G(Tt, ˜θt). (8) Then we can calibrate the gradient by a randomly sampled 
+
+( ˙ xt, ˙yt) from Tt and (¨ xt, ¨yt) from Mt (which serves as the similar role of (xik , y ik ) in (4)); the new form of vkt
+
+becomes 
+
+vkt = 1
+
+t
+
+
+
+∇θ ℓ(xt, y t, θ kt ) − ∇ θ ℓ( ˙ xt, ˙yt, ˜θt) + ˜ v
+
+
+
++
+
+t − 1
+
+t
+
+
+
+∇θ ℓ(¯ xt, ¯yt, θ kt ) − ∇ θ ℓ(¨ xt, ¨yt, ˜θt) + ˜ μ
+
+
+
+. (9) Obviously, if the buffer Mt contains the whole historical data (denote by T[1: t) = St−1 
+
+> c=1
+
+Tc), the above approach is exactly the standard SVRG. However, because Mt only takes a small subset of T[1: t), this approach still cannot avoid information loss for the previous tasks. In next section, we propose a novel two-level dynamic algorithm to record more useful information from T[1: t), and thereby reduce the information loss induced by Mt. We also take the approach of Eq (9) as a baseline in Section 4 to illustrate the advantage of our proposed approach. 
+
+3.2. Dynamic Gradient Calibration 
+
+To tackle the issue discussed in Section 3.1, we propose a novel two-level update approach “Dynamic Gradient Cali-bration (DGC)” to maintain our calibration term. Our focus is designing a method to incrementally update an unbiased estimation for G(T[1: t), θ kt ). To illustrate our idea clearly, we decompose our analysis to two levels: (1) update the parameter during the training within each time spot t; (2) up-date the parameter at the transition from time spot t to t + 1 
+
+(i.e., the moment that the task Tt has just been completed and the task Tt+1 is just coming). 
+
+(1) How to update the parameter during the training within each time spot t. We follow the setting of the streaming SVRG as discussed in Section 3.1: the training process at the current time spot t is divided into a sequence of stages; the model parameter at the beginning of each stage is recorded as ˜θt. To illustrate our idea for calibrat-ing the gradient vkt in Eq (9), we begin by considering an “imaginary” approach: we let 
+
+vkt = 1
+
+t
+
+
+
+∇θ ℓ(xt, y t, θ kt ) − ∇ θ ℓ( ˙ xt, ˙yt, ˜θt) + G(Tt, ˜θt)
+
+
+
++ t − 1
+
+t Γ, (10) where 
+
+Γ = ∇θ ℓ(¯ xt, ¯yt, θ kt ) −
+
+
+
+∇θ ℓ(¨ xt, ¨yt, ˜θt) − G (T[1: t), ˜θt)
+
+
+
+.
+
+| {z } 
+
+> Calibration from the previous parameter ˜θt
+
+Different from Eq (9), we compute vkt based on the full his-torical data T[1: t), which follows the same manner of SVRG. However, a major obstacle here is that we cannot obtain the exact Γ since T[1: t) is not available. This motivates us to design a relaxed form of (10). We define a surrogate function to approximate Γ, which can be computed through recursion. Suppose each training stage has m ≥ 1 steps, then we define 
+
+ΓDGC (t, k ) = ∇θ ℓ(¯ xt, ¯yt, θ kt )−
+
+
+
+∇θ ℓ(¨ xt, ¨yt, ˜θt) − Γ′
+
+> DGC
+
+(t)
+
+
+
+, (11) 
+
+Γ′
+
+> DGC
+
+(t) = Γ DGC (t, m + 1) , (12) in the stage. Note that the term “ ∇θ ℓ(¨ xt, ¨yt, ˜θt)” in (11) can be computed by the previous parameter ˜θt during training, so we do not need to store it in buffer. For the initial t = 1 
+
+case (i.e., when we just encounter the first task), we can directly set Γ′
+
+> DGC
+
+(1) = ⃗ 0. We update the function Γ′
+
+> DGC
+
+(t)
+
+at the end of each training stage in (12), and use the function 
+
+ΓDGC (t, k ) to approximate Γ in (10). Comparing with the original formulation of Γ in (10), we only replace the term “G(T[1: t), ˜θt)” by “ Γ′
+
+> DGC
+
+(t)”. Also, we have the following lemma to support this replacement. The detailed proof of lemma 3.2 is provided in our supplement. 
+
+Lemma 3.2. 
+
+E [Γ ′
+
+> DGC
+
+(t)] = G(T[1: t), ˜θt) (13) We utilize the term “ ∇θ ℓ(¨ xt, ¨yt, ˜θt) − Γ′
+
+> DGC
+
+(t)” of (11) as the calibrator for each updating step, thereby preserving the unbiased nature of the gradient estimator and reducing the variance of gradient estimation. 
+
+(2) How to update the parameter at the transition from time spot t to t + 1 . At the end of time spot t, we update the recorded ˜θt to θm+1  
+
+> t
+
+, and the data Tt from time t should be integrated into the historical data. In this context, it is essential to update the calibrated gradient accordingly: 
+
+Γ′
+
+> DGC
+
+(t + 1) = 1
+
+t
+
+
+
+(t − 1) · Γ′
+
+> DGC
+
+(t) + G(Tt, ˜θt)
+
+
+
+. (14) The complete algorithm is presented in Algorithm 1. Com-pared with the conventional reservoir sampling based ap-proaches, we only require the additional storage for keeping 5An Effective Dynamic Gradient Calibration Method for Continual Learning 
+
+Γ′
+
+> DGC
+
+(t), and so that the gradient ΓDGC (t, k ) in (11) can be effectively updated by the recursion. Moreover, our method can also conveniently adapt to TFCL where the task bound-aries are not predetermined. In such a setting, we can simply treat each batch data (during the SGD) as a “micro” task at the time point and then update the gradient estimation via Eq (14). The detailed algorithm for TFCL is placed in our appendix. Similar to the theoretical analysis of SVRG (Johnson & Zhang, 2013), under mild assumptions, the optimization procedure of our DGC method at each time spot t can also achieve linear convergence. We denote the optimal param-eter at time spot t as θ∗ ≜ arg min θ ℓt
+
+> CL
+
+(θ). Then we have the following theorem. 
+
+Theorem 3.3. Assume that f (x; θ) is L-smooth and γ-strongly convex; the parameters m ≥ 10 L2 
+
+> γ2
+
+and η = γ 
+
+> 10 L
+
+.Then we have a linear convergence in expectation for the DGC procedure at time t:
+
+E
+
+h ˜θt,s +1 − θ∗
+
+> 22
+
+i
+
+≤ 12s E
+
+h ˜θt, 1 − θ∗
+
+> 22
+
+i
+
+where ˜θt,s represents the initialization parameter at the beginning of the s-th stage at time spot t.
+
+The proof of Theorem 3.3 is provided in appendix. This theorem indicates that the gradient calibrated by our DGC method shares the similar advantages with SVRG. For in-stance, when updating each task Tt, the loss function has a smoother decrease (we validate this property in Section 4.3). 
+
+3.3. Combine DGC with Other CL Methods 
+
+Our proposed DGC approach can be also efficiently com-bined with other CL methods. As discussed in Section 1, a number of popular CL methods rely on the reservoir sam-pling technique to preserve historical data in buffer (Buzzega et al., 2020; Boschini et al., 2022; Riemer et al., 2019). For these methods, such as DER and XDER, we can conve-niently combine the conventional batch gradient descent with the DGC calibrated gradient estimator ΓDGC (t, k ) de-fined in Section 3.2, so as to obtain a more precise gradient estimator with reduced variance based on Eq (10): 
+
+vkt = 1
+
+> t
+
+
+
+∇θ ℓ(xt, y t, θ kt )−∇ θ (¨ xt, ¨yt, ˜θt) + G(Tt, ˜θt)
+
+
+
++
+
+> t−1
+> t
+
+
+
+αΓDGC (t, k )+(1 − α)∇θ ℓ(¯ xt, ¯yt, θ kt )
+
+
+
+, (15) where α is a given parameter to control the proportion of the two unbiased estimations ΓDGC (t, k ) and ∇θ ℓ(¯ xt, ¯yt, θ kt )
+
+of the gradient G(T[1: t), θ kt ). According to the theoretical analysis in SSVRG (Frostig et al., 2015), the selection of 
+
+α should be related to 1/L , where L is the smoothness 
+
+Algorithm 1 DGC procedure  
+
+> 1:
+
+Input: Data stream {T 1, T2, · · · T T }, update steps m,update stages S, batch size b, and learning rate η. 
+
+> 2:
+
+Output: Trained model parameter ˜θT 
+
+> 3:
+
+Initialize model parameters ˜θ0, Γ′
+
+> DGC
+
+(1) = ⃗ 0 
+
+> 4:
+
+Initialize buffer M1 = ∅ 
+
+> 5:
+
+for t = 1 , 2, . . . , T do  
+
+> 6:
+
+˜θt ← ˜θt−1 
+
+> 7:
+
+for s = 1 , 2, . . . , S do  
+
+> 8:
+
+θ1 
+
+> t
+
+← ˜θt 
+
+> 9:
+
+for k = 1 , 2, . . . , m do  
+
+> 10:
+
+Take a uniform sample Xt of size b from Tt 
+
+> 11:
+
+Take a uniform sample X′ 
+
+> t
+
+of size b from Mt 
+
+> 12:
+
+Calculate ΓDGC (t, k ) with Γ′
+
+> DGC
+
+(t) according to (11)  
+
+> 13:
+
+Calculate vkt with ΓDGC (t, k ) according to (10) 
+
+/* Calculate the calibrated gradient */  
+
+> 14:
+
+θk+1  
+
+> t
+
+← θkt − η · vkt 
+
+> 15:
+
+end for  
+
+> 16:
+
+Update Γ′
+
+> DGC
+
+(t) according to (11) and (12) 
+
+/* Update Γ′
+
+> DGC
+
+(t) from ΓDGC (t, m + 1) */  
+
+> 17:
+
+˜θt ← θm+1  
+
+> t
+> 18:
+
+end for  
+
+> 19:
+
+Mt+1 ← MemoryUpdate( Tt, Mt)
+
+/* Reservoir sampling */  
+
+> 20:
+
+Calculate and store Γ′
+
+> DGC
+
+(t + 1) according to (14) 
+
+/* Update Γ′
+
+> DGC
+
+(t + 1) from Γ′
+
+> DGC
+
+(t) */  
+
+> 21:
+
+end for 
+
+coefficient of the model f (x; θ), i.e., 
+
+L = max 
+
+> θ1,θ 2∈Θ
+
+|∇ θ f (x; θ1) − ∇ θ f (x; θ2)||θ1 − θ2| , (16) where Θ represents the parameter space. The experimental study on the impact of α is placed in our supplement. In Section 4, we show that the amalgamation of the CL method and our DGC calibration procedure can yield a more precise update direction, and consequently enhance the ultimate model performance. 
+
+# 4. Experiments 
+
+We conduct the experiments to compare with various base-line methods across different datasets. We consider both the CIL and TFCL models. 
+
+Datasets We carry out the experiments on three widely employed datasets S(Split)-CIFAR10, S-CIFAR100 (Krizhevsky et al., 2009), and S-TinyImageNet (Le & Yang, 2015). S-CIFAR10 is the split dataset by partitioning CI-FAR10 into 5 tasks, each containing two categories; sim-ilarly, S-CIFAR100 and S-TinyImageNet are the datasets by respectively partitioning CIFAR100 and TinyImageNet 6An Effective Dynamic Gradient Calibration Method for Continual Learning 
+
+Datasets S-CIFAR10 S-CIFAR100 S-TinyImageNet 
+
+Size of Buffer 500 2000 500 2000 2000 5000 
+
+AOP 66 .73 ±0.60 42 .73 ±0.62 21 .40 ±0.17 
+
+AGEM 45 .42 ±0.81 45 .58 ±0.64 26 .11 ±0.09 26 .13 ±0.07 22 .41 ±0.11 21 .98 ±0.36 
+
+SSVRG 49 .02 ±4.09 58 .68 ±3.77 27 .74 ±2.45 39 .09 ±5.53 14 .39 ±1.47 15 .88 ±2.37 
+
+MOCA 81 .01 ±0.97 85 .06 ±0.51 54 .14 ±0.43 59 .29 ±2.97 34 .74 ±10 .08 38 .86 ±8.58 
+
+GSS 68 .81 ±0.98 76 .08 ±1.35 33 .72 ±0.22 38 .54 ±0.39 31 .38 ±0.11 34 .31 ±0.22 
+
+GCR 82 .31 ±0.43 86 .35 ±0.48 53 .43 ±2.15 63 .18 ±2.26 48 .94 ±0.44 54 .60 ±0.43 
+
+HAL 58 .06 ±1.90 69 .53 ±2.55 24 .85 ±0.91 28 .05 ±1.90 18 .66 ±1.02 21 .45 ±0.91 
+
+ICARL 65 .89 ±2.74 75 .94 ±0.84 60 .58 ±0.50 64 .03 ±0.41 43 .53 ±0.21 44 .52 ±0.31 
+
+ER 74 .19 ±0.85 84 .27 ±0.57 42 .34 ±0.83 55 .48 ±1.52 39 .23 ±0.16 45 .47 ±0.44 
+
+DGC-ER 76 .09 ±0.62 86 .42 ±0.58 44 .46 ±1.07 59 .55 ±0.97 41 .38 ±0.52 47 .40 ±0.45 
+
+DER++ 59 .66 ±1.32 66 .81 ±0.19 47 .03 ±0.55 55 .22 ±0.54 32 .20 ±0.75 40 .89 ±0.37 
+
+DGC-DER++ 62 .92 ±0.90 67 .43 ±0.25 49 .59 ±1.06 57 .05 ±0.67 33 .67 ±0.73 41 .76 ±0.53 
+
+XDER 70 .12 ±0.68 70 .35 ±0.63 61 .45 ±0.50 66 .51 ±0.42 52 .45 ±0.92 55 .12 ±0.22 
+
+DGC-XDER 72 .34 ±1.08 72 .41 ±1.05 62 .70 ±0.44 67 .59 ±0.18 53 .50 ±0.25 55 .94 ±0.19 
+
+DYNAMIC ER 79 .65 ±0.86 83 .30 ±0.93 61 .92 ±2.75 64 .57 ±2.02 54 .88 ±1.64 56 .70 ±0.73 
+
+DGC-D YNAMIC ER 84 .23 ±1.62 89 .90 ±0.93 63 .33 ±1.26 70 .70 ±1.31 58 .10 ±1.06 58 .23 ±0.84 
+
+Table 1. The FAIA ± standard error(%) in CIL. The methods combined with DGC are colored in gray. The best results are highlighted in bold, and the best results except Dynamic ER and DGC-Dynamic ER are underlined. Since AOP does not store previous data during training, it only has one numerical result per dataset in the table (without specifying the buffer size). 
+
+Datasets S-CIFAR100 
+
+5 Tasks 20 Tasks AOP 43 .31 ±0.44 40 .99 ±0.36 
+
+AGEM 38 .67 ±0.14 16 .21 ±0.06 
+
+SSVRG 46 .00 ±4.60 33 .22 ±4.10 
+
+MOCA 66 .58 ±0.14 22 .05 ±2.56 
+
+GSS 50 .43 ±0.43 25 .93 ±0.11 
+
+GCR 67 .20 ±0.38 51 .57 ±1.63 
+
+HAL 35 .05 ±0.68 27 .16 ±1.51 
+
+ICARL 67 .45 ±0.27 55 .77 ±0.57 
+
+ER 60 .85 ±0.60 52 .16 ±0.90 
+
+DGC-ER 62 .13 ±0.33 54 .86 ±1.22 
+
+DER++ 56 .27 ±0.27 53 .77 ±1.56 
+
+DGC-DER++ 57 .45 ±1.04 57 .71 ±0.35 
+
+XDER 67 .14 ±0.38 60 .45 ±0.46 
+
+DGC-XDER 67 .56 ±0.79 63 .53 ±0.48 
+
+Table 2. The FAIA ± standard error(%) with different number of tasks. DGC methods are colored in gray. The best results are highlighted in bold. 
+
+into 10 tasks, each containing 10 (S-CIFAR100) and 20 
+
+(S-TinyImageNet) categories. 
+
+Baseline methods We consider the following baselines. 
+
+(1) Replay-based methods: ER (Chaudhry et al., 2019b), DER++ (Buzzega et al., 2020), XDER (Boschini et al., 2022), MOCA (Yu et al., 2023), GSS (Aljundi et al., 2019b), GCR (Tiwari et al., 2022), HAL (Chaudhry et al., 2021), and ICARL (Rebuffi et al., 2017). (2) Optimization-based methods: AGEM (Chaudhry et al., 2019a), AOP (Guo et al., 2022), and SSVRG (Frostig et al., 2015). (3) Dynamic ar-chitecture method: Dynamic ER (Yan et al., 2021). We integrate DGC with ER, DER++, XDER, and Dynamic ER, and assess their performances in CIL. For TFCL, we con-sider its combination with ER and DER++. For convenience, we use “DGC-Y” to denote the combination of DGC with a CL method “Y”. For example, DGC-ER denotes the method combining ER and DGC methods. 
+
+Evaluation metrics We employ the Average Accuracy (AA) 
+
+(Chaudhry et al., 2018; Mirzadeh et al., 2020) and the final Average Incremental Accuracy (FAIA) (Hou et al., 2019; Douillard et al., 2020) to assess the performance. These two metrics are both widely used for continual learning. Let ak,j ∈ [0 , 1]( k ≥ j) denote the classification accuracy evaluated on the testing set of the task Tj after learning 
+
+Tk. The value AA at time spot i is defined as AA i ≜
+
+> 1
+> i
+
+Pij=1 ai,j . In particular, we name the value AA T as the 
+
+final Average Accuracy (FAA) . The final AIA is defined as FAIA ≜ 1
+
+> T
+
+PTi=1 AA i. We also use Final Forgetting (FF) 
+
+from (Chaudhry et al., 2018) to measure the forgetting of the model throughout the learning process (the formal definition of FF and its numerical results are placed in the supplement). Each instance of our experiments is repeated by 10 times. 
+
+4.1. Results in CIL Hyper-parameters selection In our implementation, we fixed the values of epoch and batch size, which implies that the total number of optimization steps (i.e., the value s × m)7An Effective Dynamic Gradient Calibration Method for Continual Learning      
+
+> Figure 2. The averaged AA tover implicit task number tin TFCL on S-CIFAR100.
+
+is also fixed. In our experiments, we set the value m = 200 ,so the value of s in Algorithm 1 is also determined. Except for the Dynamic ER (which is dynamically ex-panded), all other testing methods have constant storage limits. The results shown in Table 1 reveal that our DGC method can bring improvements to the combined methods on the testing benchmarks. For the sake of clarity, we also underline the best-performing method except Dynamic ER and DGC-Dynamic ER in Table 1. Among the methods with constant storage limits, DGC-ER achieves the best results on S-CIFAR10 when the buffer size is 2000 , and DGC-XDER achieves the best results on S-CIFAR100 and S-TinyImageNet. It is worth noting that our DGC method can also be conveniently integrated with existing advanced dynamic expansion representation techniques, such as Dy-namic ER, which demonstrates the improvements to certain extent, e.g., it achieves an improvement more than 6% on S-CIFAR10/100 with buffer size 2000 . We also record the training time of these baseline methods in our supplement. In the subsequent experiment, we investigate the perfor-mance of DGC compared to other baseline methods with varying the number of tasks. Throughout the experiment, we maintain a constant buffer size of 2000 . As outlined in Table 2, our results demonstrate that DGC can bring certain improvements to ER, DER++, and XDER with setting the number of tasks to be 5 and 20 . Moreover, similar to the pre-vious research in (Boschini et al., 2022), the results shown in Table 2 also imply that increasing the number of tasks could exacerbate the catastrophic forgetting issue. This phe-nomenon occurs because the model faces a reduced volume of data on each specific task, and thereby necessitates the capability of retaining the information of historical data to guide the model updates. As can be seen, the improve-ment obtained by DGC for the case of 20 tasks usually is more significant compared with the case of 5 tasks. For ex-ample, DGC-DER++ achieves a 3.94% improvement with 
+
+20 tasks versus a 1.18% improvement with 5 tasks, while DGC-XDER exhibits a 3.08% improvement with 20 tasks and only 0.42% with 5 tasks. These results highlight the advantage of DGC for mitigating catastrophic forgetting by effectively utilizing historical data through gradient-based calibration. 
+
+4.2. Results in TFCL 
+
+We then conduct the experiments in TFCL. The curves shown in Figure 2 depict the average AA t evolutions with varying the “implicit” task number t on S-CIFAR100. We call it “implicit” since the value t is not given during the training, which means that the design of the algorithm can-not rely on task boundaries or task identities. Therefore, we only compare those baseline methods that are applicable to TFCL model. The results suggest that DGC can bring im-provements to ER and DER++ on AA t for almost all the ts; in particular, DGC-DER++ achieves the best performance and also with small variances. Through approximating the full gradient, the GCR and SSVRG methods can relieve the catastrophic forgetting issue to a certain extent, but they still suffer from the issue of storage limit, which affects their effectiveness for estimating the full gradient. Consequently, these methods exhibit performance downgrade and larger variance in Figure 2. Comparing with them, the approaches integrated with DGC illustrate more consistent and stable improvements. More detailed results for TFCL are available in our supplement. 
+
+4.3. Smoothness of Training with DGC 
+
+Since our proposed DGC approach stems from the variance reduction method of SGD, a natural question is whether 8An Effective Dynamic Gradient Calibration Method for Continual Learning  
+
+> Figure 3. The partial trajectories of loss on S-CIFAR100.
+
+it also improves the smoothness during the training pro-cess. We compare the loss trajectories on the entire training dataset before and after implementing DGC. From Figure 3 we can see that the classical ER method has erratic fluctu-ations in loss during the training process; this could cause some practical problems in a real-world CL scenario, e.g., we may need to pay more effort to carefully adjust the learn-ing rate and determine the stopping condition. In contrast, the DGC method has a smoother reduction in loss, and ultimately yields lower loss values. 
+
+# 5. Conclusion 
+
+In this paper, we revisit the experience replay method and aim to utilize historical information to derive a more accu-rate gradient for alleviating catastrophic forgetting. Inspired by the variance reduction methods for SGD, we introduce a new approach “DGC” to dynamically manage a gradient calibration term in CL training. Our approach can be conve-niently integrated with several existing continual learning methods, contributing to a substantial improvement in both CIL and TFCL. Moreover, the improved stability of training loss reduction can also ease our practical implementation. 
+
+# Acknowledgements 
+
+We want to thank the anonymous reviewers and Xianglu Wang for their helpful comments. The research of this work was supported in part by the National Key Research and Development Program of China 2021YFA1000900, the National Natural Science Foundation of China 62272432, and the Natural Science Foundation of Anhui Province 2208085MF163. 
+
+# Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none which we feel must be specifically highlighted here. 
+
+# References 
+
+Aljundi, R., Kelchtermans, K., and Tuytelaars, T. Task-free continual learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pp. 11254–11263, 2019a. Aljundi, R., Lin, M., Goujaud, B., and Bengio, Y. Gradi-ent based sample selection for online continual learning. 
+
+Advances in neural information processing systems , 32, 2019b. Arani, E., Sarfraz, F., and Zonooz, B. Learning fast, learn-ing slow: A general continual learning method based on complementary learning system. In The Tenth Interna-tional Conference on Learning Representations, ICLR 2022, Virtual Event, April 25-29, 2022 . OpenReview.net, 2022. Babanezhad Harikandeh, R., Ahmed, M. O., Virani, A., Schmidt, M., Kone ˇcn `y, J., and Sallinen, S. Stopwast-ing my gradients: Practical svrg. Advances in Neural Information Processing Systems , 28, 2015. Bai, X., Wang, X., Liu, X., Liu, Q., Song, J., Sebe, N., and Kim, B. Explainable deep learning for efficient and robust pattern recognition: A survey of recent developments. 
+
+Pattern Recognition , 120:108102, 2021. Boschini, M., Bonicelli, L., Buzzega, P., Porrello, A., and Calderara, S. Class-incremental continual learning into the extended der-verse. IEEE Transactions on Pattern Analysis and Machine Intelligence , 45(5):5497–5512, 2022. Bottou, L., Curtis, F. E., and Nocedal, J. Optimization methods for large-scale machine learning. SIAM review ,60(2):223–311, 2018. Bottou, L. et al. Stochastic gradient learning in neural networks. Proceedings of Neuro-Nımes , 91(8):12, 1991. Buzzega, P., Boschini, M., Porrello, A., Abati, D., and Calderara, S. Dark experience for general continual learn-ing: a strong, simple baseline. Advances in neural infor-mation processing systems , 33:15920–15930, 2020. Chaudhry, A., Dokania, P. K., Ajanthan, T., and Torr, P. H. Riemannian walk for incremental learning: Understand-ing forgetting and intransigence. In Proceedings of the European conference on computer vision (ECCV) , pp. 532–547, 2018. Chaudhry, A., Ranzato, M., Rohrbach, M., and Elhoseiny, M. Efficient lifelong learning with A-GEM. In 7th Inter-national Conference on Learning Representations, ICLR 
+
+9An Effective Dynamic Gradient Calibration Method for Continual Learning 
+
+2019, New Orleans, LA, USA, May 6-9, 2019 . OpenRe-view.net, 2019a. Chaudhry, A., Rohrbach, M., Elhoseiny, M., Ajanthan, T., Dokania, P. K., Torr, P. H., and Ranzato, M. On tiny episodic memories in continual learning. arXiv preprint arXiv:1902.10486 , 2019b. Chaudhry, A., Gordo, A., Dokania, P., Torr, P., and Lopez-Paz, D. Using hindsight to anchor past knowledge in continual learning. In Proceedings of the AAAI confer-ence on artificial intelligence , volume 35, pp. 6993–7001, 2021. De Lange, M., Aljundi, R., Masana, M., Parisot, S., Jia, X., Leonardis, A., Slabaugh, G., and Tuytelaars, T. A continual learning survey: Defying forgetting in classifi-cation tasks. IEEE transactions on pattern analysis and machine intelligence , 44(7):3366–3385, 2021. Defazio, A., Bach, F., and Lacoste-Julien, S. Saga: A fast incremental gradient method with support for non-strongly convex composite objectives. Advances in neural information processing systems , 27, 2014. Douillard, A., Cord, M., Ollion, C., Robert, T., and Valle, E. Podnet: Pooled outputs distillation for small-tasks incremental learning. In Computer Vision–ECCV 2020: 16th European Conference, Glasgow, UK, August 23–28, 2020, Proceedings, Part XX 16 , pp. 86–102. Springer, 2020. Farajtabar, M., Azizan, N., Mott, A., and Li, A. Orthogonal gradient descent for continual learning. In International Conference on Artificial Intelligence and Statistics , pp. 3762–3773. PMLR, 2020. Farquhar, S. and Gal, Y. Towards robust evaluations of continual learning. arXiv preprint arXiv:1805.09733 ,2018. Frostig, R., Ge, R., Kakade, S. M., and Sidford, A. Com-peting with the empirical risk minimizer in a single pass. In Conference on learning theory , pp. 728–763. PMLR, 2015. Gao, R. and Liu, W. DDGR: continual learning with deep diffusion-based generative replay. In Krause, A., Brun-skill, E., Cho, K., Engelhardt, B., Sabato, S., and Scarlett, J. (eds.), International Conference on Machine Learn-ing, ICML 2023, 23-29 July 2023, Honolulu, Hawaii, USA , volume 202 of Proceedings of Machine Learning Research , pp. 10744–10763. PMLR, 2023. Ghunaim, Y., Bibi, A., Alhamoud, K., Alfarra, M., Ham-moud, H. A. A. K., Prabhu, A., Torr, P. H. S., and Ghanem, B. Real-time evaluation in online continual learning: A new hope. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR 2023, Vancouver, BC, Canada, June 17-24, 2023 , pp. 11888– 11897. IEEE, 2023. Goodfellow, I., Pouget-Abadie, J., Mirza, M., Xu, B., Warde-Farley, D., Ozair, S., Courville, A., and Bengio, Y. Generative adversarial nets. Advances in neural informa-tion processing systems , 27, 2014a. Goodfellow, I. J., Mirza, M., Da, X., Courville, A. C., and Bengio, Y. An empirical investigation of catastrophic forgeting in gradient-based neural networks. In Ben-gio, Y. and LeCun, Y. (eds.), 2nd International Confer-ence on Learning Representations, ICLR 2014, Banff, AB, Canada, April 14-16, 2014, Conference Track Proceed-ings , 2014b. Gower, R. M., Schmidt, M., Bach, F., and Richt ´arik, P. Variance-reduced methods for machine learning. Pro-ceedings of the IEEE , 108(11):1968–1983, 2020. Guo, Y., Hu, W., Zhao, D., and Liu, B. Adaptive orthogonal projection for batch and online continual learning. In 
+
+Proceedings of the AAAI Conference on Artificial Intelli-gence , volume 36, pp. 6783–6791, 2022. He, K., Zhang, X., Ren, S., and Sun, J. Deep residual learn-ing for image recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition ,pp. 770–778, 2016. Ho, J., Jain, A., and Abbeel, P. Denoising diffusion proba-bilistic models. Advances in neural information process-ing systems , 33:6840–6851, 2020. Hou, S., Pan, X., Loy, C. C., Wang, Z., and Lin, D. Learn-ing a unified classifier incrementally via rebalancing. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 831–839, 2019. Hsu, Y.-C., Liu, Y.-C., Ramasamy, A., and Kira, Z. Re-evaluating continual learning scenarios: A categoriza-tion and case for strong baselines. arXiv preprint arXiv:1810.12488 , 2018. Hu, X., Tang, K., Miao, C., Hua, X.-S., and Zhang, H. Dis-tilling causal effect of data in class-incremental learning. In Proceedings of the IEEE/CVF conference on Computer Vision and Pattern Recognition , pp. 3957–3966, 2021. Jin, H., Lin, D., and Zhang, Z. Towards better generalization: Bp-svrg in training deep neural networks. arXiv preprint arXiv:1908.06395 , 2019. Johnson, R. and Zhang, T. Accelerating stochastic gradient descent using predictive variance reduction. Advances in neural information processing systems , 26, 2013. 10 An Effective Dynamic Gradient Calibration Method for Continual Learning 
+
+Kim, S., Noci, L., Orvieto, A., and Hofmann, T. Achieving a better stability-plasticity trade-off via auxiliary networks in continual learning. In IEEE/CVF Conference on Com-puter Vision and Pattern Recognition, CVPR 2023, Van-couver, BC, Canada, June 17-24, 2023 , pp. 11930–11939. IEEE, 2023. doi: 10.1109/CVPR52729.2023.01148. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Des-jardins, G., Rusu, A. A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the national academy of sciences , 114(13):3521–3526, 2017. Krizhevsky, A., Hinton, G., et al. Learning multiple layers of features from tiny images. 2009. Le, Y. and Yang, X. Tiny imagenet visual recognition chal-lenge. CS 231N , 7(7):3, 2015. Lei, L., Ju, C., Chen, J., and Jordan, M. I. Non-convex finite-sum optimization via scsg methods. Advances in Neural Information Processing Systems , 30, 2017. Li, Z. and Hoiem, D. Learning without forgetting. IEEE transactions on pattern analysis and machine intelligence ,40(12):2935–2947, 2017. Liu, H. and Liu, H. Continual learning with recursive gradi-ent optimization. In The Tenth International Conference on Learning Representations, ICLR 2022, Virtual Event, April 25-29, 2022 . OpenReview.net, 2022. Liu, Z., Lin, Y., Cao, Y., Hu, H., Wei, Y., Zhang, Z., Lin, S., and Guo, B. Swin transformer: Hierarchical vision transformer using shifted windows. In Proceedings of the IEEE/CVF international conference on computer vision ,pp. 10012–10022, 2021. Lopez-Paz, D. and Ranzato, M. Gradient episodic memory for continual learning. Advances in neural information processing systems , 30, 2017. Mai, Z., Li, R., Jeong, J., Quispe, D., Kim, H., and Sanner, S. Online continual learning in image classification: An empirical survey. Neurocomputing , 469:28–51, 2022. McCloskey, M. and Cohen, N. J. Catastrophic interfer-ence in connectionist networks: The sequential learning problem. In Psychology of learning and motivation , vol-ume 24, pp. 109–165. Elsevier, 1989. Mirzadeh, S. I., Farajtabar, M., Gorur, D., Pascanu, R., and Ghasemzadeh, H. Linear mode connectivity in multitask and continual learning. In International Conference on Learning Representations , 2020. Parisi, G. I., Kemker, R., Part, J. L., Kanan, C., and Wermter, S. Continual lifelong learning with neural networks: A review. Neural networks , 113:54–71, 2019. Prabhu, A., Hammoud, H. A. A. K., Dokania, P. K., Torr, P. H. S., Lim, S., Ghanem, B., and Bibi, A. Computationally budgeted continual learning: What does matter? In 
+
+IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR 2023, Vancouver, BC, Canada, June 17-24, 2023 , pp. 3698–3707. IEEE, 2023. doi: 10.1109/ CVPR52729.2023.00360. Ratcliff, R. Connectionist models of recognition memory: constraints imposed by learning and forgetting functions. 
+
+Psychological review , 97(2):285, 1990. Rebuffi, S.-A., Kolesnikov, A., Sperl, G., and Lampert, C. H. icarl: Incremental classifier and representation learning. In Proceedings of the IEEE conference on Computer Vision and Pattern Recognition , pp. 2001–2010, 2017. Riemer, M., Cases, I., Ajemian, R., Liu, M., Rish, I., Tu, Y., and Tesauro, G. Learning to learn without forgetting by maximizing transfer and minimizing interference. In 
+
+7th International Conference on Learning Representa-tions, ICLR 2019, New Orleans, LA, USA, May 6-9, 2019 .OpenReview.net, 2019. Shin, H., Lee, J. K., Kim, J., and Kim, J. Continual learning with deep generative replay. Advances in neural informa-tion processing systems , 30, 2017. Tiwari, R., Killamsetty, K., Iyer, R., and Shenoy, P. Gcr: Gradient coreset based replay buffer selection for contin-ual learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 99–108, 2022. Van de Ven, G. M. and Tolias, A. S. Three scenarios for continual learning. arXiv preprint arXiv:1904.07734 ,2019. Vitter, J. S. Random sampling with a reservoir. ACM Transactions on Mathematical Software (TOMS) , 11(1): 37–57, 1985. Wang, L., Zhang, X., Su, H., and Zhu, J. A comprehen-sive survey of continual learning: Theory, method and application. arXiv preprint arXiv:2302.00487 , 2023. Wu, C., Herranz, L., Liu, X., Van De Weijer, J., Raducanu, B., et al. Memory replay gans: Learning to generate new categories without forgetting. Advances in Neural Information Processing Systems , 31, 2018. Xu, J. and Zhu, Z. Reinforced continual learning. Advances in Neural Information Processing Systems , 31, 2018. Yan, S., Xie, J., and He, X. Der: Dynamically expandable representation for class incremental learning. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 3014–3023, 2021. 11 An Effective Dynamic Gradient Calibration Method for Continual Learning 
+
+Yu, L., Hu, T., Hong, L., Liu, Z., Weller, A., and Liu, W. Continual learning by modeling intra-class variation. 
+
+Trans. Mach. Learn. Res. , 2023, 2023. Zhu, Y., Yao, C., and Bai, X. Scene text detection and recognition: recent advances and future trends. Frontiers Comput. Sci. , 10(1):19–36, 2016. 12 An Effective Dynamic Gradient Calibration Method for Continual Learning 
+
+# A. Omitted Proofs 
+
+Lemma A.1 (Lemma 3.2) .
+
+E [Γ ′
+
+> DGC
+
+(t)] = G(T[1: t), ˜θt). (17) 
+
+Proof. We prove it by induction. When t = 1 , both the two-side terms are 0, so the equation holds. Assume the equation holds when t = t1, and we consider the change of Γ′
+
+> DGC
+
+(t) at the time spot t1.Firstly, Γ′
+
+> DGC
+
+(t1) is updated at the end of every stage. After the update, Γ′
+
+> DGC
+
+(t1) = Γ DGC (t1, m + 1) . Meanwhile, we have 
+
+E[Γ DGC (t1, m + 1)] = E[∇θ ℓ(¯ xt1 , ¯yt1 , θ m+1  
+
+> t1
+
+) − (∇θ ℓ(¨ xt1 , ¨yt1 , ˜θt1 ) − Γ′
+
+> DGC
+
+(t1))] = G(T[1: t1), θ m+1  
+
+> t1
+
+) − G (T[1: t1), ˜θt1 ) + G(T[1: t1), ˜θt1 )= G(T[1: t1), θ m+1  
+
+> t1
+
+)= G(T[1: t1), ˜θt1 ),
+
+where the first equation comes from Eq (11) and the second equation is based on the inductive hypothesis. Secondly, in the update from time spot t to t + 1 , we have 
+
+E[Γ ′
+
+> DGC
+
+(t1 + 1)] = E[ 1
+
+t1
+
+(( t1 − 1) · ΓDGC (t1, m + 1) + G(Tt1 , ˜θt1 ))] = 1
+
+t1
+
+(( t1 − 1) · G (T[1: t1), ˜θt1 ) + G(Tt1 , ˜θt1 )) = G(T[1: t1), ˜θt1+1 )
+
+based on Eq (14). This implies that our conclusion also holds when t = t1 + 1 .
+
+Theorem A.2 (Theorem 3.3) . Assume that f (x; θ) is L-smooth and γ-strongly convex; the parameters m ≥ 10 L2 
+
+> γ2
+
+and 
+
+η = γ 
+
+> 10 L
+
+. Then we have a linear convergence in expectation for the DGC procedure at time t:
+
+E
+
+h
+
+∥˜θt,s +1 − θ∗∥22
+
+i
+
+≤ 12s E
+
+h
+
+∥˜θt, 1 − θ∗∥22
+
+i
+
+where ˜θt,s represents the initialization parameter at the beginning of the s-th stage at time spot t.
+
+Our proof is inspired by the idea of (Johnson & Zhang, 2013). To simplify the notations, we define 
+
+vkt = ∇ψxt
+
+ θkt
+
+ − ∇ ψxt (˜θt) + ˜ μ
+
+through combining Eq (10) and (11) (we replace “ Γ” in Eq (10) by (11)), where 
+
+∇ψxt
+
+ θkt
+
+ ≜ 1
+
+t ∇θ ℓ(xt, y t, θ kt ) + t − 1
+
+t ∇θ ℓ(¯ x, ¯y, θ kt ),
+
+∇ψxt (˜θt) ≜ 1
+
+t ∇θ ℓ( ˙ xt, ˙yt, ˜θt) + t − 1
+
+t ∇θ ℓ(¨ x, ¨y, ˜θt),
+
+˜μ ≜ 1
+
+t G(Tt, ˜θt) + t − 1
+
+t Γ′
+
+> DGC
+
+(t).
+
+Before proving Theorem 3.3, we provide the following key lemmas first. 
+
+Lemma A.3. 
+
+E[ vkt
+
+> 22
+
+] ≤ 2L
+
+h
+
+E[|| θkt − θ∗|| 22] + E[|| ˜θt − θ∗|| 22]
+
+i
+
+.
+
+13 An Effective Dynamic Gradient Calibration Method for Continual Learning 
+
+Proof. 
+
+E[ vkt
+
+> 22
+
+]
+
+≤2E ∥∇ ψxt
+
+ θkt
+
+ − ∇ ψxt (θ∗) ∥22
+
+
+
++ 2 E
+
+h
+
+∥∇ ψxt ( ˜θt) − ∇ ψxt (θ∗) − ∇ ℓt
+
+> CL
+
+(˜θt)∥22
+
+i
+
+=2 E ∥∇ ψxt
+
+ θkt
+
+ − ∇ ψxt (θ∗) ∥22
+
+
+
++ 2 E[∥∇ ψxt (˜θt) − ∇ ψxt (θ∗)
+
+− E[∇ψxt (˜θt) − ∇ ψxt (θ∗)] ∥22]
+
+≤2E[ ∇ψxt
+
+ θkt
+
+ − ∇ ψxt (θ∗) 22]+ 2 E[ ∇ψxt (˜θt) − ∇ ψxt (θ∗) 22
+
+]
+
+≤2L
+
+h
+
+E[|| θkt − θ∗|| 22] + E[|| ˜θt − θ∗|| 22]
+
+i
+
+,
+
+(18) where the first inequality comes from the fact ∥a + b∥22 ≤ 2∥a∥22 + 2 ∥b∥22 for any vectors a, b and Lemma A.1, the second inequality is based on the fact E[∥ξ − Eξ∥22] = E[∥ξ∥22] − ∥ E[ξ]∥22 ≤ E[∥ξ∥22] for any random vector ξ, and the third inequality is based on L-smooth. 
+
+Lemma A.4. 
+
+E[ θkt − θ∗
+
+> 22
+
+] ≤ (1 − 2ηγ + 2 Lη 2)E[|| θk−1 
+
+> t
+
+− θ∗|| 22]+ 2 Lη 2E[|| ˜θt − θ∗|| 22]. (19) 
+
+Proof. Note that E[vkt ] = E[∇ψxt (θkt )] = ∇ℓt
+
+> CL
+
+ θk−1
+
+> t
+
+, and so we have 
+
+E[ θkt − θ∗
+
+> 22
+
+]= θk−1 
+
+> t
+
+− θ∗ 
+
+> 22
+
+− 2η  θk−1 
+
+> t
+
+− θ∗
+
+⊤ E[vk−1 
+
+> t
+
+] + η2E[ vk−1
+
+> t
+> 22
+
+]
+
+≤ θk−1 
+
+> t
+
+− θ∗ 
+
+> 22
+
+− 2η  θk−1 
+
+> t
+
+− θ∗
+
+⊤ ∇ℓt
+
+> CL
+
+ θk−1
+
+> t
+
+
+
++ 2 Lη 2 h
+
+E[|| θk−1 
+
+> t
+
+− θ∗|| 22] + E[|| ˜θt − θ∗|| 22]
+
+i
+
+≤ θk−1 
+
+> t
+
+− θ∗ 
+
+> 22
+
+− 2ηγ || θk−1 
+
+> t
+
+− θ∗|| 22
+
++ 2 Lη 2 h
+
+E[|| θk−1 
+
+> t
+
+− θ∗|| 22] + E[|| ˜θt − θ∗|| 22]
+
+i
+
+,
+
+where the first inequality comes from Lemma A.3, and the second inequality is based on the γ-strong convexity of ℓt
+
+> CL
+
+(θ).We take the expectation on θk−1 
+
+> t
+
+from the above inequality and then have 
+
+E[ θkt − θ∗
+
+> 22
+
+]
+
+≤ E[ θk−1 
+
+> t
+
+− θ∗
+
+> 22
+
+] − 2ηγ E[|| θk−1 
+
+> t
+
+− θ∗|| 22]+ 2 Lη 2 h
+
+E[|| θk−1 
+
+> t
+
+− θ∗|| 22] + E[|| ˜θt − θ∗|| 22]
+
+i
+
+= (1 − 2ηγ + 2 Lη 2)E[|| θk−1 
+
+> t
+
+− θ∗|| 22] + 2 Lη 2E[|| ˜θt − θ∗|| 22].
+
+Proof of Theorem 3.3 . We now proceed to prove the theorem. To simplify notation, we denote E θkt − θ∗ 
+
+> 22
+
+as pk. Based on lemma A.4, we have 
+
+pk ≤  1 − 2ηγ + 2 η2L pk−1 + 4 η2Lp k−1.
+
+14 An Effective Dynamic Gradient Calibration Method for Continual Learning 
+
+By setting η = γ 
+
+> 10 L
+
+and m ≥ 10 L2 
+
+> γ2
+
+, we have 
+
+pm+1 ≤
+
+
+
+1 − γ2
+
+10 L2
+
+
+
+pm ≤
+
+
+
+1 − γ2
+
+10 L2
+
+m
+
+p1
+
+≤ exp 
+
+
+
+− γ2
+
+10 L2 m
+
+
+
+p1 ≤ 12 p1,
+
+i.e 
+
+E ∥θm+1  
+
+> t
+
+− θ∗∥22
+
+ ≤ 12 E ∥θ1 
+
+> t
+
+− θ∗∥22
+
+ . (20) Subsequently, we consider the update during different stage s, so that the initial parameter ˜θt,s is θ1 
+
+> t
+
+and updated parameter 
+
+˜θt,s +1 = θm+1  
+
+> t
+
+is selected after all of the updates have been completed. Then Eq (20) becomes 
+
+E
+
+h
+
+∥˜θt,s +1 − θ∗∥22
+
+i
+
+≤ 12 E
+
+h
+
+∥˜θt,s − θ∗∥22
+
+i
+
+. (21) Through recursively applying the above equation from stage 1 to stage s + 1 , we have 
+
+E
+
+h
+
+∥˜θt,s +1 − θ∗∥22
+
+i
+
+≤ 12s E
+
+h
+
+∥˜θt, 1 − θ∗∥22
+
+i
+
+.
+
+# B. Detailed DGC procedure in TFCL 
+
+We consider the data streams {T 1, T2, · · · T T } with each Ti being the batch training data in TFCL. Algorithm 2 shows how to implement the DGC procedure in this model. 
+
+Algorithm 2 DGC procedure in TFCL 
+
+1: Input: Data stream {T 1, T2, · · · T T }, update steps m, batch size b, and learning rate η.
+
+2: Output: Trained model parameter θT
+
+3: Initialize model parameters θ0, Γ′
+
+> DGC
+
+(1) = ⃗ 0, ˜t = 1 
+
+4: Initialize buffer M1 = ∅, ˜θ = θ0
+
+5: for t = 1 , 2, . . . , T do 
+
+6: θt ← θt−1
+
+7: Take a uniform sample X′ 
+
+> t
+
+of size b from Mt
+
+8: Calculate ΓDGC (t, 1) with Γ′
+
+> DGC
+
+(˜ t) according to (11) 
+
+9: Calculate v1 
+
+> t
+
+with ΓDGC (t, 1) according to (10) 
+
+/* Calculate the calibrated gradient */ 
+
+10: θt ← θt − η · v1
+
+> t
+
+11: if (t − 1) mod m = 0 then 
+
+12: Update Γ′
+
+> DGC
+
+(˜ t) according to (11) and (12) 
+
+/* Update Γ′
+
+> DGC
+
+(˜ t) from ΓDGC (t, 1) */ 
+
+13: ˜t ← t, ˜θ ← θt
+
+14: end if 
+
+15: Mt+1 ← MemoryUpdate( Tt, Mt)
+
+/* Reservoir sampling */ 
+
+16: Calculate and store Γ′
+
+> DGC
+
+(˜ t) according to (14) 
+
+/* Update Γ′
+
+> DGC
+
+(˜ t) for new historical data */ 
+
+17: end for 
+
+15 An Effective Dynamic Gradient Calibration Method for Continual Learning 
+
+Datasets S-CIFAR100 
+
+α 1e−2 1e−3 1e−4 0
+
+DGC-ER 57 .4±2.14 59 .55 ±0.97 59 .14 ±0.91 55 .48 ±1.52     
+
+> Table 3. The FAIA ±standard error(%) with different selection of α.
+
+Datasets S-CIFAR100 
+
+m 1 100 200 300 400 
+
+DGC-ER 49 .11 ±5.30 59 .44 ±0.95 59 .55 ±0.97 59 .27 ±0.65 58 .94 ±0.98     
+
+> Table 4. The FAIA ±standard error(%) with different selection of m.
+
+# C. Details for Experimental Setup 
+
+Architecture and hyperparameter Most of the comparison methods in our experiments use the implementation of Mammoth 1. For the Dynamic ER (Yan et al., 2021) method we use the implementation of PyCIL 2, and for the GCR method we use the implementation of Google-research 3. To be consistent with the selection of these open source frameworks, all the methods use ResNet18 (He et al., 2016) as the base network. All the networks are trained from scratch. For the hyperparameter selection of different methods, we directly use the original hyperparameters used in these open-source frameworks, which are obtained by using grid search on 10% of the training set. 
+
+Training details To maintain consistency, we utilize the default parameter settings and network architectures provided by the framework. As in previous studies (Tiwari et al., 2022; Yan et al., 2021; Buzzega et al., 2020), random crops and horizontal flips are used as data augmentation in all experiments. All methods that do not incorporate DGC are optimized using standard SGD. In our DGC calibrated method, we empirically set m = 200 . To fairly compare the methods with constant storage limits, we uniformly train for 50 epochs in each task on S-CIFAR10 and S-CIFAR100, and 100 epochs in each task on S-TinyImageNet. The batch size is all set to be 32 . According to the experimental description in the Dynamic ER method, we train the first task for 200 epochs on all datasets and train all subsequent tasks for 170 epochs; the batch size is set to be 128 .
+
+# D. Other Experimental Results 
+
+Selection of α We explore the impact of different α values to the performance of our DGC method. In the experiment, we fix the buffer size to 2000 . Table 3 shows that DGC can improve ER under different α values. In all the experiments of Section 4, we fix the value of α to be 1e−3.
+
+Selection of m As stated in Theorem 3.3, when m is sufficiently large, our DGC method has a linear convergence in expectation. The results in Table 4 show that when m is greater than 100 , DGC-ER can significantly improve the performance of ER. Table 4 also suggests that our method is relatively robust to the selection of m.
+
+FF and FAA results in CIL we use Final Forgetting (FF) (Chaudhry et al., 2018) to measure the forget-ting of the model throughout the learning process. Following the previous work, it is defined as FF ≜ 
+
+> 1
+> T−1
+
+PT −1
+
+> j=1
+
+ max k∈{ 1,...,T −1} ak,j − aT,j 
+
+. Table 5 and Table 6 show that DGC based methods can reduce forgetting while improving the performance in all the cases. For most instances, our DGC based methods achieve the best performance. 
+
+Detailed results in TFCL Table 7 shows that our DGC method can improve the performance in TFCL. The DGC-DER++ method achieves the best performance in all the cases. 
+
+Training Time We set b = 500 and conduct experiments on S-CIFAR100 to measure the training time of several algorithms on the first three tasks in the CIL scenario. Table 8 shows that our method and GCR have roughly the same training time, which is higher than AGEM but lower than other baselines. The results on the remaining tasks and other datasets are similar. Therefore, the increase caused by our method on training time is not significant, compared with most of the baselines. 
+
+> 1https://github.com/aimagelab/mammoth
+> 2https://github.com/G-U-N/PyCIL
+> 3https://github.com/google-research/google-research/tree/master/gradient coresets replay
+
+16 An Effective Dynamic Gradient Calibration Method for Continual Learning 
+
+Datasets S-CIFAR10 S-CIFAR100 S-TinyImageNet 
+
+Size of Buffer 500 2000 500 2000 2000 5000 
+
+AOP 49 .54 ±1.44 14 .24 ±2.18 3.92 ±0.19 
+
+AGEM 96 .50 ±1.29 96 .34 ±0.87 89 .58 ±0.14 89 .56 ±0.22 77 .30 ±0.22 77 .53 ±0.39 
+
+SSVRG 52 .10 ±7.83 68 .75 ±11 .86 56 .65 ±5.21 70 .15 ±8.61 21 .99 ±2.02 31 .29 ±3.92 
+
+MOCA 12 .97 ±1.00 7.22 ±0.71 28 .65 ±0.87 58 .08 ±17 .70 41 .61 ±14 .34 32 .04 ±11 .13 
+
+GSS 64 .81 ±4.99 47 .27 ±5.06 83 .43 ±0.50 79 .52 ±0.43 72 .75 ±0.40 69 .97 ±0.48 
+
+GCR 24 .18 ±1.76 13 .34 ±1.09 58 .03 ±5.80 34 .41 ±2.56 48 .47 ±1.60 39 .34 ±1.77 
+
+HAL 62 .86 ±2.80 36 .65 ±2.88 55 .22 ±1.62 47 .69 ±2.73 43 .72 ±2.34 38 .86 ±1.25 
+
+ICARL 31 .91 ±2.25 26 .56 ±1.19 30 .20 ±0.40 24 .64 ±0.33 18 .55 ±0.45 17 .62 ±0.61 
+
+ER 44 .28 ±1.93 22 .96 ±0.90 74 .29 ±0.73 54 .60 ±0.63 65 .74 ±0.59 54 .27 ±0.68 
+
+DGC-ER 39 .72 ±1.91 20 .37 ±1.03 72 .31 ±0.85 52 .30 ±1.09 64 .58 ±0.52 52 .38 ±0.68 
+
+DER++ 9.24 ±3.01 6.82 ±0.60 14 .94 ±2.23 9.19 ±1.09 7.86 ±3.24 6.75 ±0.84 
+
+DGC-DER++ 4.90 ±1.86 3.99 ±1.01 9.15 ±2.52 5.79 ±0.85 3.40 ±0.66 4.59 ±0.83 
+
+XDER 10 .64 ±0.70 8.89 ±0.33 25 .11 ±0.79 12 .15 ±0.26 17 .95 ±0.55 12 .81 ±0.31 
+
+DGC-XDER 8.74 ±0.98 7.22 ±0.97 23 .24 ±0.65 11 .11 ±0.37 16 .99 ±0.74 11 .84 ±0.47 
+
+Table 5. The FF ± standard error(%) in CIL. The methods combined with DGC are colored in gray. The best results are highlighted in bold. 
+
+Datasets S-CIFAR10 S-CIFAR100 S-TinyImageNet 
+
+Size of Buffer 500 2000 500 2000 2000 5000 
+
+AOP 48 .52 ±1.06 26 .13 ±1.22 8.61 ±0.02 
+
+AGEM 19 .80 ±0.29 20 .06 ±0.38 9.25 ±0.08 9.31 ±0.06 7.94 ±0.06 7.86 ±0.11 
+
+SSVRG 32 .08 ±6.97 43 .55 ±11 .38 9.92 ±2.22 17 .40 ±5.35 0.75 ±0.09 7.92 ±2.22 
+
+MOCA 70 .34 ±1.23 78 .68 ±0.86 37 .13 ±0.55 9.35 ±18 .67 0.50 ±0.00 0.50 ±0.00 
+
+GSS 44 .56 ±3.95 56 .46 ±4.48 13 .22 ±0.05 16 .12 ±0.13 11 .74 ±0.14 13 .45 ±0.20 
+
+GCR 72 .62 ±0.76 80 .95 ±0.47 28 .66 ±4.14 48 .89 ±1.99 29 .01 ±0.87 36 .45 ±0.89 
+
+HAL 39 .41 ±1.96 58 .34 ±2.66 8.46 ±1.09 11 .91 ±2.05 5.43 ±0.71 8.00 ±0.99 
+
+ICARL 57 .51 ±2.90 69 .91 ±0.68 45 .69 ±0.53 52 .30 ±0.47 30 .30 ±0.44 31 .69 ±0.32 
+
+ER 61 .08 ±1.23 76 .82 ±0.95 21 .18 ±0.65 36 .24 ±1.27 18 .39 ±0.38 26 .71 ±0.53 
+
+DGC-ER 64 .42 ±1.35 79 .46 ±0.61 23 .11 ±0.76 40 .23 ±1.05 19 .52 ±0.55 27 .96 ±0.54 
+
+DER++ 54 .89 ±1.42 64 .84 ±0.40 37 .56 ±1.03 50 .42 ±0.68 15 .34 ±3.53 31 .09 ±0.59 
+
+DGC-DER++ 58 .03 ±1.10 66 .02 ±0.51 40 .48 ±1.14 52 .14 ±0.64 20 .82 ±0.91 33 .72 ±1.63 
+
+XDER 63 .88 ±1.43 67 .86 ±0.84 47 .45 ±0.65 56 .88 ±0.53 41 .41 ±0.36 44 .66 ±0.09 
+
+DGC-XDER 69 .46 ±1.82 71 .40 ±1.69 49 .07 ±0.40 57 .97 ±0.31 41 .58 ±0.32 44 .88 ±0.40 
+
+Table 6. The FAA ± standard error(%) in CIL. The methods combined with DGC are colored in gray. The best results are highlighted in bold. 
+
+17 An Effective Dynamic Gradient Calibration Method for Continual Learning 
+
+Datasets S-CIFAR10 S-CIFAR100 S-TinyImageNet 
+
+Size of Buffer 500 2000 2000 
+
+AOP 66 .73 ±0.60 42 .73 ±0.62 21 .40 ±0.17 
+
+AGEM 50 .24 ±0.53 23 .55 ±0.23 18 .95 ±0.40 
+
+SSVRG 49 .02 ±4.09 39 .09 ±5.53 14 .39 ±1.47 
+
+MOCA 81 .01 ±0.97 59 .29 ±2.97 34 .74 ±10 .08 
+
+GSS 68 .81 ±0.98 38 .54 ±0.39 31 .38 ±0.11 
+
+GCR 82 .31 ±0.43 63 .18 ±2.16 48 .94 ±0.44 
+
+ER 73 .04 ±0.47 55 .46 ±0.77 37 .44 ±0.20 
+
+DGC-ER 74 .03 ±0.55 58 .35 ±0.81 38 .00 ±0.34 
+
+DER++ 82 .72 ±0.17 65 .57 ±0.42 47 .23 ±1.22 
+
+DGC-DER++ 82 .93 ±0.14 66 .57 ±0.20 50 .08 ±1.10 
+
+Table 7. The FAIA ± standard error(%) in TFCL. The methods combined with DGC are colored in gray. The best results are highlighted in bold. 
+
+Methods(s) GSS XDER AOP MOCA SSVRG GCR DGC AGEM ER 
+
+T1 4959 .29 1083 .86 1418 .49 655 .15 216 .38 689 .85 218 .46 212 .76 214 .34 
+
+T2 4281 .39 2495 .60 1412 .48 1192 .89 873 .39 690 .34 666 .08 478 .99 345 .05 
+
+T3 4158 .51 2826 .82 1415 .24 1173 .05 878 .89 686 .16 668 .86 488 .91 340 .36 
+
+Table 8. Training time of the first three task in CIL on S-CIFAR100. 
+
+18

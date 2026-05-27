@@ -1,0 +1,4155 @@
+Title: Understanding Forgetting in Continual Learning with Linear Regression
+
+URL Source: https://openreview.net/pdf?id=89kZWloYQx
+
+Number of Pages: 24
+
+Markdown Content:
+# Understanding Forgetting in Continual Learning with Linear Regression 
+
+Meng Ding 1 Kaiyi Ji 1 Di Wang 2 Jinhui Xu 1
+
+## Abstract 
+
+Continual learning, focused on sequentially learn-ing multiple tasks, has gained significant atten-tion recently. Despite the tremendous progress made in the past, the theoretical understanding, especially factors contributing to catastrophic for-getting , remains relatively unexplored. In this paper, we provide a general theoretical analysis of forgetting in the linear regression model via Stochastic Gradient Descent (SGD) applicable to both under-parameterized and overparameter-ized regimes. Our theoretical framework reveals some interesting insights into the intricate rela-tionship between task sequence and algorithmic parameters, an aspect not fully captured in pre-vious studies due to their restrictive assumptions. Specifically, we demonstrate that, given a suffi-ciently large data size, the arrangement of tasks in a sequence—where tasks with larger eigenvalues in their population data covariance matrices are trained later—tends to result in increased forget-ting. Additionally, our findings highlight that an appropriate choice of step size will help mitigate forgetting in both under-parameterized and over-parameterized settings. To validate our theoretical analysis, we conducted simulation experiments on both linear regression models and Deep Neural Networks (DNNs). Results from these simula-tions substantiate our theoretical findings. 
+
+## 1. Introduction 
+
+Continual learning, also known as lifelong learning, is a sub-field of machine learning that focuses on developing a model capable of learning continuously from a stream of data, which are i.i.d sampled from different tasks and presented       
+
+> 1Department of Computer Science and Engineering, State University of New York at Buffalo, Buffalo, USA 2Division of CEMSE, King Abdullah University of Science and Technol-ogy, Thuwal, Saudi Arabia. Correspondence to: Kaiyi Ji <kaiy-iji@buffalo.edu >, Jinhui Xu <jinhui@buffalo.edu >.
+> Proceedings of the 41 st International Conference on Machine Learning , Vienna, Austria. PMLR 235, 2024. Copyright 2024 by the author(s).
+
+sequentially to the model. A primary challenge in con-tinual learning is the catastrophic forgetting phenomenon (McCloskey & Cohen, 1989), wherein the model forgets previously acquired knowledge when exposed to new data. Previous research addressing catastrophic forgetting in continuous learning primarily focuses on empirical stud-ies, which can be broadly classified into three categories: expansion-based methods, regularization-based methods, and memory-based methods. Expansion-based methods (Yoon et al., 2017; 2019; Yang et al., 2021) mitigate catas-trophic forgetting by allocating distinct subsets of network parameters to individual tasks. Regularization-based meth-ods (Kirkpatrick et al., 2017; Aljundi et al., 2018; Serra et al., 2018; Liu & Liu, 2022) employee structural regular-ization in fixed capacity models to counteract forgetting, which penalize significant changes in parameters that are crucial for previous tasks. Memory-based methods (Shin et al., 2017; Chaudhry et al., 2018; Riemer et al., 2018; Saha et al., 2021; Lin et al., 2022; Hao et al., 2023) alle-viate forgetting by storing subsets of previous task data or synthesizing pseudo-data without data-replay. Recently, there has been a growing body of work focused on understanding the behavior of catastrophic forgetting from a theoretical standpoint. For example, Bennani et al. 2020; Doan et al. 2021 analyze the generalization of continual learning for Orthogonal Gradient Descent (OGD) (Fara-jtabar et al., 2020) in the Neural Tangent Kernel (NTK) (Ja-cot et al., 2018) regime. Lee et al. 2021; Asanuma et al. 2021 explore the impact of task similarity in a teacher-student setting. Evron et al. 2022; Lin et al. 2023 provide a detailed forgetting analysis of the minimum-norm interpolator for the overparameterized linear regression model. However, the existing analyses of forgetting often rely on relatively stringent assumptions that may not be applicable in many scenarios. For example, Bennani et al. 2020; Doan et al. 2021; Evron et al. 2022; Lin et al. 2023 necessitate an over-parameterized regime for their analysis, which may be in-valid when involving large datasets. Moreover, Lee et al. 2021; Asanuma et al. 2021; Lin et al. 2023; Swartworth et al. 2023 assume that data follows a Gaussian distribution that may not hold in real-world datasets exhibiting more complex distributions. Evron et al. 2022; Lin et al. 2023 focus on the minimum-norm interpolator, where each task requires achieving zero loss on its training samples and 1Understanding Forgetting in Continual Learning with Linear Regression 
+
+hence can find a closed-form solution. In this paper, we investigate the behavior of forgetting under the linear regression model via the more practical Stochastic Gradient Descent (SGD) method and provide a general theo-retical analysis that is applicable to both over-parameterized and under-parameterized regimes. Our main contributions can be summarized as follows: Firstly, our work provides a theoretical analysis for multi-step SGD algorithms in both underparameterized and over-parameterized regimes, with the population data covariance matrix satisfying the general fourth moment instead of Gaus-sian distribution as in existing studies. In specific, we pro-vide a novel upper bound on the model forgetting, as well as a matching lower bound that shows the tightness of our characterization. Our bounds derive the forgetting bound that is stated as a function of 1) the spectrum of the pop-ulation data covariance matrices for each task, 2) the step size, 3) the number of training samples and 4) the effective dimensions on the forgetting. Second, our study provides some interesting insights into the impact of task sequence and algorithmic parameters on the degree of forgetting. Specifically, we show that when the data size is sufficiently large, forgetting tends to escalate when we postpone the training of tasks, whose population data covariance matrices possess larger eigenvalues. It is intuitive that when tasks with larger eigenvalues are trained later, the model might overfit these tasks due to their high variance. In addition, our findings reveal that an appropriate choice of step size can help mitigate forgetting in both un-derparameterized and overparameterized settings. Note that these results cannot be derived from existing works due to their restrictive data distribution assumptions or closed-form updating rules. More detailed discussions can be found in Section 4. Finally, we conducted simulation experiments on both linear regression models and Deep Neural Networks (DNNs) to validate our theoretical analysis. Our simulation results in-dicate that both linear regression models and DNNs exhibit increased forgetting when tasks with larger eigenvalues are encountered later. Additionally, we demonstrate that smaller step sizes in training can also mitigate forgetting across task sequences, especially in under-parameterized settings. In-terestingly, we observe that in over-parameterized DNNs, higher dimensionality does not necessarily equate to more forgetting if the dataset size is fixed, as opposite to the linear regression case. 
+
+1.1. Related Work 
+
+In this section, we discuss related work on Covariate Shift, SGD analysis in linear regression, and theoretical studies for catastrophic forgetting. 
+
+Covariate Shift Covariate shift is a specific set-up in ma-chine learning (Pan & Yang, 2009; Sugiyama & Kawanabe, 2012), referring to a distribution mismatch between the training and test data. The concept is typically applied in transfer learning, which can be seen as a particular instance of continual learning, generally involving two tasks. For example, Mohri & Medina 2012; Cortes & Mohri 2014; Kpotufe & Martinet 2018; Cortes et al. 2019; Hanneke & Kpotufe 2020; Ma et al. 2023; Wu et al. 2022b examine the (regularized) empirical risk minimizer, which focuses on minimizing the empirical and generalization error across accessible datasets. Nevertheless, the standard covariate shift is defined over two distinct data distributions, which can not be directly applied to our case. Consequently, we propose an extended version in Definition 2.2 to better suit our context. 
+
+SGD Analysis Recently, several studies have investigated the behavior of Stochastic Gradient Descent (SGD) in linear regression models through the lens of bias-variance decom-position (D ´efossez & Bach, 2015; Dieuleveut et al., 2017; Jain et al., 2017; 2018) and the eigen-decomposition of the covariance matrix (Chen et al., 2020; Zou et al., 2021; Wu et al., 2022a;b). Our work closely relates to the studies in Zou et al. 2021; Wu et al. 2022b that also characterized the SGD dynamic in linear regression with respect to the full eigenspectrum of the data covariance matrix. However, they focused on either the single-task setting or the pretraining-finetuning setting, while we studied the more challenging continual learning problem that involves a sequence of tasks with different data distributions. More discussion in Sec-tion 4. 
+
+Theoretical Studies in Continual Learning Although sig-nificant progress has been made in empirical studies address-ing the issue of forgetting in continual learning, theoretical insights into this area are still largely unexplored. In this con-text, Bennani et al. 2020 established a theoretical framework to study continual learning algorithms in the NTK regime, and provided the first generalization bound dependent on task similarity for SGD and OGD. Doan et al. 2021 intro-duced the NTK overlap matrix as a task similarity metric and proposed a data-structure-informed variant of OGD that uti-lizes Principal Component Analysis (PCA). Asanuma et al. 2021 utilized the teacher-student framework on a single neu-ral network and demonstrated that catastrophic forgetting can be circumvented when the similarity among input distri-butions is small and the similarity among teacher networks is large. Lee et al. 2021 expanded an earlier analysis of two-layer networks within the teacher-student setup to the setting with multiple teachers and revealed that the highest level of forgetting occurs when tasks have intermediate similarity with each other. Evron et al. 2022; Swartworth et al. 2023 explained the behavior of forgetting in the linear regression model from the perspectives of alternating projections and 2Understanding Forgetting in Continual Learning with Linear Regression 
+
+the Kaczmarz method (Karczmarz, 1937). Lin et al. 2023 investigated the impact of overparameterization, task simi-larity, and task ordering on forgetting and generalization in the overparameterized linear regression model. The works most relevant to our study include (Evron et al., 2022; Lin et al., 2023), both of which also studied the be-havior of forgetting in the linear regression model. However, our work differs from their studies in several aspects. Firstly, with regard to assumptions, Evron et al. 2022 as-sumed all data are bounded with 1 and the model is noiseless, and Lin et al. 2023 assumed all data are sampled from a Gaussian distribution. In contrast, our assumptions cover more data distributions and are much milder than theirs (see Remark 2 and Section 4 for more details). Secondly, in terms of methods, both Evron et al. 2022 and Lin et al. 2023 analyze the problem of forgetting using the minimum norm solution, which presupposes zero training error—a requirement not necessary in our approach with SGD (see Section 2 for further discussions). Third, Evron et al. 2022; Lin et al. 2023 considered only the overparameterized case where the data dimension is larger than the data size, while our analysis holds for both the underparameterized and over-parameterized settings. 
+
+Notations : In this paper, we adhere to a consistent notation style for clarity. We use boldface lower letters such as x, w
+
+for vectors, and boldface capital letters (e.g. A, H) for matrices. Let ∥A∥2 denote the spectral norm of A and 
+
+∥v∥2 denote the Euclidean norm of v. For two vectors u
+
+and v, their inner product is denoted by ⟨u, v⟩ or u⊤v. For two matrices A and B of appropriate dimension, their inner product is defined as ⟨A, B⟩ := tr( A⊤B). For a positive semi-definite (PSD) matrix A and a vector v of appropriate dimension, we write ∥v∥2 
+
+> A
+
+:= v⊤Av . The outer product is denoted by ⊗.
+
+## 2. Preliminaries 
+
+In our setup, we consider a sequence of tasks, denoted as 
+
+M = {1, 2, . . . , M }. For each task m in this sequence, we have a corresponding dataset Dm, which consists of N data points. Each of these data points, denoted as (xm,i , y m,i ), is drawn independently and identically distributed (i.i.d.) from a specific distribution Dm = Xm × Y m ⊂ Rd × R. Here, 
+
+xm,i represents the feature vector, and ym,i is the response variable for each data point in the dataset Dm. Assume that 
+
+{(xm,i , y m,i )}Ni=1 are i.i.d. sampled from a linear regression model, i.e., each pair (xm,i , y m,i ) is a realization of the linear regression model ym = ( x⊤
+
+> m
+
+w∗) + zm, where zm is some randomized noise and w∗ ∈ Rd is the optimal model parameter. Our goal is to output a model wM N minimizing the degree of forgetting (Evron et al., 2022) for M tasks, i.e. 
+
+G(M ) = 1
+
+M
+
+> M
+
+X
+
+> m=1
+
+Lm(wM N ), where (1) 
+
+Lm(w) = 12 E(xm,y m)∼D m ∥x⊤
+
+> m
+
+w − ym∥2, m ∈ M
+
+wM N represents the final output after sequentially training on M tasks, each updated via SGD over N iterations for each task. Equation (1) quantifies an average excess pop-ulation risk on the final output wM N across all tasks. For each task m, the loss Lm evaluate how well wM N performs on it, thus assessing the degree of the model’s forgetting on previous tasks in continual learning scenarios. 
+
+Definition 2.1 (Data Covariance) . Assume that each entry and the trace of the E[xmx⊤
+
+> m
+
+] are finite. Define Hm := 
+
+E[xmx⊤
+
+> m
+
+] as data covariance matrix. Let Hm denote the eigen decomposition of the data co-variance for task m, given by Hm = P 
+
+> i
+
+λimvimvim
+
+> ⊤
+
+,where (λim)i≥1 are eigenvalues in a nonincreasing order and (vim)i≥1 are the corresponding eigenvectors. Define 
+
+Hm,k 1:k2 as Hm,k 1:k2 := P 
+
+> k1<i ≤k2
+
+λimvimvim
+
+> ⊤
+
+, and al-low k2 = ∞ to imply that Hm,k :∞ = P 
+
+> i>k
+
+λimvimvim
+
+> ⊤
+
+.
+
+Definition 2.2 (Covariate Shift) . For each task m, the co-variates xm, 1, . . . , xm,N are i.i.d. drawn from Dm.Compared to the concept of covariate shift in transfer learn-ing (Pathak et al., 2022), Definition 2.2 provides a more general scenario applicable to a series of tasks M ≥ 2. For simplicity, in our analysis, we assume that each task m in our model consists of N data points, differentiating it from transfer learning approaches that typically consider the total dataset size as N .
+
+Assumption 2.3 (Fourth moment conditions) . Assume that for each task m, the expected fourth moment of covariates, denoted as M := E[xm ⊗xm ⊗xm ⊗xm], and the expected covariance matrix Hm are finite. Moreover: (A) There exists a constant αm > 0 such that for any Positive Semi-Definite (PSD) matrix A, the following holds: 
+
+E[xmxm⊤Ax mxm⊤] ⪯ αm · tr( HmA)Hm.
+
+(B) There exists a constant βm > 0, such that for every PSD matrix A, the following holds:    
+
+> E[xmxm⊤Ax mxm⊤]−HmAH m⪰βm·tr( HmA)Hm.
+
+Remark 1. Assumption 2.3 is a commonly employed as-sumption in the linear regression analysis utilizing SGD methods (Zou et al., 2021; Wu et al., 2022a;b), which is 3Understanding Forgetting in Continual Learning with Linear Regression 
+
+much weaker than the assumptions on the aforementioned related work. Specifically, it can be verified that Assump-tion 2.3 holds with αm = 3 and βm = 1 for Gaussian distribution discussed in (Asanuma et al., 2021; Lee et al., 2021; Lin et al., 2023). Additionally, Assumption 2.3(A) can be relaxed to E∥xm∥22 ≤ αm tr( Hm) with A = I,where αm tr( Hm) = 1 is assumed in Evron et al. 2022. 
+
+Assumption 2.4 (Well-specified noise) . Assume that for each distribution of task m, the response (conditional on input covariates) is given by ym = x⊤
+
+> m
+
+w∗ + zm, where 
+
+zm ∼ N (0 , σ 2) and zm is independent with xm.Similar to previous works, we assume that zm is some ran-domized noise that satisfies E[zm|x] = 0 and E[z2
+
+> m
+
+] = σ2
+
+for each task m.
+
+Continual Learning via SGD Suppose we train the model parameter w sequentially. Let w(m−1) N +N repre-sent the parameter state after the completion of training on task m, which also serves as the initial condition for the training of task m + 1 . Starting with w0 and employing a constant step size η, the model is updated by SGD for each task m ∈ M over N iterations, with t = 1 , . . . , N :
+
+w(m−1) N +t = w(m−1) N +t−1 − η · gm,t , and 
+
+gm,t := ( x⊤
+
+> m,t
+
+w(m−1) N +t−1 − ym,t )xm,t , (2) where gm,t represents the gradient of the loss function at task m and iteration t for a given data point (xm,t , y m,t ).Contrastingly, the minimum norm solution in linear regres-sion, particularly relevant in overparameterized settings, aims to find a weight vector w that not only achieves zero training error but also possesses the minimal possible norm. Here, wm represents the outcome post-training for task m,and it also serves as the starting point for training task m+1 .The objective, beginning from an initial condition w0 = 0,is defined by the following optimization problem: 
+
+min  
+
+> w
+
+∥w − wm−1∥2, s.t. (Xm)⊤w = ym,
+
+where Xm := [xm, 1, . . . , xm,N ] ∈ Rd×N and ym =[ym, 1, . . . , y m,N ] ∈ R1×N . The update rules for each it-eration follow as: 
+
+wm = wm−1 + Xm(X⊤
+
+> m
+
+Xm)−1(ym − X⊤
+
+> m
+
+wm−1), (3) where highlights the computational intensity of inverting the matrix (X⊤
+
+> m
+
+Xm)−1. This is particularly challenging for large datasets or overparameterized feature spaces. Unlike the minimum norm solution, SGD does not assume the existence of a unique, exact solution and is more adaptable to a variety of problems, including those with non-linear dynamics. 
+
+## 3. Main Results 
+
+Before presenting our upper bound, we shall establish the following notations to facilitate comprehension of the re-sults. 
+
+
+
+Γi 
+
+> (p,q )
+
+:= 
+
+> q
+
+Y
+
+> j=p
+
+(1 − ηλ ij )2N , Γqp := 
+
+> q
+
+Y
+
+> j=p
+
+(I − ηHj )2N ,
+
+Uk∗ 
+
+> m
+
+:= Im, 0: k∗ 
+
+> m
+
++ N η Hm,k ∗
+
+> m:∞
+
+, Λi := 
+
+> M
+
+X
+
+> m=1
+
+λim,
+
+(4) 
+
+where (λim)i≥1 are eigenvalues of Hm in a nonincreasing order and k∗ 
+
+> m
+
+= max {i : λim ≥ 1 
+
+> N η
+
+} represents the cut-off index for Hm. Here, Γi 
+
+> (p,q )
+
+and Γqp can be regarded as a projection accumulation from task p to task q, and basically capture the impact of the learning dynamic of previous tasks on the subsequent task. Uk∗ 
+
+> m
+
+is defined with respect to the cut-off index k∗ 
+
+> m
+
+for each task’s data covariance matrix Hm
+
+that captures both the dominant eigenvalues and the tail of the spectrum, and Λi denotes the sum of the i-th eigenvalue across all tasks. In the following, we first provide our upper bound for the be-havior of forgetting via SGD in the linear regression model. 
+
+Theorem 3.1 (Upper Bound) . Consider a scenario where the model w undergoes training via SGD for M distinct tasks, following a sequence 1, . . . , M . With a constant step size of η ≤ 1/R 2 given that R2 = max {αm tr( Hm)}Mm=1 ,each task m is executed for N iterations. Given that As-sumptions (A) and 2.4 are satisfied, the following will hold: 
+
+G(M ) ≤ err var + err bias ,
+
+where the variance and bias errors are upper-bounded by 
+
+err var ≤
+
+PMm=1 
+
+M · ησ 2
+
+(1 − ηR 2) · Deff  
+
+> 1
+
+,
+
+err bias ≤
+
+PMk=1 
+
+M ∥w0 − w∗∥2 
+
+> ΓM
+> 1Hk
+
++
+
+PMm=1 
+
+M
+
+2αmη2 · (Deff  
+
+> 2
+
++ Φ m−11 Deff  
+
+> 3
+
+)1 − ηα m tr( Hm) · ∥ w0 − w∗∥2
+
+> Uk∗
+> m
+
++
+
+PMm=1 
+
+M αmη · ∥ w0 − w∗∥2   
+
+> ΓM
+> 1Hk(Hm+Φ m−11I)·Uk∗
+> m
+
+,
+
+where the effective dimensions are given by 
+
+Deff  
+
+> 1
+
+:= X
+
+> i<k ∗
+> m
+
+Γi 
+
+> (m+1 ,M )
+
+Λi + N η X
+
+> i>k ∗
+> m
+
+Γi 
+
+> (m+1 ,M )
+
+λimΛi
+
+Deff  
+
+> 2
+
+:= X
+
+> i<k ∗
+> m
+
+Γi 
+
+> (1 ,M )
+
+(λim)2Λi + N η X
+
+> i>k ∗
+> m
+
+Γi 
+
+> (1 ,M )
+
+(λim)3Λi
+
+Deff  
+
+> 3
+
+:= X
+
+> i<k ∗
+> m
+
+Γi 
+
+> (m,M )
+
+(λim)Λ i + ηN X
+
+> i>k ∗
+> m
+
+Γi 
+
+> (m,M )
+
+(λim)2Λi,
+
+(5) 
+
+with k∗
+
+> m
+
+, Γi 
+
+> (p,q )
+
+and Γqp defined as in Equation (4) and denoting 
+
+Φm−11 := Pm−1
+
+> j=1
+
+Qjk=1 αk ηj · ⟨ Hk−1, I − (I − ηHm−1)N ⟩ · ⟨Hj , Hm⟩.
+
+4Understanding Forgetting in Continual Learning with Linear Regression 
+
+In Theorem 3.1, we establish an upper bound on the forget-ting behavior of a model trained using SGD in the continual learning with various data distribution settings. It highlights that the model’s performance is influenced by both err var and err bias , where err var stems from the inherent noise intrinsic to the model itself and err bias represents the bias associated with the initial value during the learning process. Notice that both of them are determined jointly by the spectrum of the covariance matrices as well as the stepsizes for continual learning. To provide a more intuitive explanation, we explore a sim-plified scenario by setting η = 0 . Specifically, this setting simplifies our analysis by reducing the error terms to only the first term in bias error, which appears to depend solely on the initial weight w0 and the data. However, this simpli-fication might misleadingly imply that a minimal η would result in optimal learning outcomes. A crucial aspect over-looked in this interpretation is the role of the projection term ΓM 
+
+> 1
+
+= QMj=1 (I − ηHj )2N , which becomes an identity matrix I when η = 0 . Thus, while setting η = 0 eliminates other error terms, it also exacerbates the first term of bias error, potentially making it the most significant error con-tributor. Consequently, there exists a trade-off in choosing the step size. The subsequent theorem presents a nearly matching lower bound. 
+
+Theorem 3.2 (Lower Bound) . Consider a scenario where the model w undergoes training via SGD for M distinct tasks, following a sequence 1, . . . , M . With a constant step size of η ≤ 1/R 2 given that R2 = max {αm tr( Hm)}Mm=1 ,each task m is executed for N iterations. Given that As-sumptions (B) and 2.4 are satisfied, the following will hold: 
+
+G(M ) ≥ err var + err bia ,
+
+where the variance and bias errors are lower bounded by 
+
+err var ≥
+
+PMm=1 
+
+M · 9η2σ2
+
+20 · Deff  
+
+> 1
+
+,
+
+err bias ≥
+
+PMk=1 
+
+M ∥w0 − w∗∥2 
+
+> ΓM
+> 1Hk
+
++
+
+PMm=1 
+
+M · β2
+
+> m
+
+η2
+
+25 · (Deff  
+
+> 2
+
++ ˆΦm−11 Deff  
+
+> 3
+
+) · ∥ w0 − w∗∥2
+
+> Uk∗
+> m
+
++
+
+PMm=1 
+
+Mβmη2
+
+5 · ∥ w0 − w∗∥2(I−ηHm)2N ΓM   
+
+> 1Hk(Hm+ ˆΦm−11I)·Uk∗
+> m
+
+where the effective dimensions k∗
+
+> m
+
+, Γi 
+
+> (p,q )
+
+and Γqp are the same as in Theorem 3.1, and ˆΦm−11 := Pm−1
+
+> j=1
+
+Qjk=1 βk ( η 
+
+> 2
+
+)j ·⟨Hk−1, (I − (I − ηHm−1)2N )⟩ · ⟨ Hj , Hm⟩.
+
+Analogous to the Theorem 3.1, our lower bound also con-sists of the bias term and the variance term. It is noteworthy that our lower bound is tight with the upper bound in terms of variance term, differing only by absolute constants. Addi-tionally, our lower bound closely matches the upper bound in terms of the bias term, with some differences arising from the following quantities 
+
+ˆΦm−11 ∥w0 − w∗∥2
+
+> Uk∗
+> m
+
+, ∥w0 − w∗∥(I−ηHm)2N .
+
+Specifically, ˆΦm−11 here differs from Φm−11 in Theorem 3.1 only by a factor of constants (i.e. αk and βk defined in Assumption 2.3). The term ∥w0 − w∗∥(I−ηHm)2N has a different subscript of (I − ηHm)2N compared to that of the upper bound. Nevertheless, it can be regarded as a part of the projection accumulation ΓM 
+
+> 1
+
+that exists in the subscript of both results simultaneously. More importantly, we show that the upper and lower bounds converge, ignoring constant factors, under the conditions 
+
+∥w0 − w∗∥2
+
+> Uk∗
+> m
+
+≲ σ2, ˆΦm−11 ≲ O(1) ,
+
+which can be satisfied that the signal-to-noise ratios ∥w0 −
+
+w∗∥2
+
+> Uk∗
+> m
+
+/σ 2 is bounded and the step size is appropriate small. 
+
+## 4. Discussion 
+
+Building on Theorem 3.1 and Theorem 3.2, we aim to offer a more comprehensive understanding of our findings from three key perspectives: 1) Technical Understanding Under Simplified Cases; 2) Comparison with Existing Work; 3) The Impact of Task Ordering and Parameters on Forgetting. 
+
+4.1. Technical Understanding Under Simplified Cases 
+
+In this section, we demonstrate how to achieve a vanishing bound in the overparameterized regime. Based on Theorem 3.1, we consider a scenario where 
+
+∥w0 − w∗∥22, σ 2 ≲ 1 and tr( Hm) ≃ 1 for each task m,implying a rapid decay in the spectrum of Hm. To obtain a vanishing bound in the overparameterized regime, the effective dimension should hold that 
+
+Deff  
+
+> 1
+
+≃ Deff  
+
+> 3
+
+= o( M N e(M −m) ),Deff  
+
+> 2
+
+= o( M N eM ).
+
+(6) To meet the condition in Equation (6), for each task em, let 
+
+k† = min {k∗
+
+> m
+
+, k ∗
+
+> em
+
+} and k⋆ = max {k∗
+
+> m
+
+, k ∗
+
+> em
+
+}. It necessar-ily holds that 
+
+X
+
+> i<k ⋆
+
+λi 
+
+> em
+
+≃ X
+
+> i<k ⋆
+
+λimλi 
+
+> em
+
+≃ X
+
+> i<k ⋆
+
+(λim)2λi 
+
+> em
+
+= o(N ),
+
+X
+
+> i>k †
+
+λi
+
+> em
+
+λim ≃ X
+
+> i>k †
+
+(λim)2λi 
+
+> em
+
+≃ X
+
+> i>k †
+
+(λim)3λi 
+
+> em
+
+= o( 1
+
+N ).
+
+(7) 
+
+To clarify Equation (7), let notice the crucial cut-off index 
+
+k⋆ and k†, which divide the entire feature space into two 5Understanding Forgetting in Continual Learning with Linear Regression 
+
+k⋆-dimensional and k†-dimensional subspaces. For achiev-ing a diminishing bound in overparameterized setting, it is necessary that the sum of eigenvalues for indices less than k⋆, denoted as P 
+
+> i<k ⋆
+
+, should be o(N ), and the sum of the tail eigenvalues for indices greater than k†, P 
+
+> i>k †
+
+,should be o( 1 
+
+> N
+
+). These conditions are typically met when the dataset size N is sufficiently large, or when a smaller step size η is chosen dependent on N . Additionally, We note that the condition in Equation (7) can be relaxed. In light of the definition of k∗
+
+> m
+
+, the eigenvalues for task em are truncated based on the following two scenarios: 1) k∗
+
+> m
+
+<k ∗
+
+> em
+
+: Here, the cut-off for task em occurs earlier, resulting in an additional (k∗ 
+
+> em
+
+− k∗
+
+> m
+
+) dimensions of eigenvalues such that λi 
+
+> em
+
+≥ 1/(N η ). To achieve a diminishing bound un-der this condition, it is necessary that P
+
+> k∗
+> m≤i≤k∗
+> ˜m
+
+λi 
+
+> em
+
+=
+
+o(N ). 2) k∗ 
+
+> m
+
+≥ k∗ 
+
+> em
+
+: In this case, the cut-off for task em
+
+occurs later, involving an additional (k∗ 
+
+> m
+
+− k∗
+
+> em
+
+) dimensions of eigenvalues where λi 
+
+> em
+
+≤ 1/(N η ), achieving the same results. In the under-parameterized regime, we even account for the worst-case scenario where λim ≥ 1 
+
+> N η
+
+for all index i and task 
+
+m, leading to a bound of Deff  
+
+> 1
+
+≃ Deff  
+
+> 3
+
+= o( M dλ 1  
+
+> m
+> e(M−m)
+
+), D eff  
+
+> 2
+
+=
+
+o( M dλ 1 
+
+> m
+> eM
+
+).
+
+4.2. Comparison with Existing work 
+
+In this section, we will first explore the challenges and par-allels between traditional/transfer learning and continual learning. Secondly, we examine how restrictive assump-tions in previous studies might overshadow the impact of key factors, thereby affecting the overall understanding of forgetting in continual learning. Our results reveal that compared to traditional learning (Zou et al., 2021), which typically involves a single task, and transfer learning (Wu et al., 2022b), which usually incorpo-rates two data distributions, the effective dimension in con-tinual learning scenarios is more complex. Specifically, in our analysis, the term Λi arises from a distinct measurement perspective (i.e. forgetting ), which requires us to consider how the final output aligns with all previously encountered tasks in the continual learning (i.e. Hm for all m). This is in contrast to both traditional training and transfer learning, where the evaluation metric is uniformly focused on perfor-mance against a single dataset (i.e. HM ). Moreover, the multi-task nature of continual learning introduces unique challenges considering the bias iterates and variance iterates, where we refer to the proof in Appendix for more details. Given that our analysis, similar to theirs, characterizes bounds with the full eigenspectrum of the data covariance matrix, it follows that our derived results match their find-ings in several aspects: 1) The cutoff index k∗ 
+
+> m
+
+is uniquely determined for each task m in continual learning, akin to the one in Zou et al. 2021; Wu et al. 2022b, where they identify corresponding indices k∗ 
+
+> training
+
+and k∗ 
+
+> test
+
+. 2) The projection terms Γi 
+
+> (p,q )
+
+and Γqp also occur in transfer learn-ing (Wu et al., 2022b), showing how previous iterations/past learning is projected onto the future updates. Previous work (Evron et al., 2022) also explored the dynam-ics of forgetting through the perspective of projection. We first revisit the findings presented by Evron et al. 2022. Con-sidering a scenario where the number of iterations N = 1 ,the update rule in their analysis can be reformulated as follows: 
+
+wm − w∗ = ( I − ηmxmx⊤
+
+> m
+
+)( wm−1 − w∗), (8) where they incorporate the noiseless model assumption that 
+
+ym = x⊤
+
+> m
+
+w∗. As a result, the forgetting in Evron et al. 2022 holds that                     
+
+> G(M) = 1
+> M
+> MX
+> m=1
+> ∥xm(wM−w∗)∥22,given ∥xm∥2≤1
+> ≤1
+> M
+> MX
+> m=1
+> ∥(I−ηmxMx⊤
+> M). . . (I−ηmx1x⊤
+> 1)( w0−w∗)∥22,
+
+indicating that the forgetting dynamic can be determined by the projection of (I − ηmxmx⊤
+
+> m
+
+), where ηm = ∥xm∥−2.However, compared to our analysis, their study exhibits sev-eral key differences in comparison to ours. 1) The inherent model noise: Evron et al. 2022 considers a noiseless model, where results in the absence of an additional iterative term 
+
+xm ·zm related to noise in Equation (8). This omission leads to a lack of accumulative variance error in the evaluation of forgetting performance (i.e. err var in our analysis). It is noteworthy to mention that in numerous learning prob-lems, the variance error often plays a dominant role in the total error (Jain et al., 2018; Zou et al., 2021; Wu et al., 2022b). 2) The bounded norm ∥x∥2: the assumption of the bounded norm, which omits the interaction with pro-jection effects, is crucial in our analysis as the factor Λi in Theorem 3.1 and Theorem 3.2. 3) Last iterate SGD results: Evron et al. 2022 shows that, with a ∥xm∥−22 step size, their worst-case expected forgetting will become a dimension-dependent bound of O(d/M ). This analysis, conducted under the overparameterized regime, suggests the occur-rence of catastrophic forgetting . In contrast, our results, as discussed earlier, offer a different perspective, suggesting the possibility of achieving a vanishing forgetting bound in overparameterized settings with certain conditions met. It is noticed that Lin et al. 2023 also investigates the rela-tionship between catastrophic forgetting and factors such as task sequence (order) and dimensionality. However, their results will tend to be vacuous in the under-parameterized setting since (XmX⊤
+
+> m
+
+)−1, data matrix for task m, is non-invertible when employing minimum norm solution, as we discussed earlier in Section 2. Due to space constraints, a more extensive discussion will be provided in Appendix D. 6Understanding Forgetting in Continual Learning with Linear Regression           
+
+> (a) (b) (c) (d)
+> (e) (f) (g) (h)
+> (i) (j) (k) (l) Figure 1:
+
+Impact of Task Sequence and Algorithmic Parameters on Forgetting Behavior with Linear Regression Model and Deep Neural Networks. This figure presents the relationship between task sequence order and algorithmic parameters (data size, dimensionality, and step size) on the forgetting behavior observed in linear regression models (figures (a)-(f)) and deep neural networks (figures (g)-(l)). Figures (a), (b), (i), and (j) illustrate how varying data sizes impact forgetting behavior for different task sequences, while figures (c), (d), (k), and (l) demonstrate the effect of changing dimensionality on forgetting. Lastly, Figures (e)-(h) demonstrate the influence of stepsize on the rate of forgetting across different model configurations. 
+
+4.3. The Impact of Task Ordering and Parameters on Forgetting 
+
+In the upcoming discussion, we will present theoretical insights derived from our results. Notice that the bounds in Theorem 3.1 and Theorem 3.2 contain two crucial factors: the effective dimension Deff and the covariance accumulation ˆΦm−11 /Φm−11 . We first discuss the effective dimension. Each Deff is consist of a projection term Γi  
+
+> (m,M )
+
+and the eigenvalues λim, with Λi serving as the constant. It can be observed that when data size N ap-proaches infinity, the projection term converges to 1  
+
+> eM−m
+
+,implying that the eigenvalue will predominantly dictate the larger effective dimension with respect to λim  
+
+> eM−m
+
+. This obser-vation highlights the substantial influence of eigenvalues on task sequence in continual learning. Specifically, it shows that when data size is sufficiently large, task sequences organized in a way, where tasks associated with larger eigenvalues in their population data covariance matrix are trained later, exhibit more forgetting . Additionally, if the step size is appropriately small, the projection term stabilizes to a constant of less than 1, leading to similar outcomes as in the first scenario. It is noteworthy that these insights can not be derived from the existing work analysis due to their restrictive assumptions, such as Gaussian data distribution in Lee et al. 2021; Asanuma et al. 2021; Lin et al. 2023 and minimum norm solution in Evron et al. 2022; Lin et al. 2023; Swartworth et al. 2023. The covariance accumulation term, ˆΦm−11 /Φm−11 , which includes the covariance matrices Hj≤m and the step size 
+
+η, plays a crucial role in demonstrating how previously ac-quired information is retained and influences the model’s adaptability to new tasks. Notably, there is an interest-ing contradiction in the optimal accumulation order within 
+
+ˆΦm−11 /Φm−11 compared to the projection term in Γi 
+
+> (m,M )
+
+.Specifically, earlier occurrence of Hj with larger expected eigenvalues tends to increase the degree of forgetting. Mean-while, an important observation is that if the step size is suf-ficiently small, the impact of the covariance accumulation term becomes less significant. This interplay between the effective dimension and covariance accumulation elucidates the complexities inherent in continual learning scenarios. 
+
+## 5. Empirical Stimulation 
+
+In this section, we conduct experiments using synthetic data to validate our theoretical results and shed light on the intricate interplay between eigenvalues , step size , and 7Understanding Forgetting in Continual Learning with Linear Regression 
+
+dimensionality .
+
+Experimental Setup In our study, we designed three dis-tinct tasks, denoted as Tasks 1,2, and 3, each with a different feature space. During the initial simulations, the eigenvalues for the feature values of Tasks 1, 2, and 3 were set accord-ing to λi = i−3, λ i = i−2, and λi = i−1 respectively. To mimic real-world data imperfections, Gaussian noise with a standard deviation of 0.1 was added to the labels. We as-sessed the impact of task sequence on the model’s tendency to forget by evaluating six different task orders: [1,2,3], [2,1,3], [1, 3, 2], [3, 1, 2], [2, 3, 1], and [3, 2, 1]. 
+
+5.1. Linear Regression Training and Evaluation For this experiment, a linear re-gression model was trained using Stochastic Gradient De-scent (SGD) with a learning rate of 0.01 or 0.001. The model was tested in both low-dimensional (10 input fea-tures) and high-dimensional (1000 input features) settings. Each task sequence underwent training with various data sizes, ranging from 100 to 950 in increments of 50, and each task was trained for five epochs. The performance of the model was evaluated on each task to calculate the average excess risk (Equation (1)), quantifying the degree of forgetting the model experienced. 
+
+Impact of Eigenvalue Sequencing The observations from Figure 1a and Figure 1c reveal the significant impact of eigenvalue sequencing on forgetting behavior in the under-parameterzied regime. Notably, task sequences that are arranged such that tasks with larger eigenvalues (i.e. Task 3 in our case, characterized by λi = i−1 ) are trained later in the learning process tend to result in increased forget-ting. This empirical finding aligns well with our theoretical analysis (the term λim  
+
+> eM−m
+
+discussed in Section 4.3). In an under-parameterized setting, or when the eigenvalues decay rapidly, the effective dimension — crucial in determining the model’s forgetting performance - is largely influenced by the eigenvalues. Such a pattern is intuitive as when tasks with larger eigenvalues are trained later, the model might overfit these tasks due to their high variance. 
+
+Impact of Dimensionality Our results, depicted in Fig-ure 1c and Figure 1d, show that in under-parameterized scenarios, performance remains relatively unaffected by an increase in dimensionality. However, in over-parameterized settings, the model tends to exhibit increased forgetting as dimensionality rises, particularly when the data size is kept constant. This highlights the varying impact of dimension-ality on model performance in different parameterization contexts. In higher-dimensional settings, the influence of the projection term Γi
+
+> (p,q )
+
+, as shown in Theorem 3.1, diminishes in comparison to the impact of Λi and λi. Consequently, as the number of features in the model increases, the sequence in which tasks are presented becomes less significant in de-termining the model’s forgetting behavior. This shift implies that, in high-dimensional scenarios, the inherent complexity and the distribution of eigenvalues of the feature space play a more critical role than the sequence of tasks, influencing the model’s learning and retention capabilities. 
+
+Impact of Step-size Our results, depicted in Figure 1e and Figure 1f, reveal that a smaller step size effectively reduces forgetting in various task sequences and across different dimensionalities. This trend is especially noticeable in high-dimensional feature spaces, where a reduced step size markedly lowers the rate of forgetting. This observation is in line with the theoretical insights provided in Theorem 3.1 and Theorem 3.2, as smaller step sizes may lead to more refined updates during training, allowing the model to incre-mentally adjust to new tasks while preserving knowledge from previous ones. 
+
+5.2. Implication on DNNs 
+
+Intriguingly, our next discussion will adopt the same data generation and task setup as outlined in Section 5.1, but shift our focus to a different Neural Network model. This model comprises an input layer, a hidden layer with ten neurons, and an output layer, and it undergoes a training process akin to that of linear regression. 
+
+Impact of Eigenvalue Sequencing In our studies with Deep Neural Networks (DNNs), we still find that task sequences, ending with tasks having larger eigenvalues, tend to exhibit increased forgetting, especially in under-parameterized set-tings, similar to linear regression models. This indicates that the tendency of overfitting observed in linear models, particularly when tasks with larger eigenvalues are trained later in the sequence, may occur in DNNs as well. 
+
+Impact of Dimensionality Our results also reveal the consis-tent behaviors between DNNs and linear regression concern-ing dimensionality. In under-parameterized scenarios (Fig-ure 1k), forgetting remains stable despite increased dimen-sionality, while in over-parameterized settings (Figure 1l), higher dimensionality leads to more forgetting when data size is fixed. However, the adverse effects of higher di-mensions can be alleviated by expanding the dataset size, as demonstrated in Figure 1j. It is a notable contrast to linear regression, which suggests that the complex struc-tures of DNNs are better suited to manage and learn from high-dimensional data in continual learning scenarios. The different behaviors observed between DNNs and linear re-gression models will be a potentially interesting direction for future work. 
+
+Impact of Step Size Our results, depicted in Figure 1e and Figure 1f, indicate that in under-parameterized settings, a smaller step size significantly lessens the influence of 8Understanding Forgetting in Continual Learning with Linear Regression 
+
+task sequences on forgetting, while in models with high-dimensional features, forgetting can be mitigated even with-out adjusting the step size. 
+
+## 6. Conclusion 
+
+In this work, we contribute to the understanding of catas-trophic forgetting in continual learning via a multi-step SGD algorithm. Our theoretical analysis establishes bounds that illustrate the impact of various factors on forgetting such as data covariance matrix spectrum, step size, data size, and dimensionality, which can not be fully captured in previous studies due to their restrictive assumptions. This theoretical understanding is further substantiated through simulations conducted in linear regression models and Deep Neural Networks, which corroborate our theoretical insights. 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none of which we feel must be specifically highlighted here. 
+
+## Acknowledgments 
+
+The research of Meng Ding and Jinhui Xu was supported in part by KAUST through grant CRG10-4663.2. Di Wang was supported in part by the baseline funding BAS/1/1689-01-01, funding from the CRG grand URF/1/4663-01-01, REI/1/5232-01-01, REI/1/5332-01-01, FCC/1/1976-49-01 from CBRC of King Abdullah University of Science and Technology (KAUST). Di Wang was also supported by the funding RGC/3/4816-09-01 of the SDAIA-KAUST Center of Excellence in Data Science and Artificial Intelligence (SDAIA-KAUST AI). 
+
+## References 
+
+Aljundi, R., Babiloni, F., Elhoseiny, M., Rohrbach, M., and Tuytelaars, T. Memory aware synapses: Learning what (not) to forget. In Proceedings of the European conference on computer vision (ECCV) , pp. 139–154, 2018. Asanuma, H., Takagi, S., Nagano, Y., Yoshida, Y., Igarashi, Y., and Okada, M. Statistical mechanical analysis of catastrophic forgetting in continual learning with teacher and student networks. Journal of the Physical Society of Japan , 90(10):104001, 2021. Bennani, M. A., Doan, T., and Sugiyama, M. Generali-sation guarantees for continual learning with orthogonal gradient descent. arXiv preprint arXiv:2006.11942 , 2020. Chaudhry, A., Ranzato, M., Rohrbach, M., and Elhoseiny, M. Efficient lifelong learning with a-gem. arXiv preprint arXiv:1812.00420 , 2018. Chen, X., Liu, Q., and Tong, X. T. Dimension independent generalization error by stochastic gradient descent. arXiv preprint arXiv:2003.11196 , 2020. Cortes, C. and Mohri, M. Domain adaptation and sam-ple bias correction theory and algorithm for regression. 
+
+Theoretical Computer Science , 519:103–126, 2014. Cortes, C., Mohri, M., and Medina, A. M. Adaptation based on generalized discrepancy. The Journal of Machine Learning Research , 20(1):1–30, 2019. D ´efossez, A. and Bach, F. Averaged least-mean-squares: Bias-variance trade-offs and optimal sampling distribu-tions. In Artificial Intelligence and Statistics , pp. 205–213. PMLR, 2015. Dieuleveut, A., Flammarion, N., and Bach, F. Harder, better, faster, stronger convergence rates for least-squares regres-sion. The Journal of Machine Learning Research , 18(1): 3520–3570, 2017. Doan, T., Bennani, M. A., Mazoure, B., Rabusseau, G., and Alquier, P. A theoretical analysis of catastrophic forgetting through the ntk overlap matrix. In International Conference on Artificial Intelligence and Statistics , pp. 1072–1080. PMLR, 2021. Evron, I., Moroshko, E., Ward, R., Srebro, N., and Soudry, D. How catastrophic can catastrophic forgetting be in linear regression? In Conference on Learning Theory , pp. 4028–4079. PMLR, 2022. Farajtabar, M., Azizan, N., Mott, A., and Li, A. Orthogonal gradient descent for continual learning. In International Conference on Artificial Intelligence and Statistics , pp. 3762–3773. PMLR, 2020. Hanneke, S. and Kpotufe, S. On the value of target data in transfer learning, 2020. Hao, J., Ji, K., and Liu, M. Bilevel coreset selection in continual learning: A new formulation and algorithm. In 
+
+Thirty-seventh Conference on Neural Information Pro-cessing Systems , 2023. Jacot, A., Gabriel, F., and Hongler, C. Neural tangent ker-nel: Convergence and generalization in neural networks. 
+
+Advances in neural information processing systems , 31, 2018. Jain, P., Kakade, S. M., Kidambi, R., Netrapalli, P., Pil-lutla, V. K., and Sidford, A. A markov chain theory approach to characterizing the minimax optimality of stochastic gradient descent (for least squares). arXiv preprint arXiv:1710.09430 , 2017. 9Understanding Forgetting in Continual Learning with Linear Regression 
+
+Jain, P., Kakade, S., Kidambi, R., Netrapalli, P., and Sid-ford, A. Parallelizing stochastic gradient descent for least squares regression: mini-batching, averaging, and model misspecification. Journal of machine learning research ,18, 2018. Karczmarz, S. Angenaherte auflosung von systemen linearer glei-chungen. Bull. Int. Acad. Pol. Sic. Let., Cl. Sci. Math. Nat. , pp. 355–357, 1937. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Des-jardins, G., Rusu, A. A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the national academy of sciences , 114(13):3521–3526, 2017. Kpotufe, S. and Martinet, G. Marginal singularity, and the benefits of labels in covariate-shift. In Conference On Learning Theory , pp. 1882–1886. PMLR, 2018. Lee, S., Goldt, S., and Saxe, A. Continual learning in the teacher-student setup: Impact of task similarity. In 
+
+International Conference on Machine Learning , pp. 6109– 6119. PMLR, 2021. Lin, S., Yang, L., Fan, D., and Zhang, J. Trgp: Trust region gradient projection for continual learning. arXiv preprint arXiv:2202.02931 , 2022. Lin, S., Ju, P., Liang, Y., and Shroff, N. Theory on forgetting and generalization of continual learning. arXiv preprint arXiv:2302.05836 , 2023. Liu, H. and Liu, H. Continual learning with recursive gra-dient optimization. arXiv preprint arXiv:2201.12522 ,2022. Ma, C., Pathak, R., and Wainwright, M. J. Optimally tack-ling covariate shift in rkhs-based nonparametric regres-sion, 2023. McCloskey, M. and Cohen, N. J. Catastrophic interfer-ence in connectionist networks: The sequential learning problem. In Psychology of learning and motivation , vol-ume 24, pp. 109–165. Elsevier, 1989. Mohri, M. and Medina, A. M. New analysis and algorithm for learning with drifting distributions, 2012. Pan, S. J. and Yang, Q. A survey on transfer learning. IEEE Transactions on knowledge and data engineering , 22(10): 1345–1359, 2009. Pathak, R., Ma, C., and Wainwright, M. A new similar-ity measure for covariate shift with applications to non-parametric regression. In International Conference on Machine Learning , pp. 17517–17530. PMLR, 2022. Riemer, M., Cases, I., Ajemian, R., Liu, M., Rish, I., Tu, Y., and Tesauro, G. Learning to learn without forgetting by maximizing transfer and minimizing interference. arXiv preprint arXiv:1810.11910 , 2018. Saha, G., Garg, I., and Roy, K. Gradient projection memory for continual learning. arXiv preprint arXiv:2103.09762 ,2021. Serra, J., Suris, D., Miron, M., and Karatzoglou, A. Over-coming catastrophic forgetting with hard attention to the task. In International conference on machine learning ,pp. 4548–4557. PMLR, 2018. Shin, H., Lee, J. K., Kim, J., and Kim, J. Continual learning with deep generative replay. Advances in neural informa-tion processing systems , 30, 2017. Sugiyama, M. and Kawanabe, M. Machine learning in non-stationary environments: Introduction to covariate shift adaptation . MIT press, 2012. Swartworth, W. J., Needell, D., Ward, R., Kong, M., and Jeong, H. Nearly optimal bounds for cyclic forgetting. In Thirty-seventh Conference on Neural Information Pro-cessing Systems , 2023. URL https://openreview. net/forum?id=X25L5AjHig .Wu, J., Zou, D., Braverman, V., Gu, Q., and Kakade, S. Last iterate risk bounds of sgd with decaying stepsize for over-parameterized linear regression. In International Con-ference on Machine Learning , pp. 24280–24314. PMLR, 2022a. Wu, J., Zou, D., Braverman, V., Gu, Q., and Kakade, S. The power and limitation of pretraining-finetuning for linear regression under covariate shift. Advances in Neu-ral Information Processing Systems , 35:33041–33053, 2022b. Yang, L., Lin, S., Zhang, J., and Fan, D. Grown: Grow only when necessary for continual learning. arXiv preprint arXiv:2110.00908 , 2021. Yoon, J., Yang, E., Lee, J., and Hwang, S. J. Lifelong learning with dynamically expandable networks. arXiv preprint arXiv:1708.01547 , 2017. Yoon, J., Kim, S., Yang, E., and Hwang, S. J. Scalable and order-robust continual learning with additive parameter decomposition. arXiv preprint arXiv:1902.09432 , 2019. Zou, D., Wu, J., Braverman, V., Gu, Q., and Kakade, S. Be-nign overfitting of constant-stepsize sgd for linear regres-sion. In Conference on Learning Theory , pp. 4633–4635. PMLR, 2021. 10 Understanding Forgetting in Continual Learning with Linear Regression 
+
+## A. Support Lemmas 
+
+Notations 
+
+For two matrices A and B, their inner product is defined as ⟨A, B⟩ := tr( A⊤B). For each task m ∈ [M ], we define the following linear operators: 
+
+I = I ⊗ I, Mm = E[xm ⊗ xm ⊗ xm ⊗ xm], fMm = Hm ⊗ Hm,
+
+T = H ⊗ I + I ⊗ Hm − ηMm, eT = Hm ⊗ I + I ⊗ Hm − ηHm ⊗ Hm.
+
+We use the notation O ◦ A to denote the operator O acting on a symmetric matrix A. For example, with these definitions, we have that for a symmetric matrix A,
+
+I ◦ A = A, Mm ◦ A = E[( xm⊤Ax m)xmxm⊤], fMm ◦ A = HmAH m
+
+(I − η eTm) ◦ A = ( I − ηHm)A(I − ηHm)(I − ηTm) ◦ A = E[( I − ηxmxm⊤)A(I − ηxmxm⊤)] 
+
+It can be readily understood that the following properties are satisfied: 
+
+Lemma A.1 ((Zou et al., 2021)) . An operator O, when defined on symmetric matrices, is termed a Positive Semi-Definite (PSD) mapping if A ⪰ 0 implies O ◦ A ⪰ 0. Consequently, for each task m ∈ [M ] we have: 1. Mm and fMm are both PSD mappings. 2. Mm − fMm and eTm − T m are both PSD mappings. 3. I − ηTm and I − η eTm are both PSD mappings. 4. If 0 < η < 1/λ 1
+
+> m
+
+, then eT −1 exists, and is a PSD mapping. 5. If 0 < η < 1/(αm tr( Hm)) , then T −1 
+
+> m
+
+◦ A exists for PSD matrix A, and T −1 
+
+> m
+
+is a PSD mapping. 
+
+Then for the SGD iterates, we can consider their associated bias iterates and variance iterates: 
+
+(
+
+B0 = ( w0 − w∗)( w0 − w∗)⊤,
+
+B(m−1) N +t+1 = ( I − ηTm(η)) ◦ B(m−1) N +t; (9) 
+
+(
+
+C0 = 0,
+
+C(m−1) N +t+1 = ( I − ηTHm (η)) ◦ C(m−1) N +t + η2ΣHm ; (10) where t = 0 , . . . , N − 1 and m = 1 , . . . , M .
+
+Lemma A.2 (Bias-variance decomposition) . Suppose that Assumption 2.4 holds. Then we have: 
+
+E[ExcessRisk( wM N )] = 12 ⟨H, BM N ⟩ + 12 ⟨H, CM N ⟩.
+
+## B. Variance Error 
+
+B.1. Upper Bound 
+
+The assumption presented below can be inferred from 2.3 by setting A = I, given that R2 = max {αm tr( Hm)}Mm=1 .
+
+Assumption B.1 (Relaxed version) . For each task m, there exists a constant R ≥ 0 such that: 
+
+Ex∼D m [xx ⊤xx ⊤] ⪯ R2Hm.
+
+Lemma B.2. Suppose Assumptions 2.3 and 2.4 hold with step size η ≤ 1/R 2, then it holds that: 
+
+Ct ≤ ησ 2
+
+1 − ηR 2 I, for every t = 0 , 1, . . . , M N 
+
+11 Understanding Forgetting in Continual Learning with Linear Regression 
+
+Proof. This lemma is derived directly from the Lemmas in (Jain et al., 2018; Zou et al., 2021). To ensure completeness, we include a proof as follows. We prove the lemma via induction. Initially, for t = 0 , it is evident that C0 = 0 ⪯ ησ 2 
+
+> 1−ηR 2
+
+I. Now, assuming that 
+
+Ct ⪯ ησ 2 
+
+> 1−ηR 2
+
+I, let us examine Ct+1 in light of Equation (9). When 0 ≤ t ≤ N − 1, for each task m, it implies: 
+
+C(m−1) N +t+1 = ( I − ηTHm (η)) ◦ C(m−1) N +t + η2ΣHm
+
+⪯ ησ 2
+
+1 − ηR 2 I · (I − ηTHm (η)) ◦ I + η2σ2Hm (11) 
+
+⪯ ησ 2
+
+1 − ηR 2 · (I − 2ηHm + η2R2Hm) + η2σ2Hm
+
+⪯ ησ 2
+
+1 − ηR 2 · I.
+
+Lemma B.3. Suppose Assumptions 2.3 and 2.4 hold with step size η ≤ 1/R 2, then it holds that: 
+
+CM N ⪯
+
+> M
+
+Y
+
+> m=2
+
+(I − η eTHm (η)) N ◦ CN + 
+
+> M−1
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m+1
+
+(I − η eTHj (η)) N Pm + PM ,
+
+where Pm = η2σ2
+
+> 1−ηR 2
+
+PN −1 
+
+> t=0
+
+(I − η eTHm (η)) t ◦ Hm and CN ⪯ ησ 2 
+
+> 1−ηR 2
+
+· (I − (I − ηH1)N ).
+
+Proof. We first examine the recursion from t = 0 to t = N − 1 for each task m:
+
+C(m−1) N +t+1 = ( I − ηTHm (η)) ◦ C(m−1) N +t + η2ΣHm
+
+⪯ (I − η eTHm (η)) ◦ C(m−1) N +t + η2Mm ◦ C(m−1) N +t + η2σ2Hm
+
+⪯ (I − η eTHm (η)) ◦ C(m−1) N +t + η2R2 · ησ 2
+
+1 − ηR 2 · Hm + η2σ2Hm
+
+⪯ (I − η eTHm (η)) ◦ C(m−1) N +t + η2σ2
+
+1 − ηR 2 Hm,
+
+where the penultimate inequality is derived from the Lemma B.2. Hence, after N iterations, we could have the following results for task m:
+
+C(m−1) N +N ⪯ (I − η eTHm (η)) N ◦ C(m−1) N + η2σ2
+
+1 − ηR 2 
+
+> N−1
+
+X
+
+> t=0
+
+(I − η eTHm (η)) t ◦ Hm.
+
+Now, we consider the first task incorporating with the Lemma B.5 in (Zou et al., 2021), which implies: 
+
+CN ⪯ ησ 2
+
+1 − ηR 2 · (I − (I − ηH1)N ).
+
+By combining the aforementioned results and denoting Pm = η2σ2
+
+> 1−ηR 2
+
+PN −1 
+
+> t=0
+
+(I − η eTHm (η)) t ◦ Hm, we obtain: 
+
+CM N ⪯
+
+> M
+
+Y
+
+> m=2
+
+(I − η eTHm (η)) N ◦ CN + 
+
+> M−1
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m+1
+
+(I − η eTHj (η)) N Pm + PM .
+
+12 Understanding Forgetting in Continual Learning with Linear Regression 
+
+Based on Lemma A.2, the upper bound of the variance error can be expressed as follows: 
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, CM N ⟩ ≤ 
+
+> M
+
+X
+
+> k=1
+
+ησ 2
+
+1 − ηR 2 ⟨Hk,
+
+> M
+
+Y
+
+> m=2
+
+(I − η eTHm (η)) N (I − (I − ηH1)N )⟩
+
+| {z }
+
+> variance term 1
+
++
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, 
+
+> M−1
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m+1
+
+(I − η eTHj (η)) N Pm⟩
+
+| {z }
+
+> variance term 2
+
++
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, PM ⟩
+
+| {z }
+
+> variance term 3
+
+. (12) Let us consider the variance terms separately. variance term 1 =
+
+> M
+
+X
+
+> k=1
+
+ησ 2
+
+1 − ηR 2 ⟨Hk,
+
+> M
+
+Y
+
+> m=2
+
+(I − ηHm)N (I − (I − ηH1)N )( I − ηHm)N ⟩≤
+
+> M
+
+X
+
+> k=1
+
+ησ 2
+
+1 − ηR 2 ⟨
+
+> M
+
+Y
+
+> m=2
+
+(I − ηHm)N Hk, (I − (I − ηH1)N )⟩
+
+= ησ 2
+
+1 − ηR 2
+
+> M
+
+X
+
+> k=1
+
+X
+
+> i
+
+[
+
+> M
+
+Y
+
+> m=2
+
+(1 − ηλ im)N λik(1 − (1 − ηλ i
+
+> 1
+
+)N )] 
+
+≤ ησ 2
+
+1 − ηR 2 ( X
+
+> i<k ∗
+> 1
+
+Γi 
+
+> (2 ,M )
+
+Λi + N η X
+
+> i>k ∗
+> 1
+
+Γi 
+
+> (2 ,M )
+
+λi
+
+> 1
+
+Λi),
+
+(13) where we use the facts that 1 − (1 − ηλ im)N ≤ min {1, ηN λ im} hold for all i ≥ 1 in the last inequality. Before we turn our attention to the second term, we first consider the Pm:
+
+Pm = η2σ2
+
+1 − ηR 2 
+
+> N−1
+
+X
+
+> t=0
+
+(I − η eTHm (η)) t ◦ Hm
+
+= η2σ2
+
+1 − ηR 2 
+
+> N−1
+
+X
+
+> t=0
+
+(I − ηHm)tHm(I − ηHm)t
+
+⪯ ησ 2
+
+1 − ηR 2 (I − (I − ηHm)N ).
+
+Substituting the above to the variance term 2, we have: variance term 2 =
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, 
+
+> M−1
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m+1
+
+(I − η eTHj (η)) N Pm⟩≤ ησ 2
+
+1 − ηR 2
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, 
+
+> M−1
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m+1
+
+(I − η eTHj (η)) N (I − (I − ηHm)N )⟩≤ ησ 2
+
+1 − ηR 2
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, 
+
+> M−1
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m+1
+
+(I − ηHj )N (I − (I − ηHm)N )⟩≤ 
+
+> M−1
+
+X
+
+> m=1
+
+ησ 2
+
+1 − ηR 2 ( X
+
+> i<k ∗
+> m
+
+Γi 
+
+> (m+1 ,M )
+
+Λi + N η X
+
+> i>k ∗
+> m
+
+Γi 
+
+> (m+1 ,M )
+
+λimΛi) (14) Similarly, for the last term, we have: variance term 3 =
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, PM ⟩ ≤ ησ 2
+
+1 − ηR 2 ( X
+
+> i<k ∗
+> M
+
+Γi  
+
+> (M+1 ,M )
+
+Λi + N η X
+
+> i>k ∗
+> M
+
+Γi  
+
+> (M+1 ,M )
+
+λimΛi) (15) 13 Understanding Forgetting in Continual Learning with Linear Regression 
+
+B.2. Lower Bound 
+
+Now, we shift our focus to the lower bound of variance. Similarly, we have the following lemma hold: 
+
+Lemma B.4. Suppose Assumptions 2.3 and 2.4 hold with step size η ≤ 1/R 2, then it holds that: 
+
+CM N ⪰
+
+> M
+
+Y
+
+> m=2
+
+(I − η eTHm (η)) N ◦ CN + 
+
+> M−1
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m+1
+
+(I − η eTHj (η)) N P′ 
+
+> m
+
++ P′ 
+
+> M
+
+,
+
+where P′ 
+
+> m
+
+= η2σ2 PN −1 
+
+> t=0
+
+(I − η eTHm (η)) t ◦ Hm and CN ⪰ ησ 2 
+
+> 2
+
+· (I − (I − ηH1)2N ).Proof. In a similar fashion, let’s first examine the recursion of C from t = 0 to t = N − 1 for each task m.
+
+C(m−1) N +t+1 = ( I − ηTHm (η)) ◦ C(m−1) N +t + η2ΣHm
+
+= ( I − η eTHm (η)) ◦ C(m−1) N +t + η2(Mm − fMm) ◦ C(m−1) N +t + η2σ2Hm
+
+⪰ (I − η eTHm (η)) ◦ C(m−1) N +t + η2σ2Hm,
+
+where we utilize the fact that Mm − fMm is a PSD mapping, as established by A.1. Consequently, after N iterations, the following results can be deduced for task m:
+
+C(m−1) N +N ⪰ (I − η eTHm (η)) N ◦ C(m−1) N + η2σ2 
+
+> N−1
+
+X
+
+> t=0
+
+(I − η eTHm (η)) t ◦ Hm.
+
+Now, we consider the first task incorporating the Lemma C.2 in (Zou et al., 2021), which implies: 
+
+CN ⪰ ησ 2
+
+2 · (I − (I − ηH1)2N ).
+
+By combining the aforementioned results and denoting P′ 
+
+> m
+
+= η2σ2 PN −1 
+
+> t=0
+
+(I − η eTHm (η)) t ◦ Hm, we obtain: 
+
+CM N ⪰
+
+> M
+
+Y
+
+> m=2
+
+(I − η eTHm (η)) N ◦ CN + 
+
+> M−1
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m+1
+
+(I − η eTHj (η)) N P′ 
+
+> m
+
++ P′ 
+
+> M
+
+,
+
+which completes the proof. Drawing from Lemma A.2, the lower bound of the variance error is expressed as follows: 
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, CM N ⟩ ≥ 
+
+> M
+
+X
+
+> k=1
+
+ησ 2
+
+2 ⟨Hk,
+
+> M
+
+Y
+
+> m=2
+
+(I − η eTHm (η)) N (I − (I − ηH1)2N )⟩
+
+| {z }
+
+> variance term 1 ′
+
++
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, 
+
+> M−1
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m+1
+
+(I − η eTHj (η)) N P′
+
+> m
+
+⟩
+
+| {z }
+
+> variance term 2 ′
+
++
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, P′ 
+
+> M
+
+⟩
+
+| {z }
+
+> variance term 3 ′
+
+. (16) 14 Understanding Forgetting in Continual Learning with Linear Regression 
+
+Analogous to the approach for the upper bound, we will examine the terms one by one. variance term 1 ′ =
+
+> M
+
+X
+
+> k=1
+
+ησ 2
+
+2 ⟨Hk,
+
+> M
+
+Y
+
+> m=2
+
+(I − ηHm)N (I − (I − ηH1)2N )( I − ηHm)N ⟩
+
+=
+
+> M
+
+X
+
+> k=1
+
+ησ 2
+
+2 ⟨
+
+> M
+
+Y
+
+> m=2
+
+(I − ηHm)2N Hk, (I − (I − ηH1)2N )⟩
+
+= ησ 2
+
+2
+
+> M
+
+X
+
+> k=1
+
+X
+
+> i
+
+[
+
+> M
+
+Y
+
+> m=2
+
+(1 − ηλ im)2N λik(1 − (1 − ηλ i
+
+> 1
+
+)2N )] 
+
+≥ ησ 2
+
+2
+
+X
+
+> i
+
+[
+
+> M
+
+Y
+
+> m=2
+
+(1 − ηλ im)2N (
+
+> M
+
+X
+
+> k=1
+
+λik)(1 − (1 − ηλ i
+
+> 1
+
+)2N )] (17) To further lower bound the two terms, noticing the following inequality: 
+
+1 − (1 − ηλ i
+
+> 1
+
+)2N ≥
+
+(1 − (1 − 1 
+
+> N
+
+)2N ≥ 1 − e−2 ≥ 910 , λi 
+
+> 1
+
+≥ 1 
+
+> ηN
+
+,
+
+2N · ηλ i 
+
+> 1
+
+− 2N (N −1) 2 · η2λi 
+
+> 12
+
+≥ 9N 
+
+> 10
+
+· ηλ i
+
+> 1
+
+, λi 
+
+> 1
+
+< 1 
+
+> ηN
+
+.
+
+Hence, the first term, we have: variance term 1 ′ ≥ 9η2σ2
+
+20 ( X
+
+> i<k ∗
+> 1
+
+Γi 
+
+> (2 ,M )
+
+Λi + N η X
+
+> i>k ∗
+> 1
+
+Γi 
+
+> (2 ,M )
+
+λi
+
+> 1
+
+Λi).
+
+For the variance term 2′, we notice that: 
+
+P′ 
+
+> m
+
+= η2σ2 
+
+> N−1
+
+X
+
+> t=0
+
+(I − η eTHm (η)) t ◦ Hm = η2σ2 
+
+> N−1
+
+X
+
+> t=0
+
+(I − ηHm)2tHm
+
+≥ η2σ2
+
+2 (I − (I − ηHm)2N )
+
+Substituting the above to the variance term 2’, we have: variance term 2 ′ =
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, 
+
+> M−1
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m+1
+
+(I − η eTHj (η)) N P′
+
+> m
+
+⟩≥ η2σ2
+
+2
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, 
+
+> M−1
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m+1
+
+(I − η eTHj (η)) N (I − (I − ηHm)2N )⟩
+
+= η2σ2
+
+2
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, 
+
+> M−1
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m+1
+
+(I − ηHj )2N (I − (I − ηHm)2N )⟩≥ 9η2σ2
+
+20  
+
+> M−1
+
+X
+
+> m=1
+
+( X
+
+> i<k ∗
+> m
+
+Γi 
+
+> (m+1 ,M )
+
+Λi + N η X
+
+> i>k ∗
+> m
+
+Γi 
+
+> (m+1 ,M )
+
+λimΛi).
+
+Also, similar to the variance term 3’, it holds that: variance term 3’ ≥ 9η2σ2
+
+20 ( X
+
+> i<k ∗
+> M
+
+Γi  
+
+> (M+1 ,M )
+
+Λi + N η X
+
+> i>k ∗
+> M
+
+Γi  
+
+> (M+1 ,M )
+
+λiM Λi).
+
+## C. Bias Error 
+
+Before providing the proof of bias bound, we first introduce the following lemmas for tradition SGD training in Zou et al. 2021. 15 Understanding Forgetting in Continual Learning with Linear Regression 
+
+Lemma C.1 (Summation of bias iterates (Zou et al., 2021)) . Suppose that Assumption 2.3 holds. Suppose that η < 
+
+1/(α tr( Hm)) . Then for every N ≥ 1 and each task m, it holds that: 
+
+12η · (I − (I − ηHm)2N ) ⪯ 
+
+> N−1
+
+X
+
+> t=0
+
+(I − η · T Hm (η)) t ◦ Hm ⪯ 1
+
+η · (I − (I − ηHm)2N )
+
+Lemma C.2. Under Assumptions 2.3, let Ba,b = Ba − (I − ηHm)b−aBa(I − ηHm)b−a, if the stepsize satisfies η < 
+
+1/(αm tr( Hm)) , then for any t ≤ N , it holds that for each task m:
+
+St ⪯
+
+> t−1
+
+X
+
+> k=0
+
+(I − ηHm)k( ηα m tr( B0,N )1 − ηα m tr( Hm) · Hm + B0)( I − ηHm)k,
+
+where denoting St = Pt−1
+
+> k=0
+
+(I − T (η) ◦ B0.
+
+Lemma C.3. Suppose Assumptions 2.3 and 2.4 hold with step size η ≤ 1/R 2, then it holds that: 
+
+St ⪰ βm
+
+4 tr 
+
+ 
+
+I − (I − ηHm)t/ 2
+
+B0
+
+
+
+·
+
+
+
+I − (I − ηHm)t/ 2
+
++
+
+> t−1
+
+X(I − ηHm)t · B0 · (I − ηHm)t,
+
+where denoting St = Pt−1
+
+> k=0
+
+(I − T (η) ◦ B0.
+
+C.1. Upper Bound Lemma C.4. Suppose Assumptions 2.3 and 2.4 hold with step size η ≤ 1/R 2, then it holds that: 
+
+BM N ⪯
+
+> M
+
+Y
+
+> m=1
+
+(I − η eTHm (η)) N ◦ B0 +
+
+> M
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m
+
+(I − η eTHj (η)) N Pm,
+
+where Pm = αmη2 PN −1 
+
+> t=0
+
+(I − ηHm)2tHm⟨Hm, B(m−1) N +t⟩ and Qk2 
+
+> k1
+
+= 1 if k1 > k 2.
+
+We first examine the recursion from t = 0 to t = N − 1 for each task m:
+
+B(m−1) N +t+1 = ( I − ηTHm (η)) ◦ B(m−1) N +t (18) 
+
+= ( I − η eTHm (η)) ◦ B(m−1) N +t + η2(Mm − fMm) ◦ B(m−1) N +t
+
+⪯ (I − η eTHm (η)) ◦ B(m−1) N +t + αmη2 · Hm · ⟨ Hm, B(m−1) N +t⟩.
+
+where the penultimate inequality is derived from the assumption 2.3. Hence, after N iterations, we could have the following results for task m:
+
+B(m−1) N +N ⪯ (I − η eTHm (η)) N ◦ B(m−1) N + αmη2 
+
+> N−1
+
+X
+
+> t=0
+
+(I − η eTHm (η)) tHm⟨Hm, B(m−1) N +t⟩
+
+= ( I − η eTHm (η)) N ◦ B(m−1) N + αmη2 
+
+> N−1
+
+X
+
+> t=0
+
+(I − ηHm)2tHm⟨Hm, B(m−1) N +t⟩
+
+= ( I − η eTHm (η)) N ◦ B(m−1) N + αmη2 
+
+> N−1
+
+X
+
+> t=0
+
+(I − ηHm)2tHm⟨Hm, (I − ηTHm (η)) tB(m−1) N ⟩⪯ (I − η eTHm (η)) N ◦ B(m−1) N + αmη2 
+
+> N−1
+
+X
+
+> t=0
+
+Hm⟨Hm, (I − ηTHm (η)) tB(m−1) N ⟩
+
+16 Understanding Forgetting in Continual Learning with Linear Regression 
+
+We now examine the second term for each m:
+
+N −1X
+
+t=0 
+
+⟨Hm, (I − ηTHm (η)) tB(m−1) N ⟩
+
+=
+
+N −1X
+
+t=0 
+
+⟨Hm, (I − ηTHm (η)) t(I − ηTHm−1 (η)) N . . . (I − ηTH1 (η)) N B0⟩
+
+=
+
+N −1X
+
+t=0 
+
+⟨(I − ηTHm−1 (η)) N . . . (I − ηTH1 (η)) N Hm, (I − ηTHm (η)) tB0⟩,
+
+where we know the following holds: 
+
+(I − ηTHm−1 (η)) ◦ Hm = ( I − η eTHm−1 (η)) ◦ Hm + ( M − fM) ◦ Hm
+
+⪯ (I − η eTHm−1 (η)) ◦ Hm + αm−1η2 · Hm−1 · ⟨ Hm−1, Hm⟩.
+
+Moreover, we have PN −1
+
+t=0 η · Hm−1 · (I − η eTHm−1 (η)) t ⪯ I − (I − ηHm−1)N ⪯ I. Therefore, it holds that: 
+
+(I − ηTHm−1 (η)) N ◦ Hm ⪯ (I − η eTHm−1 (η)) N ◦ Hm + αm−1η · I · ⟨ Hm−1, Hm⟩.
+
+It implies: 
+
+(I − ηTH1 (η)) N . . . (I − ηTHm−1 (η)) N ◦ Hm ⪯ (I − η eTH1 (η)) N . . . (I − η eTHm−1 (η)) N ◦ Hm
+
++
+
+m−1X
+
+j=1 
+
+jY
+
+k=1 
+
+αkηj · ⟨ Hk−1, I − (I − ηHm−1)N ⟩ · ⟨ Hj , Hm⟩ · I,
+
+where we denote H0 = I and define Φm−11 := Pm−1
+
+j=1 
+
+Qjk=1 αkηj · ⟨ Hk−1, I − (I − ηHm−1)N ⟩ · ⟨ Hj , Hm⟩. Therefore, Equation (19) can be represented as follows:  
+
+> N−1
+
+X
+
+> t=0
+
+⟨(I − η eTH1 (η)) N . . . (I − η eTHm−1 (η)) N ◦ Hm + Φ m−11 · I, (I − ηTHm (η)) tB0⟩≤ 
+
+> N−1
+
+X
+
+> t=0
+
+⟨(I − η eTH1 (η)) N . . . (I − η eTHm−1 (η)) N ◦ Hm, (I − ηHm)t( ηα m tr( B0,N )1 − ηα m tr( Hm) · Hm + B0)( I − ηHm)t⟩
+
+| {z }
+
+> term 1
+
++ 
+
+> N−1
+
+X
+
+> t=0
+
+⟨Φm−11 · I, (I − ηHm)t( ηα m tr( B0,N )1 − ηα m tr( Hm) · Hm + B0)( I − ηHm)t⟩
+
+| {z }
+
+> term 2
+
+.
+
+We first consider the term 1 with Lemma C.2. 
+
+term 1 
+
+= 
+
+> N−1
+
+X
+
+> t=0
+
+⟨
+
+> m−1
+
+Y
+
+> j=1
+
+(I − ηHj )2N (I − ηHm)2tHm, ( ηα m tr( B0,N )1 − ηα m tr( Hm) · Hm + B0)⟩
+
+= 
+
+> N−1
+
+X
+
+> t=0
+
+ηα m tr( B0,N )1 − ηα m tr( Hm) ⟨
+
+> m−1
+
+Y
+
+> j=1
+
+(I − ηHj )2N (I − ηHm)2tHm, Hm⟩ + 
+
+> N−1
+
+X
+
+> t=0
+
+⟨(I − ηHm)2tHm, B0⟩≤ αm tr( B0,N )1 − ηα m tr( Hm) ⟨
+
+> m−1
+
+Y
+
+> j=1
+
+(I − ηHj )2N (I − (I − ηHm)N ), Hm⟩ + 1
+
+η ⟨
+
+> m−1
+
+Y
+
+> j=1
+
+(I − ηHj )2N (I − (I − ηHm)N ), B0⟩
+
+= αm tr( B0,N )1 − ηα m tr( Hm)
+
+X
+
+> i
+
+Γi
+
+> (1 ,m −1)
+
+[1 − (1 − ηλ im)N ]λim + 1
+
+η
+
+X
+
+> i
+
+Γi
+
+> (1 ,m −1)
+
+ω2 
+
+> i
+
+[1 − (1 − ηλ im)N ]
+
+≤ αm tr( B0,N )1 − ηα m tr( Hm)
+
+X
+
+> i
+
+Γi 
+
+> (1 ,m −1)
+
+min {1, ηN λ im} + 1
+
+η
+
+X
+
+> i
+
+Γi
+
+> (1 ,m −1)
+
+ω2 
+
+> i
+
+min {1, ηN λ im}≤ αm tr( B0,N )1 − ηα m tr( Hm) ( X
+
+> i≤k∗
+> m
+
+Γi
+
+> (1 ,m −1)
+
+λim
+
+N η + N η X
+
+> i>k ∗
+> m
+
+Γi
+
+> (1 ,m −1)
+
+(λim)2) + 1
+
+η ∥w0 − w∗∥2 
+
+> Γm−11Im, 0: k∗
+> m
+
++ N ∥w0 − w∗∥2 
+
+> Γm−11Hm,k ∗
+> m:∞
+
+17 Understanding Forgetting in Continual Learning with Linear Regression 
+
+where k∗ 
+
+> m
+
+is the index of the smallest eigenvalue of Hm satisfying λik∗ 
+
+> m
+
+≥ 1/(ηN ), and denotes Um =    
+
+> αmtr( B0,N )1−ηα mtr( Hm)
+
+(P 
+
+> i≤k∗
+> m
+> Γi
+> (1 ,m −1)
+> N η
+
++ N η P 
+
+> i>k ∗
+> m
+
+(λim)2) + 1 
+
+> η
+
+∥w0 − w∗∥2 
+
+> Γm−11Im, 0: k∗
+> m
+
++ N ∥w0 − w∗∥2 
+
+> Γm−11Hm,k ∗
+> m:∞
+
+.Moreover, . tr( B0,N ) = tr( B0 − (I − ηHm)N B0(I − ηHm)N )) = P(1 − (1 − ηΛi)2N ) · (⟨w0 − w∗, vi⟩)2, Hence: 
+
+tr( B0,N ) ≤ 2 X
+
+> i
+
+min {1, N η Λi}(⟨w0 − w∗, vi⟩)2 ≤ 2( ∥w0 − w∗∥2
+
+> Im, 0: k∗
+> m
+
++ N η ∥w0 − w∗∥2 
+
+> Hm,k ∗
+> m:∞
+
+).
+
+Now we are ready to examine the term 2. term 2 = 
+
+> N−1
+
+X
+
+> t=0
+
+⟨Φm−11 · I · (I − ηHm)2t, ( ηα m tr( B0,N )1 − ηα m tr( Hm) · Hm + B0)⟩≤ 
+
+> N−1
+
+X
+
+> t=0
+
+ηα m tr( B0,N )1 − ηα m tr( Hm) ⟨Φm−11 · (I − ηHm)2t, Hm⟩ + 
+
+> N−1
+
+X
+
+> t=0
+
+⟨Φm−11 · (I − ηHm)2t, B0⟩≤ αm tr( B0,N )1 − ηα m tr( Hm) ⟨Φm−11 I, (I − (I − ηHm)N )⟩ + 1
+
+η ⟨
+
+> m−1
+
+X
+
+> j=1
+
+⟨Hj , α j Γj−11 · Hm⟩H−1 
+
+> m
+
+(I − (I − ηHm)N ), B0⟩
+
+= αm tr( B0,N )1 − ηα m tr( Hm)
+
+X
+
+> i
+
+Φm−11 [1 − (1 − ηλ im)N ] + 1
+
+η
+
+X
+
+> i
+
+Φm−11
+
+> i
+
+ω2 
+
+> i
+
+(λim)−1[1 − (1 − ηλ im)N ]
+
+≤ αm tr( B0,N )1 − ηα m tr( Hm)
+
+X
+
+> i
+
+Φm−11 min {1, ηN λ im} + 1
+
+η
+
+X
+
+> i
+
+Φm−11 ω2 
+
+> i
+
+(λim)−1 min {1, ηN λ im}≤ αm tr( B0,N )Φ m−11
+
+1 − ηα m tr( Hm) (k∗ 
+
+> m
+
++ N η X
+
+> i>k ∗
+> m
+
+(λim)) + Φm−11
+
+η ∥w0 − w∗∥2
+
+> H−1
+> m, 0: k∗
+> m
+
++ N Φm−11 ∥w0 − w∗∥2 
+
+> Im,k ∗
+> m:∞
+
+.
+
+Let us denote Vm = αm tr( B0,N )Φ m−11  
+
+> 1−ηα mtr( Hm)
+
+(k∗ 
+
+> m
+
++ N η P 
+
+> i>k ∗
+> m
+
+(λim)) + Φm−11 
+
+> η
+
+∥w0 − w∗∥2
+
+> H−1
+> m, 0: k∗
+> m
+
++ N Φm−11 ∥w0 − w∗∥2 
+
+> Im,k ∗
+> m:∞
+
+.By combining the aforementioned results, we obtain: 
+
+BM N ⪯
+
+> M
+
+Y
+
+> m=1
+
+(I − η eTHm (η)) N ◦ B0 +
+
+> M
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m
+
+(I − η eTHj (η)) N Pm,
+
+where denoting Pm = αmη2(Um + Vm) · Hm.Based on Lemma A.2, the upper bound of the bias error can be expressed as follows: 
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, BM N ⟩ ≤ 
+
+> M
+
+X
+
+> k=1
+
+⟨Hk,
+
+> M
+
+Y
+
+> m=1
+
+(I − η eTHm (η)) N ◦ B0⟩
+
+| {z }
+
+> bias term 1
+
++
+
+> M
+
+X
+
+> k=1
+
+⟨Hk,
+
+> M
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m
+
+(I − η eTHj (η)) N Pm⟩
+
+| {z }
+
+> bias term 2
+
+.
+
+18 Understanding Forgetting in Continual Learning with Linear Regression 
+
+For each k:
+
+⟨Hk, BM N ⟩ = ⟨
+
+MY
+
+m=1 
+
+(I − ηHm)2N Hk, B0⟩ + ⟨Hk,
+
+MX
+
+m=1 
+
+MY
+
+j=m
+
+(I − ηHj )2N αmη2(Um + Vm) · Hm⟩≤ ∥ w0 − w∗∥2QMm=1 (I−ηHm)2N Hk
+
++
+
+MX
+
+m=1 
+
+αmη2( αm tr( B0,N )1 − ηα m tr( Hm) ( X
+
+i<k ∗
+
+> m
+
+Γi
+
+(1 ,M )(λim)2λik
+
+N η + N η X
+
+i>k ∗
+
+> m
+
+Γi
+
+(1 ,M )(λim)3λik)) +
+
+MX
+
+m=1 
+
+αmη2(∥w0 − w∗∥2(ΓM 
+
+> 1
+
+HmHk )0: k∗
+
+> m
+
++ N η ∥w0 − w∗∥2(ΓM 
+
+> 1
+
+H2
+
+> m
+
+Hk )k∗ 
+
+> m:∞
+
+) (19) 
+
++
+
+MX
+
+m=1 
+
+αmη2Φm−11 ( αm tr( B0,N )1 − ηα m tr( Hm) ( X
+
+i<k ∗
+
+> m
+
+Γi
+
+(m,M )(λim) + N η X
+
+i>k ∗
+
+> m
+
+Γi
+
+(m,M )(λim)2)) +
+
+MX
+
+m=1 
+
+αmη2Φm−11 ( 1
+
+η ∥w0 − w∗∥2(ΓMm H−1 
+
+> m
+
+)0: k∗
+
+> m
+
++ N ∥w0 − w∗∥2(ΓMm )k∗ 
+
+> m:∞
+
+)
+
+Hence, 
+
+MX
+
+k=1 
+
+⟨Hk, BM N ⟩ ≤ 
+
+MX
+
+k=1 
+
+∥w0 − w∗∥2QMm=1 (I−ηHm)2N Hk
+
++
+
+MX
+
+k=1 
+
+MX
+
+m=1 
+
+αmη2 αm tr( B0,N )1 − ηα m tr( Hm) ( X
+
+i<k ∗
+
+> m
+
+Γi
+
+(1 ,M )(λim)2λik
+
+N η + N η X
+
+i>k ∗
+
+> m
+
+Γi
+
+(1 ,M )(λim)3λik)+
+
+MX
+
+k=1 
+
+MX
+
+m=1 
+
+αmη2(∥w0 − w∗∥2(ΓM 
+
+> 1
+
+HmHk )0: k∗
+
+> m
+
++ N η ∥w0 − w∗∥2(ΓM 
+
+> 1
+
+Hk H2
+
+> m
+
+)k∗
+
+> m:∞
+
+)+
+
+MX
+
+k=1 
+
+MX
+
+m=1 
+
+αmη2Φm−11 ( αm tr( B0,N )1 − ηα m tr( Hm) ( X
+
+i<k ∗
+
+> m
+
+Γi
+
+(m,M )λik(λim) + N η X
+
+i>k ∗
+
+> m
+
+Γi
+
+(m,M )(λim)2λik)) +
+
+MX
+
+k=1 
+
+MX
+
+m=1 
+
+αmηΦm−11 (∥w0 − w∗∥2(ΓMm Hk )0: k∗ 
+
+> m
+
++ N ∥w0 − w∗∥2(ΓMm Hk Hm)k∗ 
+
+> m:∞
+
+)
+
+C.2. Lower Bound 
+
+We first examine the recursion from t = 0 to t = N − 1 for each task m:
+
+B(m−1) N +t+1 = ( I − ηTHm (η)) ◦ B(m−1) N +t (20) 
+
+= ( I − η eTHm (η)) ◦ B(m−1) N +t + η2(Mm − fMm) ◦ B(m−1) N +t
+
+⪰ (I − η eTHm (η)) ◦ B(m−1) N +t + βmη2 · Hm · ⟨ Hm, B(m−1) N +t⟩.
+
+Hence, after N iterations, we could have the following results for task m:
+
+B(m−1) N +N ⪰ (I − η eTHm (η)) N ◦ B(m−1) N + βmη2
+
+N −1X
+
+t=0 
+
+(I − η eTHm (η)) tHm⟨Hm, B(m−1) N +t⟩
+
+= ( I − η eTHm (η)) N ◦ B(m−1) N + βmη2
+
+N −1X
+
+t=0 
+
+(I − ηHm)2tHm⟨Hm, B(m−1) N +t⟩
+
+= ( I − η eTHm (η)) N ◦ B(m−1) N + βmη2
+
+N −1X
+
+t=0 
+
+(I − ηHm)2tHm⟨Hm, (I − ηTHm (η)) tB(m−1) N ⟩
+
+(21) 19 Understanding Forgetting in Continual Learning with Linear Regression 
+
+We now examine the second term for each m:
+
+βmη2 
+
+> N−1
+
+X
+
+> t=0
+
+(I − ηHm)2tHm⟨Hm, (I − ηTHm (η)) tB(m−1) N ⟩
+
+= βmη2 
+
+> N−1
+
+X
+
+> t=0
+
+(I − ηHm)2tHm⟨Hm, (I − ηTHm (η)) t(I − ηTHm−1 (η)) N . . . (I − ηTH1 (η)) N B0⟩
+
+(22) Acccording to Assumption 2.3 (B), we have: 
+
+(I − ηTHm−1 (η)) ◦ Hm = ( I − η eTHm−1 (η)) ◦ Hm + ( M − fM) ◦ Hm
+
+⪰ (I − η eTHm−1 (η)) ◦ Hm + βm−1η2 · Hm−1 · ⟨ Hm−1, Hm⟩→ (I − ηTHm−1 (η)) N ◦ Hm ⪰ (I − η eTHm−1 (η)) N ◦ Hm + βm−1η2 · 
+
+> N−1
+
+X
+
+> t=0
+
+(I − η eTHm−1 (η)) t ◦ Hm−1 · ⟨ Hm−1, Hm⟩⪰ (I − η eTHm−1 (η)) N ◦ Hm + βm−1η
+
+2 · (I − (I − ηHm−1)2N ) · ⟨ Hm−1, Hm⟩.
+
+Therefore, we have iterations that: 
+
+(I − ηTH1 (η)) N . . . (I − ηTHm−1 (η)) N ◦ Hm ⪰ (I − η eTH1 (η)) N . . . (I − η eTHm−1 (η)) N ◦ Hm
+
++
+
+> m−1
+
+X
+
+> j=1
+> j
+
+Y
+
+> k=1
+
+βk( η
+
+2 )j · ⟨ Hk−1, (I − (I − ηHm−1)2N )⟩ · ⟨ Hj , Hm⟩ · I.
+
+Subsituting the above to Equation (22) and denoting ˆΦm−11 := Pm−1
+
+> j=1
+
+Qjk=1 βk( η 
+
+> 2
+
+)j · ⟨ Hk−1, (I − (I − ηHm−1)2N )⟩ · ⟨Hj , Hm⟩, we have:  
+
+> N−1
+
+X
+
+> t=0
+
+⟨Hm, (I − ηTHm (η)) tB(m−1) N ⟩ ⪰  
+
+> N−1
+
+X
+
+> t=0
+
+⟨(I − η eTHm−1 (η)) N . . . (I − η eTH1 (η)) N Hm, (I − ηTHm (η)) tB0⟩
+
++ 
+
+> N−1
+
+X
+
+> t=0
+
+⟨ ˆΦm−11 I, (I − ηTHm (η)) tB0⟩
+
+= ⟨
+
+> m−1
+
+Y
+
+> p=1
+
+(I − ηHp)2N Hm, 
+
+> N−1
+
+X
+
+> t=0
+
+(I − ηTHm (η)) tB0⟩
+
+| {z }
+
+> term 1
+
++ ⟨ ˆΦm−11 I, 
+
+> N−1
+
+X
+
+> t=0
+
+(I − ηTHm (η)) tB0⟩
+
+| {z }
+
+> term 2
+
+From the Lemma, we have:  
+
+> N−1
+
+X
+
+> t=0
+
+(I − ηTHm (η)) tB0 ⪰ βm
+
+4 tr(( I − (I − ηHm)N/ 2)B0) · (I − (I − ηHm)N/ 2)+ 
+
+> N−1
+
+X
+
+> t=0
+
+(I − ηHm)t · B0 · (I − ηHm)t.
+
+20 Understanding Forgetting in Continual Learning with Linear Regression 
+
+Then, for each task m, we examine the term 1: term 1 =⟨
+
+> m−1
+
+Y
+
+> p=1
+
+(I − ηHp)2N Hm, 
+
+> N−1
+
+X
+
+> t=0
+
+(I − ηTHm (η)) tB0⟩≥⟨ 
+
+> m−1
+
+Y
+
+> p=1
+
+(I − ηHp)2N Hm, βm
+
+4 tr(( I − (I − ηHm)N/ 2)B0) · (I − (I − ηHm)N/ 2)⟩
+
++⟨
+
+> m−1
+
+Y
+
+> p=1
+
+(I − ηHp)2N Hm, 
+
+> N−1
+
+X
+
+> t=0
+
+(I − ηHm)t · B0 · (I − ηHm)t⟩
+
+= βm
+
+4 tr(( I − (I − ηHm)N/ 2)B0) · ⟨ 
+
+> m−1
+
+Y
+
+> p=1
+
+(I − ηHp)2N Hm, (I − (I − ηHm)N/ 2)⟩
+
+| {z } 
+
+> bias term bm
+> 1
+
++ 12η ⟨
+
+> m−1
+
+Y
+
+> p=1
+
+(I − ηHp)2N · (I − (I − ηHm)2N ), B0⟩
+
+| {z } 
+
+> bias term bm
+> 2
+
+The first bias item is lower bounded by: bias term bm 
+
+> 1
+
+= βm
+
+4 (X
+
+> i
+
+(1 − (1 − ηλ im)N/ 2)ω2 
+
+> i
+
+) · (X
+
+> im−1
+
+Y
+
+> p=1
+
+(1 − ηλ ip)2N λim(1 − (1 − ηλ im)N/ 2)) ,
+
+The second bias item is lower bounded by: bias term bm 
+
+> 2
+
+≥ (X
+
+> im−1
+
+Y
+
+> p=1
+
+(1 − ηλ ip)2N (1 − (1 − ηλ im)2N )ω2 
+
+> i
+
+)
+
+To further lower bound the two terms, we notice that: 
+
+1 − (1 − ηλ im) N 
+
+> 2
+
+≥
+
+(1 − (1 − 1 
+
+> N
+
+) N 
+
+> 2
+
+≥ 1 − e− 12 ≥ 15 , λim ≥ 1 
+
+> ηN N
+> 2
+
+· ηλ im − N (N −2) 8 · η2λim 
+
+> 2
+
+≥ N 
+
+> 5
+
+· ηλ im, λim < 1
+
+> ηN
+
+Substituting to the previous results, we have: bias term bm 
+
+> 1
+
+≥ βm
+
+4 ( 15 · X
+
+> i≤k∗
+> m
+
+ω2 
+
+> i
+
++ ηN 
+
+5
+
+X
+
+> i>k ∗
+> m
+
+(λim)ω2 
+
+> i
+
+) · ( 15 · X
+
+> i≤k∗
+> m
+
+Γi
+
+> (1 ,m −1)
+
+λim + ηN 
+
+5
+
+X
+
+> i>k ∗
+> m
+
+Γi
+
+> (1 ,m −1)
+
+(λim)2)= βm
+
+25 · (∥w0 − w∗∥2
+
+> Im, 0: k∗
+> m
+
++ N η ∥w0 − w∗∥2 
+
+> Hm,k ∗
+> m:∞
+
+) · ( X
+
+> i≤k∗
+> m
+
+Γi
+
+> (1 ,m −1)
+
+(λim) + ηN X
+
+> i>k ∗
+> m
+
+Γi
+
+> (1 ,m −1)
+
+(λim)2)
+
+and bias term bm 
+
+> 2
+
+≥ ( 15 · X
+
+> i≤k∗
+> m
+
+Γi
+
+> (1 ,m −1)
+
+ω2 
+
+> i
+
++ ηN 
+
+5
+
+X
+
+> i>k ∗
+> m
+
+Γi
+
+> (1 ,m −1)
+
+λimω2 
+
+> i
+
+)= 15 · (∥w0 − w∗∥2(Qm−1  
+
+> p=1 (I−ηHp)2N)0: k∗
+> m
+
++ N η ∥w0 − w∗∥2(Qm−1  
+
+> p=1 (I−ηHp)2NHm)k∗
+> m:∞
+
+)
+
+21 Understanding Forgetting in Continual Learning with Linear Regression 
+
+Now we are ready to examine term 2. term 2 =⟨ ˆΦm−11 I, 
+
+> N−1
+
+X
+
+> t=0
+
+(I − ηTHm (η)) tB0⟩≥⟨ ˆΦm−11 I, βm
+
+4 tr(( I − (I − ηHm)N/ 2)B0) · (I − (I − ηHm)N/ 2)⟩
+
++⟨ ˆΦm−11 I, 
+
+> N−1
+
+X
+
+> t=0
+
+(I − ηHm)t · B0 · (I − ηHm)t⟩
+
+= βm
+
+4 tr(( I − (I − ηHm)N/ 2)B0) · ⟨ ˆΦm−11 I, (I − (I − ηHm)N/ 2)⟩
+
+| {z } 
+
+> bias term dm
+> 1
+
++ 12η ⟨ ˆΦm−11 H−1 
+
+> m
+
+· (I − (I − ηHm)2N ), B0⟩
+
+| {z } 
+
+> bias term dm
+> 2
+
+Analogous to term 1, we have: bias term dm 
+
+> 1
+
+= βm
+
+4 (X
+
+> i
+
+(1 − (1 − ηλ im)N/ 2)ω2 
+
+> i
+
+) · (X
+
+> i
+
+ˆΦm−11 λim(1 − (1 − ηλ im)N/ 2)) 
+
+≥ βm
+
+25 · (∥w0 − w∗∥2
+
+> Im, 0: k∗
+> m
+
++ N η ∥w0 − w∗∥2 
+
+> Hm,k ∗
+> m:∞
+
+) · Φm−11 · ( X
+
+> i<k ∗
+> m
+
+(λim) + ηN X
+
+> i>k ∗
+> m
+
+(λim)2)
+
+and bias term dm 
+
+> 2
+
+≥ (X
+
+> i
+
+ˆΦm−11 (λim)−1(1 − (1 − ηλ im)2N )ω2 
+
+> i
+
+)
+
+≥ ˆΦm−11 ( 15 · X
+
+> i≤k∗
+> m
+
+(λim)−1ω2 
+
+> i
+
++ ηN 
+
+5
+
+X
+
+> i>k ∗
+> m
+
+ω2 
+
+> i
+
+)= ˆΦm−11
+
+5 · (∥w0 − w∗∥2(H−1 
+
+> m)0: k∗
+> m
+
++ N η · ∥ w0 − w∗∥2 
+
+> I)k∗
+> m:∞
+
+)
+
+After M N iterations, it holds that: 
+
+BM N ⪰
+
+> M
+
+Y
+
+> m=1
+
+(I − η eTHm (η)) N ◦ B0 +
+
+> M
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m
+
+(I − η eTHj (η)) N Pm,
+
+where denoting Pm = βmη2(bm 
+
+> 1
+
++ bm 
+
+> 2
+
++ dm 
+
+> 1
+
++ dm 
+
+> 2
+
+) · (I − ηHm)2N Hm.Then, the bias error can be represented as follows: 
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, BM N ⟩ ≥ 
+
+> M
+
+X
+
+> k=1
+
+⟨Hk,
+
+> M
+
+Y
+
+> m=1
+
+(I − η eTHm (η)) N ◦ B0⟩
+
+| {z }
+
+> bias term 1’
+
++
+
+> M
+
+X
+
+> k=1
+
+⟨Hk,
+
+> M
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m
+
+(I − η eTHj (η)) N Pm⟩
+
+| {z }
+
+> bias term 2’
+
+.
+
+≥
+
+> M
+
+X
+
+> k=1
+
+∥w0 − w∗∥2QMm=1 (I−ηHm)2N Hk
+
++
+
+> M
+
+X
+
+> k=1
+
+⟨Hk,
+
+> M
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m
+
+(I − ηHj )2N βmη2(bm 
+
+> 1
+
++ bm 
+
+> 2
+
++ dm 
+
+> 1
+
++ dm 
+
+> 2
+
+) · (I − ηHm)2N Hm⟩.
+
+22 Understanding Forgetting in Continual Learning with Linear Regression 
+
+It follows that: 
+
+> M
+
+X
+
+> k=1
+
+⟨Hk, BM N ⟩ ≥ 
+
+> M
+
+X
+
+> k=1
+
+∥w0 − w∗∥2QMm=1 (I−ηHm)2N Hk
+
++
+
+> M
+
+X
+
+> k=1
+
+X
+
+> i
+
+λik ·
+
+> M
+
+X
+
+> m=1
+> M
+
+Y
+
+> j=m
+
+(1 − ηλ ij )2N βmη2(bm 
+
+> 1
+
++ bm 
+
+> 2
+
++ dm 
+
+> 1
+
++ dm 
+
+> 2
+
+) · (1 − ηλ im)2N λim
+
+≥
+
+> M
+
+X
+
+> k=1
+
+∥w0 − w∗∥2QMm=1 (I−ηHm)2N Hk
+
++
+
+> M
+
+X
+
+> k=1
+> M
+
+X
+
+> m=1
+
+(bm 
+
+> 1
+> ′
+
++ bm 
+
+> 2
+> ′
+
++ dm 
+
+> 1
+> ′
+
++ dm
+
+> 2
+> ′
+
+)
+
+where 
+
+bm 
+
+> 1
+> ′
+
+= β2
+
+> m
+
+η2
+
+25 · (∥w0 − w∗∥2
+
+> Im, 0: k∗
+> m
+
++ N η ∥w0 − w∗∥2 
+
+> Hm,k ∗
+> m:∞
+
+)
+
+· ( X
+
+> i<k ∗
+> m
+
+Γi 
+
+> (1 ,M )
+
+λik(λim)2 + ηN X
+
+> i>k ∗
+> m
+
+Γi 
+
+> (1 ,M )
+
+(λim)3λik)
+
+bm 
+
+> 2
+> ′
+
+= βmη2
+
+5 · (∥w0 − w∗∥2(Γ(1 ,M )HmHk )0: k∗
+
+> m
+
++ N η ∥w0 − w∗∥2(Γ(1 ,M )(I−ηHm)2N H2  
+
+> mHk)k∗
+> m:∞
+
+),
+
+and 
+
+dm 
+
+> 1
+> ′
+
+= βm
+
+25 · (∥w0 − w∗∥2
+
+> Im, 0: k∗
+> m
+
++ N η ∥w0 − w∗∥2 
+
+> Hm,k ∗
+> m:∞
+
+)
+
+· ˆΦm−11 · ( X
+
+> i<k ∗
+> m
+
+Γi 
+
+> (m,M )
+
+λik(λim) + ηN X
+
+> i>k ∗
+> m
+
+Γi 
+
+> (m,M )
+
+(λim)2λik)
+
+dm 
+
+> 2
+> ′
+
+= βmη2 ˆΦm−11
+
+5 · (∥w0 − w∗∥2(Γ(m,M )Hk )0: k∗
+
+> m
+
++ N η ∥w0 − w∗∥2(Γ(m,M )(I−ηHm)2N HmHk )k∗ 
+
+> m:∞
+
+).
+
+## D. Extension work 
+
+It is noticed that when the step size is set to ∥xm∥−2, the update rule for the minimum norm solution can be considered equivalent to that of the last iterate SGD. Consequently, in this subsection, we will focus on a particular case (akin to the setting in Lin et al. 2023) that involves this specific step size, allowing us to draw direct comparisons and insights under a defined set of conditions. Consider a series of tasks M = {1, 2, . . . , M }. Given M datasets, for each dataset m ∈ M, Dm = {(xm,i , y m,i )}Ni=1 drawn i.i.d from some fixed distribution Dm = Xm × Y m ⊂ Rd × R. Assume that {(xm,i , y m,i )}Ni=1 are i.i.d. sampled from a linear regression model, i.e., each (xm,i , y m,i ) is a realization of the linear regression model ym = ( x⊤
+
+> m
+
+w∗
+
+> m
+
+) + zm, where 
+
+zm is some randomized noise satisfing well-specified condition and w∗ 
+
+> m
+
+∈ Rd is the optimal model parameter for task m.We adopt the same learning procedure with specific step size, aiming to output a model wNM minimizing the performance 
+
+(Lin et al., 2023), i.e. 
+
+G(wNM ) = 1
+
+M
+
+> M
+
+X
+
+> i=1
+
+∥wNM − w∗ 
+
+> i
+
+∥2. (23) Therefore, our results can be restated as follows 
+
+Theorem D.1. Consider a scenario where the model w undergoes training via SGD for M distinct tasks, following a sequence 1, . . . , M . With a specific step size of ηm,t = ∥xm,t ∥−2, each task is executed for N iterations. Given that 
+
+23 Understanding Forgetting in Continual Learning with Linear Regression 
+
+Assumption 2.4 are satisfied, the following will hold: 
+
+E[G(wNM )] = 1
+
+M
+
+> M
+
+X
+
+> i=1
+
+∥w00 − w∗ 
+
+> i
+
+∥2
+
+> QMm=1
+> QNt=1
+
+(I−Hmηm,t )+ 1
+
+M
+
+> M
+
+X
+
+> i=1
+> M
+
+X 
+
+> m=1
+> N−1
+
+X
+
+> t=0
+
+∥w∗ 
+
+> m
+
+− w∗ 
+
+> i
+
+∥2 
+
+> QM−mp=1
+> QNj=1
+
+(I−Hpηp,j ) QN −tj=q (I−Hmηm,q )Hmηm,q 
+
++ 1
+
+M
+
+> M
+
+X
+
+> i=1
+> M
+
+X 
+
+> m=1
+> N−1
+
+X
+
+> t=0
+
+∥zm,t ∥2 
+
+> QM−mp=1
+> QNj=1
+
+(I−Hpηp,j ) QN −tq=1 (I−Hmηm,q )ηm,q .
+
+Remark 2. In contrast to the approach in Theorem 3.1 and Theorem 3.2, here we do not rely on the decomposition of bias and variance error while considering that the projection (I − ηm,t xm,t x⊤
+
+> m,t
+
+) is orthogonal to ηm,t xm,t x⊤ 
+
+> m,t
+
+with a specific stepsize ηm,t = ∥xm,t ∥−22 . This perspective allows us to derive a closed-form expression for the expected performance, which integrates the impact of initial parameter deviations, task-specific parameter variations, and random noise. Furthermore, Theorem D.1 in our study explores the performance behavior on general data distributions, expanding beyond the Gaussian distribution context discussed in Lin et al. 2023. In scenarios where there is only a single sample per training iteration, our results could cover their findings. 
+
+Proof. For each iteration, according to the update rule of SGD, it holds that 
+
+wNm = wN −1 
+
+> m
+
+− η(xm,N (( xm,N )⊤wN −1 
+
+> m
+
+− ym,N )) .
+
+which can be rewritten as: 
+
+wNm − w∗ 
+
+> i
+
+= ( I − ηxm,N (xm,N )⊤)( wN −1 
+
+> m
+
+− w∗ 
+
+> i
+
+) + ηz m,N xm,N .
+
+We consider the expectation norm for both sides: 
+
+E[∥wNm − w∗ 
+
+> i
+
+∥2]=E[( wNm − w∗ 
+
+> i
+
+)⊤(wNm − w∗ 
+
+> i
+
+)] =E[( wN −1 
+
+> m
+
+− w∗ 
+
+> i
+
+)⊤(I − ηxm,N (xm,N )⊤)⊤(I − ηxm,N (xm,N )⊤)( wN −1 
+
+> m
+
+− w∗ 
+
+> i
+
+) + η2(zm,N xm,N )⊤(zm,N xm,N )] (∗) = E[∥(I − ηm,N xm,N (xm,N )⊤)( wN −1 
+
+> m
+
+− w∗ 
+
+> i
+
+)∥2 + ∥ηm,N xm,N (xm,N )⊤(w∗ 
+
+> m
+
+− w∗ 
+
+> i
+
+)∥2 + ∥ηm,N xm,N zm,N ∥2]=E[∥wN −1 
+
+> m
+
+− w∗ 
+
+> i
+
+∥2(I−Hmηm,N )] + ηm,N σ2 + ∥w∗ 
+
+> m
+
+− w∗ 
+
+> i
+
+∥2
+
+> Hmηm,N
+
+=∥w0 
+
+> m
+
+− w∗ 
+
+> i
+
+∥2QNt=1 (I−Hmηm,t ) + 
+
+> N−1
+
+X
+
+> t=1
+
+∥w∗ 
+
+> m
+
+− w∗ 
+
+> i
+
+∥2QN −tj=1 (I−Hmηm,j )j Hmηm,N 
+
++ 
+
+> N−1
+
+X
+
+> t=1
+
+∥zm,t ∥2QN −tj=1 (I−Hmηm,j )j ηm,N 
+
+,
+
+where the (*) equation comes from the choice of step size such that (I − ηm,t xm,t (xm,t )⊤) and ηm,t xm,t (xm,t )⊤ are orthogonal projection, which equals the minimum norm solution with one sample. Considering M tasks, it holds that 
+
+E∥wm, − w∗ 
+
+> i
+
+∥2 = ∥w00 − w∗ 
+
+> i
+
+∥2QMm=1 
+
+> QNt=1 (I−Hmηm,t )
+
++ 
+
+> M−1
+
+X 
+
+> m=1
+> N−1
+
+X
+
+> t=0
+
+∥w∗ 
+
+> m
+
+− w∗ 
+
+> i
+
+∥2QM −mp=1      
+
+> QNj=1 (I−Hpηp,j )QN−tj=q(I−Hmηm,q )Hmηm,q
+
++ 
+
+> M−1
+
+X 
+
+> m=1
+> N−1
+
+X
+
+> t=0
+
+∥zm∥2QM −mp=1      
+
+> QNj=1 (I−Hpηp,j )QN−tq=1 (I−Hmηm,q )ηm,q
+
+.
+
+In conclusion, we aggregate the performance metrics across tasks, ranging from i = 1 to i = M , to derive the final result. 24

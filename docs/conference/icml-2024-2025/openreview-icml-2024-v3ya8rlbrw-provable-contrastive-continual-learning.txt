@@ -1,0 +1,1982 @@
+Title: Provable Contrastive Continual Learning
+
+URL Source: https://openreview.net/pdf?id=V3ya8RlbrW
+
+Number of Pages: 20
+
+Markdown Content:
+# Provable Contrastive Continual Learning 
+
+Yichen Wen * 1 2 Zhiquan Tan * 3 Kaipeng Zheng 1 Chuanlong Xie 2 Weiran Huang † 1 4 
+
+## Abstract 
+
+Continual learning requires learning incremental tasks with dynamic data distributions. So far, it has been observed that employing a combination of contrastive loss and distillation loss for training in continual learning yields strong performance. To the best of our knowledge, however, this con-trastive continual learning framework lacks con-vincing theoretical explanations. In this work, we fill this gap by establishing theoretical per-formance guarantees, which reveal how the per-formance of the model is bounded by training losses of previous tasks in the contrastive contin-ual learning framework. Our theoretical explana-tions further support the idea that pre-training can benefit continual learning. Inspired by our theo-retical analysis of these guarantees, we propose a novel contrastive continual learning algorithm called CILA, which uses adaptive distillation coef-ficients for different tasks. These distillation coef-ficients are easily computed by the ratio between average distillation losses and average contrastive losses from previous tasks. Our method shows great improvement on standard benchmarks and achieves new state-of-the-art performance. 
+
+## 1. Introduction 
+
+Incrementally learning a sequence of tasks with dynamic data distributions is a typical setting for continual learning. We call the learned neural networks “continual learners”. The main challenge for continual learners is to obtain a suitable trade-off between learning plasticity and memory stability. Specifically, excessive focus on learning plasticity of new tasks often leads to greatly reduced performance        
+
+> *Equal contribution 1MIFA Lab, Qing Yuan Research Institute, SEIEE, Shanghai Jiao Tong University 2Beijing Normal Univer-sity 3Department of Mathematical Sciences, Tsinghua University
+> 4Shanghai AI Laboratory. †Correspondence to: Weiran Huang
+> <weiran.huang@outlook.com >. This work was conducted during the period when the first two authors were visiting MIFA Lab.
+> Proceedings of the 41 st International Conference on Machine Learning , Vienna, Austria. PMLR 235, 2024. Copyright 2024 by the author(s).
+
+on old tasks (McClelland et al., 1995), which is known as catastrophic forgetting. To address the challenge, the literature on continual learn-ing has proposed various approaches. Representation-based approaches take advantage of representations. As one of these approaches, self-supervised learning with contrastive loss has demonstrated notable efficacy in obtaining robust representations against catastrophic forgetting in continual learning (Gallardo et al., 2021; Fini et al., 2022). For these methods based on contrastive loss, the training of represen-tations is often decoupled with the training of the classifier, unlike methods based on cross-entropy. Specifically, con-trastively trained representations suffer less catastrophic for-getting than ones trained by cross-entropy loss (Cha et al., 2021). Replay-based approaches use buffers to restore a part of previous data, and train networks using data from a combination of the current task and the buffer (Lopez-Paz & Ranzato, 2017). Naturally, these methods are combined with knowledge distillation strategies to prevent the degrada-tion of information in the network over time (Rebuffi et al., 2017). Regularization-based approaches introduce regular-ization terms to the target loss for continual learning to reach a balance between learning new tasks and preserving infor-mation from old tasks (Kirkpatrick et al., 2017). Two main sub-directions within regularization-based approaches in-clude weight regularization (Ritter et al., 2018) and function regularization (Li & Hoiem, 2016). To achieve effective continual learning, a natural idea is to combine the three approaches above, and this idea leads to a new framework called contrastive continual learning (Cha et al., 2021), as illustrated in Figure 1. This framework fo-cuses on using contrastively learned representations to learn new tasks and utilizing knowledge distillation to preserve information from past tasks, with the help of memory buffer and function regularization. The target loss of this frame-work contains a contrastive loss and a distillation loss with a distillation coefficient λ. The training data will be selected from the combination of the current data and buffered data. Empirically, this framework has been observed to be effi-cient, showing promising performance in continual learning (Cha et al., 2021). Despite the growing attention directed towards this framework, limited theoretical works have been proposed to explain its superior performance. 1Provable Contrastive Continual Learning 
+
+In this paper, we try to address the theoretical problem of why this framework is efficient. Therefore, we consider the losses provided in (Cha et al., 2021). We have found a clear relationship between the contrastive losses of two consecutive models in continual learning. Inspired by this, we propose theoretical performance guarantees that reveal how the population test loss, i.e., the total performance of the final model on all seen tasks, is bounded by the se-ries of training losses for the contrastive continual learning framework. Based on our theory, we propose a new and effi-cient contrastive continual learning algorithm called CILA, which uses distillation coefficients adapted to different tasks. Moreover, CILA consistently outperforms all baselines in different scenarios, datasets, and buffer sizes, e.g., about 
+
+1.77% improvement compared with the previous state-of-the-art method Co 2L (Cha et al., 2021) on Seq-CIFAR-10 with a buffer of 500 samples for Class-IL scenario. Overall, our contributions are listed as follows. (1) We pro-vide theoretical performance guarantees for the contrastive continual learning scheme. We identify that the overall per-formance of the final learned model on all seen tasks can be bounded by a function of the series of training losses with the distillation coefficient; (2) We propose an efficient algorithm CILA, which uses adaptive distillation coefficient 
+
+λt (replace λ with λt in Figure 1) for each task t; (3) We conduct extensive experiments to validate the efficacy of our algorithm, and the results strongly support our theory. Our method can inspire future works in contrastive continual learning. 
+
+## 2. Related Work 
+
+Continual learning. Continual learning is also referred to as incremental learning, which learns incremental tasks effectively (Wang et al., 2023). The literature in this field mainly focuses on several streams including weight and function regularization (Jung et al., 2020), memory replay (Prabhu et al., 2020), sparse representations (Javed & White, 2019), parameter isolation (Gurbuz & Dovrolis, 2022), and dynamic architecture (Ramesh & Chaudhari, 2021). As one of these effective continual learning methods, replay-based methods have demonstrated superior performance in terms of both learning plasticity and memory stability (Riemer et al., 2019). Replay-based continual learning methods are developed from the idea of Experience Re-play (Buzzega et al., 2020), which typically stores past training samples in a fixed-size buffer. Currently, these replay-based methods are divided into two main streams, including experience replay and generative replay. Expe-rience replay-based methods focus on the construction of memory buffer (Riemer et al., 2019; Tiwari et al., 2022) and storage efficiency (Caccia et al., 2019; Bang et al., 2021). Generative replay-based methods concentrate on generative adversarial networks (GANs) to generate fine-grained data (Cong et al., 2020; Ayub & Wagner, 2021). Representation-based methods for continual learning are also observed to be competitive. Recent works in continual learning take advantage of self-supervised learning to obtain robust representations, showing great performance on down-stream tasks (Pham et al., 2021). Large-scale pre-training also contributes to improving transferable and robust rep-resentations for downstream continual learning (Gallardo et al., 2021; Ramasesh et al., 2022). Regularization-based methods mainly focus on weight and function regularization. Weight regularization methods add penalties to the loss function, typically the penalty is a quadratic one (Kirkpatrick et al., 2017; Liu et al., 2018), and function regularization methods implement knowledge dis-tillation on the intermediate or final output of the prediction function (Li & Hoiem, 2017; Lee et al., 2019). For function regularization methods, the teacher model is the frozen past model, and the student model is the current model. Besides, there are some theory works analyzing regularization-based methods. Evron et al. (2022) study the minimum norm estimator in CL under an over-parameterized and noise-free setup. Li et al. (2023) give a fixed design analysis of continual ridge regression for two-task linear regres-sion. Zhao et al. (2024) consider a family of generalized 
+
+ℓ2-regularization estimators and give some optimality anal-ysis. 
+
+Contrastive learning. Contrastive learning aims to learn representations that attract different views of the same im-age while repelling views from different images (Tian et al., 2020). Contrastive methods have been widely used in self-supervised learning and pre-training, showing superior per-formance on downstream tasks. The contrastive loss was first proposed in (Bromley et al., 1993) and then more for-mally defined in (Chopra et al., 2005) and (Hadsell et al., 2006). Later some theoretical analyses on the contrastive learning framework were provided in (Arora et al., 2019; Huang et al., 2023; Tan et al., 2023b;c;a; Zhang et al., 2023). There are various target losses in contrastive learning, for example, InfoNCE loss (van den Oord et al., 2019) is a widely adopted and efficient one. Notably, methods in this field have reached or even outperformed supervised learn-ing methods (Khosla et al., 2020) for image classification. Representative approaches include SimCLR (Chen et al., 2020a), MoCo v1&v2 (He et al., 2020; Chen et al., 2020b). In this work, we employ the contrastive loss provided in (Khosla et al., 2020) for the contrastive continual learning framework to show some theoretical insights. 
+
+Knowledge distillation. In various scenarios of continual learning, knowledge distillation is used to preserve infor-mation from the old model to the current model, contribut-ing to mitigate catastrophic forgetting. Typically, knowl-2Provable Contrastive Continual Learning 
+
+Figure 1. An illustration of contrastive continual learning framework. At the end of the previous task, we restore the previous model and values of losses. For the current task, augmentations are applied to both the buffered and the current data. Then the augmented data is passed through the current model and the previous frozen model to obtain representations. The target loss of contrastive continual learning is a weighted sum of contrastive loss and distillation loss with a distillation coefficient λ.
+
+edge distillation learns a small student model from a large teacher model with limited resources (Gou et al., 2021). Var-ious kinds of knowledge can be transferred by knowledge distillation, including response-based knowledge which is the neural response of the last output layer of the teacher model (Hinton et al., 2015), feature-based knowledge like feature maps (Zagoruyko & Komodakis, 2016) and relation-based knowledge referring to relationships between different layers or between different samples (Passalis et al., 2020). Learning schemes of knowledge distillation include three streams, they are online distillation, offline distillation, and self-distillation. Among them, self-distillation considers the same structure between the teacher model and the student model (Zhang & Sabuncu, 2020; Mobahi et al., 2020). 
+
+## 3. Problem Setup 
+
+We are given a sequence of T supervised tasks, with each task presented sequentially, one after the other. For each task t, the training samples are assumed to be drawn from an unknown data distribution Dt. The model can be updated after seeing each task. The goal of continual learning is to train a model f that performs well over all seen tasks. Supervised contrastive loss (Khosla et al., 2020) has shown its superiority over the cross-entropy loss in the standard supervised classification, and it is then introduced into the continual learning by Co 2L (Cha et al., 2021). Specifically, contrastive continual learning updates the model at each time step t according to two losses, the contrastive loss and the distillation loss, which measure the learning plasticity and memory stability, respectively. 
+
+Contrastive loss. For each task t, we use μt to denote the class distribution of task Dt, and Dc to denote the data dis-tribution associated with each class c. In this paper, we con-sider a contrastive loss involving two similar samples x, x +
+
+i.i.d. drawn from the same class distribution Dc. Mean-while, there are several negative samples randomly picked from the whole data distribution Dt. For simplicity, we only consider the case of one negative sample here, the case of multiple negative samples can be found in Appendix D and E. Therefore, the contrastive loss can be formulated as 
+
+Lcon (f ; Dt) = E
+
+> c+∼μt
+> c−∼μt
+
+E
+
+> x,x +∼D c+
+> x−∼D c−
+
+ℓ [f (x)⊤(f (x+)−f (x−)) ],
+
+where function ℓ(v) is defined as log(1 + exp( −v)) and embeddings are conventionally normalized, i.e., ∥f ∥ = 1 .
+
+Distillation loss. Continual learning focuses on retain-ing previously acquired information while simultaneously learning new knowledge. In the specific context of con-trastive continual learning, the model achieves knowledge preservation by keeping the model’s ability to differentiate between similar and dissimilar (negative) samples. To do so, we first compute the similarity probability distribution as 
+
+p(f ; x, x +, x −) = softmax( f (x)⊤f (x+), f (x)⊤f (x−)) ,and then regulate the cross-entropy between the past simi-larity probability distribution and the current one (e.g., IRD loss in (Cha et al., 2021)). Specifically, for task t, we denote the distribution of all seen data by D1: t−1 := Pt−1 
+
+> j=1
+
+ktj Dj ,where we allow different tasks have different weights 
+
+ktj > 0 with Pt−1 
+
+> j=1
+
+ktj = 1 . Therefore, the distillation loss considered in this paper can be formulated as 
+
+Ldis (ft; ft−1, D1: t−1) = 
+
+E
+
+> c+∼μ1: t−1
+> c−∼μ1: t−1
+
+E
+
+> x,x +∼D c+
+> x−∼D c−
+
+[−p(ft−1; x, x +, x −) · log p(ft; x, x +, x −)],
+
+where μ1: t−1 represents the class distribution of D1: t−1.3Provable Contrastive Continual Learning 
+
+The total training loss of ft on task t ≥ 2 is 
+
+Ltrain (ft; ft−1, Dt, D1: t−1)= Lcon (ft; Dt) + λ · Ldis (ft; ft−1, D1: t−1),
+
+where λ is a hyper-parameter for balancing the two loss terms. For the first task t = 1 , the training loss does not have the distillation term, i.e., Ltrain (f1; D1) = Lcon (f1; D1).To evaluate the contrastive continual learning model, we use the total performance (test loss) of the final model fT on all seen tasks, which can be formulated as 
+
+Ltest (fT ; D1, . . . , DT ) := 
+
+> T
+
+X
+
+> t=1
+
+Lcon (fT ; Dt).
+
+## 4. Theoretical Analysis 
+
+Contrastive continual learning has demonstrated strong per-formance in practice. The focus of this paper is to ex-amine its performance guarantees theoretically. In par-ticular, our study aims to investigate the relationship be-tween the test loss Ltest (fT ; D1, . . . , DT ) and the series of training losses Ltrain (f1; D1), Ltrain (f2; f1, D2, D1), . . . , 
+
+Ltrain (fT ; fT −1, DT , D1: T −1).According to the definition, despite the distillation loss terms, the training losses involve {Lcon (ft; Dt)}Tt=1 , while the test loss consists of {Lcon (fT ; Dt)}Tt=1 . To bridge the test loss and the training losses, we first provide the rela-tionship between the contrastive losses of two consecutive models ft and ft−1 in the following lemma. 
+
+Lemma 1. When t ≥ 2, for any data distribution D, the contrastive losses of current model ft and previous model 
+
+ft−1 can be connected via the distillation loss, i.e., 
+
+Lcon (ft; D) ≤ αL con (ft−1; D) + Ldis (ft; ft−1, D) + β, Lcon (ft; D) ≥ αL con (ft−1; D) + Ldis (ft; ft−1, D) + β′,
+
+where α = 2e2 
+
+> 1+ e2
+
+, β = 2 −α+α log α 
+
+> 2
+
+, and β′ = −α log(1+ 
+
+e2) − α.
+
+The above lemma can be directly proved using the formulae for contrastive loss and distillation loss. A detailed proof is provided in the appendix due to the space limitation. According to Lemma 1, when considering D = Dt (t ≤ T ),a connection between Lcon (fT ; Dt) and Lcon (fT −1; Dt) can be established. Similarly, a link between Lcon (fT −1; Dt)
+
+and Lcon (fT −2; Dt) can be drawn, and so on. This ap-proach allows us to build a bridge between Lcon (fT ; Dt)
+
+and Lcon (ft; Dt) for any given t, which are the compo-nents of test loss and training losses, respectively. Thus, with Lemma 1, we can now derive the relationship be-tween the test loss Ltest (fT ; D1, . . . , DT ) and the series of training losses Ltrain (f1; D1), Ltrain (f2; f1, D2, D1), . . . , 
+
+Ltrain (fT ; fT −1, DT , D1: T −1). Our results are presented in the following main theorem. 
+
+Theorem 1. For the contrastive continual learning involv-ing T ≥ 2 tasks, the test loss of the final model fT can be bounded via a linear combination of the training losses associated with each task. More specifically, the following two bounds are applicable. (1) Upper bound: 
+
+Ltest (fT ; D1, . . . , DT ) ≤ αT −1Ltrain (f1; D1)+
+
+> T
+
+X
+
+> t=2
+
+αT −t
+
+γt(λ) Ltrain (ft; ft−1, Dt, D1: t−1) + η, 
+
+(2) Lower bound: 
+
+Ltest (fT ; D1, . . . , DT ) ≥ αT −1Ltrain (f1; D1)+
+
+> T
+
+X
+
+> t=2
+
+αT −t
+
+γ′
+
+> t
+
+(λ) Ltrain (ft; ft−1, Dt, D1: t−1) + η′,
+
+where 
+
+
+
+α = 2e2 
+
+> 1+ e2
+
+,γt(λ) = min  { 1 
+
+> t
+
+} ∪ { λk tj }t−1
+
+> j=1
+
+ ,γ′
+
+> t
+
+(λ) = max  {1} ∪ { λk tj }t−1
+
+> j=1
+
+ ,η = (2 − α + α log α 
+
+> 2
+
+) T −1−T α +( α)T
+
+> (1 −α)2
+
++ PTt=2 αT −t(1 − 1 
+
+> γt(λ)
+
+)min f Lcon (f ; Dt),η′ = −(α log(1 + e2) + α) T −1−T α +( α)T 
+
+> (1 −α)2
+
+.
+
+The proof for the theorem can be found in the appendix. It can be concluded from Theorem 1 that, the perfor-mance of the final model fT on all T tasks, namely 
+
+Ltest (fT ; D1, . . . , DT ), can be well bounded by train-ing losses on all seen tasks, suggesting that minimizing 
+
+Ltrain (ft; ft−1, Dt, D1: t−1) during each task t can help to improve the performance of the final model on all seen tasks. Note that there is also a lower bound of 
+
+Ltest (fT ; D1, . . . , DT ), which means that minimizing the training loss during each task t is necessary. In particular, given that the training loss is a weighted sum of contrastive loss and distillation loss, these bounds also emphasize the necessity of both contrastive loss and distillation loss in effectively learning a contrastive continual learning model. Taking inspiration from Theorem 1, we can infer that pre-training can benefit continual learning. The coefficients of training losses associated with each task become fixed if 
+
+λ exceeds a certain value. For example, the denominators of the coefficients of training losses, i.e., {γt(λ)}Tt=2 for the upper bound become constant values if λ is large. Note that the component α > 1, then the weight αT −t/γ t(λ) for 4Provable Contrastive Continual Learning 
+
+the training loss of task t decreases greatly as t increases, reducing the importance of task t in the bounds. Therefore, we have the following corollary, which shows that improved training performance of initial tasks contributes more to im-proving the later models’ performance guarantees than that of later tasks. This aligns with the idea that pre-training can benefit continual learning, as observed in previous literature (Wang et al., 2022; Hu et al., 2022). After choosing a suitable distillation coefficient λ, training performances of initial tasks in contrastive continual learn-ing contribute more to improving the overall performance of the final model on all tasks compared with that of the latter ones, explaining that a well pre-trained network can benefit continual learning. We conclude from the statement above that small changes in the training performance on the first task may lead to great changes in the overall performance of the final model. For example, the weight of Ltrain (f1; D1) in the upper bound increases greatly when adding more tasks, and a large value of Ltrain (f1; D1) implies a potential great increase of the upper bound. Therefore, well-trained initial models with small training losses in continual learning can be beneficial. 
+
+## 5. Further Discussion on the Distillation Coefficient λ
+
+5.1. Analysis on the distillation coefficient 
+
+Inspired by additional analysis on Theorem 1, we find that the suitable distillation coefficient λ is correlated with the weights {{ ktj }t−1
+
+> j=1
+
+}Tt=1 that depends on the data distribu-tions. Specifically, we would like to choose the suitable value of λ as the turning point of the upper bound to get better theoretical guarantees. We define the turning point as the minimum value of λ at which the upper bound no longer decreases. Once the distillation coefficient λ exceeds the value of this turning point, the upper bound becomes a fixed value that is no longer influenced by λ, as illustrated in Figure 2. In the following part of this section, we will present several examples and calculate the corresponding turning point values. This may help us better understand the choice of distillation coefficient ( λ = 1 ) employed in the experiments of Co 2L (Cha et al., 2021). We begin by clarifying that in the contrastive continual learning framework, choosing a fixed distillation coefficient as one for all tasks is favorable for achieving a balance between learning new tasks and preserving old knowledge. Specifically, with well-constructed weights {ktj }t−1 
+
+> j=1
+
+for task t, the suggested λ value for learning tends to stay close to one, thereby contributing to a tighter upper bound. To illustrate this point, we provide an example below. 
+
+Example 1. Assume that there are five tasks, each task with data distribution Dt, t ∈ { 1, . . . , 5}, and we have          
+
+> Figure 2. An illustration of Example 2. The suggesting λfor ρ=0.95 or ρ= 1 .05 stays close to one.
+
+corresponding models {ft}5
+
+> t=1
+
+. We make the assumption that these models obtain the same value of training loss, i.e., 
+
+Ltrain (f5; f4, D5, D1:4 ) = · · · = Ltrain (f1; D1).
+
+Weights of tasks are given as follows, i.e., for t ≥ 2,
+
+ktj =
+
+( 2 
+
+> t
+
+, j = 1 , 
+
+> 1
+> t
+
+, else .
+
+These weights can be considered well-constructed, as they are uniform across different tasks, except for the weight of the first task which has a larger value than the others. Indeed, this strategy emphasizes the importance of the first task which is typically regarded as a base task. Then according to our Theorem 1, the value of appropriate 
+
+λ is suggested to be close to one to get a tighter upper bound on the overall performance for the final model. Note that in Example 1, we have assumed that the values of total training losses of different tasks remain the same, which may not align with realistic settings. To provide a more realistic illustration, we construct another example with adaptive ratios between the training losses of different tasks. Specifically, we allow the value of the training loss of each task to either increase or decrease with the same ratio ρ close to one. The weights construction strategy is correlated to ρ to maintain an alignment with the chang-ing training loss. Constructed in this way, the following example illustrates how the appropriate value of λ remains close to one even when ρ fluctuates around one, and further achieves a tighter upper bound. This observation inspires us to consider adjusting the value of λ around one. 
+
+Example 2. Assume that there are five tasks, each task with data distribution Dt, t ∈ { 1, . . . , 5}, and we have corresponding models {ft}5
+
+> t=1
+
+. We assume that the value of the training loss of each task has a fixed ratio ρ ≈ 1, i.e., 
+
+Ltrain (f5; f4, D5, D1:4 ) = · · · = ρ4Ltrain (f1; D1).
+
+5Provable Contrastive Continual Learning 
+
+Weights of different tasks are given by a biased strategy related to ρ, i.e, for t ≥ 2,
+
+ktj =
+
+(1 − t−2 
+
+> ρt
+
+, j = 1 , 
+
+> 1
+> ρt
+
+, else .
+
+Then according to Theorem 1, the value of appropriate 
+
+λ is suggested to get close to one as ρ changes slightly around one, ensuring a tight upper bound on the overall performance of the final model. As illustrated in Figure 2, setting ρ = 0 .95 or ρ = 1 .05 implies that suggesting λ value remains close to one. The settings in Example 2 are more realistic and can closely resemble the Co 2L configuration (Cha et al., 2021). Thus this example can further support the rationale for choosing λ = 1 in Co 2L. However, in an extreme case of the weights construction, an undesirable result may occur with a value of λ greater than one. This insight suggests that data distribution may play a crucial role in selecting a suitable λ since the weights 
+
+{ktj }t−1 
+
+> j=1
+
+are strongly correlated with the data distribution of task t. As illustrated in the following example, when there exists a weight significantly smaller than the other weights, the value of appropriate λ would deviate from one. In such a case, persistently using λ = 1 may not achieve the best theoretical guarantees. 
+
+Example 3. Take the same assumption from Example 1, excluding the weights construction strategy. Weights of tasks are given as follows, i.e., for t ≥ 3,
+
+ktj =
+
+ 
+
+> 2.9
+> t
+
+, j = 1 , 
+
+> 0.1
+> t
+
+, j = 2 , 
+
+> 1
+> t
+
+, else .
+
+For the second task, we set k21 = 1 .Then according to our Theorem 1, the suggesting value of appropriate λ is close to ten in Example 3. If we choose 
+
+λ = 1 , the upper bound may get large and fail to provide the best guarantees. The failure of Example 3 is attributed to a change in the weights construction strategy, highlight-ing a substantial relationship between the suitable value of distillation coefficient λ and data distributions. 
+
+5.2. Adaptive selection of distillation coefficients 
+
+Inspired by our theoretical analysis, we are curious whether it is possible to provide better theoretical guarantees by dynamically adjusting distillation coefficients. Interestingly, the analysis of Theorem 1 can be adapted to the case of adaptive distillation coefficient λt, simply by replacing λ
+
+with λt for the coefficient of training loss of task t in the bounds. Then we can conclude from Theorem 1 for the new case that, increasing λt for each task t with a threshold strategy can provide better guarantees. Note that our target is to get a set of distillation coefficients 
+
+{λt}Tt=2 that tighten the upper bound in Theorem 1. There-fore, we want to adaptively select λt for task t to achieve this goal. We now propose our theoretical explanations for the adaptive selection of distillation coefficients. First, we give some related definitions. Suppose there are T tasks for continual learning setting. For each task t ≥ 2, we denote 
+
+λt as the task-specific distillation coefficient, and define 
+
+Ut =
+
+> t
+
+X
+
+> j=2
+
+αt−j
+
+γj (λt) Ltrain (fj ; fj−1, Dj , D1: j−1).
+
+Motivated by Theorem 1 and explanations above, at the end of task t, if the calculated Ut has a relatively large value, then a slight increase in λt+1 around one can be benefi-cial for improving the upper bound. Inspired by this, we will maintain an extra set of task-specific threshold values 
+
+{ut}Tt=2 where ut > 0, and a set of update momentums 
+
+{∆t}Tt=1 where ∆t ≥ 0. After training task t, if Ut > u t,we let λt+1 = λt + ∆ t, else, λt+1 = λt. Then the total training loss of each task t for model ft can be rewritten as 
+
+Ltrain (ft; ft−1, Dt, D1: t−1)= Lcon (ft; Dt) + λt · Ldis (ft; ft−1, D1: t−1).
+
+The following theorem provides a theoretical explanation for the benefits of the adaptive λt selection protocol above. 
+
+Theorem 2. Assume that the training loss of each task is larger than zero. For each task t ≥ 2, there exists a task-specific constant ut > 0. If we have 
+
+Ut =
+
+> t
+
+X
+
+> j=2
+
+αt−j
+
+γj (λt) Ltrain (fj ; fj−1, Dj , D1: j−1) > u t,
+
+where α, {γj (λt)}tj=2 are defined in Theorem 1, then we increase λt by ∆t , i.e., λt+1 = λt + ∆ t, else, λt+1 = λt.By choosing λt in this way, we get tighter upper bounds. 
+
+It can be concluded from Theorem 2 that, increasing λt
+
+by a threshold strategy about the performance of the cur-rent model can help make the upper bound tighter. More-over, Theorem 2 can also provide theoretical support for the choosing strategy of λ in previous examples. 
+
+5.3. Contrastive Incremental Learning with Adaptive distillation (CILA) 
+
+Note that we lack access to the construction of weights dur-ing the real training phase. Consequently, computing Ut
+
+is not available for task t, and estimating {ktj }t−1 
+
+> j=1
+
+may be also inaccessible due to the high computing load and low es-timating accuracy. However, according to our explanations above, it is suggested that the adaptive λt for each task t
+
+6Provable Contrastive Continual Learning 
+
+stays around one with a relatively larger value. Hence, we can find an easy-to-get and adaptive metric to replace λt.Before we introduce the chosen metric, we first give some related definitions. We first define the empirical contrastive loss (Khosla et al., 2020). For each task t, we denote Dt
+
+as the given batch of N training samples {(xt,i , c t,i )}Ni=1 ,and the augmented batch is {(˜ xt,i , ˜ct,i )}2Ni=1 which is gener-ated by making two randomly augmented versions of xt,i 
+
+as ˜xt, 2i−1 and ˜xt, 2i with ˜ct, 2i−1 = ˜ ct, 2i = ct,i . The aug-mented samples are mapped to a d-dimensional Euclidean sphere by a model ft. Denote zt,i = ft(˜ xt,i ), then the empirical contrastive loss can be formulated as 
+
+ˆLcon (ft; Dt)=
+
+> 2N
+
+X
+
+> i=1
+
+−1
+
+|pt,i |
+
+X
+
+> j∈pt,i
+
+log exp( z⊤
+
+> t,i
+
+zt,j /τ )
+
+P  
+
+> k̸=i
+
+exp( z⊤
+
+> t,i
+
+zt,k /τ )
+
+!
+
+,
+
+where pt,i = {j ∈ { 1, . . . , 2N }| j̸ = i, c t,j = ct,i } and 
+
+τ > 0 is the temperature hyperparameter. Then we define the empirical distillation loss (Cha et al., 2021). We first define a similarity vector 
+
+p(ft, τ ; ˜ xi) = softmax (z⊤
+
+> t,i
+
+zt, 1/τ, . . . , z⊤
+
+> t,i
+
+zt,i −1/τ, 
+
+z⊤
+
+> t,i
+
+zt,i +1 /τ, . . . z⊤
+
+> t,i
+
+zt, 2N /τ ).
+
+Then the empirical distillation loss is formulated as 
+
+ˆLdis (ft; ft−1, D t)=
+
+> 2N
+
+X
+
+> i=1
+
+−p(ft−1, τ ∗; ˜ xt,i ) · log p(ft, τ ; ˜ xt,i ).
+
+Here, both τ ∗ and τ will remain fixed for all tasks. Actually, when constructing the experiment, we found that the ratio 
+
+> t−1
+
+X
+
+> j=2
+
+ˆLdis (fj ; fj−1, D j )/
+
+> t−1
+
+X
+
+> j=2
+
+ˆLcon (fj ; Dj ),
+
+is stable and stays close to one as task index t ≥ 3 varies. This ratio is easy to get during the training procedure and is aligned with the idea that the distillation coefficient is sug-gested to stay close to one and varies according to the data distribution which depends on the task index. Therefore, inspired by Example 2 and 3, an applicable method is to use 
+
+λt = max(1 , κ 
+
+> t−1
+
+X
+
+> j=2
+
+ˆLdis (fj ; fj−1, D j )/
+
+> t−1
+
+X
+
+> j=2
+
+ˆLcon (fj ; Dj )) ,
+
+for task t ≥ 3, where κ is a balancing distillation coefficient, and for the second task, we use λ2 = 1 . More details can be found in Algorithm 1. In the following section, we will conduct several experiments. 
+
+Algorithm 1 CILA: Contrastive Incremental Learning with Adaptive distillation 
+
+Input: Buffer size B, a sequence of training sets {Dt}Tt=1 ,base distillation coefficient λ0, balancing distillation coefficient κ.
+
+1: Initialize model f0 and set buffer M ← ϕ;
+
+2: for task t = 1 , · · · , T do 
+
+3: Construct dataset D ← Dt ∪ M ;
+
+4: Initialize model ft ← ft−1;
+
+5: Compute L by L ← ˆLcon (ft; D);
+
+6: if t > 1 then 
+
+7: Adaptively update λt by 
+
+λt ← max( λ0, κ ·       
+
+> Pt−1
+> j=2 ˆLdis (fj;fj−1,D j)
+> Pt−1
+> j=2 ˆLcon (fj;Dj)
+
+);
+
+8: Update L by 
+
+L ← L + λt · ˆLdis (ft; ft−1, D );
+
+9: end if 
+
+10: Update ft by SGD; 
+
+11: Collect buffer samples until |M| = B;
+
+12: end for 
+
+## 6. Experiment 
+
+Learning settings and datasets. We conducted experi-ments on three basic continual learning scenarios, Class-IL, Task-IL, and Domain-IL (van de Ven & Tolias, 2019). Each scenario was evaluated using different datasets. Specifically, for Class-IL and Task-IL, we utilized Seq-CIFAR-10 and Seq-Tiny-ImageNet datasets. Seq-CIFAR-10 is a modified version of the CIFAR-10 (Krizhevsky, 2009) dataset, where it is divided into 5 distinct subsets, each comprising two classes. Similarly, Seq-Tiny-ImageNet is an adapted version of the Tiny-ImageNet (Le & Yang, 2015) dataset, where the 200 classes are split into 10 separate sets, each contain-ing 20 classes. The order of splits in Seq-CIFAR-10 and Seq-Tiny-ImageNet remains consistent across multiple runs. For Domain-IL, we employed R-MINST, which is a variant of the MNIST (Lecun et al., 1998) dataset. In R-MINST, the original images are randomly rotated by an angle between 0 and π. R-MINST consists of 20 tasks, with each task corresponding to a randomly selected rotation angle. During the training process, samples from different tasks with the same digital class are treated as distinct classes. In summary, our experiments covered Class-IL, Task-IL, and Domain-IL scenarios, utilizing Seq-CIFAR-10, Seq-Tiny-ImageNet, and R-MINST datasets, respectively. 
+
+Baselines. We compare our contrastive continual learning algorithm with replay-based continual learning baselines, including ER (Riemer et al., 2019), GEM (Lopez-Paz & Ranzato, 2017), A-GEM (Chaudhry et al., 2018), iCaRL (Rebuffi et al., 2017), FDR (Benjamin et al., 2019), GSS (Aljundi et al., 2019), HAL (Chaudhry et al., 2019), DER 7Provable Contrastive Continual Learning 
+
+Table 1. Classification accuracies for Seq-CIFAR-10, Seq-Tiny-ImageNet, and R-MNIST on replay-based baselines and our algorithm. All results are averaged over ten independent trials. The best performance is marked as bold. 
+
+Dataset Seq-CIFAR-10 Seq-Tiny-ImageNet R-MNIST Scenario Class-IL Task-IL Class-IL Task-IL Domain-IL Buffer 200 500 200 500 200 500 200 500 200 500 ER 44.79 ±1.86 57.74 ±0.27 91.19 ±0.94 93.61 ±0.27 8.49 ±0.16 9.99 ±0.29 38.17 ±2.00 48.64 ±0.46 93.53 ±1.15 94.89 ±0.95 
+
+GEM 25.54 ±0.76 26.20 ±1.26 90.44 ±0.94 92.16 ±0.64 – – – – 89.86 ±1.23 92.55 ±0.85 
+
+A-GEM 20.04 ±0.34 22.67 ±0.57 83.88 ±1.49 89.48 ±1.45 8.07 ±0.08 8.06 ±0.04 22.77 ±0.03 25.33 ±0.49 89.03 ±2.76 89.04 ±7.01 
+
+iCaRL 49.02 ±3.20 47.55 ±3.95 88.99 ±2.13 88.22 ±2.62 7.53 ±0.79 9.38 ±1.53 28.19 ±1.47 31.55 ±3.27 – –FDR 30.91 ±2.74 28.71 ±3.23 91.01 ±0.68 93.29 ±0.59 8.70 ±0.19 10.54 ±0.21 40.36 ±0.68 49.88 ±0.71 93.71 ±1.51 95.48 ±0.68 
+
+GSS 39.07 ±5.59 49.73 ±4.78 88.80 ±2.89 91.02 ±1.57 – – – – 87.10 ±7.23 89.38 ±3.12 
+
+HAL 32.36 ±2.70 41.79 ±4.46 82.51 ±3.20 84.54 ±2.36 – – – – 89.40 ±2.50 92.35 ±0.81 
+
+DER 61.93 ±1.79 70.51 ±1.67 91.40 ±0.92 93.40 ±0.39 11.87 ±0.78 17.75 ±1.14 40.22 ±0.67 51.78 ±0.88 96.43 ±0.59 97.57 ±1.47 
+
+DER++ 64.88 ±1.17 72.70 ±1.36 91.92 ±0.60 93.88 ±0.50 10.96 ±1.17 19.38 ±1.41 40.87 ±1.16 51.91 ±0.68 95.98 ±1.06 97.54 ±0.43 
+
+Co 2L 65.57 ±1.37 74.26 ±0.77 93.43 ±0.78 95.90 ±0.26 13.88 ±0.40 20.12 ±0.42 42.37 ±0.74 53.04 ±0.69 97.90 ±1.92 98.65 ±0.31 
+
+CILA (Ours) 67.06 ±1.59 76.03 ±0.79 94.29 ±0.24 96.40 ±0.21 14.55 ±0.39 20.64 ±0.59 44.15 ±0.70 54.13 ±0.72 98.36 ±0.45 98.76 ±0.22 
+
+(Buzzega et al., 2020), DER++ (Buzzega et al., 2020), and Co 2L (Cha et al., 2021). 
+
+Details of training. Following the configuration of previ-ous studies, we trained ResNet-18 on the Seq-CIFAR-10 and Tiny-ImageNet datasets. We implemented a simple network with convolution layers for the R-MNIST dataset. In our training process, we employed buffers of sizes 200 and 500. The base distillation coefficient λ0 is set as one following the default configuration of Co 2L (Cha et al., 2021). 
+
+Evaluation. Like Co 2L, CILA follows the idea of “first pre-training, then linear probing”. Thus, unlike the joint representation-classifier training approaches, an additional classifier needs to be trained on top of the frozen representa-tions. To ensure a fair comparison, the classifier is trained using only the samples from the last task and buffered sam-ples, leveraging the representations learned by CILA. To mitigate the challenges posed by class imbalance, we em-ploy a class-balanced sampling strategy during the training of a linear classifier. The strategy involves the following steps. We first uniformly select a class from the available set of classes. This ensures that each class has an equal chance of being chosen. Once a class is selected, we fur-ther uniformly sample an instance from that specific class. This guarantees that all instances within the chosen class are equal to be selected. For all experiments, a linear classifier is trained for a fixed number of epochs and we adopt 100 epochs to align with prior work. After training, the classification test accuracy is reported based on the predictions made by this classifier. 
+
+Main results. In Table 1, our method outperforms all base-lines in different scenarios, datasets, and buffer sizes, es-pecially compared with Co 2L. This result verifies the su-
+
+Table 2. Accuracies on Seq-CIFAR-10 with 200 buffer samples. 
+
+Adaptive Method Class-IL Task-IL Co 2L 65.57 93.43 Pure-adapted 66.52 94.27 Min-adapted 66.36 94.21 Max-adapted 67.06 94.29 
+
+periority of our adaptive method and supports our theories strongly. Our algorithm successfully reaches a balance be-tween learning plasticity and memory stability in continual learning. Under appropriate adaptation of the distillation coefficients, we also mitigate the catastrophic forgetting problem. Besides, the power of adaptation also impacts the performance of the learned continual learner, we will talk about it in the following ablation study. 
+
+## 7. Ablation Studies 
+
+We conduct ablation experiments to verify the effectiveness of adaptive distillation coefficients. We consider two setups, Class-IL and Task-IL, and perform experiments on Seq-CIFAR-10 with three variants of adapted λt for each task t.Variants include (1) pure-adapted 
+
+λt, pure = κ
+
+> t−1
+
+X
+
+> j=2
+
+ˆLdis (fj , f j−1; Dj )/
+
+> t−1
+
+X
+
+> j=2
+
+ˆLcon (fj ; Dj ),
+
+(2) min-adapted 
+
+λt, min = min(1 , λ t,pure ),
+
+8Provable Contrastive Continual Learning 
+
+and (3) max-adapted 
+
+λt, max = max(1 , λ t,pure ),
+
+where κ is a balancing distillation coefficient. For our abla-tion experiments, we train the linear classifier on top of the representations with 200 buffer samples. As shown in Table 2, methods with adaptive distillation coefficients show superior performance compared with the method with a fixed distillation coefficient with about 1% 
+
+improvement on both settings. As the adaptive λt increases with moderate limitations, the performance of the model boosts with an obvious improvement on Class-IL. This ver-ifies our assumption based on the theoretical results that continual learners with larger adaptive distillation coeffi-cients show greater performance. 
+
+## 8. Conclusion 
+
+Contrastive learning has demonstrated remarkable perfor-mance in the field of continual learning, although there remains a lack of theoretical explanations. In this study, we aim to fill this gap by introducing theoretical perfor-mance guarantees for the final model in contrastive continual learning. Drawing inspirations from a detailed theoretical analysis, we propose the utilization of adaptive distillation coefficients for the distillation training loss in contrastive continual learning. Through comprehensive experiments conducted in diverse settings for continual learning, our approach surpasses baseline methods in terms of perfor-mance. We anticipate that our work can establish a robust foundation for continual learning from a representation per-spective, and potentially spark further theoretical insights into the realm of contrastive continual learning. 
+
+## Acknowledgment 
+
+Weiran Huang is supported by 2023 CCF-Baidu Open Fund and Microsoft Research Asia. Chuanlong Xie is sup-ported by the National Nature Science Foundation of China (No.12201048). We would also like to express our sincere gratitude to the reviewers of ICML 2024 for their insightful and constructive feedback. Their valuable comments have greatly contributed to improving the quality of our work. 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none of which we feel must be specifically highlighted here. 
+
+## References 
+
+Aljundi, R., Lin, M., Goujaud, B., and Bengio, Y. Gradient based sample selection for online continual learning. In 
+
+NeurIPS , 2019. Arora, S., Khandeparkar, H., Khodak, M., Plevrakis, O., and Saunshi, N. A theoretical analysis of contrastive unsupervised representation learning. arXiv:1902.09229 ,2019. Ayub, A. and Wagner, A. R. Eec: Learning to encode and regenerate images for continual learning. In ICLR , 2021. Bang, J., Kim, H., Yoo, Y., Ha, J.-W., and Choi, J. Rainbow memory: Continual learning with a memory of diverse samples. In CVPR , 2021. Benjamin, A. S., Rolnick, D., and Kording, K. Measuring and regularizing networks in function space, 2019. Bromley, J., Guyon, I., LeCun, Y., S ¨ackinger, E., and Shah, R. Signature verification using a” siamese” time delay neural network. In NeurIPS , 1993. Buzzega, P., Boschini, M., Porrello, A., Abati, D., and Calderara, S. Dark experience for general continual learn-ing: a strong, simple baseline. In NeurIPS , 2020. Caccia, L., Belilovsky, E., Caccia, M., and Pineau, J. Online learned continual compression with adaptive quantization modules. In ICML , 2019. Cha, H., Lee, J., and Shin, J. Co2l: Contrastive continual learning. In ICCV , 2021. Chaudhry, A., Marc’Aurelio, R., Rohrbach, M., and Elho-seiny, M. Efficient lifelong learning with a-gem. In ICLR ,2018. Chaudhry, A., Gordo, A., Dokania, P. K., Torr, P. H. S., and Lopez-Paz, D. Using hindsight to anchor past knowledge in continual learning. In AAAI , 2019. Chen, T., Kornblith, S., Norouzi, M., and Hinton, G. Asimple framework for contrastive learning of visual rep-resentations. In ICML , 2020a. Chen, X., Fan, H., Girshick, R., and He, K. Im-proved baselines with momentum contrastive learning. 
+
+arXiv:2003.04297 , 2020b. Chopra, S., Hadsell, R., and LeCun, Y. Learning a sim-ilarity metric discriminatively, with application to face verification. In CVPR , 2005. Cong, Y., Zhao, M., Li, J., Wang, S., and Carin, L. Gan memory with no forgetting. In NeurIPS , 2020. 9Provable Contrastive Continual Learning 
+
+Evron, I., Moroshko, E., Ward, R., Srebro, N., and Soudry, D. How catastrophic can catastrophic forgetting be in linear regression? In Conference on Learning Theory , pp. 4028–4079. PMLR, 2022. Fini, E., da Costa, V. G. T., Alameda-Pineda, X., Ricci, E., Alahari, K., and Mairal, J. Self-supervised models are continual learners. In CVPR , 2022. Gallardo, J., Hayes, T. L., and Kanan, C. Self-supervised training enhances online continual learning. In BMVC ,2021. Gou, J., Yu, B., Maybank, S. J., and Tao, D. Knowledge distillation: A survey. IJCV , 2021. Gurbuz, M. B. and Dovrolis, C. Nispa: Neuro-inspired stability-plasticity adaptation for continual learning in sparse networks. In ICML , 2022. Hadsell, R., Chopra, S., and LeCun, Y. Dimensionality reduction by learning an invariant mapping. In CVPR ,2006. He, K., Fan, H., Wu, Y., Xie, S., and Girshick, R. Mo-mentum contrast for unsupervised visual representation learning. In CVPR , 2020. Hinton, G., Vinyals, O., and Dean, J. Distilling the knowl-edge in a neural network. arXiv:1503.02531 , 2015. Hu, D., Yan, S., Lu, Q., HONG, L., Hu, H., Zhang, Y., Li, Z., Wang, X., and Feng, J. How well does self-supervised pre-training perform with streaming data? In ICLR , 2022. Huang, W., Yi, M., Zhao, X., and Jiang, Z. Towards the generalization of contrastive self-supervised learning. In 
+
+The Eleventh International Conference on Learning Rep-resentations , 2023. Javed, K. and White, M. Meta-learning representations for continual learning. In NeurIPS , 2019. Jung, S., Ahn, H., Cha, S., and Moon, T. Continual learn-ing with node-importance based adaptive group sparse regularization. In NeurIPS , 2020. Khosla, P., Teterwak, P., Wang, C., Sarna, A., Tian, Y., Isola, P., Maschinot, A., Liu, C., and Krishnan, D. Supervised contrastive learning. In NeurIPS , 2020. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Des-jardins, G., Rusu, A. A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., Hassabis, D., Clopath, C., Kumaran, D., and Hadsell, R. Overcoming catastrophic forgetting in neural networks. Proceedings of the Na-tional Academy of Sciences , 2017. Krizhevsky, A. Learning multiple layers of features from tiny images. https://www.cs.toronto.edu/ ˜kriz/index.html , 2009. Le, Y. and Yang, X. S. Tiny imagenet visual recognition challenge. https://tiny-imagenet. herokuapp.com , 2015. Lecun, Y., Bottou, L., Bengio, Y., and Haffner, P. Gradient-based learning applied to document recognition. Proceed-ings of the IEEE , 1998. Lee, K., Lee, K., Shin, J., and Lee, H. Overcoming catas-trophic forgetting with unlabeled data in the wild. In 
+
+ICCV , 2019. Li, H., Wu, J., and Braverman, V. Fixed design analysis of regularization-based continual learning. In Conference on Lifelong Learning Agents , pp. 513–533. PMLR, 2023. Li, Z. and Hoiem, D. Learning without forgetting. TPAMI ,2016. Li, Z. and Hoiem, D. Learning without forgetting. In TPAMI ,2017. Liu, X., Masana, M., Herranz, L., de Weijer, J. V., Lopez, A. M., and Bagdanov, A. D. Rotate your networks: Bet-ter weight consolidation and less catastrophic forgetting. 
+
+arXiv:1802.02950 , 2018. Lopez-Paz, D. and Ranzato, M. Gradient episodic memory for continual learning. In NeurIPS , 2017. McClelland, J. L., McNaughton, B. L., and O’Reilly, R. C. Why there are complementary learning systems in the hip-pocampus and neocortex: insights from the successes and failures of connectionist models of learning and memory. 
+
+Psychological review , 1995. Mobahi, H., Farajtabar, M., and Bartlett, P. L. Self-distillation amplifies regularization in hilbert space. In 
+
+NeurIPS , 2020. Passalis, N., Tzelepi, M., and Tefas, A. Heterogeneous knowledge distillation using information flow modeling. In CVPR , 2020. Pham, Q., Liu, C., and Hoi, S. Dualnet: Continual learning, fast and slow. In NeurIPS , 2021. Prabhu, A., Torr, P. H. S., and Dokania, P. K. Gdumb: A simple approach that questions our progress in continual learning. In ECCV , 2020. Ramasesh, V. V., Lewkowycz, A., and Dyer, E. Effect of scale on catastrophic forgetting in neural networks. In 
+
+ICLR , 2022. 10 Provable Contrastive Continual Learning 
+
+Ramesh, R. and Chaudhari, P. Model zoo: A growing brain that learns continually. In ICLR , 2021. Rebuffi, S.-A., Kolesnikov, A., Sperl, G., and Lampert, C. H. icarl: Incremental classifier and representation learning. In CVPR , 2017. Riemer, M., Cases, I., Ajemian, R., Liu, M., Rish, I., Tu, Y., and Tesauro, G. Learning to learn without forgetting by maximizing transfer and minimizing interference. In 
+
+ICLR , 2019. Ritter, H., Botev, A., and Barber, D. Online structured laplace approximations for overcoming catastrophic for-getting. In NeurIPS , 2018. Tan, Z., Yang, J., Huang, W., Yuan, Y., and Zhang, Y. Infor-mation flow in self-supervised learning. arXiv preprint arXiv:2309.17281 , 2023a. Tan, Z., Zhang, Y., Yang, J., and Yuan, Y. Contrastive learning is spectral clustering on similarity graph. arXiv preprint arXiv:2303.15103 , 2023b. Tan, Z., Zheng, K., and Huang, W. Otmatch: Improving semi-supervised learning with optimal transport. arXiv preprint arXiv:2310.17455 , 2023c. Tian, Y., Krishnan, D., and Isola, P. Contrastive multiview coding. In ECCV , 2020. Tiwari, R., Killamsetty, K., Iyer, R., and Shenoy, P. Gcr: Gradient coreset based replay buffer selection for contin-ual learning. In CVPR , 2022. van de Ven, G. M. and Tolias, A. S. Three scenarios for continual learning. arXiv:1904.07734 , 2019. van den Oord, A., Li, Y., and Vinyals, O. Repre-sentation learning with contrastive predictive coding. 
+
+arXiv:1807.03748 , 2019. Wang, L., Zhang, X., Su, H., and Zhu, J. A comprehen-sive survey of continual learning: Theory, method and application. arXiv:2302.00487 , 2023. Wang, Z., Shen, L., Fang, L., Suo, Q., Zhan, D., Duan, T., and Gao, M. Meta-learning with less forgetting on large-scale non-stationary task distributions. In ECCV ,2022. Zagoruyko, S. and Komodakis, N. Paying more attention to attention: Improving the performance of convolutional neural networks via attention transfer. In ICLR , 2016. Zhang, Y., Tan, Z., Yang, J., Huang, W., and Yuan, Y. Matrix information theory for self-supervised learning. arXiv preprint arXiv:2305.17326 , 2023. Zhang, Z. and Sabuncu, M. R. Self-distillation as instance-specific label smoothing. In NeurIPS , 2020. Zhao, X., Wang, H., Huang, W., and Lin, W. A statisti-cal theory of regularization-based continual learning. In 
+
+International conference on machine learning . PMLR, 2024. 11 Provable Contrastive Continual Learning 
+
+# Appendix 
+
+## A. Proof of Lemma 1 
+
+We recall Lemma 1. 
+
+Lemma 1. When t ≥ 2, for any data distribution D, the contrastive losses of current model ft and previous model ft−1 can be connected via the distillation loss, i.e., 
+
+Lcon (ft; D) ≤ αL con (ft−1; D) + Ldis (ft; ft−1, D) + β, Lcon (ft; D) ≥ αL con (ft−1; D) + Ldis (ft; ft−1, D) + β′,
+
+where α = 2e2 
+
+> 1+ e2
+
+, β = 2 − α + α log α 
+
+> 2
+
+, and β′ = −α log(1 + e2) − α.Proof. For model f , denote the data pair x = ( x, x +, x −) to simplify the proof, we first define v(f ; x) = f (x)⊤(f (x+) −
+
+f (x−)) , and 
+
+q(f ; x) = exp( v(f ; x)) 1 + exp( v(f ; x)) .
+
+For models ft and ft−1, the function ℓ(v) = log(1 + exp( −v)) , and p(f ; x) = softmax( f (x)⊤f (x+), f (x)⊤f (x−)) , we have the following equation 
+
+−p(ft−1; x) · log p(ft; x)= −q(ft−1; x) log( q(ft; x)) − (1 − q(ft−1; x)) log(1 − q(ft; x)) = q(ft−1; x) log(1 + exp( −v(ft; x))) + (1 − q(ft−1; x)) log(1 + exp( v(ft; x))) = q(ft−1; x) log(1 + exp( −v(ft; x))) + (1 − q(ft−1; x)) log(1 + exp( −v(ft; x))) + (1 − q(ft−1; x)) log(exp( v(ft; x))) = ℓ(v(ft; x)) + (1 − q(ft−1; x)) v(ft; x).
+
+Then for any data distribution D, we have 
+
+Ldis (ft; ft−1, D)= E
+
+> c+∼μc−∼μ
+
+E
+
+> x,x +∼D c+
+> x−∼D c−
+
+−p(ft−1; x) · log p(ft; x)= E
+
+> c+∼μc−∼μ
+
+E
+
+> x,x +∼D c+
+> x−∼D c−
+
+ℓ(v(ft; x)) + E
+
+> c+∼μc−∼μ
+
+E
+
+> x,x +∼D c+
+> x−∼D c−
+
+(1 − q(ft−1; x)) v(ft; x)= Lcon (ft; D) + E
+
+> c+∼μc−∼μ
+
+E
+
+> x,x +∼D c+
+> x−∼D c−
+
+(1 − q(ft−1; x)) v(ft; x).
+
+Note that ft, f t−1 are normalized, i.e., −2 ≤ v(ft−1; x) ≤ 2, and −2 ≤ v(ft; x) ≤ 2. We first prove the upper bound. By using the following inequality 
+
+α log(1 + e−h) + β − 21 + eh ≥ 0,
+
+where α = 2e2 
+
+> 1+ e2
+
+, β = 2 − α + α log α 
+
+> 2
+
+, −2 ≤ h ≤ 2, and using v(ft−1; x) to replace h, we have 
+
+(1 − q(ft−1; x)) v(ft; x) ≥ − 2(1 − q(ft−1; x)) = − 21 + exp( v(ft−1; x)) 
+
+≥ − α log(1 + exp( −v(ft−1; x))) − β
+
+= −αℓ (v(ft−1; x)) − β. 
+
+12 Provable Contrastive Continual Learning 
+
+Using the result above, we have 
+
+Ldis (ft; ft−1, D) = Lcon (ft; D) + E
+
+> c+∼μc−∼μ
+
+E
+
+> x,x +∼D c+
+> x−∼D c−
+
+(1 − q(ft−1; x)) v(ft; x)
+
+≥ Lcon (ft; D) + E
+
+> c+∼μc−∼μ
+
+E
+
+> x,x +∼D c+
+> x−∼D c−
+
+[−αℓ (v(ft−1; x)) − β]= Lcon (ft; D) − αL con (ft−1; D) − β. 
+
+which means 
+
+Lcon (ft; D) ≤ αL con (ft−1; D) + Ldis (ft; ft−1, D) + β. 
+
+This finishes the upper bound part. Then let us consider the lower bound. We use the inequality 
+
+α log(1 + e−h) + β′ + 21 + eh ≤ 0,
+
+where α = 2e2 
+
+> 1+ e2
+
+, β′ = −α log(1 + e2) − α, −2 ≤ h ≤ 2, and using v(ft−1; x) to replace h, then we have 
+
+(1 − q(ft−1; x)) v(ft; x) ≤ 2(1 − q(ft−1; x)) = 21 + exp( v(ft−1; x)) 
+
+≤ − α log(1 + exp( −v(ft−1; x)) − β′
+
+= −αℓ (v(ft−1; x)) − β′.
+
+Using the result above, we have 
+
+Ldis (ft; ft−1, D) = Lcon (ft; D) + E
+
+> c+∼μc−∼μ
+
+E
+
+> x,x +∼D c+
+> x−∼D c−
+
+(1 − q(ft−1; x)) v(ft; x)
+
+≤ Lcon (ft; D) + E
+
+> c+∼μc−∼μ
+
+E
+
+> x,x +∼D c+
+> x−∼D c−
+
+[−αℓ (v(ft−1; x)) − β′]= Lcon (ft; D) − αL con (ft−1; D) − β′.
+
+It can be translated into 
+
+Lcon (ft; D) ≥ αL con (ft−1; D) + Ldis (ft; ft−1, D) + β′.
+
+The proof has finished. 
+
+## B. Proof of Theorem 1 
+
+We recall Theorem 1. 
+
+Theorem 1. For the contrastive continual learning involving T ≥ 2 tasks, the test loss of the final model fT can be bounded via a linear combination of the training losses associated with each task. More specifically, the following two bounds are applicable. (1) Upper bound: 
+
+Ltest (fT ; D1, . . . , DT ) ≤ αT −1Ltrain (f1; D1)+
+
+> T
+
+X
+
+> t=2
+
+αT −t
+
+γt(λ) Ltrain (ft; ft−1, Dt, D1: t−1) + η, 
+
+13 Provable Contrastive Continual Learning 
+
+(2) Lower bound: 
+
+Ltest (fT ; D1, . . . , DT ) ≥ αT −1Ltrain (f1; D1)+
+
+> T
+
+X
+
+> t=2
+
+αT −t
+
+γ′
+
+> t
+
+(λ) Ltrain (ft; ft−1, Dt, D1: t−1) + η′,
+
+where 
+
+
+
+α = 2e2 
+
+> 1+ e2
+
+,γt(λ) = min  { 1 
+
+> t
+
+} ∪ { λk tj }t−1
+
+> j=1
+
+ ,γ′
+
+> t
+
+(λ) = max  {1} ∪ { λk tj }t−1
+
+> j=1
+
+ ,η = (2 − α + α log α 
+
+> 2
+
+) T −1−T α +( α)T
+
+> (1 −α)2
+
++ PTt=2 αT −t(1 − 1 
+
+> γt(λ)
+
+)min f Lcon (f ; Dt),η′ = −(α log(1 + e2) + α) T −1−T α +( α)T 
+
+> (1 −α)2
+
+.
+
+Proof. We first proof the upper bound. For models ft and ft−1, we have 
+
+Ldis (ft; ft−1, D1: t−1) = E
+
+> c+∼μ1: t−1
+> c−∼μ1: t−1
+
+E
+
+> x,x +∼D c+
+> x−∼D c−
+
+[−p(ft−1; x) · log p(ft; x)] =
+
+> t−1
+
+X
+
+> j=1
+
+ktj E
+
+> c+∼μj
+> c−∼μj
+
+E
+
+> x,x +∼D c+
+> x−∼D c−
+
+[−p(ft−1; x) · log p(ft; x)] =
+
+> t−1
+
+X
+
+> j=1
+
+ktj Ldis (ft; ft−1, Dj ).
+
+Then we can write the training loss as 
+
+Ltrain (ft; ft−1, Dt, D1: t−1) = Lcon (ft; Dt) + λL dis (ft; ft−1, D1: t−1)= Lcon (ft; Dt) + λ
+
+> t−1
+
+X
+
+> j=1
+
+ktj Ldis (ft; ft−1, Dj ).
+
+for task t ≥ 2, and Ltrain (f1; D1) = Lcon (f1; D1). According to the proof of Lemma 1, for models ft and ft−1, data distribution Dj (j ≤ t), we have 
+
+Lcon (ft, Dj ) ≤ αL con (ft−1, Dj ) + Ldis (ft; ft−1, Dj ) + β. 
+
+14 Provable Contrastive Continual Learning 
+
+Denote γt(λ) = min  { 1 
+
+> t
+
+} ∪ { λk tj }t−1
+
+> j=1
+
+ for task t ≥ 2. Then we have 
+
+Ltest (fT ; D1: T )= Lcon (fT ; DT ) +  
+
+> T−1
+
+X
+
+> t=1
+
+Lcon (fT , Dt)
+
+≤ Lcon (fT ; DT ) +  
+
+> T−1
+
+X
+
+> t=1
+
+[Ldis (fT ; fT −1, Dt) + αL con (fT −1; Dt) + β]
+
+≤ ( 1
+
+γT (λ) − 1
+
+γT (λ) + 1) Lcon (fT ; DT ) + λγT (λ) 
+
+> T−1
+
+X
+
+> t=1
+
+kT t Ldis (fT ; fT −1, Dt) +  
+
+> T−1
+
+X
+
+> t=1
+
+[αL con (fT −1; Dt) + β]
+
+≤ 1
+
+γT (λ) Ltrain (fT ; fT −1, DT , D1: T −1) + (1 − 1
+
+γT (λ) )min f Lcon (f ; DT )+ ( T − 1) β + αL test (fT −1; D1: T −1)
+
+...
+
+≤ αT −1Ltrain (f1; D1) + 
+
+> T
+
+X
+
+> t=2
+
+αT −t
+
+γt(λ) Ltrain (ft; ft−1, Dt, D1: t−1) + η. 
+
+where α = 2e2 
+
+> 1+ e2
+
+, η = (2 − α + α log α 
+
+> 2
+
+) T −1−T α +( α)T 
+
+> (1 −α)2
+
++ PTt=2 αT −t(1 − 1 
+
+> γt(λ)
+
+)min f Lcon (f ; Dt).Let us prove the lower bound. According to the proof of Lemma 1, for models ft and ft−1, and data distribution Dj (j ≤ t),we have 
+
+Lcon (ft, Dj ) ≥ αL con (ft−1, Dj ) + Ldis (ft; ft−1, Dj ) + β′.
+
+Denote γ′
+
+> t
+
+(λ) = max  {1} ∪ { λk tj }t−1
+
+> j=1
+
+ for task t ≥ 2. The proof is similar to that of the upper bound. 
+
+Ltest (fT ; D1: T )= Lcon (fT ; DT ) +  
+
+> T−1
+
+X
+
+> t=1
+
+Lcon (fT , Dt)
+
+≥ Lcon (fT ; DT ) +  
+
+> T−1
+
+X
+
+> t=1
+
+[Ldis (fT ; fT −1, Dt) + αL con (fT −1; Dt) + β′]
+
+≥ 1
+
+γ′
+
+> t
+
+(λ) [Lcon (fT ; DT ) + λ 
+
+> T−1
+
+X
+
+> t=1
+
+kT t Ldis (fT ; fT −1, Dt)] +  
+
+> T−1
+
+X
+
+> t=1
+
+[αL con (fT −1; Dt) + β′]= 1
+
+γ′
+
+> t
+
+(λ) Ltrain (fT ; fT −1, DT , D1: T −1) + α 
+
+> T−1
+
+X
+
+> t=1
+
+Lcon (fT −1; Dt) + ( T − 1) β′
+
+= 1
+
+γ′
+
+> t
+
+(λ) Ltrain (fT ; fT −1, DT , D1: T −1) + αL test (fT −1; D1: T −1) + ( T − 1) β′
+
+≥ αT −1Ltrain (f1; D1) + 
+
+> T
+
+X
+
+> t=2
+
+αT −t
+
+γ′
+
+> t
+
+(λ) Ltrain (ft; ft−1, Dt, D1: t−1) + η′.
+
+where α = 2e2 
+
+> 1+ e2
+
+, η′ = −(α log(1 + e2) + α) T −1−T α +( α)T 
+
+> (1 −α)2
+
+.
+
+## C. Proof of Theorem 2 
+
+We recall Theorem 2. 15 Provable Contrastive Continual Learning 
+
+Theorem 2. Assume that the training loss of each task is larger than zero. For each task t ≥ 2, there exists a task-specific constant ut > 0. If we have 
+
+Ut =
+
+> t
+
+X
+
+> j=2
+
+αt−j
+
+γj (λt) Ltrain (fj ; fj−1, Dj , D1: j−1) > u t,
+
+where α, {γj (λt)}tj=2 are defined in Theorem 1, then we increase λt by ∆t , i.e., λt+1 = λt + ∆ t, else, λt+1 = λt. By choosing λt in this way, we get tighter upper bounds. Proof. Note that Ut > 0, thus ut exists. If λt increases by ∆ ≥ 0, then λt+1 ≥ λt and γj (λt+1 ) ≥ γj (λt). We have 
+
+U ′ 
+
+> t+1
+
+=
+
+> t+1
+
+X
+
+> j=2
+
+αt+1 −j
+
+γj (λt+1 ) Ltrain (fj ; fj−1, Dj ) ≤ Ut+1 =
+
+> t+1
+
+X
+
+> j=2
+
+αt+1 −j
+
+γj (λt) Ltrain (fj ; fj−1, Dj ).
+
+Thus the upper bound becomes tighter. 
+
+## D. The Case of Multiple Negative Examples for Lemma 1 
+
+Following our definitions in the paper, the contrastive loss for the case of k(k ≥ 1) negative samples can be formulated as 
+
+Lcon (f ; Dt) = E 
+
+> c+∼μt
+> c−
+> i∼μt
+
+E 
+
+> x,x +∼D c+
+> x−
+> i∼D c−
+> i
+
+ℓ [{f (x)⊤(f (x+)−f (x− 
+
+> i))
+
+}],
+
+where function ℓ(v) is defined as ℓ(v) = log(1 + Pki=1 exp( −vi)) for v ∈ Rk and embeddings are conventionally normalized, i.e., ∥f ∥ = 1 . The distillation loss for the case of k negative samples can be formulated as 
+
+Ldis (ft; ft−1, D1: t−1) = 
+
+E 
+
+> c+∼μ1: t−1
+> c−
+> i∼μ1: t−1
+
+E 
+
+> x,x +∼D c+
+> x−
+> i∼D c−
+> i
+
+[−p(ft−1; x, x +, x −        
+
+> 1, . . . , x −
+> k)·log p(ft;x, x +, x −
+> 1, . . . , x −
+> k)
+
+],
+
+where μ1: t−1 represents the class distribution of D1: t−1 and 
+
+p(f ; x, x +, x − 
+
+> 1
+
+, . . . , x − 
+
+> k
+
+) = softmax( f (x)⊤f (x+), f (x)⊤f (x− 
+
+> 1
+
+), . . . , f (x)⊤f (x− 
+
+> k
+
+)) .
+
+Then we provide the extended version of Lemma 1 and its proof. 
+
+Lemma 2. When t ≥ 2 and the number of negative samples k ≥ 1, for any data distribution D, the contrastive losses of current model ft and previous model ft−1 can be connected via the distillation loss, i.e., 
+
+Lcon (ft; D) ≤ αL con (ft−1; D) + Ldis (ft; ft−1, D) + β, Lcon (ft; D) ≥ αL con (ft−1; D) + Ldis (ft; ft−1, D) + β′,
+
+where α = 2e2 
+
+> k+e2
+
+, β = 2 − α + α log α 
+
+> 2
+
+, and β′ = −α log(1 + ke 2) − 2ke 2 
+
+> 1+ ke 2
+
+.Proof. For model f , denote the data pair x = ( x, x +, x − 
+
+> 1
+
+, . . . , x − 
+
+> k
+
+) to simplify the proof, we first define vi(f ; x) = 
+
+f (x)⊤(f (x+) − f (x− 
+
+> i
+
+)) , and 
+
+qi(f ; x) = exp( −vi(f ; x)) 1 + Pki=1 exp( −vi(f ; x)) ,q(f ; x) = 11 + Pki=1 exp( −vi(f ; x)) ,
+
+16 Provable Contrastive Continual Learning 
+
+where q(f ; x) + Pki=1 qi(f ; x) = 1 . For models ft and ft−1, the function ℓ(v) = log(1 + Pki=1 exp( −vi)) for v ∈ Rk ,and 
+
+p(f ; x) = softmax( f (x)⊤f (x+), f (x)⊤f (x− 
+
+> 1
+
+), . . . , f (x)⊤f (x− 
+
+> k
+
+)) ,
+
+we have the following equation 
+
+−p(ft−1; x) · log p(ft; x)= −q(ft−1; x) log( q(ft; x)) −
+
+> k
+
+X
+
+> i=1
+
+qi(ft−1; x) log( qi(ft; x)) = q(ft−1; x) log(1 + 
+
+> k
+
+X
+
+> i=1
+
+exp( −vi(ft; x))) −
+
+> k
+
+X
+
+> i=1
+
+qi(ft−1; x)[ −vi(ft; x) − log(1 + 
+
+> k
+
+X
+
+> i=1
+
+exp( −vi(ft; x)))] = q(ft−1; x) log(1 + 
+
+> k
+
+X
+
+> i=1
+
+exp( −vi(ft; x))) + 
+
+> k
+
+X
+
+> i=1
+
+qi(ft−1; x)[ vi(ft; x) + log(1 + 
+
+> k
+
+X
+
+> i=1
+
+exp( −vi(ft; x)))] = log(1 + 
+
+> k
+
+X
+
+> i=1
+
+exp( −vi(ft; x))) + 
+
+> k
+
+X
+
+> i=1
+
+qi(ft−1; x)vi(ft; x)= ℓ(v(ft; x)) + 
+
+> k
+
+X
+
+> i=1
+
+qi(ft−1; x)vi(ft; x).
+
+Then for any data distribution D, we have 
+
+Ldis (ft; ft−1, D)= E 
+
+> c+∼μc−
+> i∼μ
+
+E 
+
+> x,x +∼D c+
+> x−
+> i∼D c−
+> i
+
+−p(ft−1; x) · log p(ft; x)= E 
+
+> c+∼μc−
+> i∼μ
+
+E 
+
+> x,x +∼D c+
+> x−
+> i∼D c−
+> i
+
+ℓ(v(ft; x)) + E 
+
+> c+∼μc−
+> i∼μ
+
+E 
+
+> x,x +∼D c+
+> x−
+> i∼D c−
+> i
+> k
+
+X
+
+> i=1
+
+qi(ft−1; x)vi(ft; x)= Lcon (ft; D) + E 
+
+> c+∼μc−
+> i∼μ
+
+E 
+
+> x,x +∼D c+
+> x−
+> i∼D c−
+> i
+> k
+
+X
+
+> i=1
+
+qi(ft−1; x)vi(ft; x).
+
+Note that ft, f t−1 are normalized, i.e., −2 ≤ vi(ft−1; x) ≤ 2, and −2 ≤ vi(ft; x) ≤ 2. We first prove the upper bound. By using the following inequality 
+
+α log h + β ≥ 2(1 − 1
+
+h ),
+
+where α = 2e2 
+
+> k+e2
+
+, β = 2 − α + α log α 
+
+> 2
+
+, 1 + ke −2 ≤ h ≤ 1 + ke 2, and using 1 + Pki=1 exp( −vi(ft−1; x)) to replace h in the inequality above, we have 
+
+> k
+
+X
+
+> i=1
+
+qi(ft−1; x)vi(ft; x) ≥ − 2(1 − q(ft−1; x)) = −2(1 − 11 + Pki=1 exp( −vi(ft−1; x)) )
+
+≥ − α log(1 + 
+
+> k
+
+X
+
+> i=1
+
+exp( −vi(ft−1; x))) − β
+
+= −αℓ (v(ft−1; x)) − β. 
+
+17 Provable Contrastive Continual Learning 
+
+Using the results above, we have 
+
+Ldis (ft; ft−1, D) = Lcon (ft; D) + E 
+
+> c+∼μc−
+> i∼μ
+
+E 
+
+> x,x +∼D c+
+> x−
+> i∼D c−
+> i
+> k
+
+X
+
+> i=1
+
+qi(ft−1; x)vi(ft; x)
+
+≥ Lcon (ft; D) + E 
+
+> c+∼μc−
+> i∼μ
+
+E 
+
+> x,x +∼D c+
+> x−
+> i∼D c−
+> i
+
+[−αℓ (v(ft−1; x)) − β]= Lcon (ft; D) − αL con (ft−1; D) − β. 
+
+which means 
+
+Lcon (ft; D) ≤ αL con (ft−1; D) + Ldis (ft; ft−1, D) + β. 
+
+This finishes the upper bound part. Then let us consider the lower bound. We use the inequality 
+
+−α log h − β′ ≥ 2(1 − 1
+
+h ),
+
+where α = 2e2 
+
+> k+e2
+
+, β′ = −α log(1 + ke 2) − 2ke 2 
+
+> 1+ ke 2
+
+, 1 + ke −2 ≤ h ≤ 1 + ke 2, and using 1 + Pki=1 exp( −vi(ft−1; x)) to replace h, then we have 
+
+> k
+
+X
+
+> i=1
+
+qi(ft−1; x)vi(ft; x) ≤ 2(1 − q(ft−1; x)) = 2(1 − 11 + Pki=1 exp( −vi(ft−1; x)) )
+
+≤ − α log(1 + 
+
+> k
+
+X
+
+> i=1
+
+exp( −vi(ft−1; x)) − β′
+
+= −αℓ (v(ft−1; x)) − β′.
+
+Using the results above, we have 
+
+Ldis (ft; ft−1, D) = Lcon (ft; D) + E 
+
+> c+∼μc−
+> i∼μ
+
+E 
+
+> x,x +∼D c+
+> x−
+> i∼D c−
+> i
+> k
+
+X
+
+> i=1
+
+qi(ft−1; x)vi(ft; x)
+
+≤ Lcon (ft; D) + E 
+
+> c+∼μc−
+> i∼μ
+
+E 
+
+> x,x +∼D c+
+> x−
+> i∼D c−
+> i
+
+[−αℓ (v(ft−1; x)) − β′]= Lcon (ft; D) − αL con (ft−1; D) − β′.
+
+It can be translated into 
+
+Lcon (ft; D) ≥ αL con (ft−1; D) + Ldis (ft; ft−1, D) + β′.
+
+The proof has finished. 
+
+## E. The Case of Multiple Negative Examples for Theorem 1 
+
+We provide the extended version of Theorem 1 and its proof. 
+
+Theorem 3. For the contrastive continual learning involving T ≥ 2 tasks where each task involves k negative samples, the test loss of the final model fT can be bounded via a linear combination of the training losses associated with each task. More specifically, the following two bounds are applicable. 
+
+18 Provable Contrastive Continual Learning 
+
+(1) Upper bound: 
+
+Ltest (fT ; D1, . . . , DT ) ≤ αT −1Ltrain (f1; D1)+
+
+> T
+
+X
+
+> t=2
+
+αT −t
+
+γt(λ) Ltrain (ft; ft−1, Dt, D1: t−1) + η, 
+
+(2) Lower bound: 
+
+Ltest (fT ; D1, . . . , DT ) ≥ αT −1Ltrain (f1; D1)+
+
+> T
+
+X
+
+> t=2
+
+αT −t
+
+γ′
+
+> t
+
+(λ) Ltrain (ft; ft−1, Dt, D1: t−1) + η′,
+
+where 
+
+
+
+α = 2e2 
+
+> k+e2
+
+,γt(λ) = min  { 1 
+
+> t
+
+} ∪ { λk tj }t−1
+
+> j=1
+
+ ,γ′
+
+> t
+
+(λ) = max  {1} ∪ { λk tj }t−1
+
+> j=1
+
+ ,η = (2 − α + α log α 
+
+> 2
+
+) T −1−T α +( α)T
+
+> (1 −α)2
+
++ PTt=2 αT −t(1 − 1 
+
+> γt(λ)
+
+)min f Lcon (f ; Dt),η′ = −(α log(1 + ke 2) + 2ke 2 
+
+> 1+ ke 2
+
+) T −1−T α +( α)T 
+
+> (1 −α)2
+
+.
+
+Proof. We first proof the upper bound. For models ft and ft−1, we have 
+
+Ldis (ft; ft−1, D1: t−1) = E
+
+> c+∼μ1: t−1
+> c−∼μ1: t−1
+
+E
+
+> x,x +∼D c+
+> x−∼D c−
+
+[−p(ft−1; x) · log p(ft; x)] =
+
+> t−1
+
+X
+
+> j=1
+
+ktj E
+
+> c+∼μj
+> c−∼μj
+
+E
+
+> x,x +∼D c+
+> x−∼D c−
+
+[−p(ft−1; x) · log p(ft; x)] =
+
+> t−1
+
+X
+
+> j=1
+
+ktj Ldis (ft; ft−1, Dj ).
+
+Then we can write the training loss as 
+
+Ltrain (ft; ft−1, Dt, D1: t−1) = Lcon (ft; Dt) + λL dis (ft; ft−1, D1: t−1)= Lcon (ft; Dt) + λ
+
+> t−1
+
+X
+
+> j=1
+
+ktj Ldis (ft; ft−1, Dj ).
+
+for task t ≥ 2, and Ltrain (f1; D1) = Lcon (f1; D1). According to the proof of Lemma 1, for models ft and ft−1, data distribution Dj (j ≤ t), we have 
+
+Lcon (ft, Dj ) ≤ αL con (ft−1, Dj ) + Ldis (ft; ft−1, Dj ) + β. 
+
+19 Provable Contrastive Continual Learning 
+
+Denote γt(λ) = min  { 1 
+
+> t
+
+} ∪ { λk tj }t−1
+
+> j=1
+
+ for task t ≥ 2. According to the equations above, we have 
+
+Ltest (fT ; D1: T )= Lcon (fT ; DT ) +  
+
+> T−1
+
+X
+
+> t=1
+
+Lcon (fT , Dt)
+
+≤ Lcon (fT ; DT ) +  
+
+> T−1
+
+X
+
+> t=1
+
+[Ldis (fT ; fT −1, Dt) + αL con (fT −1; Dt) + β]
+
+≤ ( 1
+
+γT (λ) − 1
+
+γT (λ) + 1) Lcon (fT ; DT ) + λγT (λ) 
+
+> T−1
+
+X
+
+> t=1
+
+kT t Ldis (fT ; fT −1, Dt) +  
+
+> T−1
+
+X
+
+> t=1
+
+[αL con (fT −1; Dt) + β]
+
+≤ 1
+
+γT (λ) Ltrain (fT ; fT −1, DT , D1: T −1) + (1 − 1
+
+γT (λ) )min f Lcon (f ; DT )+ ( T − 1) β + αL test (fT −1; D1: T −1)
+
+...
+
+≤ αT −1Ltrain (f1; D1) + 
+
+> T
+
+X
+
+> t=2
+
+αT −t
+
+γt(λ) Ltrain (ft; ft−1, Dt, D1: t−1) + η. 
+
+where α = 2e2 
+
+> k+e2
+
+, η = (2 − α + α log α 
+
+> 2
+
+) T −1−T α +( α)T 
+
+> (1 −α)2
+
++ PTt=2 αT −t(1 − 1 
+
+> γt(λ)
+
+)min f Lcon (f ; Dt).Let us prove the lower bound. According to the proof of Lemma 1, for models ft and ft−1, and data distribution Dj (j ≤ t),we have 
+
+Lcon (ft, Dj ) ≥ αL con (ft−1, Dj ) + Ldis (ft; ft−1, Dj ) + β′.
+
+Denote γ′
+
+> t
+
+(λ) = max  {1} ∪ { λk tj }t−1
+
+> j=1
+
+ for task t ≥ 2. The proof is similar to that of the upper bound. Similarly, we have 
+
+Ltest (fT ; D1: T )= Lcon (fT ; DT ) +  
+
+> T−1
+
+X
+
+> t=1
+
+Lcon (fT , Dt)
+
+≥ Lcon (fT ; DT ) +  
+
+> T−1
+
+X
+
+> t=1
+
+[Ldis (fT ; fT −1, Dt) + αL con (fT −1; Dt) + β′]
+
+≥ 1
+
+γ′
+
+> t
+
+(λ) [Lcon (fT ; DT ) + λ 
+
+> T−1
+
+X
+
+> t=1
+
+kT t Ldis (fT ; fT −1, Dt)] +  
+
+> T−1
+
+X
+
+> t=1
+
+[αL con (fT −1; Dt) + β′]= 1
+
+γ′
+
+> t
+
+(λ) Ltrain (fT ; fT −1, DT , D1: T −1) + α 
+
+> T−1
+
+X
+
+> t=1
+
+Lcon (fT −1; Dt) + ( T − 1) β′
+
+= 1
+
+γ′
+
+> t
+
+(λ) Ltrain (fT ; fT −1, DT , D1: T −1) + αL test (fT −1; D1: T −1) + ( T − 1) β′
+
+≥ αT −1Ltrain (f1; D1) + 
+
+> T
+
+X
+
+> t=2
+
+αT −t
+
+γ′
+
+> t
+
+(λ) Ltrain (ft; ft−1, Dt, D1: t−1) + η′.
+
+where α = 2e2 
+
+> k+e2
+
+, η′ = −(α log(1 + ke 2) + 2ke 2 
+
+> 1+ ke 2
+
+) T −1−T α +( α)T 
+
+> (1 −α)2
+
+.20
