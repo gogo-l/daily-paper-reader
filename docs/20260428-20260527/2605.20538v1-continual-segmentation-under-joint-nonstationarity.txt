@@ -1,0 +1,3168 @@
+Title: Continual Segmentation under Joint Nonstationarity
+
+URL Source: https://arxiv.org/pdf/2605.20538v1
+
+Published Time: Thu, 21 May 2026 00:24:44 GMT
+
+Number of Pages: 63
+
+Markdown Content:
+# Continual Segmentation under Joint Nonstationarity 
+
+Prashant Pandey 1 Himanshu Kumar 2 Devineni Sri Venkatraya Chowdary 3 Brejesh Lall 1
+
+## Abstract 
+
+Evolving data streams induce joint nonstation-arity in continual semantic segmentation, where semantic classes, input distributions, and supervi-sion availability change simultaneously over time. This setting reflects practical structured prediction systems, yet remains largely unexplored in prior continual learning work, which typically studies these factors in isolation. We formalize continual segmentation under coupled class, domain, and label shifts and investigate learning in heteroge-neous dense prediction environments with limited annotations and abundant unlabeled data. To ad-dress instability and overfitting arising from few-shot supervision under distribution drift, we intro-duce gradient-adaptive stabilization , a parameter-wise regularization mechanism implemented via gradient-scaled stochastic perturbations that pro-motes a principled stability–plasticity tradeoff. We further leverage unlabeled data through semi-supervised learning and introduce prototype an-chored supervision that validates pseudo-labels via joint confidence and prototype consistency. Together, these mechanisms enable learning un-der joint nonstationarity in continual segmenta-tion. Extensive empirical evaluation across class-incremental, domain-incremental, and few-shot regimes demonstrates consistent improvements over prior methods in heterogeneous structured prediction settings. Our results expose funda-mental failure modes of existing continual seg-mentation approaches and provide insight into learning robust dense predictors in dynamically evolving environments. Our code is available at https://github.com/prinshul/JASCL.git. 
+
+> 1
+
+Bharti School of Telecommunications Technology & Manage-ment, Indian Institute of Technology, Delhi, India 2Yardi School of Artificial Intelligence, Indian Institute of Technology, Delhi, India 3Department of Computer Science and Engineering, Indian Institute of Technology (Indian School of Mines), Dhanbad, India. Correspondence to: Prashant Pandey <bsz178495@iitd.ac.in >. 
+
+Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s). 
+
+Figure 1. Class-incremental (CI), few-shot (FS), and domain-incremental (DI) constraints all lead to significantly reduced Dice scores compared to the unconstrained fine-tuning (“no constraint”) on the common base model. 
+
+## 1 Introduction 
+
+The pursuit of adaptive intelligent systems requires learning from data streams whose underlying distributions evolve over time. While continual learning (CL) (Wang et al., 2024; Yuan & Zhao, 2024b) has made progress across a range of settings, a critical gap remains in addressing realistic dense prediction problems such as semantic segmentation, where multiple sources of nonstationarity arise simultaneously. In applications including autonomous driving and medical image analysis, segmentation models encounter sequential data characterized by both evolving semantic label spaces (class-incremental learning, CIL (Zhou et al., 2024)) and shifting input distributions (domain-incremental learning, DIL (Mirza et al., 2022)), often under severely limited su-pervision. We consider a sequence of learning sessions {S t}Tt=0 , where each session is associated with a joint distribution Dt(x, y )
+
+over inputs x and pixel-wise labels y, a class set Ct, and a la-beled sample budget Nt ≪ N0 for t > 0. In realistic settings, these quantities evolve jointly, with Dt̸ = Dt−1, Ct̸ = Ct−1,and Nt ≪ N0, giving rise to joint nonstationarity . Existing CL formulations typically isolate these factors, studying class increments, domain shifts, or data scarcity indepen-dently, leaving their coupled interaction largely unexplored. This discrepancy between idealized CL scenarios and prac-tical structured prediction manifests as severe performance degradation. In the presence of joint shifts, models suf-fer from catastrophic forgetting, unstable adaptation, and 1
+
+> arXiv:2605.20538v1 [cs.CV] 19 May 2026 Continual Segmentation under Joint Nonstationarity
+
+rapid overfitting to few-shot supervision. Figure 1 shows that unconstrained fine-tuning achieves the strongest per-formance, whereas class-incremental (CI), few-shot (FS), and domain-incremental (DI) constraints each induce sub-stantial accuracy drops. These constraints stress models in distinct ways: CI alters decision boundaries, FS produces noisy gradients and overfitting, and DI distorts feature rep-resentations, leading to large degradations relative to the unconstrained baseline. Figure 2 further shows that naive fine-tuning is unstable across architectures: freezing most layers inhibits learning new concepts, while fully unfreezing disrupts previously acquired representations. These obser-vations highlight that effective continual segmentation re-quires preserving earlier structure while enabling controlled adaptation under joint nonstationarity. Few-shot learning (Tao et al., 2020; Qiu et al., 2023; Tian et al., 2024) and semi-supervised learning (Kang et al., 2023b; Cui et al., 2024) offer partial remedies by exploiting limited labels and abundant unlabeled data. However, under joint nonstationarity, pseudo-labeling becomes unreliable: initial model biases propagate across sessions, progressively degrading learning. Recent studies and surveys (Zhang et al., 2025; Yuan & Zhao, 2024a; Xu et al., 2024; Kwak et al., 2025; Zhu et al., 2026; Xue et al., 2025) emphasize the necessity of CL formulations that jointly account for class evolution, domain drift, and label scarcity, yet principled solutions for dense prediction remain scarce. Motivated by this gap, we study continual semantic seg-mentation under coupled class, domain, and supervision shifts. Each incremental session introduces novelty, new classes, new domains, or both, while previously observed class and domain pairs do not recur. Learning proceeds with few labeled samples per session and access to unlabeled data drawn from the current distribution, capturing realistic nonstationary structured prediction. Limited supervision under distribution drift destabilizes optimization and accelerates overfitting. To mitigate this, we introduce gradient-adaptive stabilization (GAS) , a parameter-wise regularization mechanism implemented via gradient-scaled stochastic perturbations that explicitly bal-ances stability and plasticity during adaptation. We further introduce prototype anchored supervision (PAS) in a semi-supervised setting, where class prototypes learned across sessions are used to validate pseudo-labels through joint confidence and feature-space consistency, suppressing error propagation under domain shift and improving knowledge retention over time. Extensive empirical evaluation across class-incremental, domain-incremental, few-shot, and semi-supervised regimes demonstrates consistent gains over prior approaches. Our key contributions to continual semantic segmentation under joint nonstationarity are fourfold: (i) We formalize a  
+
+> Figure 2. Fine-tuning the Session 0 base model in incremental Session 1 causes all backbones to drop in performance, whether their weights are partially frozen (top) or fully unfrozen (bottom).
+
+realistic continual segmentation setting with coupled class, domain, and supervision shifts, exposing fundamental fail-ure modes of existing continual learning methods under joint nonstationarity. (ii) We propose gradient-adaptive stabilization (GAS), a parameter-wise regularization mecha-nism that balances stability and plasticity via gradient-scaled stochastic perturbations, enabling robust adaptation under distribution drift. (iii) We introduce prototype anchored su-pervision (PAS), which validates pseudo-labels through joint confidence and prototype consistency, mitigating error prop-agation and improving learning from unlabeled data. (iv) 
+
+Extensive empirical evaluation demonstrates consistent im-provements across class-incremental, domain-incremental, and few-shot regimes, with strong generalization across het-erogeneous architectures including 3D U-Net (Ronneberger et al., 2015), DeepLabv3+ (Chen et al., 2018), and Trans-former/MedFormer (Gao et al., 2022), surpassing large-scale pretrained models such as SAM (Kirillov et al., 2023; Kerssies et al., 2024). 
+
+## 2 Related Work 
+
+Continual Semantic Segmentation under Distribution Shift. Early class-incremental segmentation methods ad-dressed background shift via distillation and classifier ini-tialization (MiB (Cermelli et al., 2020)), while subsequent approaches incorporated auxiliary supervision or external priors, e.g., CLIP-CT (Zhang et al., 2023) with pseudo-labeling and CLIP-guided heads. Domain-incremental learning has been studied through architectural factoriza-tion, with MDIL (Garg et al., 2022) decomposing parame-ters into domain-invariant and domain-specific components. Regularization-based strategies include uncertainty-aware penalties (UCL (Ahn et al., 2019)), flat-minima optimiza-tion (C-Flat (Bian et al., 2024)), parameter-space perturba-tions (STAR (Eskandar et al., 2025)), and uncertainty- and class-balanced pseudo-label reweighting (UCB (Liang et al., 2025)). 
+
+Few-shot Class-Incremental Learning. Few-shot con-2Continual Segmentation under Joint Nonstationarity 
+
+tinual learning has been explored via prototype-based and constraint-driven formulations. PIFS (Cermelli et al., 2021) and FeCAM (Goswami et al., 2023) leverage prototypes for exemplar-free adaptation, Subspace (Akyürek et al., 2021) constrains novel classifiers to base-class subspaces, and NC-FSCIL (Yang et al., 2023) fixes classifiers as simplex equiangular tight frames. Other approaches allocate future embedding capacity (FACT (Zhou et al., 2022)), synthesize prior data (Gen-Replay (Liu et al., 2022)), address partial annotations (GAPS (Qiu et al., 2023)), decompose networks via soft masks (SoftNet (Kang et al., 2023a)), combine pseudo-labeling with distillation (FSCIL-SS (Jiang et al., 2023)), or mine relevant base classes (BCM (Sakai et al., 2024)). C-FSCIL (Hersche et al., 2022) further employs hy-perdimensional representations with quasi-orthogonal pro-totypes. 
+
+Semi-Supervised and Pseudo-Labeling. Semi-supervised continual learning methods exploit unlabeled data while mit-igating error accumulation, including coreset selection (RE-TRIEVE (Killamsetty et al., 2021)), soft nearest-neighbor stabilization (NNCSL (Kang et al., 2023b)), uncertainty-aware distillation with class equilibrium (UaD-CE (Cui et al., 2024)), and confidence–distribution based pseudo-label selection (CSL (Liu & Liu, 2025)). 
+
+Optimization and Representation Learning under Dis-tribution Shift. Related advances include supervised and self-supervised contrastive learning (SupCL (Khosla et al., 2020), SimCLR (Chen et al., 2020), UnSupCL-HNM (Robinson et al., 2021)), unifying views of multi-task and meta-learning (Wang et al., 2021), and multi-task representation analyses of few-shot learning (Bouniot et al., 2022). CLIP-driven universal segmentation (Liu et al., 2023) leverages text embeddings (Radford et al., 2021) for partial labels, while HALO (Franco et al., 2024) applies hyperbolic representations for pixel-level active learning under domain shift. 
+
+Prior work typically addresses class-incremental learning, domain shift, or few-shot supervision in isolation. We in-stead formalize their coupled interaction and develop learn-ing mechanisms for continual segmentation under joint non-stationarity. 
+
+## 3 Jointly Anchored and Stabilized Continual Learning (JASCL) 
+
+Problem Setup (Joint Nonstationarity). We formalize continual semantic segmentation under joint nonstation-arity as a sequence of sessions {S t}Tt=0 , where each ses-sion is characterized by a class set Ct and domain distri-bution Dt. At session t, the model observes labeled data 
+
+Dt = {(xi, y i)}Nt 
+
+> i=1
+
+with xi ∼ D t and pixel-wise labels 
+
+yi ∈ C t. The base session S0 provides abundant supervision (N0), while subsequent sessions satisfy Nt ≪ N0 and are few-shot. Across sessions, both semantic classes and domains may evolve, yielding three realistic cases: (i) Ct = Ct′ , Dt̸ = Dt′
+
+(domain shift); (ii ) Ct̸ = Ct′ , Dt = Dt′ (class evolution); and (iii ) Ct̸ = Ct′ , Dt̸ = Dt′ (joint shift). Previously observed class–domain pairs are not revisited. Each in-cremental session uses Nt = K|C t| labeled samples with 
+
+K ∈ { 5, 10 , 20 , 30 } and may additionally access unlabeled data Ut = {x(u) 
+
+> j
+
+}Mt
+
+> j=1
+
+, where Mt ≫ Nt and x(u) 
+
+> j
+
+∼ D t.Our goal is to learn a segmentation model that adapts across sessions while retaining prior knowledge under this cou-pled class, domain, and supervision shift. To this end, JASCL combines gradient adaptive stabilization (GAS) for optimization stability with prototype anchored supervision (PAS) to anchor semi-supervised learning under nonstation-arity. 
+
+3.1 Gradient Adaptive Stabilization (GAS) 
+
+To prevent catastrophic forgetting and overfitting on few-shot data while adapting to domain shifts, we introduce 
+
+gradient-adaptive stabilization (GAS) that regulates per-turbation magnitude using parameter gradients as a proxy for curvature. Let θ ∈ Rd denote the flattened vector of all model parameters, where d is the total number of parameters. At session t, define the squared gradient Gi = ( ∂L/∂θ i)2
+
+where L is the loss function and θi is the i-th parameter. Given classifier layer F of segmentation model with weight matrix W ∈ Rm×n, we maintain gradient buffer G that accumulates squared gradients {Gij } and compute inverse gradients G−1 
+
+> ij
+
+= 1 /(Gij + ϵ) where ϵ > 0 ensures numeri-cal stability. The normalized noise scale is: 
+
+˜G−1 
+
+> ij
+
+= 1 + G−1 
+
+> ij
+
+− min( G−1)1 + max( G−1) − min( G−1) ∈ (0 , 1] (1) where min( G−1) and max( G−1) are the minimum and maximum values over all elements in the inverse gradient matrix. The weights are perturbed as ˜W = W + ˜G−1 ⊙N (0 , I ), where ⊙ denotes element-wise multiplication and 
+
+N (0 , I ) is standard Gaussian noise. This mechanism in-jects minimal noise into critical parameters with large gradi-ents actively contributing to learning, while injecting higher noise into parameters with small gradients that may be over-fitting. 
+
+Theoretical analysis. We establish optimality of GAS through Bayesian posterior approximation (a variational inference approach to approximate intractable posteri-ors). Under diagonal Gaussian approximation, the approximate posterior after session t is q(t)(θ) =
+
+N (μ(t), diag( σ(t)2 1 , . . . , σ (t)2  
+
+> d
+
+)) where μ(t) ∈ Rd is the mean vector and σ(t)2  
+
+> i
+
+is the variance of parameter 
+
+θi. The true posterior under Laplace approximation 3Continual Segmentation under Joint Nonstationarity 
+
+(second-order Taylor approximation of the posterior) is π(t)(θ) = N (θ(t), diag(1 /F (t)11 , . . . , 1/F (t) 
+
+> dd
+
+)) where 
+
+θ(t) is the optimal parameter vector at session t and 
+
+F (t) 
+
+> ii
+
+is the i-th diagonal element of the Fisher Infor-mation Matrix (FIM) at session t, defined as Fij := 
+
+E(x,y)∼P
+
+h ∂ log p(y|x;θ)  
+
+> ∂θ i
+> ∂log p(y|x;θ)
+> ∂θ j
+
+i
+
+where P is the data distribution and p(y|x; θ) is the model’s likelihood. The FIM measures parameter sensitivity to data. A large Fii in-dicates parameter θi significantly affects model predictions. 
+
+Assumption 3.1 (Gradient-Fisher Correspondence) . For parameter i at session t, the squared gradient g(t) 
+
+> i
+
+= ∂L/∂θ i
+
+approximates the diagonal Fisher: |g(t) 
+
+> i
+
+|2 = F (t) 
+
+> ii
+
+(1 + ϵi)
+
+where ϵi is an approximation error satisfying |ϵi| ≤ δ for some small δ ∈ (0 , 1) .
+
+Assumption 3.2 (Domain Shift Model) . Under domain shift from session t to t + 1 , the diagonal Fisher elements change as F (t+1)  
+
+> ii
+
+= F (t) 
+
+> ii
+
++ ∆ Fii where ∆Fii is the change in Fisher information for parameter i, and 1
+
+> d
+
+Pdi=1 (∆ Fii )2 ≥
+
+γ2 
+
+> F
+
+∆2 
+
+> t
+
+for constants γF > 0 (Fisher sensitivity) and ∆t > 0
+
+(domain shift magnitude). 
+
+Proposition 3.3 (GAS Achieves Lower KL Under Anisotropic Structure) . Let ˜G2 
+
+> i
+
+= c/F ii where c > 0
+
+is a normalization constant. Let qiso be an isotropic posterior (uniform variance across parameters) with 
+
+σ2 = c/ ¯F where ¯F = 1
+
+> d
+
+Pdi=1 Fii is the average Fisher information. Consider the informed prior p =
+
+N (θ∗, diag(1 /F 11 , . . . , 1/F dd )) where θ∗ is the optimal parameter vector. If Fisher information is heterogeneous across parameters, i.e., Var( Fii ) > 0, then KL( qGAS ∥p) <
+
+KL( qiso ∥p) where KL( ·∥· ) is the Kullback-Leibler diver-gence (measures difference between probability distribu-tions). When Fisher information varies across parameters, uni-form noise cannot match the per-parameter variance of the Laplace approximation; GAS resolves this by scaling noise inversely to Fii , achieving strictly lower KL divergence. 
+
+Corollary 3.4 (GAS Generalization Bound) . Under Proposition 3.3, GAS achieves tighter PAC-Bayes bound (McAllester, 1999) (a framework for deriv-ing generalization guarantees) than isotropic noise. With informed prior p, for expected risk R(q) =
+
+Eθ∼q [E(x,y)∼P [ℓ(fθ (x), y)]] (where ℓ is the loss function and fθ is the model parameterized by θ) and empirical risk ˆR(q) = Eθ∼q [ 1
+
+> n
+
+Pni=1 ℓ(fθ (xi), yi)] (computed over 
+
+n training samples), with probability at least 1 − δ:
+
+R(qGAS ) ≤ ˆR(qGAS ) + 
+
+r KL( qGAS ∥p) + log(2 √n/δ )2n (2) 
+
+where KL( qGAS ∥p) < KL( qiso ∥p) when Fisher is het-erogeneous. Assuming equal empirical risk, the general-ization gap for GAS is smaller: R(qGAS ) − ˆR(qGAS ) <R(qiso ) − ˆR(qiso ).Since the generalization bound increases with KL( q∥p), the strictly lower KL achieved by GAS directly yields a tighter bound on the expected risk. 
+
+Assumption 3.5 (Heterogeneous Curvature) . The Hessian 
+
+H = ∇2L(θ) ∈ Rd×d (second derivative matrix of the loss) has eigenvalues λ1 ≥ λ2 ≥ · · · ≥ λd > 0 with condition number κ := λ1/λ d > 1 (ratio of largest to smallest eigenvalue). Static regularization methods (e.g. Dropout, weight de-cay (Mirzadeh et al., 2020), noise injection (Orvieto et al., 2023)) set variance independent of current-task Fisher infor-mation F (t+1)  
+
+> ii
+
+.
+
+Theorem 3.6 (GAS vs. Static Regularization) . Let qGAS be the GAS posterior with noise variance ˜G2 
+
+> i
+
+∝ 1/g 2 
+
+> i
+
+(inversely proportional to squared gradients) and qstatic be a static regularization posterior with fixed variance σ2static deter-mined from session t−1. Under Assumptions A.10 and A.11, when domain shift magnitude satisfies ∆t > Cλδ/γ F for regularization strength λ and constants C, δ, γ F , we have 
+
+KL( qGAS ∥π(t)) < KL( qstatic ∥π(t)) where π(t) is the true posterior at session t.
+
+Memory-based regularization methods (e.g. EWC (Kirk-patrick et al., 2017), UCL (Ahn et al., 2019)) set variance using Fisher information from sessions 0, . . . , t to regularize session t + 1 .
+
+Theorem 3.7 (GAS vs. Memory-Based Regularization) .
+
+Let qmemory be a memory-based regularization posterior us-ing Fisher information accumulated from previous sessions. Define the Fisher mismatch ρi = ( F (t) 
+
+> ii
+
+− ¯F (hist ) 
+
+> ii
+
+)/F (t)
+
+> ii
+
+where ¯F (hist ) 
+
+> ii
+
+is the historical Fisher estimate (weighted average from past sessions). Under Assumptions A.10 and A.11, when 1
+
+> d
+
+P 
+
+> i
+
+ρ2 
+
+> i
+
+> O (δ2) (Fisher mismatch ex-ceeds approximation error), we have KL( qGAS ∥π(t)) <
+
+KL( qmemory ∥π(t)).Fisher estimates accumulated from past sessions become misaligned with the current session’s Fisher information under domain shift; GAS recomputes noise scales from in-stantaneous gradients, maintaining alignment with F (t) 
+
+> ii
+
+.
+
+Adversarial flatness methods (e.g. SAM (Foret et al., 2021), C-Flat (Bian et al., 2024), STAR (Eskandar et al., 2025)) seek flat minima via worst-case perturbations. 
+
+Theorem 3.8 (GAS vs. Adversarial Flatness Methods) .
+
+Let Ladv (θ) = max ∥δ∥2≤ρ L(θ + δ) be the adversarial loss maximized over an ℓ2-ball of radius ρ (perturbation budget). The worst-case perturbation concentrates on high-curvature directions, yielding expected loss increase 
+
+4Continual Segmentation under Joint Nonstationarity 
+
+E[Ladv ] − L (θ) = O(ρ2λmax ) where λmax is the max-imum Hessian eigenvalue. For GAS with inverse gradi-ent scaling, the expected loss increase is O(ρ2 ¯λ) where 
+
+¯λ = 1
+
+> d
+
+P 
+
+> i
+
+λi is the average curvature. Under Assump-tion A.12 with κ > d , GAS achieves lower expected loss increase: E[LGAS ] − L (θ) < E[Ladv ] − L (θ) by factor up to κ/d .Adversarial perturbations concentrate on the maximum cur-vature direction, incurring loss increase O(ρ2λmax ); in-verse gradient scaling distributes perturbations toward low-curvature directions, reducing this to O(ρ2 ¯λ).
+
+The proofs for Proposition 3.3,Corollary 3.4, and Theo-rems 3.6–3.8 are provided in Appendix A. Please refer to Table 9 and Appendix C for robustness and sensitivity anal-ysis of GAS. 
+
+3.2 Prototype Anchored Supervision (PAS) 
+
+To leverage abundant unlabeled data Ut while mitigating error propagation, we introduce prototype anchored supervi-sion (PAS) within a mean-teacher framework (Tarvainen & Valpola, 2017) (a semi-supervised learning approach where a teacher network generates pseudo-labels for unlabeled data to train a student network). For each class c ∈ C t, we extract a compact prototype from the feature space. Given a trained model with intermediate feature extractor ϕ and classifier F , for each labeled sample (xi, y i) with embed-ding Ei = ϕ(xi) ∈ RD×H×W (where D is the feature dimension, H, W are spatial dimensions), we extract class-specific features F(i) 
+
+> c
+
+= {Ei : yi = c} (all features where ground-truth label is class c) and compute the per-sample prototype as p(i) 
+
+> c
+
+= 1 
+
+> |F (i)
+> c|
+
+P 
+
+> f∈F (i)
+> c
+
+f . Across all samples in session t containing class c (denoted N S c ⊆ Nt), the class prototype is: 
+
+Pc = 1
+
+N S c
+
+X
+
+> j∈N S c
+
+p(j)
+
+> c
+
+|| p(j) 
+
+> c
+
+|| 2
+
+(3) where || · || 2 is the ℓ2-norm (Euclidean norm). 
+
+These prototypes serve as class anchors in feature space, enabling pseudo-label validation via feature-space consis-tency rather than confidence alone. 
+
+For unlabeled input x(u) 
+
+> j
+
+, student network Ms and teacher network Mt generate predictions ˆys, Fs = Ms(x(u) 
+
+> j
+
+) and 
+
+ˆyt, Ft = Mt(x(u) 
+
+> j
+
+), where ˆys, ˆyt ∈ RC×H×W are predicted class probabilities and Fs, Ft ∈ RD×H×W are feature rep-resentations. For each pixel (p, q ), we compute predicted class c′(p, q ) = arg max c(softmax (ˆ y(p, q ))) , confidence conf (p, q ) = max( softmax (ˆ y(p, q ))) (maximum probabil-ity over classes), and cosine similarity to prototype: sim (p, q ) = F(p, q ) · Pc′(p,q )
+
+||F (p, q )|| 2|| Pc′(p,q )|| 2
+
+(4) where · denotes dot product. A pseudo-label at (p, q )
+
+is retained only if valid (p, q ) = ( conf (p, q ) > τ conf ) ∧
+
+(sim (p, q ) > τ sim ) where τconf , τ sim ∈ [0 , 1] are thresholds. The consistency loss operates on validated pseudo-labels: 
+
+Lconsistency = 1
+
+|V| 
+
+X
+
+> (p,q )∈V
+
+|| ˆys(p, q ) − ˆyt(p, q )|| 22 (5) where V = {(p, q ) : valid s(p, q ) ∧ valid t(p, q )} represents pixels validated by both models. 
+
+Theoretical analysis. We model pseudo-label dynamics through error rates. Let ϵs(t) and ϵt(t) denote expected fractions of incorrect pseudo-labels produced by student and teacher at iteration t. With unlabeled data Du of size nu and pseudo-label weight γ ∈ (0 , 1) (controls the influence of pseudo-labels on learning), define coverage f ∈ [0 , 1] as the fraction of pseudo-labels retained, and precision ρ ∈ [0 , 1] 
+
+as the probability a retained pseudo-label is correct. 
+
+Assumption 3.9 (Labeled Data Error) . There exists a con-stant ϵ0 ∈ (0 , 1) representing the irreducible error rate of the student when trained solely on labeled data Dl (the best achievable error without unlabeled data). 
+
+Assumption 3.10 (Linear Error Mixing) . When trained on mixture of ground-truth labels (weight 1 − γ) and pseudo-labels (weight γ), the student’s expected error is: ϵs(t+1) = (1 − γ)ϵ0 + γϵ t(t).
+
+Assumption 3.11 (EMA Error Inheritance) . The teacher’s pseudo-label error inherits from student via exponen-tial moving average (EMA) with decay α ∈ [0 , 1) (a momentum-based update where teacher parameters slowly track student parameters): ϵt(t+1) = αϵ t(t)+(1 −α)ϵs(t+1) .
+
+Proposition 3.12 (Error Dynamics Recurrence) . Under As-sumptions B.1–B.3, the teacher error satisfies first-order linear recurrence: ϵt(t + 1) = λϵ t(t) + (1 − α)(1 − γ)ϵ0
+
+where λ := α + (1 − α)γ < 1 is the contraction factor. 
+
+Theorem 3.13 (Asymptotic Error Without Prototype An-chored Supervision (PAS)) . Let γ ∈ (0 , 1) and α ∈ [0 , 1) .Then λ = α + (1 − α)γ < 1, and teacher error converges: 
+
+lim t→∞ ϵt(t) = ϵ0. Without PAS, semi-supervised learning provides no asymptotic improvement over purely supervised learning. 
+
+Theorem 3.14 (Asymptotic Error With PAS) . Under As-sumptions B.1–B.3, with PAS that achieves coverage f and precision ρ, the teacher error converges to: 
+
+ϵ∞(f, ρ ) = (1 − f γ )ϵ0
+
+1 − f γ (1 − ρ) . (6) 5Continual Segmentation under Joint Nonstationarity 
+
+Furthermore: (i) ϵ∞ < ϵ 0 if and only if ρ > 1 − 1−f γ f γ , (ii) 
+
+ϵ∞ is strictly decreasing in ρ when f > 0, (iii) for any ρ > π (base rate), PAS strictly improves over the no PAS baseline, and (iv) higher precision always reduces asymptotic error. When ρ = 0 (all accepted pseudo-labels incorrect), ϵ∞ =
+
+ϵ0, recovering the no PAS baseline; when ρ = 1 (all ac-cepted pseudo-labels correct), ϵ∞ = (1 − f γ )ϵ0 < ϵ 0,achieving the maximum possible reduction. 
+
+We also prove that PAS performs better compared with confidence-only, consistency-based (CSL (Liu & Liu, 2025)), and memory bank based (NNCSL (Kang et al., 2023b)) methods. All proofs are provided in Appendix B. JASCL integrates Gradient Adaptive Stabilization (GAS) with Prototype Anchored Supervision (PAS) to address continual segmentation under joint nonstationarity (Fig-ure 3). At session t, training minimizes L = LCE (Dt) + 
+
+λcons Lconsistency (Ut) (if unlabeled data is available), where 
+
+LCE denotes supervised cross-entropy and Lconsistency is computed only on PAS-validated pseudo-labels. GAS ap-plies gradient-adaptive perturbations to classifier parameters, providing stability under curvature heterogeneity (Propo-sition 3.3, Corollary 3.4, Theorems 3.6–3.8), while PAS anchors semi-supervised learning to class prototypes, im-proving pseudo-label reliability (Theorem 3.13–3.14). Pro-totypes are replayed at the classifier F (Lproto ). Together, GAS stabilizes optimization and PAS suppresses error prop-agation, enabling continual learning across evolving classes, domains, and supervision regimes. 
+
+## 4 JASCL Benchmarks 
+
+We construct five challenging benchmarks for 3D medical 
+
+and 2D natural scene segmentation , designed to simulate realistic clinical and autonomous driving scenarios with 
+
+multiple sessions , diverse domains , and a large number of novel classes . Each benchmark features a base learning session on a large dataset followed by incremental sessions with limited labeled data (few-shot) and with significant domain shifts. 
+
+3D Medical JASCL Benchmarks : We develop three 3D medical benchmarks using data from TotalSegmentator 
+
+(TS - CT) ((Wasserthal et al., 2023)), AMOS (mostly CT with few MRI samples) ((Ji et al., 2022)), BCV 
+
+(CT)((Landman et al., 2015), MOTS (CT) ((Zhang et al., 2021)), BraTS (MRI) ((Menze et al., 2014)), and VerSe 
+
+(CT) ((Sekuboyina et al., 2021)). All three benchmarks adopt a few-shot learning setup, using 5 training samples per class for incremental sessions, progressing from normal to tumor segmentation. The three medical benchmarks: (i) Med JASCL-Disjoint ,a 6-session, 37-class protocol with disjoint classes and domains; (ii) Med JASCL-Mixed , a 5-session, 35-class setup allowing recurrence of either classes or domains (but not both) and mixing datasets per session; and (iii) Med Semi-Supervised-JASCL , a semi-supervised variant of Med JASCL-Disjoint augmented with 8–30 unlabeled sam-ples per session. Please refer to Table 1 for various classes and domains. 
+
+2D Natural Scene JASCL Benchmarks : We introduce two benchmarks for autonomous driving scenarios using data from BDD100K ((Yu et al., 2020)), Cityscapes ((Cordts et al., 2016)), and IDD ((Varma et al., 2019)). These bench-marks feature a few-shot learning with 10 training sam-ples per class. The two natural scene benchmarks for au-tonomous driving: (i) Natural-JASCL , a 3-session setup using BDD100K, Cityscapes, and IDD, designed to test representation adaptation under domain shifts and class re-currence; and (ii) Semi-Supervised Natural-JASCL , a 4-session variant that augments new classes with 400 un-labeled images per class to reflect realistic scenarios with limited annotations but abundant raw data. Details on all datasets, class and domain specifications, and unlabeled data are provided in Appendix F. 
+
+## 5 Results and Analysis 
+
+We use mean Intersection over Union (mIoU), ranging from 0 to 100 (higher is better), for 2D natural scene benchmarks, and the Dice coefficient (Dice score), ranging from 0 to 1 (higher is better), for 3D medical benchmarks, as evaluation metrics. In each incremental session , we evaluate the classes introduced in the current session along with all classes en-countered in previous sessions. The goal is to retain previ-ously learned knowledge while effectively acquiring new information, handling data scarcity, and adapting to domain shifts. A Vanilla baseline consists of a plain backbone with no mechanisms to handle any constraints. Gen-Replay (Liu et al., 2022) is implemented with a diffusion model adapted from (Dorjsembe et al., 2024). Some baselines act only in incremental sessions and rely on a shared pre-trained base model, whereas others modify training in Session 0, thereby altering base session performance. See Appendix I for comparison with regularization-based methods. We observe substantial performance drops across all Vanilla models and baselines. Notably, transformer-based models perform comparably to, or sometimes worse than, simpler encoder–decoder architectures like U-Net, and even heav-ily pre-trained models such as SAM show a clear decline. Across the medical benchmarks, baselines collapse after just two sessions in Med JASCL-Disjoint (Table 2), while JASCL with a U-Net backbone sustains strong performance across all five, demonstrating robustness to multiple constraints as shown in Table 2 and Table 3. In Med JASCL-Mixed ,transformer backbones such as MedFormer, SwinUNetr, 6Continual Segmentation under Joint Nonstationarity 
+
+Figure 3. At session t, gradient adaptive stabilization (GAS) is applied to the decoder’s pixel classifier F of Ms. With unlabeled data, a mean-teacher model Mt generates pseudo-labels via similarity matching ( τsim ), and only high-confidence predictions ( τconf ) contribute to a consistency loss. Prototype anchored supervision (PAS) uses labeled prototypes Pc to validate pseudo-labels in both prediction and feature spaces, preventing error amplification in the student–teacher loop. 
+
+Table 1. Summary of JASCL Benchmarks. |C t| denotes the number of classes in session i. ‘SS’ denotes Semi-Supervised.                                                                                     
+
+> Benchmark Session 0 (Base) Session 1 Session 2 Session 3 Session 4 Session 5 Med JASCL-Disjoint |C 0|= 15 (TS) |C 1|= 5 (AMOS) |C 2|= 6 (BCV) |C 3|= 4 (MOTS) |C 4|= 3 (BraTS) |C 5|= 4 (VerSe)
+> Med JASCL-Mixed |C 0|= 10 (AMOS) |C 1|= 8 (BCV, MOTS) |C 2|= 6 (TS, AMOS) |C 3|= 4 (MOTS, TS) |C 4|= 7 (BraTS, VerSe) –
+> Med SS-JASCL |C 0|= 15 (TS) |C 1|= 5 (AMOS) |C 2|= 6 (BCV) |C 3|= 4 (MOTS) |C 4|= 3 (BraTS) |C 5|= 4 (VerSe)
+> Natural-JASCL |C 0|= 10 (BDD) |C 1|= 5 (IDD) |C 2|= 5 (BDD, IDD) –––
+> SS-Natural-JASCL |C 0|= 10 (BDD) |C 1|= 2 (Cityscapes) |C 2|= 2 (IDD) |C 3|= 3 (IDD) ––
+
+Table 2. Performance of baselines on the 3-session Med JASCL-Disjoint benchmark, reported as Dice score. 
+
+Method Session 0 Session 1 Session 2 UCL (Ahn et al., 2019) 0.700 0.430 0.325 
+
+PIFS (Cermelli et al., 2021) 0.700 0.129 0.078 
+
+NC-FSCIL (Yang et al., 2023) 0.394 0.077 0.081 
+
+CLIP-CT (Zhang et al., 2023) 0.475 0.186 0.141 
+
+MiB (Cermelli et al., 2020) 0.700 0.271 0.096 
+
+MDIL (Garg et al., 2022) 0.779 0.115 0.097 
+
+C-FSCIL (Hersche et al., 2022) 0.787 0.334 0.297 
+
+SoftNet (Kang et al., 2023a) 0.820 0.305 0.146 
+
+GAPS (Qiu et al., 2023) 0.700 0.334 0.253 
+
+FSCIL - SS (Jiang et al., 2023) 0.700 0.115 0.089 
+
+Subspace (Akyürek et al., 2021) 0.257 0.054 0.040 
+
+Gen-Replay (Liu et al., 2022) 0.700 0.076 0.102 
+
+FeCAM (Goswami et al., 2023) 0.700 0.048 0.042 
+
+FACT (Zhou et al., 2022) 0.357 0.071 0.028 
+
+MAML (Bouniot et al., 2022) 0.700 0.001 0.059 
+
+MAML + regularizer (Bouniot et al., 2022) 0.700 0.001 0.062 
+
+MTL (Wang et al., 2021) 0.700 0.079 0.088 
+
+UnSupCL (Chen et al., 2020) 0.700 0.039 0.088 
+
+SupCL (Khosla et al., 2020) 0.700 0.058 0.042 
+
+UnSupCL-HNM (Robinson et al., 2021) 0.700 0.035 0.068 
+
+C-Flat (Bian et al., 2024) 0.700 0.174 0.030 
+
+STAR (Eskandar et al., 2025) 0.700 0.050 0.020 
+
+Saving100x (Chen et al., 2023) 0.700 0.072 0.053 
+
+YoooP (Kong et al., 2025) 0.700 0.176 0.028 
+
+UCB (Liang et al., 2025) 0.700 0.267 0.127 
+
+BCM (Sakai et al., 2024) 0.700 0.014 0.000 
+
+Adapt_replay (Zhu et al., 2025) 0.700 0.044 0.027 
+
+JASCL (U-Net) 0.736 0.460 0.398 
+
+and a CLIP-driven U-Net all degrade over sessions, with the latter dropping despite pre-training on 21 of 35 classes (Table 6), highlighting the benchmark’s difficulty. In Med Semi-Supervised-JASCL , adding unlabeled data significantly boosts JASCL (Table 8, Figure 4b), unlike existing semi-supervised methods that fail to exploit it. This demon-strates that leveraging readily available unlabeled data can substantially improve multi-constraint continual 
+
+Table 3. Performance on the 6-session Med JASCL-Disjoint bench-mark, reported as Dice score.                   
+
+> Method Session 0 Session 1 Session 2 Session 3 Session 4 Session 5 U-Net Vanilla 0.700 0.076 0.057 0.047 0.030 0.042
+> JASCL (U-Net) 0.736 0.460 0.398 0.329 0.025 0.324
+
+Table 4. Performance on the Natural-JASCL benchmark, reported as mIoU. 
+
+Method Session 0 Session 1 Session 2 DeepLab Vanilla 47.76 2.18 3.86 
+
+GAPS (Qiu et al., 2023) 47.76 23.42 16.68 
+
+MiB (Cermelli et al., 2020) 47.76 2.50 2.37 
+
+MDIL (Garg et al., 2022) 48.54 1.59 3.02 
+
+SAM Vanilla (Kerssies et al., 2024) 66.0 32.6 30.81 
+
+JASCL (SAM) 66.0 33.2 31.22 
+
+learning for semantic segmentation. Figure 4b compares JASCL with (SS JASCL-U-Net) and without (JASCL-U-Net) access to unlabeled data. With only a few labeled sam-ples, the added unlabeled examples broaden the coverage of the new session and lead to a clear performance gain. This improvement shows that selective pseudo-labeling helps stabilize adaptation. In this setup, MedFormer effectively adapts to the substantial domain shift introduced by BraTS (MRI) domain in Session 4 (Table 1) and still maintains a strong score of 0.323 with JASCL (Table 8), outperform-ing U-Net. In natural scene benchmark ( Natural-JASCL ), even large-scale models like SAM (Kirillov et al., 2023), pre-trained on a billion masks, exhibit forgetting (Table 4), yet JASCL consistently improves SAM, as well as U-Net and transformer backbones, showing broad applicability. Finally, in Semi-Supervised Natural-JASCL , JASCL serves 7Continual Segmentation under Joint Nonstationarity 
+
+Table 5. Computational analysis for Session 1.                           
+
+> Setting Parameters (M) FLOPs (T) Training Time
+> JASCL w/o JASCL JASCL w/o JASCL JASCL w/o JASCL
+> Med JASCL-Disjoint 16.27 16.27 0.52 0.52 4h 06m 4h 05m
+> Med Semi-Supervised-JASCL 39.59 39.59 1.10 1.10 5h 18m 5h 08m
+> Natural-JASCL (SAM ViT-B) 88.90 88.90 0.37 0.37 1h 43m 1h 35m
+
+Table 6. Performance on Med JASCL-Mixed benchmark. All values are reported as Dice score.                                     
+
+> Method Session 0 Session 1 Session 2 Session 3 Session 4 U-Net Vanilla 0.571 0.216 0.133 0.074 0.045
+> CLIP-driven (Liu et al., 2023) 0.717 0.417 0.227 0.196 0.089
+> MedFormer Vanilla 0.613 0.198 0.134 0.052 0.067
+> SwinUNetr Vanilla 0.605 0.197 0.133 0.082 0.082
+> JASCL (SwinUNetr) 0.605 0.318 0.275 0.254 0.210
+> JASCL (MedFormer) 0.622 0.367 0.287 0.288 0.228
+
+Table 7. Performance on Semi-Supervised Natural-JASCL bench-mark. All values are reported as mIoU.                                                
+
+> Method Session 0 Session 1 Session 2 Session 3 DeepLab Vanilla 47.76 1.04 1.51 0.43
+> MDIL (Garg et al., 2022) 47.76 1.87 1.43 0.39
+> MiB (Cermelli et al., 2020) 47.76 5.97 1.59 0.42
+> UaD-CE (Cui et al., 2024) 47.76 1.88 1.74 0.69
+> NNCSL (Kang et al., 2023b) 47.76 0.79 1.27 0.46
+> HALO (Franco et al., 2024) 47.76 1.78 2.02 1.27
+> RETRIEVE (Killamsetty et al., 2021) 47.76 1.57 1.89 0.39
+> GAPS (Qiu et al., 2023) 47.76 19.73 18.76 14.45
+> JASCL + GAPS 47.76 27.84 27.69 25.47
+
+as a plug-and-play module that leverages unlabeled data to enhance GAPS results (Table 7), further underscoring its effectiveness across diverse baselines. Existing continual semi-supervised methods remain unreliable in these setups. The CT to BraTS MRI shift at Session 4 (Table 3 and 8) caused near complete forgetting in the U-Net. JASCL raises the Dice score only from 0.025 (Table 3) to 0.0576 (Table 8), highlighting the difficulty of the JASCL benchmarks. 
+
+Hyperparameters: The robustness and sensitivity analysis of GAS in Table 9 shows that JASCL remains robust despite relying on only a minimal set of hyperparameters. We select pseudo-labels using the confidence threshold τconf and the similarity threshold τsim . Lower values (e.g., 0.6) increase retention of pseudo-labels but admit low-confidence labels, while higher values reduce retention excessively. We adopt 
+
+τconf = 0 .7 and τsim = 0 .7 across all datasets. Sensitivity analysis in the Appendix D confirms robustness. 
+
+Ablations: In the Med JASCL-Mixed benchmark, where JASCL improves the performance of MedFormer, we re-moved gradient adaptive stabilization ( ˜G−1), and the results are plotted in Figure 5a. As shown, there is a significant drop in performance, highlighting the importance of the pro-posed gradient adaptive stabilization strategy, which helps regularize the model under few-shot data and domain shifts. In the Semi-Supervised Natural-JASCL benchmark, where JASCL improves GAPS using unlabeled data, we removed the prototype anchored supervision strategy and evaluated JASCL’s performance, as shown in Figure 5b. It is evident that the PAS contributes to the improved performance of JASCL. Please see Appendix E for the layer-wise impact of GAS. 
+
+Figure 4. Performance of JASCL without unlabeled data (Med JASCL-Disjoint) and with unlabeled data (Med Semi-Supervised-JASCL). ‘SS’ is Semi-Supervised. 
+
+Figure 5. a) (top) JASCL without Gradient adaptive stabilization (GAS) evaluated with MedFormer (Med JASCL-Mixed). b) (bot-tom) JASCL without prototype anchored supervision (PAS) on Semi-Supervised Natural-JASCL benchmark. 
+
+Computational overhead: The computational analysis (Ta-ble 5) for Session 1 shows that JASCL adds no extra cost yet yields notable performance improvements over the Vanilla baseline (w/o JASCL). JASCL remains lightweight, uses 8Continual Segmentation under Joint Nonstationarity 
+
+Table 8. Performance on Med Semi-Supervised-JASCL benchmark. Results reported as Dice score.                                                                  
+
+> Method Session 0 Session 1 Session 2 Session 3 Session 4 Session 5 U-Net Vanilla 0.700 0.076 0.058 0.047 0.030 0.043
+> NNCSL (U-Net) (Kang et al., 2023b) 0.700 0.048 0.048 0.030 0.011 0.040
+> UaD-CE (U-Net) (Cui et al., 2024) 0.700 0.082 0.075 0.067 0.031 0.049
+> JASCL (U-Net) 0.736 0.554 0.445 0.414 0.058 0.368 MedFormer Vanilla 0.659 0.065 0.062 0.059 0.051 0.040
+> UaD-CE (MedFormer) (Cui et al., 2024) 0.659 0.052 0.048 0.065 0.037 0.032
+> NNCSL (MedFormer) (Kang et al., 2023b) 0.659 0.142 0.095 0.144 0.010 0.048
+> CSL (MedFormer) (Liu & Liu, 2025) 0.659 0.040 0.020 0.000 0.000 0.000
+> JASCL (MedFormer) 0.640 0.431 0.368 0.335 0.323 0.293
+
+Table 9. JASCL sensitivity/robustness analysis across ε, noise variance, and number of shots K.                          
+
+> Setting Varying εVariance of noise added to WShots (K)10 −610 −710 −810 −90.1 110 345
+> JASCL 0.443 0.437 0.460 0.482 0.460 0.460 0.408 0.414 0.434 0.460
+> Vanilla 0.076
+
+few hyperparameters, generalizes across backbones, and per-forms strongly on about 12 datasets compared with around 37 baselines. 
+
+## 6 Limitations 
+
+Despite the strong performance of JASCL, several limita-tions remain. The benchmarks reveal that extremely severe domain shifts, particularly the abrupt transition from CT to MRI data, can still cause near-complete forgetting in lightweight architectures such as U-Net, highlighting the difficulty of continual segmentation under joint nonstation-arity. Although PAS effectively utilizes unlabeled data, per-formance remains sensitive to the quality and diversity of unlabeled samples under large distribution shifts and noise corruption. Furthermore, segmentation of small anatomical structures in 3D medical imaging remains challenging in few-shot continual settings, where limited supervision am-plifies optimization instability and retention difficulties. Fi-nally, while JASCL improves robustness across diverse back-bones and settings, substantial performance gaps still exist across sessions, indicating significant room for improve-ment in continual semantic segmentation under evolving classes, domains, and supervision conditions. Appendix J discusses limitations and future work in detail. 
+
+## 7 Conclusion 
+
+We presented JASCL for continual segmentation under joint nonstationarity, combining Gradient-Adaptive Stabilization and Prototype-Anchored Supervision to address optimiza-tion instability and pseudo-label noise. Experiments expose a large gap in current methods, including foundation models, and show that validated unlabeled data enables continual learning, with substantial room for improvement. JASCL extends to robotics, medical imaging, detection, and open-vocabulary vision–language settings. We hope this work bridges theory and deployment in real-world systems. 
+
+## 8 Impact Statement 
+
+This work advances continual semantic segmentation in dy-namic environments, with potential applications in robotics, autonomous systems, and medical imaging. By enabling adaptation under evolving classes and domains with limited supervision, JASCL may reduce retraining costs and im-prove scalability of deployed models. However, continual learning systems may accumulate errors or reflect biases in unlabeled data, particularly in safety-critical settings. While our method mitigates these risks through stability-aware optimization and prototype-anchored supervision, careful validation and human oversight remain essential. We hope this work encourages the development of robust and respon-sible continual learning systems. 
+
+## References 
+
+Ahn, H., Cha, S., Lee, D., and Moon, T. Uncertainty-based continual learning with adaptive regularization. In 
+
+Advances in Neural Information Processing Systems , pp. 4394–4404, 2019. Akyürek, A. F., Akyürek, E., Wijaya, D. T., and Andreas, J. Subspace regularizers for few-shot class incremental learning. arXiv preprint arXiv:2110.07059 , 2021. Bian, A., Li, W., Yuan, H., Wang, M., Zhao, Z., Lu, A., Ji, P., Feng, T., et al. Make continual learning stronger via c-flat. Advances in Neural Information Processing Systems , 37:7608–7630, 2024. Bouniot, Q., Redko, I., Audigier, R., Loesch, A., and Habrard, A. Improving few-shot learning through multi-task representation learning theory. In European Confer-ence on Computer Vision , 2022. 9Continual Segmentation under Joint Nonstationarity 
+
+Cermelli, F., Mancini, M., Rota Bulò, S., Ricci, E., and Caputo, B. Modeling the background for incremental learning in semantic segmentation. In Computer Vision and Pattern Recognition (CVPR) , June 2020. Cermelli, F., Mancini, M., Xian, Y., Akata, Z., and Caputo, B. Prototype-based incremental few-shot semantic seg-mentation. In Proceedings of the 32nd British Machine Vision Conference , November 2021. Chen, J., Cong, R., Luo, Y., Ip, H., and Kwong, S. Saving 100x storage: Prototype replay for reconstructing training sample distribution in class-incremental semantic seg-mentation. Advances in Neural Information Processing Systems , 36:35988–35999, 2023. Chen, L.-C., Zhu, Y., Papandreou, G., Schroff, F., and Adam, H. Encoder-decoder with atrous separable convolution for semantic image segmentation. In Ferrari, V., Hebert, M., Sminchisescu, C., and Weiss, Y. (eds.), Computer Vision – ECCV 2018 , pp. 833–851, Cham, 2018. Springer International Publishing. ISBN 978-3-030-01234-2. Chen, T., Kornblith, S., Norouzi, M., and Hinton, G. Asimple framework for contrastive learning of visual rep-resentations. In International conference on machine learning , pp. 1597–1607. PmLR, 2020. Cordts, M., Omran, M., Ramos, S., Rehfeld, T., Enzweiler, M., Benenson, R., Franke, U., Roth, S., and Schiele, B. The cityscapes dataset for semantic urban scene un-derstanding. In Proceedings of the IEEE conference on computer vision and pattern recognition , pp. 3213–3223, 2016. Cui, Y., Deng, W., Chen, H., and Liu, L. Uncertainty-aware distillation for semi-supervised few-shot class-incremental learning. IEEE Transactions on Neural Net-works and Learning Systems , 35(10):14259–14272, 2024. doi: 10.1109/TNNLS.2023.3277018. Dorjsembe, Z., Pao, H.-K., Odonchimed, S., and Xiao, F. Conditional diffusion models for semantic 3d brain mri synthesis. IEEE Journal of Biomedical and Health Infor-matics , 28(7):4084–4093, 2024. doi: 10.1109/JBHI.2024. 3385504. Eskandar, M., Imtiaz, T., Hill, D., Wang, Z., and Dy, J. STAR: Stability-inducing weight perturbation for con-tinual learning. In The Thirteenth International Confer-ence on Learning Representations , 2025. URL https: //openreview.net/forum?id=6N5OM5Duuj .Foret, P., Kleiner, A., Mobahi, H., and Neyshabur, B. Sharpness-aware minimization for efficiently improving generalization. In International Conference on Learning Representations , 2021. URL https://openreview. net/forum?id=6Tm1mposlrM .Franco, L., Mandica, P., Kallidromitis, K., Guillory, D., Li, Y.-T., Darrell, T., and Galasso, F. Hyperbolic ac-tive learning for semantic segmentation under domain shift. In Forty-first International Conference on Machine Learning , 2024. URL https://openreview.net/ forum?id=hKdJPMQvew .Gao, Y., Zhou, M., Liu, D., Yan, Z., Zhang, S., and Metaxas, D. N. A data-scalable transformer for medical image segmentation: Architecture, model efficiency, and bench-mark, 2022. Garg, P., Saluja, R., Balasubramanian, V. N., Arora, C., Subramanian, A., and Jawahar, C. Multi-domain in-cremental learning for semantic segmentation. In 2022 IEEE/CVF Winter Conference on Applications of Com-puter Vision (WACV) , pp. 2080–2090, 2022. doi: 10. 1109/WACV51458.2022.00214. Goswami, D., Liu, Y., Twardowski, B., and van de Weijer, J. FeCAM: Exploiting the heterogeneity of class distri-butions in exemplar-free continual learning. In Thirty-seventh Conference on Neural Information Processing Systems , 2023. URL https://openreview.net/ forum?id=Asx5eDqFZl .Hersche, M., Karunaratne, G., Cherubini, G., Benini, L., Sebastian, A., and Rahimi, A. Constrained few-shot class-incremental learning. In 2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) ,pp. 9047–9057, 2022. doi: 10.1109/CVPR52688.2022. 00885. Ji, Y., Bai, H., GE, C., Yang, J., Zhu, Y., Zhang, R., Li, Z., Zhanng, L., Ma, W., Wan, X., and Luo, P. AMOS: A large-scale abdominal multi-organ benchmark for versatile medical image segmentation. In Thirty-sixth Conference on Neural Information Processing Systems Datasets and Benchmarks Track , 2022. URL https: //openreview.net/forum?id=Vk4-HUnkEak .Jiang, C., Wang, T., Li, S., Wang, J., Wang, S., and Anto-niou, A. Few-shot class-incremental semantic segmenta-tion via pseudo-labeling and knowledge distillation. In 
+
+2023 4th International Conference on Information Sci-ence, Parallel and Distributed Systems (ISPDS) , pp. 192– 197, 2023. doi: 10.1109/ISPDS58840.2023.10235731. Kang, H., Yoon, J., Madjid, S. R. H., Hwang, S. J., and Yoo, C. D. On the soft-subnetwork for few-shot class incre-mental learning. In The Eleventh International Confer-ence on Learning Representations , 2023a. URL https: //openreview.net/forum?id=z57WK5lGeHd .Kang, Z., Fini, E., Nabi, M., Ricci, E., and Alahari, K. A soft nearest-neighbor framework for continual semi-supervised learning. In Proceedings of the IEEE/CVF 
+
+10 Continual Segmentation under Joint Nonstationarity 
+
+International Conference on Computer Vision (ICCV) , pp. 11868–11877, October 2023b. Kerssies, T., De Geus, D., and Dubbelman, G. How to benchmark vision foundation models for semantic seg-mentation? In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 1162– 1171, 2024. Khosla, P., Teterwak, P., Wang, C., Sarna, A., Tian, Y., Isola, P., Maschinot, A., Liu, C., and Krishnan, D. Supervised contrastive learning. Advances in neural information processing systems , 33:18661–18673, 2020. Killamsetty, K., Zhao, X., Chen, F., and Iyer, R. Retrieve: Coreset selection for efficient and robust semi-supervised learning. Advances in neural information processing systems , 34:14488–14501, 2021. Kirillov, A., Mintun, E., Ravi, N., Mao, H., Rolland, C., Gustafson, L., Xiao, T., Whitehead, S., Berg, A. C., Lo, W.-Y., et al. Segment anything. In Proceedings of the IEEE/CVF international conference on computer vision ,pp. 4015–4026, 2023. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Des-jardins, G., Rusu, A. A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the national academy of sciences , 114(13):3521–3526, 2017. Kong, J., Zong, Z., Zhou, T., and Shao, H. Yooop: You only optimize one prototype per class for non-exemplar incremental learning. Transactions on Machine Learning Research , 2025. ISSN 2835-8856. URL https:// openreview.net/forum?id=FYe66NLDkO .Kwak, J., Cha, S., and Moon, T. Towards realistic in-cremental scenario in class incremental semantic seg-mentation. In Lomonaco, V., Melacci, S., Tuyte-laars, T., Chandar, S., and Pascanu, R. (eds.), Pro-ceedings of The 3rd Conference on Lifelong Learning Agents , volume 274 of Proceedings of Machine Learn-ing Research , pp. 652–671. PMLR, 29 Jul–01 Aug 2025. URL https://proceedings.mlr.press/ v274/kwak25a.html .Landman, B., Xu, Z., Igelsias, J., Styner, M., Langerak, T., and Klein, A. Miccai multi-atlas labeling beyond the cranial vault–workshop and challenge. In Proc. MICCAI multi-atlas labeling beyond cranial vault—workshop challenge , volume 5, pp. 12. Munich, Germany, Synapse, 2015. doi: 10.7303/SYN3193805. URL https:// repo-prod.prod.sagebase.org/repo/v1/ doi/locate?id=syn3193805&type=ENTITY .Liang, Z., Hu, Y., Yang, F., and Liu, X. Enhancing continual semantic segmentation via uncertainty and class balance re-weighting. IEEE Transactions on Image Processing ,34:3689–3702, 2025. doi: 10.1109/TIP.2025.3576477. Liu, H., Gu, L., Chi, Z., Wang, Y., Yu, Y., Chen, J., and Tang, J. Few-shot class-incremental learning via entropy-regularized data-free replay. In Computer Vi-sion – ECCV 2022: 17th European Conference, Tel Aviv, Israel, October 23–27, 2022, Proceedings, Part XXIV , pp. 146–162, Berlin, Heidelberg, 2022. Springer-Verlag. ISBN 978-3-031-20052-6. doi: 10.1007/ 978-3-031-20053-3_9. URL https://doi.org/10. 1007/978-3-031-20053-3_9 .Liu, J., Zhang, Y., Chen, J.-N., Xiao, J., Lu, Y., A Landman, B., Yuan, Y., Yuille, A., Tang, Y., and Zhou, Z. Clip-driven universal model for organ segmentation and tumor detection. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 21152–21164, 2023. Liu, P. and Liu, J. When confidence fails: Revisiting pseudo-label selection in semi-supervised semantic segmentation. In Proceedings of the IEEE/CVF International Confer-ence on Computer Vision , pp. 21874–21884, 2025. McAllester, D. A. Pac-bayesian model averaging. In Pro-ceedings of the twelfth annual conference on Computa-tional learning theory , pp. 164–170, 1999. Menze, B. H., Jakab, A., Bauer, S., Kalpathy-Cramer, J., Farahani, K., Kirby, J., Burren, Y., Porz, N., Slotboom, J., Wiest, R., et al. The multimodal brain tumor image segmentation benchmark (brats). IEEE transactions on medical imaging , 34(10):1993–2024, 2014. Mirza, M. J., Masana, M., Possegger, H., and Bischof, H. An efficient domain-incremental learning approach to drive in all weather conditions. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 3001–3011, 2022. Mirzadeh, S. I., Farajtabar, M., Pascanu, R., and Ghasemzadeh, H. Understanding the role of training regimes in continual learning. Advances in Neural Infor-mation Processing Systems , 33:7308–7320, 2020. Orvieto, A., Raj, A., Kersting, H., and Bach, F. Explicit regu-larization in overparametrized models via noise injection. In International Conference on Artificial Intelligence and Statistics , pp. 7265–7287. PMLR, 2023. Qiu, R.-Z., Chen, P., Sun, W., Wang, Y.-X., and Hauser, K. GAPS: Few-shot incremental semantic segmentation via guided copy-paste synthesis, 2023. URL https: //openreview.net/forum?id=cDVL245jZa .11 Continual Segmentation under Joint Nonstationarity 
+
+Radford, A., Kim, J. W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al. Learning transferable visual models from natural language supervision. In International conference on machine learning , pp. 8748–8763. PmLR, 2021. Robinson, J. D., Chuang, C.-Y., Sra, S., and Jegelka, S. Contrastive learning with hard negative samples. In 
+
+International Conference on Learning Representations ,2021. URL https://openreview.net/forum? id=CR1XOQ0UTh-.Ronneberger, O., Fischer, P., and Brox, T. U-net: Convolu-tional networks for biomedical image segmentation. In In-ternational Conference on Medical image computing and computer-assisted intervention , pp. 234–241. Springer, 2015. Sakai, T., Qiu, H., Katsuki, T., Kimura, D., Osogami, T., and Inoue, T. A surprisingly simple approach to generalized few-shot semantic segmentation. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024. URL https://openreview.net/ forum?id=p3nPHMpx04 .Sekuboyina, A., Husseini, M. E., Bayat, A., Löffler, M., Liebl, H., Li, H., Tetteh, G., Kukaˇ cka, J., Payer, C., Štern, D., et al. Verse: a vertebrae labelling and segmentation benchmark for multi-detector ct images. Medical image analysis , 73:102166, 2021. Tao, X., Hong, X., Chang, X., Dong, S., Wei, X., and Gong, Y. Few-shot class-incremental learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 12183–12192, 2020. Tarvainen, A. and Valpola, H. Mean teachers are better role models: Weight-averaged consistency targets improve semi-supervised deep learning results. In Guyon, I., Luxburg, U. V., Bengio, S., Wallach, H., Fergus, R., Vishwanathan, S., and Garnett, R. (eds.), Advances in Neural Information Process-ing Systems , volume 30. Curran Associates, Inc., 2017. URL https://proceedings.neurips. cc/paper_files/paper/2017/file/ 68053af2923e00204c3ca7c6a3150cf7-Paper. pdf .Tian, S., Li, L., Li, W., Ran, H., Ning, X., and Ti-wari, P. A survey on few-shot class-incremental learn-ing. Neural Networks , 169:307–324, 2024. ISSN 0893-6080. doi: https://doi.org/10.1016/j.neunet.2023.10. 039. URL https://www.sciencedirect.com/ science/article/pii/S0893608023006019 .Varma, G., Subramanian, A., Namboodiri, A., Chandraker, M., and Jawahar, C. Idd: A dataset for exploring prob-lems of autonomous navigation in unconstrained environ-ments. In 2019 IEEE winter conference on applications of computer vision (WACV) , pp. 1743–1751. IEEE, 2019. Wang, H., Zhao, H., and Li, B. Bridging multi-task learning and meta-learning: Towards efficient training and effec-tive adaptation. In International Conference on Machine Learning . PMLR, 2021. Wang, L., Zhang, X., Su, H., and Zhu, J. A comprehen-sive survey of continual learning: Theory, method and application. IEEE transactions on pattern analysis and machine intelligence , 46(8):5362–5383, 2024. Wasserthal, J., Breit, H.-C., Meyer, M. T., Pradella, M., Hinck, D., Sauter, A. W., Heye, T., Boll, D. T., Cyriac, J., Yang, S., et al. Totalsegmentator: robust segmenta-tion of 104 anatomic structures in ct images. Radiology: Artificial Intelligence , 5(5):e230024, 2023. Xu, M., Islam, M., Bai, L., and Ren, H. Privacy-preserving synthetic continual semantic segmentation for robotic surgery. IEEE transactions on medical imaging , 43(6): 2291–2302, 2024. Xue, H., An, Y., Qin, Y., Li, W., Wu, Y., Che, Y., Fang, P., and Zhang, M.-L. Toward Few-Shot Learning in the Open World: A Review and Beyond . IEEE Transactions on Pattern Analysis & Machine Intelli-gence , 47(11):10420–10440, November 2025. ISSN 1939-3539. doi: 10.1109/TPAMI.2025.3594686. URL 
+
+https://doi.ieeecomputersociety.org/ 10.1109/TPAMI.2025.3594686 .Yang, Y., Yuan, H., Li, X., Lin, Z., Torr, P., and Tao, D. Neural collapse inspired feature-classifier alignment for few-shot class-incremental learning. In ICLR , 2023. Yu, F., Chen, H., Wang, X., Xian, W., Chen, Y., Liu, F., Mad-havan, V., and Darrell, T. Bdd100k: A diverse driving dataset for heterogeneous multitask learning. In Proceed-ings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 2636–2645, 2020. Yuan, B. and Zhao, D. A Survey on Continual Semantic Segmentation: Theory, Challenge, Method and Applica-tion . IEEE Transactions on Pattern Analysis & Machine Intelligence , 46(12):10891–10910, December 2024a. ISSN 1939-3539. doi: 10.1109/TPAMI.2024.3446949. URL https://doi.ieeecomputersociety. org/10.1109/TPAMI.2024.3446949 .Yuan, B. and Zhao, D. A survey on continual semantic segmentation: Theory, challenge, method and application. 
+
+IEEE Transactions on Pattern Analysis and Machine In-telligence , 2024b. 12 Continual Segmentation under Joint Nonstationarity 
+
+Zhang, J., Xie, Y., Xia, Y., and Shen, C. Dodnet: Learning to segment multi-organ and tumors from multiple par-tially labeled datasets. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,pp. 1195–1204, 2021. Zhang, J., Liu, L., Silven, O., Pietikainen, M., and Hu, D. Few-Shot Class-Incremental Learning for Classification and Object Detection: A Survey .
+
+IEEE Transactions on Pattern Analysis & Machine Intelligence , 47(04):2924–2945, April 2025. ISSN 1939-3539. doi: 10.1109/TPAMI.2025.3529038. URL 
+
+https://doi.ieeecomputersociety.org/ 10.1109/TPAMI.2025.3529038 .Zhang, Y., Li, X., Chen, H., Yuille, A. L., Liu, Y., and Zhou, Z. Continual learning for abdominal multi-organ and tumor segmentation. In Medical Image Computing and Computer Assisted Intervention – MICCAI 2023: 26th In-ternational Conference, Vancouver, BC, Canada, October 8–12, 2023, Proceedings, Part II , pp. 35–45, Berlin, Hei-delberg, 2023. Springer-Verlag. ISBN 978-3-031-43894-3. doi: 10.1007/978-3-031-43895-0_4. URL https:// doi.org/10.1007/978-3-031-43895-0_4 .Zhou, D.-W., Wang, F.-Y., Ye, H.-J., Ma, L., Pu, S., and Zhan, D.-C. Forward compatible few-shot class-incremental learning. In CVPR , 2022. Zhou, D.-W., Wang, Q.-W., Qi, Z.-H., Ye, H.-J., Zhan, D.-C., and Liu, Z. Class-incremental learning: A survey. 
+
+IEEE Transactions on Pattern Analysis and Machine In-telligence , 2024. Zhu, G., Wu, D., Gao, C., Wang, R., Yang, W., and Sang, N. Adaptive prototype replay for class incremental semantic segmentation. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, pp. 10932–10940, 2025. Zhu, S., Yu, C., Wang, Q., Song, Y., Li, G., Wu, J., Xu, X., Yi, Z., and Hu, J. Class incremental medical im-age segmentation via prototype-guided calibration and dual-aligned distillation. In Proceedings of the AAAI Con-ference on Artificial Intelligence , volume 40, pp. 13961– 13969, 2026. 13 Continual Segmentation under Joint Nonstationarity 
+
+## Appendix 
+
+The appendix provides comprehensive theoretical foundations, experimental details, and additional analyses supporting the main paper. Appendix A establishes the mathematical framework for Gradient Adaptive Stabilization (GAS), proving its optimality through Bayesian posterior approximation, PAC-Bayes bounds, and demonstrating superiority over static regularization, memory-based methods, and adversarial flatness approaches. Appendix B develops the theoretical analysis of Prototype Anchored Supervision (PAS), deriving asymptotic error dynamics and proving that PAS achieves lower error than confidence-only, consistency-based, and memory bank methods through dual-criteria filtering. Appendices C–E present robustness analyses, sensitivity studies, and ablations examining hyperparameter choices, layer-wise GAS effects, and noise tolerance. Appendix F details the construction of five JASCL benchmarks spanning 3D medical imaging, autonomous driving, and robotic surgery domains. Appendices G–I expand evaluation to detection tasks, provide implementation details for 37+ baselines, and compare GAS against existing regularization methods including dropout, weight decay, and adaptive optimizers. Appendices J–M discuss limitations (severe domain shifts, noisy unlabeled data, dataset complexity), provide practical deployment guidelines (unlabeled data usage, model selection, extreme data scarcity), and present additional results including class-wise performance breakdowns, ablation studies, and performance comparisons demonstrating that JASCL maintains reliability across diverse architectures and constraint combinations. 
+
+## A Theoretical Analysis of Gradient Adaptive Stabilization 
+
+Definition A.1 (Parameter Space) . Let θ ∈ Rd denote the flattened vector of all model parameters, where θi denotes the 
+
+i-th parameter for i ∈ { 1, . . . , d }.
+
+Definition A.2 (Gradient and Squared Gradient) . At the current optimization step, define: 
+
+gi := ∂L
+
+∂θ i
+
+, (7) 
+
+Gi := g2 
+
+> i
+
+. (8) 
+
+Definition A.3 (Fisher Information Matrix) . For a probabilistic model with likelihood p(y|x; θ), the Fisher Information Matrix (FIM) is: 
+
+Fij := E(x,y)∼P
+
+ ∂ log p(y|x; θ)
+
+∂θ i
+
+∂ log p(y|x; θ)
+
+∂θ j
+
+
+
+. (9) We denote by F (t) the Fisher matrix computed with respect to distribution Pt at session t.
+
+Definition A.4 (GAS Noise Scale) . Given squared gradients {Gi}di=1 , define the inverse gradient modulator: 
+
+Ginv ,i := 1
+
+Gi + ε (10) for regularization constant ε > 0. The normalized noise scale is: 
+
+˜Gi := 1 + Ginv ,i − min j Ginv ,j 
+
+1 + max j Ginv ,j − min j Ginv ,j 
+
+∈ (0 , 1] . (11) 
+
+Definition A.5 (GAS Perturbation) . Let ξ = ( ξ1, . . . , ξ d) with ξi
+
+> i.i.d.
+
+∼ N (0 , 1) . The GAS perturbation is: 
+
+˜θi := θi + ˜Giξi. (12) 
+
+Definition A.6 (Continual Learning Setting) . At session t ∈ { 0, 1, . . . , T }, the learner receives dataset Dt from distribution 
+
+Pt. After training on session t, the parameters are θ(t).
+
+Definition A.7 (Bayesian Posterior Approximation) . Under a diagonal Gaussian approximation, the approximate posterior after session t is: 
+
+q(t)(θ) = N (μ(t), diag( σ(t)2 1 , . . . , σ (t)2  
+
+> d
+
+)) . (13) The true posterior under Laplace approximation is: 
+
+π(t)(θ) = N (θ(t), diag(1 /F (t)11 , . . . , 1/F (t) 
+
+> dd
+
+)) . (14) 14 Continual Segmentation under Joint Nonstationarity 
+
+A.1 Assumptions Assumption A.8 (Smoothness) . The loss function L : Rd → R is twice continuously differentiable with bounded third derivatives in a neighborhood of the optimum. Let H := ∇2L(θ) denote the Hessian. 
+
+Assumption A.9 (Positive Definite Fisher) . The diagonal Fisher information elements satisfy F (t) 
+
+> ii
+
+> 0 for all i ∈ { 1, . . . , d }
+
+and all sessions t.
+
+Assumption A.10 (Gradient-Fisher Correspondence) . For parameter i at session t, the squared gradient magnitude approximates the diagonal Fisher: 
+
+|g(t) 
+
+> i
+
+|2 = F (t) 
+
+> ii
+
+(1 + ϵi) (15) where |ϵi| ≤ δ for some δ ∈ (0 , 1) .
+
+Assumption A.11 (Domain Shift Model) . Under domain shift from session t to t + 1 , the diagonal Fisher elements change as: 
+
+F (t+1)  
+
+> ii
+
+= F (t) 
+
+> ii
+
++ ∆ Fii (16) where there exists γF > 0 such that 1
+
+> d
+
+Pdi=1 (∆ Fii )2 ≥ γ2 
+
+> F
+
+∆2 
+
+> t
+
+and ∆t > 0 quantifies the domain shift magnitude. 
+
+Assumption A.12 (Heterogeneous Curvature) . The Hessian H has eigenvalues λ1 ≥ λ2 ≥ · · · ≥ λd > 0 with condition number: 
+
+κ := λ1
+
+λd
+
+> 1. (17) 
+
+Assumption A.13 (Bounded Fisher Ratio) . There exist constants 0 < F min ≤ Fmax < ∞ such that for all i and t:
+
+Fmin ≤ F (t) 
+
+> ii
+
+≤ Fmax . (18) 
+
+A.2 KL Divergence Framework Lemma A.14 (KL Divergence Between Diagonal Gaussians) . For diagonal Gaussians q = N (μq , diag( σ2 
+
+> q
+
+)) and π =
+
+N (μπ , diag( σ2 
+
+> π
+
+)) :
+
+KL( q∥π) = 12
+
+> d
+
+X
+
+> i=1
+
+"
+
+(μq,i − μπ,i )2
+
+σ2
+
+> π,i
+
++ σ2
+
+> q,i
+
+σ2
+
+> π,i
+
+− log σ2
+
+> q,i
+
+σ2
+
+> π,i
+
+− 1
+
+#
+
+. (19) 
+
+Proof. For multivariate Gaussians q = N (μq , Σq ) and π = N (μπ , Σπ ), the KL divergence is: 
+
+KL( q∥π) = 12
+
+
+
+tr(Σ −1 
+
+> π
+
+Σq ) + ( μπ − μq )⊤Σ−1 
+
+> π
+
+(μπ − μq ) − d + log |Σπ ||Σq |
+
+
+
+. (20) For diagonal covariances Σq = diag( σ2
+
+> q, 1
+
+, . . . , σ 2
+
+> q,d
+
+) and Σπ = diag( σ2
+
+> π, 1
+
+, . . . , σ 2
+
+> π,d
+
+):
+
+tr(Σ −1 
+
+> π
+
+Σq ) = 
+
+> d
+
+X
+
+> i=1
+
+σ2
+
+> q,i
+
+σ2
+
+> π,i
+
+, (21) 
+
+(μπ − μq )⊤Σ−1 
+
+> π
+
+(μπ − μq ) = 
+
+> d
+
+X
+
+> i=1
+
+(μπ,i − μq,i )2
+
+σ2
+
+> π,i
+
+, (22) 
+
+log |Σπ ||Σq | =
+
+> d
+
+X
+
+> i=1
+
+log σ2
+
+> π,i
+
+σ2
+
+> q,i
+
+. (23) Substituting yields the result. 
+
+Definition A.15 (Variance Ratio Function) . Define f : R>0 → R≥0 by: 
+
+f (x) := x − log x − 1. (24) 
+
+Lemma A.16 (Properties of f ). The function f satisfies: 
+
+15 Continual Segmentation under Joint Nonstationarity 
+
+1. f (x) ≥ 0 for all x > 0, with equality if and only if x = 1 .2. f is strictly convex with f ′′ (x) = 1 /x 2 > 0.3. For |x − 1| ≤ 1/2: 12 (x − 1) 2 ≤ f (x) ≤ (x − 1) 2.Proof. Part (1): We have f ′(x) = 1 − 1/x , which equals zero if and only if x = 1 . Since f (1) = 1 − 0 − 1 = 0 and 
+
+f ′′ (1) = 1 > 0, x = 1 is a global minimum with f (1) = 0 . For x̸ = 1 , we have f (x) > 0.
+
+Part (2): Direct computation: f ′′ (x) = 1 /x 2 > 0 for all x > 0.
+
+Part (3): By Taylor expansion around x = 1 :
+
+f (x) = f (1) + f ′(1)( x − 1) + f ′′ (ξ)2 (x − 1) 2 = 12ξ2 (x − 1) 2 (25) for some ξ between 1 and x. For |x − 1| ≤ 1/2, we have ξ ∈ [1 /2, 3/2] , so 1/ξ 2 ∈ [4 /9, 4] . Thus: 
+
+29 (x − 1) 2 ≤ f (x) ≤ 2( x − 1) 2. (26) The stated bounds 12 (x − 1) 2 ≤ f (x) ≤ (x − 1) 2 hold for the tighter range |x − 1| ≤ 1/2 by convexity arguments: since f
+
+is convex with f (1) = 0 and f ′(1) = 0 , and f ′′ (1) = 1 , the lower bound follows from the quadratic lower envelope, while the upper bound can be verified directly at x = 1 /2 and x = 3 /2.
+
+Corollary A.17 (Variance-Only KL Divergence) . When means coincide ( μq = μπ ), the KL divergence reduces to: 
+
+KL var (q∥π) := 12
+
+> d
+
+X
+
+> i=1
+
+f σ2
+
+> q,i
+
+σ2
+
+> π,i
+
+!
+
+. (27) 
+
+A.3 Regularization Methods Definition A.18 (Static Regularization Methods) . Static regularization methods set variance independent of current-task Fisher information F (t+1)  
+
+> ii
+
+:1. Weight Decay: σ2 
+
+> q,i
+
+= 1 /λ for fixed λ > 0.2. Dropout: Effective variance σ2 
+
+> q,i
+
+= ( θ(t) 
+
+> i
+
+)2p/ (1 − p) for dropout rate p ∈ (0 , 1) .3. Variational Dropout: σ2 
+
+> q,i
+
+= αi(θ(t) 
+
+> i
+
+)2 for learned but fixed αi.
+
+Definition A.19 (Memory-Based Regularization Methods) . Memory-based methods set variance using Fisher information from sessions 0, . . . , t to regularize session t + 1 :1. EWC: σ(t+1)2  
+
+> q,i
+
+= 1 /(λF (t) 
+
+> ii
+
+).2. Online EWC: σ(t+1)2  
+
+> q,i
+
+= 1 /(λ P 
+
+> s≤t
+
+γt−sF (s) 
+
+> ii
+
+) for decay factor γ ∈ (0 , 1) .
+
+Definition A.20 (Adversarial Flatness Methods) . Adversarial flatness methods seek flat minima via worst-case perturbations: 1. SAM: min θ max ∥δ∥2≤ρ L(θ + δ).The adversarial perturbation direction for SAM is δ∗ = ρ∇θ L/∥∇ θ L∥ 2.
+
+Definition A.21 (GAS Variance) . GAS induces approximate variance: 
+
+σ(t+1)2  
+
+> q,i
+
+= ˜G2 
+
+> i
+
+. (28) Under Assumption A.10, this satisfies: 
+
+˜G2 
+
+> i
+
+F (t+1)  
+
+> ii
+
+= β(1 + ηi) (29) where β > 0 is a normalization constant determined by the range of Fisher values, and |ηi| ≤ Cδ for a constant C depending on Fmax /F min .16 Continual Segmentation under Joint Nonstationarity 
+
+Lemma A.22 (GAS Variance Approximation) . Under Assumptions A.10 and A.13, the GAS noise scale satisfies: 
+
+˜G2 
+
+> i
+
+= βF (t+1) 
+
+> ii
+
+(1 + ηi) (30) 
+
+where |ηi| ≤ Cδ for C = 2( Fmax /F min ).Proof. By Definition A.4, ˜Gi is a monotonically increasing function of Ginv ,i = 1 /(Gi + ε). Under Assumption A.10: 
+
+Gi = g2 
+
+> i
+
+= Fii (1 + ϵi) (31) with |ϵi| ≤ δ. For small ε:
+
+Ginv ,i ≈ 1
+
+Fii (1 + ϵi) = 1
+
+Fii 
+
+(1 − ϵi + O(ϵ2 
+
+> i
+
+)) . (32) The normalization in Definition A.4 maps the range [min j Ginv ,j , max j Ginv ,j ] to (0 , 1] . Since Ginv ,i ∝ 1/F ii up to O(δ)
+
+errors, we have ˜G2 
+
+> i
+
+∝ 1/F ii with multiplicative error bounded by Cδ where C depends on the ratio Fmax /F min .
+
+Proof for theorem 3.6 
+
+Proof. GAS upper bound. 
+
+By Lemma A.22: 
+
+σ2
+
+> q,i
+
+σ2
+
+> π,i
+
+= ˜G2 
+
+> i
+
+F (t+1)  
+
+> ii
+
+= β(1 + ηi) (33) where |ηi| ≤ Cδ .The constant β can be chosen to minimize the KL divergence. Taking the derivative of P 
+
+> i
+
+f (β(1 + ηi)) with respect to β
+
+and setting to zero: 
+
+> d
+
+X
+
+> i=1
+
+(1 + ηi)
+
+
+
+1 − 1
+
+β(1 + ηi)
+
+
+
+= 0 = ⇒ β = d
+
+Pdi=1 (1 + ηi) . (34) Since |ηi| ≤ Cδ < 1, we have β ∈ [1 /(1 + Cδ ), 1/(1 − Cδ )] , so β = 1 + O(Cδ ).With optimal β, the variance ratio is ri := β(1 + ηi) = 1 + O(Cδ ). By Lemma A.16(3), for |ri − 1| ≤ 1/2 (which holds when Cδ ≤ 1/4): 
+
+f (ri) ≤ (ri − 1) 2 ≤ (Cδ )2. (35) Therefore: 
+
+KL var (qGAS ∥π(t+1) ) = 12
+
+> d
+
+X
+
+> i=1
+
+f (ri) ≤ dC 2δ2
+
+2 . (36) 
+
+Static regularization lower bound. 
+
+For weight decay, σ2 
+
+> q,i
+
+= 1 /λ (constant). The variance ratio is: 
+
+σ2
+
+> q,i
+
+σ2
+
+> π,i
+
+= F (t+1) 
+
+> ii
+
+λ . (37) Under domain shift (Assumption A.11), suppose weight decay was calibrated for session t, meaning 1/λ ≈ 1/ ¯F (t) for some representative Fisher value ¯F (t). Then: 
+
+σ2
+
+> q,i
+
+σ2
+
+> π,i
+
+= F (t) 
+
+> ii
+
++ ∆ Fii 
+
+λ . (38) 17 Continual Segmentation under Joint Nonstationarity 
+
+Define ri := F (t+1)  
+
+> ii
+
+/λ . By Lemma A.16(1) and (3): 
+
+f (ri) ≥ 12 (ri − 1) 2 for |ri − 1| ≤ 12 . (39) More generally, since f is strictly convex with minimum at r = 1 , and f (r) → ∞ as r → 0+ or r → ∞ , we have 
+
+f (r) ≥ c0(r − 1) 2 for some c0 > 0 depending on the bounded ratio Fmax /F min .The deviation from optimality is: 
+
+ri − 1 = F (t+1)  
+
+> ii
+
+− λλ . (40) For any fixed λ, when Fisher values change by ∆Fii :
+
+KL var (qstatic ∥π(t+1) ) ≥ c0
+
+2
+
+> d
+
+X
+
+> i=1
+
+ ∆Fii 
+
+λ
+
+2
+
+= c0
+
+2λ2
+
+> d
+
+X
+
+> i=1
+
+(∆ Fii )2. (41) Taking c0 = 1 /2 (valid for bounded ratios), and using Assumption A.11: 
+
+KL var (qstatic ∥π(t+1) ) ≥ 14λ2 · dγ 2 
+
+> F
+
+∆2 
+
+> t
+
+. (42) 
+
+Comparison. 
+
+GAS dominates when: dC 2δ2
+
+2 < dγ 2 
+
+> F
+
+∆2
+
+> t
+
+4λ2 ⇐⇒ ∆t > Cλδ γF
+
+. (43) 
+
+A.4 GAS optimality over Memory-Based Regularization Proof for theorem 3.7 
+
+Proof. For memory-based regularization methods, the approximate posterior variance is determined by accumulated Fisher information from previous sessions: σ2 
+
+> q,i
+
+= 1 /(λ ¯F (hist)  
+
+> ii
+
+), where ¯F (hist)  
+
+> ii
+
+is a weighted average of Fisher information from sessions 0, . . . , t and λ > 0 is the regularization strength. The true posterior under Laplace approximation has variance 
+
+σ2 
+
+> π,i
+
+= 1 /F (t) 
+
+> ii
+
+.The variance ratio is: 
+
+σ2
+
+> q,i
+
+σ2
+
+> π,i
+
+= F (t)
+
+> ii
+
+λ ¯F (hist) 
+
+> ii
+
+= 1
+
+λ · F (t)
+
+> ii
+
+¯F (hist) 
+
+> ii
+
+. (44) Define the Fisher mismatch as in the theorem statement: 
+
+ρi := F (t) 
+
+> ii
+
+− ¯F (hist) 
+
+> ii
+
+F (t)
+
+> ii
+
+, (45) which captures the discrepancy between current Fisher information and the historical estimate. Rearranging yields 
+
+¯F (hist)  
+
+> ii
+
+= F (t) 
+
+> ii
+
+(1 − ρi), so: 
+
+σ2
+
+> q,i
+
+σ2
+
+> π,i
+
+= 1
+
+λ(1 − ρi) . (46) By the KL divergence decomposition for diagonal Gaussians with matching means (Corollary A.17): 
+
+KL var (qmemory ∥π(t)) = 12
+
+> d
+
+X
+
+> i=1
+
+f
+
+ 1
+
+λ(1 − ρi)
+
+
+
+, (47) 18 Continual Segmentation under Joint Nonstationarity 
+
+where f (r) = r − 1 − log r ≥ 12 (r − 1) 2/(r ∨ 1) for r > 0.For λ = 1 (optimal under no domain shift), let ri = 1 /(1 − ρi). For small |ρi|, we have ri ≈ 1 + ρi + ρ2 
+
+> i
+
++ · · · , and by Taylor expansion: 
+
+f (ri) = f
+
+ 11 − ρi
+
+
+
+≥ 12 ρ2 
+
+> i
+
+for |ρi| ≤ 12 . (48) For general λ, the minimum of P 
+
+> i
+
+f (1 /(λ(1 − ρi))) over λ occurs at some λ∗ depending on the distribution of {ρi}. Even at this optimum, the irreducible error due to heterogeneous Fisher mismatch remains. Let ¯ρ = 1
+
+> d
+
+P 
+
+> i
+
+ρi. The optimal 
+
+λ∗ ≈ 1/(1 − ¯ρ) minimizes only the bias term, leaving: 
+
+f
+
+ 1 − ¯ρ
+
+1 − ρi
+
+
+
+≥ 12
+
+ ρi − ¯ρ
+
+1 − ρi
+
+2
+
+. (49) Summing over all parameters and using P
+
+> i
+
+(ρi − ¯ρ)2 ≤ P 
+
+> i
+
+ρ2 
+
+> i
+
+:
+
+KL var (qmemory ∥π(t)) ≥ 14(1 − ρmin )2
+
+> d
+
+X
+
+> i=1
+
+ρ2 
+
+> i
+
+, (50) where ρmin = min i ρi. Under Assumption A.13, |ρi| is bounded, yielding: 
+
+KL var (qmemory ∥π(t)) ≥ 14M 2
+
+> d
+
+X
+
+> i=1
+
+ρ2 
+
+> i
+
+(51) for some constant M > 0 depending on the Fisher bounds. For GAS, by Assumption A.10, the variance is set as σ2 
+
+> q,i
+
+∝ 1/|g(t) 
+
+> i
+
+|2 = 1 /(F (t) 
+
+> ii
+
+(1 + ϵi)) where |ϵi| ≤ δ. This yields: 
+
+KL var (qGAS ∥π(t)) ≤ 12
+
+> d
+
+X
+
+> i=1
+
+f (1 + ϵi) ≤ dC 2δ2
+
+2 (52) for some constant C > 0.Comparing the two bounds, KL( qGAS ∥π(t)) < KL( qmemory ∥π(t)) when: 
+
+dC 2δ2
+
+2 < 14M 2
+
+> d
+
+X
+
+> i=1
+
+ρ2 
+
+> i
+
+⇐⇒ 1
+
+d
+
+> d
+
+X
+
+> i=1
+
+ρ2 
+
+> i
+
+> 2M 2C2δ2 = O(δ2). (53) 
+
+Remark A.23 . This result applies to any memory-based regularization method that estimates parameter importance using historical Fisher information, including EWC (Kirkpatrick et al., 2017), UCL (Ahn et al., 2019), and related approaches. The condition 1
+
+> d
+
+P 
+
+> i
+
+ρ2 
+
+> i
+
+> O (δ2) states that the mean squared Fisher mismatch between historical estimates and current Fisher information must exceed the squared gradient-Fisher approximation error in GAS. This condition is satisfied whenever domain shift induces Fisher changes that are not captured by historical estimates, which is the typical scenario in continual learning with non-stationary data distributions. 
+
+A.5 Expected Loss Analysis Proposition A.24 (Expected Perturbed Loss) . Under Assumption A.8, let ˜θ = θ + ˜G ⊙ ξ be the GAS perturbed parameters where ξi
+
+> i.i.d.
+
+∼ N (0 , 1) . Then: 
+
+Eξ [L(˜θ)] = L(θ) + 12
+
+> d
+
+X
+
+> i=1
+
+Hii ˜G2 
+
+> i
+
++ O(∥ ˜G∥3
+
+> ∞
+
+). (54) 
+
+Proof. By Taylor expansion around θ:
+
+L(θ + ∆ θ) = L(θ) + g⊤∆θ + 12 ∆θ⊤H∆θ + R3(∆ θ) (55) 19 Continual Segmentation under Joint Nonstationarity 
+
+where |R3(∆ θ)| ≤ C3∥∆θ∥3 for some constant C3 by the bounded third derivative assumption. With ∆θ = ˜G ⊙ ξ:
+
+Linear term: 
+
+Eξ [g⊤∆θ] = 
+
+> d
+
+X
+
+> i=1
+
+gi ˜GiE[ξi] = 0 . (56) 
+
+Quadratic term: 
+
+Eξ [∆ θ⊤H∆θ] = X
+
+> i,j
+
+Hij ˜Gi ˜Gj E[ξiξj ] (57) 
+
+=
+
+> d
+
+X
+
+> i=1
+
+Hii ˜G2 
+
+> i
+
+(58) since E[ξiξj ] = δij (Kronecker delta). 
+
+Remainder: 
+
+E[|R3|] ≤ C3E[∥ ˜G ⊙ ξ∥3] ≤ C3∥ ˜G∥3
+
+> ∞
+
+E[∥ξ∥3] = O(∥ ˜G∥3
+
+> ∞
+
+) (59) since ˜Gi ∈ (0 , 1] and E[∥ξ∥3] < ∞ for standard Gaussian ξ.
+
+A.6 GAS vs. Adversarial Flatness Methods Lemma A.25 (SAM Perturbation Direction) . For SAM with perturbation radius ρ, the adversarial perturbation is: 
+
+δSAM = ρ ∇L ∥∇L∥ 2
+
+. (60) 
+
+In the eigenbasis of the Hessian H = U ΛU ⊤ with eigenvalues λ1 ≥ · · · ≥ λd, near a local minimum where ∇L ≈ 
+
+H(θ − θ∗), the perturbation component in eigendirection r is: 
+
+(δSAM )r = ρ λr (θ − θ∗)r
+
+qPdj=1 λ2 
+
+> j
+
+(θ − θ∗)2
+
+> j
+
+. (61) 
+
+Proof. Near a local minimum θ∗, Taylor expansion gives ∇L (θ) ≈ H(θ − θ∗). In the eigenbasis of H:
+
+(∇L )r = λr (θ − θ∗)r . (62) The SAM perturbation is: 
+
+δSAM = ρ ∇L ∥∇L∥ 2
+
+(63) with ∥∇L∥ 2 =
+
+qP 
+
+> j
+
+λ2 
+
+> j
+
+(θ − θ∗)2 
+
+> j
+
+.
+
+Proof for theorem 3.8 
+
+Proof. Adversarial flatness loss increase. Consider the adversarial loss Ladv (θ) = max ∥δ∥2≤ρ L(θ + δ). By second-order Taylor expansion around θ:
+
+L(θ + δ) ≈ L (θ) + ∇L (θ)⊤δ + 12 δ⊤Hδ, (64) where H = ∇2L(θ) is the Hessian. At a local minimum or near-stationary point, ∇L (θ) ≈ 0, so: 
+
+L(θ + δ) − L (θ) ≈ 12 δ⊤Hδ. (65) 20 Continual Segmentation under Joint Nonstationarity 
+
+The worst-case perturbation maximizes this quadratic form subject to ∥δ∥2 ≤ ρ. Let H = V ΛV ⊤ be the eigendecomposition with eigenvalues λ1 ≥ λ2 ≥ · · · ≥ λd > 0. The maximum of δ⊤Hδ over the ℓ2-ball is achieved when δ aligns with the top eigenvector v1:
+
+δ∗ 
+
+> adv
+
+= ρ · v1. (66) This yields the worst-case loss increase: 
+
+∆Ladv := Ladv (θ) − L (θ) = 12 ρ2λmax = O(ρ2λmax ), (67) where λmax = λ1 is the maximum Hessian eigenvalue. 
+
+GAS loss increase. For GAS, perturbations are stochastic with variance scaled inversely to gradient magnitude. Under the gradient-Fisher correspondence (Assumption A.10) and the Fisher-Hessian relationship for well-specified models, the noise variance in eigendirection i satisfies ˜G2 
+
+> i
+
+∝ 1/λ i.With normalization constraint P 
+
+> i
+
+˜G2 
+
+> i
+
+= ρ2 (matching total perturbation budget), we have: 
+
+˜G2 
+
+> i
+
+= ρ2
+
+λi
+
+Pdj=1 1/λ j
+
+. (68) The expected loss increase under GAS perturbation ˜δ = ˜G ⊙ ξ where ξ ∼ N (0 , I ) is: 
+
+∆LGAS := Eξ
+
+ 12 ( ˜G ⊙ ξ)⊤H( ˜G ⊙ ξ)
+
+
+
+(69) 
+
+= 12
+
+> d
+
+X
+
+> i=1
+
+λi ˜G2 
+
+> i
+
+· E[ξ2 
+
+> i
+
+] (70) 
+
+= 12
+
+> d
+
+X
+
+> i=1
+
+λi · ρ2
+
+λi
+
+P 
+
+> j
+
+1/λ j
+
+(71) 
+
+= ρ2d
+
+2 P 
+
+> j
+
+1/λ j
+
+. (72) By the harmonic-arithmetic mean inequality, 1
+
+> d
+
+P 
+
+> j
+
+1/λ j ≥ 1/¯λ where ¯λ = 1
+
+> d
+
+P 
+
+> i
+
+λi is the average eigenvalue. Thus: 
+
+∆LGAS ≤ ρ2 ¯λ
+
+2 = O(ρ2 ¯λ). (73) 
+
+Comparison. The ratio of loss increases is: 
+
+∆Ladv 
+
+∆LGAS 
+
+= ρ2λmax /2
+
+ρ2d/ (2 P 
+
+> j
+
+1/λ j ) = λmax 
+
+P 
+
+> j
+
+1/λ j
+
+d . (74) Since P 
+
+> j
+
+1/λ j ≥ d/λ max (all terms are positive and include 1/λ d ≥ 1/λ max ), we have: 
+
+∆Ladv 
+
+∆LGAS 
+
+≥ 1. (75) For the upper bound, note that P 
+
+> j
+
+1/λ j ≤ d/λ min = d/λ d. Thus: 
+
+∆Ladv 
+
+∆LGAS 
+
+≤ λmax 
+
+λd
+
+= κ. (76) Under Assumption A.12 with condition number κ = λ1/λ d > 1, when eigenvalues are spread such that the harmonic mean is close to λd:
+
+∆Ladv 
+
+∆LGAS 
+
+≈ λmax · d/λ d
+
+d = κ. (77) 21 Continual Segmentation under Joint Nonstationarity 
+
+More precisely, when κ > d , the ratio satisfies: 
+
+∆Ladv 
+
+∆LGAS 
+
+≥ κd , (78) which follows from P 
+
+> j
+
+1/λ j ≥ 1/λ d and λmax /λ d = κ.Therefore, GAS achieves lower expected loss increase than adversarial flatness methods: 
+
+E[LGAS ] − L (θ) < E[Ladv ] − L (θ) (79) by a factor up to κ/d when curvature is highly heterogeneous. 
+
+Remark A.26 . This result applies to any adversarial flatness method that seeks worst-case perturbations, including SAM (Foret et al., 2021), C-Flat (Bian et al., 2024), and STAR (Eskandar et al., 2025). The fundamental distinction is in perturbation allocation: adversarial methods concentrate perturbations on high-curvature directions (where gradient magnitude is largest), incurring maximal loss increase O(ρ2λmax ). In contrast, GAS allocates perturbations inversely proportional to curvature via the gradient-Fisher correspondence, distributing perturbations toward low-curvature directions where they minimally impact the loss, achieving O(ρ2 ¯λ). When the loss landscape exhibits heterogeneous curvature (κ ≫ 1), this difference becomes substantial. 
+
+A.7 PAC-Bayes Framework 
+
+This section establishes PAC-Bayes generalization bounds for GAS, showing that the anisotropic noise structure leads to tighter bounds than isotropic alternatives. 
+
+Definition A.27 (Stochastic Classifier) . Let W ⊆ Rd be the parameter space. A stochastic classifier is defined by a distribution q over W. For input x, the prediction is made by sampling θ ∼ q and outputting fθ (x).
+
+Definition A.28 (GAS Posterior) . The GAS mechanism induces a posterior distribution: 
+
+qGAS (θ) = N (θ∗, diag( ˜G21, . . . , ˜G2
+
+> d
+
+)) (80) where θ∗ is the converged parameter vector and ˜Gi is the normalized noise scale from Definition A.4. 
+
+Definition A.29 (Prior Distribution) . Let p be a prior distribution over parameters, chosen before observing data. We consider: 1. Isotropic prior: piso (θ) = N (0 , σ 20 Id)
+
+2. Informed prior: pinf (θ) = N (θ0, diag( σ20,1, . . . , σ 20,d )) 
+
+Definition A.30 (Expected Risk) . For loss function ℓ : Y × Y → [0 , 1] and distribution P over (x, y):
+
+R(q) := Eθ∼q [E(x,y)∼P [ℓ(fθ (x), y)]] (population risk) (81) 
+
+ˆR(q) := Eθ∼q
+
+"
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+ℓ(fθ (xi), yi)
+
+#
+
+(empirical risk) (82) 
+
+A.8 PAC-Bayes Bound Theorem A.31 (McAllester’s PAC-Bayes Bound) . For any prior p chosen independently of the training data S =
+
+{(xi, yi)}ni=1 , any δ ∈ (0 , 1) , and any posterior q, with probability at least 1 − δ over the draw of S:
+
+R(q) ≤ ˆR(q) + 
+
+r KL( q∥p) + log(2 √n/δ )2n . (83) 
+
+Proof. This is a standard result in PAC-Bayes theory; see McAllester (1999) or Catoni (2007) for the complete proof. 22 Continual Segmentation under Joint Nonstationarity 
+
+A.9 KL Divergence Calculations Lemma A.32 (KL Divergence: GAS to Isotropic Prior) . For GAS posterior qGAS = N (θ∗, diag( ˜G21, . . . , ˜G2
+
+> d
+
+)) and isotropic prior piso = N (0 , σ 20 Id):
+
+KL( qGAS ∥piso ) = 12
+
+"
+
+∥θ∗∥22
+
+σ20
+
++
+
+Pdi=1 ˜G2
+
+> i
+
+σ20
+
+−
+
+> d
+
+X
+
+> i=1
+
+log ˜G2
+
+> i
+
+σ20
+
+− d
+
+#
+
+. (84) 
+
+Proof. Apply Lemma A.14 with Σq = diag( ˜G21, . . . , ˜G2
+
+> d
+
+), Σp = σ20 Id, μq = θ∗, μp = 0 :
+
+tr(Σ −1 
+
+> p
+
+Σq ) = 1
+
+σ20
+
+> d
+
+X
+
+> i=1
+
+˜G2 
+
+> i
+
+, (85) 
+
+(μp − μq )⊤Σ−1 
+
+> p
+
+(μp − μq ) = ∥θ∗∥22
+
+σ20
+
+, (86) 
+
+log |Σp||Σq | = d log σ20 −
+
+> d
+
+X
+
+> i=1
+
+log ˜G2 
+
+> i
+
+= −
+
+> d
+
+X
+
+> i=1
+
+log ˜G2
+
+> i
+
+σ20
+
+. (87) Substituting into the KL formula yields the result. 
+
+Lemma A.33 (KL Divergence: Isotropic Posterior to Isotropic Prior) . For isotropic posterior qiso = N (θ∗, σ 2Id) and prior 
+
+piso = N (0 , σ 20 Id):
+
+KL( qiso ∥piso ) = 12
+
+ ∥θ∗∥22
+
+σ20
+
++ dσ 2
+
+σ20
+
+− d log σ2
+
+σ20
+
+− d
+
+
+
+. (88) 
+
+Proof. Direct application of Lemma A.14 with Σq = σ2Id.
+
+A.10 Comparison of Posteriors Proof for proposition 3.3 
+
+Proof. Since both posteriors have mean θ∗ equal to the prior mean, the KL divergence reduces to the variance-only form (Corollary A.17). For GAS with ˜G2 
+
+> i
+
+= c/F ii and prior variance 1/F ii :
+
+˜G2
+
+> i
+
+1/F ii 
+
+= c ∀i. (89) Therefore: 
+
+KL( qGAS ∥p) = 12
+
+> d
+
+X
+
+> i=1
+
+f (c) = d
+
+2 f (c). (90) For the isotropic posterior with σ2 = c/ ¯F and prior variance 1/F ii :
+
+σ2
+
+1/F ii 
+
+= cF ii 
+
+¯F . (91) Therefore: 
+
+KL( qiso ∥p) = 12
+
+> d
+
+X
+
+> i=1
+
+f
+
+ cF ii 
+
+¯F
+
+
+
+. (92) 23 Continual Segmentation under Joint Nonstationarity 
+
+By Jensen’s inequality applied to the strictly convex function f (Lemma A.16): 
+
+1
+
+d
+
+> d
+
+X
+
+> i=1
+
+f
+
+ cF ii 
+
+¯F
+
+
+
+≥ f 1
+
+d
+
+> d
+
+X
+
+> i=1
+
+cF ii 
+
+¯F
+
+!
+
+= f (c) (93) with equality if and only if all Fii are equal. When Var( Fii ) > 0 (heterogeneous Fisher), the inequality is strict: 
+
+KL( qiso ∥p) = d
+
+2 · 1
+
+d
+
+> d
+
+X
+
+> i=1
+
+f
+
+ cF ii 
+
+¯F
+
+
+
+> d
+
+2 f (c) = KL( qGAS ∥p). (94) 
+
+Proof for corollary 3.4 
+
+Proof. From Theorem A.31, the generalization gap bound depends on pKL( q∥p)/(2 n) (plus logarithmic terms). By Proposition 3.3, KL( qGAS ∥p) < KL( qiso ∥p) when Fisher information is heterogeneous, yielding the tighter bound for GAS. 
+
+A.11 Summary of Theoretical Results 
+
+The theoretical analysis establishes the following guarantees for GAS: 1. Gradient-Fisher Correspondence: Under Assumption A.10, GAS’s noise scaling ˜G2 
+
+> i
+
+∝ 1/g 2 
+
+> i
+
+≈ 1/F ii approximates the optimal posterior variance under Laplace approximation, achieving variance ratio σ2 
+
+> q
+
+/σ 2 
+
+> π
+
+= 1 + O(δ).2. Adaptivity to Domain Shift: Static and memory-based methods use fixed or outdated Fisher estimates, incurring KL divergence Ω( γ2 
+
+> F
+
+∆2 
+
+> t
+
+) under domain shift. GAS adapts to the current distribution by recomputing noise scales from current gradients, achieving O(dδ 2) divergence. 3. Curvature-Aware Perturbation: Unlike adversarial methods (SAM, STAR) that allocate perturbation budget uni-formly in ℓ2-norm—thereby concentrating on high-curvature directions—GAS allocates inversely proportional to curvature, minimizing expected loss increase by a factor of up to κ/d in the worst case. 4. Generalization via PAC-Bayes: The anisotropic posterior induced by GAS achieves lower KL divergence to the true Laplace posterior than isotropic alternatives, yielding tighter PAC-Bayes generalization bounds when Fisher information is heterogeneous across parameters. 5. Conditions for Optimality: GAS’s advantages are most pronounced when: • Domain shift is present (Fisher information changes across sessions, ∆t > 0)• Gradient-Fisher correspondence holds (near convergence, δ < 1)• Curvature is heterogeneous (condition number κ ≫ 1)• Fisher information varies across parameters ( Var( Fii ) > 0)
+
+## B Theoretical Analysis of Prototype Anchored Supervision (PAS) 
+
+This section provides a rigorous analysis of pseudo-label dynamics in semi-supervised mean-teacher frameworks and establishes conditions under which prototype anchored supervision (PAS) provably achieves lower asymptotic error than existing semi-supervised learning methods. 24 Continual Segmentation under Joint Nonstationarity 
+
+B.1 Setup and Notation 
+
+Consider a student-teacher semi-supervised segmentation framework with the following components: • Labeled dataset: Dl with nl samples • Unlabeled dataset: Du with nu samples • Student network: Ms with parameters θs
+
+• Teacher network: Mt with parameters θt (exponential moving average of θs)• Pseudo-label weight: γ ∈ (0 , 1) 
+
+• EMA decay coefficient: α ∈ [0 , 1) 
+
+• Number of classes: C ≥ 2
+
+We model the learning dynamics through the lens of pseudo-label error rates. Let ϵs(t) and ϵt(t) denote the expected fraction of incorrect pseudo-labels produced by the student and teacher, respectively, at discrete training iteration t.
+
+Assumption B.1 (Labeled Data Error) . There exists a constant ϵ0 ∈ (0 , 1) representing the irreducible error rate of the student when trained solely on labeled data Dl.
+
+Assumption B.2 (Linear Error Mixing) . When trained on a mixture of ground-truth labels (weight 1 − γ) and pseudo-labels (weight γ), the student’s expected error is a convex combination of the labeled data error and the pseudo-label error rate. 
+
+B.2 Pseudo-Label Error Dynamics Without PAS 
+
+Under Assumptions B.1 and B.2, the student error evolves according to: 
+
+ϵs(t + 1) = (1 − γ)ϵ0 + γϵ t(t), (95) where the first term captures learning from labeled data and the second term captures learning from teacher-generated pseudo-labels. The teacher parameters are updated via exponential moving average: 
+
+θt ← αθ t + (1 − α)θs. (96) 
+
+Assumption B.3 (EMA Error Inheritance) . The teacher’s pseudo-label error rate inherits from the student according to: 
+
+ϵt(t + 1) = αϵ t(t) + (1 − α)ϵs(t + 1) . (97) 
+
+Proof for proposition 3.12 
+
+Proof. Substituting (95) into (97): 
+
+ϵt(t + 1) = αϵ t(t) + (1 − α)(1 − γ)ϵ0 + γϵ t(t)
+
+= αϵ t(t) + (1 − α)(1 − γ)ϵ0 + (1 − α)γϵ t(t)= [ α + (1 − α)γ]ϵt(t) + (1 − α)(1 − γ)ϵ0
+
+= λϵ t(t) + (1 − α)(1 − γ)ϵ0.
+
+Proof for theorem 3.13 
+
+Proof. Since γ < 1 and α < 1, we have: 
+
+λ = α + (1 − α)γ = α + γ − αγ < α + (1 − α) = 1 .
+
+From proposition 3.12, the recurrence has general solution: 
+
+ϵt(t) = λtϵt(0) + (1 − α)(1 − γ)ϵ0
+
+> t−1
+
+X
+
+> k=0
+
+λk.
+
+25 Continual Segmentation under Joint Nonstationarity 
+
+Since |λ| < 1, we have λt → 0 and P∞ 
+
+> k=0
+
+λk = 11−λ . Therefore: 
+
+ϵ∞ = (1 − α)(1 − γ)ϵ0
+
+1 − λ .
+
+Substituting 1 − λ = 1 − α − (1 − α)γ = (1 − α)(1 − γ):
+
+ϵ∞ = (1 − α)(1 − γ)ϵ0
+
+(1 − α)(1 − γ) = ϵ0.
+
+Remark B.4 . Theorem 3.13 shows that without PAS, the asymptotic teacher error equals the base labeled-data error ϵ0. The semi-supervised framework with pseudo-labels provides no asymptotic improvement over purely supervised learning in this model. 
+
+B.3 Prototype Anchored Supervision 
+
+We now introduce a filtering mechanism that accepts only pseudo-labels satisfying dual criteria. 
+
+Definition B.5 (Class Prototypes) . For class c ∈ { 1, . . . , C }, the prototype is defined as the mean feature embedding over labeled samples: 
+
+μc := 1
+
+|D (c) 
+
+> l
+
+|
+
+X
+
+> xi∈D (c)
+> l
+
+fθ (xi) ∈ Rd,
+
+where D(c) 
+
+> l
+
+⊆ D l is the set of labeled samples with ground-truth label c, and fθ : X → Rd is the feature encoder. 
+
+Definition B.6 (PAS Acceptance Criterion) . A pseudo-label ˆy for input x is accepted if both conditions hold: 1. Confidence criterion: pT (ˆ y | x) ≥ τconf 
+
+2. Similarity criterion: s(x, ˆy) := ⟨fθ (x),μ ˆy ⟩∥fθ (x)∥∥ μˆy ∥ ≥ τsim 
+
+where pT (· | x) is the teacher’s predictive distribution, and τconf , τ sim ∈ (0 , 1) are threshold hyperparameters. 
+
+Definition B.7 (Coverage and Precision) . Given any pseudo-label acceptance criterion, we define: • Coverage f ∈ (0 , 1] : the fraction of unlabeled samples whose pseudo-labels are accepted. • Precision ρ ∈ [0 , 1] : the probability that an accepted pseudo-label is correct, i.e., ρ = Pr[ y = ˆ y | accepted ].
+
+B.4 Error Dynamics Under General Filtering Assumption B.8 (Filtered Error Dynamics) . Under any filtering scheme with coverage f and precision ρ, the student update becomes: 
+
+ϵs(t + 1) = (1 − f γ )ϵ0 + f γ (1 − ρ)ϵt(t), (98) where (1 − ρ) is the error rate among accepted pseudo-labels. 
+
+Proposition B.9 (Filtered Error Recurrence) . Under Assumptions B.3 and B.8, the teacher error satisfies: 
+
+ϵt(t + 1) = λeff ϵt(t) + (1 − α)(1 − f γ )ϵ0, (99) 
+
+where λeff := α + (1 − α)f γ (1 − ρ).Proof. Substituting (98) into (97): 
+
+ϵt(t + 1) = αϵ t(t) + (1 − α)(1 − f γ )ϵ0 + f γ (1 − ρ)ϵt(t)
+
+= α + (1 − α)f γ (1 − ρ)ϵt(t) + (1 − α)(1 − f γ )ϵ0
+
+= λeff ϵt(t) + (1 − α)(1 − f γ )ϵ0.
+
+Proof for theorem 3.14 26 Continual Segmentation under Joint Nonstationarity 
+
+Proof. Convergence formula. Under the error dynamics with PAS achieving coverage f and precision ρ, the effective eigenvalue governing error propagation is λeff = α + (1 − α)f γ (1 − ρ). For stability, we require λeff < 1, which holds when f γ (1 − ρ) < 1.The asymptotic error satisfies: 
+
+ϵ∞ = (1 − α)(1 − f γ )ϵ0
+
+1 − λeff 
+
+. (100) Computing the denominator: 
+
+1 − λeff = 1 − α − (1 − α)f γ (1 − ρ)= (1 − α)1 − f γ (1 − ρ).
+
+Therefore: 
+
+ϵ∞ = (1 − α)(1 − f γ )ϵ0
+
+(1 − α)[1 − f γ (1 − ρ)] = (1 − f γ )ϵ0
+
+1 − f γ (1 − ρ) . (101) 
+
+Part (i): Condition for improvement. Define the error ratio R := ϵ∞/ϵ 0:
+
+R = 1 − f γ 
+
+1 − f γ (1 − ρ) = 1 − f γ 
+
+1 − f γ + f γρ . (102) We have ϵ∞ < ϵ 0 if and only if R < 1:
+
+1 − f γ 
+
+1 − f γ + f γρ < 11 − f γ < 1 − f γ + f γρ 
+
+0 < f γρ. 
+
+This holds if and only if f γ > 0 and ρ > 0. Equivalently, solving for the threshold on ρ:
+
+ρ > 1 − 1 − f γ f γ = 2f γ − 1
+
+f γ . (103) For f γ ≤ 0.5, this threshold is non-positive, so any ρ > 0 suffices. For f γ > 0.5, precision must exceed the threshold 
+
+(2 f γ − 1) /(f γ ).
+
+Part (ii): Monotonicity in precision. For fixed f > 0 and γ > 0, differentiating with respect to ρ:
+
+∂ϵ ∞
+
+∂ρ = (1 − f γ )ϵ0 · ∂∂ρ 
+
+ 11 − f γ (1 − ρ)
+
+
+
+= (1 − f γ )ϵ0 · −f γ 
+
+[1 − f γ (1 − ρ)] 2
+
+= − (1 − f γ )f γϵ 0
+
+[1 − f γ (1 − ρ)] 2 .
+
+Under stability ( 1 − f γ > 0 when f γ < 1) and f > 0, all factors in the numerator and denominator are positive, so  
+
+> ∂ϵ ∞
+> ∂ρ
+
+< 0. Thus ϵ∞ is strictly decreasing in ρ.
+
+Part (iii): Improvement over baseline when ρ > π . Let π denote the base rate of errors (proportion of incorrect pseudo-labels without PAS). When PAS achieves precision ρ > π , it identifies incorrect pseudo-labels at a rate better than random selection. Without PAS (equivalently, f = 0 or ρ = π), the asymptotic error equals the initial error: ϵno-PAS  
+
+> ∞
+
+= ϵ0.With PAS achieving ρ > π > 0 and coverage f > 0:
+
+ϵPAS  
+
+> ∞
+
+= (1 − f γ )ϵ0
+
+1 − f γ (1 − ρ) < ϵ 0 = ϵno-PAS  
+
+> ∞
+
+, (104) 27 Continual Segmentation under Joint Nonstationarity 
+
+where the inequality follows from Part (i) since f γρ > 0. Therefore, PAS with precision exceeding the base rate strictly improves over the no-PAS baseline. 
+
+Part (iv): Higher precision reduces asymptotic error. This follows directly from Part (ii). Since ∂ϵ ∞ 
+
+> ∂ρ
+
+< 0 for all valid parameter ranges, any increase in precision ρ strictly decreases the asymptotic error ϵ∞. Quantitatively, improving precision from ρ1 to ρ2 > ρ 1 yields: 
+
+ϵ∞(ρ2) = ϵ∞(ρ1) · 1 − f γ (1 − ρ1)1 − f γ (1 − ρ2) < ϵ ∞(ρ1), (105) since 1 − f γ (1 − ρ2) > 1 − f γ (1 − ρ1) when ρ2 > ρ 1.
+
+Remark B.10 . The theorem establishes that PAS effectiveness depends on two key factors: coverage f (fraction of pseudo-labels evaluated) and precision ρ (accuracy of identifying errors). While coverage determines the scope of error correction, precision determines its quality. Notably, even moderate precision substantially reduces asymptotic error when coverage is high, making PAS robust to imperfect pseudo-label assessment. 
+
+B.5 Comparative Analysis: PAS vs. Existing Methods 
+
+We now establish that PAS achieves higher precision than existing semi-supervised learning methods under precisely stated conditions. The key insight is that asymptotic error depends on precision through Theorem 3.14(iv), so comparing methods reduces to comparing their precision. 
+
+Definition B.11 (Method Classes) . We categorize pseudo-label selection methods by their acceptance criteria: 1. Confidence-only : Accept if p(ˆ y|x) ≥ τ
+
+2. Consistency-based : No filtering; use all pseudo-labels with consistency regularization 3. Memory bank : Accept based on nearest neighbors in a memory bank M containing past (pseudo-)labeled features 4. PAS (dual-criteria) : Accept if confidence ≥ τconf AND prototype similarity ≥ τsim 
+
+B.5.1 PAS VS . C ONFIDENCE -O NLY METHODS 
+
+Assumption B.12 (Conditional Independence of Criteria) . Let S1 denote the event “confidence criterion satisfied” and S2
+
+denote the event “similarity criterion satisfied.” We assume S1 and S2 are conditionally independent given correctness: 
+
+P (S1 ∩ S2 | C) = P (S1 | C) · P (S2 | C), (106) 
+
+P (S1 ∩ S2 | ¬ C) = P (S1 | ¬ C) · P (S2 | ¬ C), (107) where C denotes the event that the pseudo-label is correct. 
+
+Definition B.13 (Filtering Statistics) . For each criterion i ∈ { 1, 2}, define: 
+
+αi := P (Si | C) (true positive rate) ,βi := P (Si | ¬ C) (false positive rate) .
+
+Define the likelihood ratio LR i := αi/β i and let π := P (C) denote the base precision (fraction of correct pseudo-labels before filtering). 
+
+Proposition B.14 (Dual-Criteria Precision Improvement) . Under Assumption B.12, let ρ1 denote the precision of confidence-only filtering and ρ12 denote the precision of PAS (dual-criteria). Then: 
+
+ρ1 = α1πα1π + β1(1 − π) , (108) 
+
+ρ12 = α1α2πα1α2π + β1β2(1 − π) . (109) 
+
+Furthermore: 
+
+ρ12 > ρ 1 ⇐⇒ LR 2 = α2
+
+β2
+
+> 1.
+
+28 Continual Segmentation under Joint Nonstationarity 
+
+Proof. By Bayes’ theorem, the precision of criterion S1 alone is: 
+
+ρ1 = P (C | S1) = P (S1 | C)P (C)
+
+P (S1) = α1πα1π + β1(1 − π) .
+
+For dual-criteria filtering under Assumption B.12: 
+
+P (S1 ∩ S2 | C) = α1α2,P (S1 ∩ S2 | ¬ C) = β1β2.
+
+Therefore: 
+
+ρ12 = P (C | S1 ∩ S2) = α1α2πα1α2π + β1β2(1 − π) .
+
+To compare ρ12 and ρ1, define a := α1π and b := β1(1 − π). Then: 
+
+ρ1 = aa + b , ρ12 = α2aα2a + β2b .
+
+The inequality ρ12 > ρ 1 holds iff: 
+
+α2aα2a + β2b > aa + bα2a(a + b) > a (α2a + β2b)
+
+α2a2 + α2ab > α 2a2 + β2ab α2ab > β 2ab α2 > β 2,
+
+where the last step uses ab > 0 (since π ∈ (0 , 1) and α1, β 1 > 0). 
+
+Corollary B.15 (Precision Gain Formula) . The precision ratio satisfies: 
+
+ρ12 
+
+ρ1
+
+= 1 + β1(1 −π)
+
+> α1π
+
+1 + β1β2(1 −π)
+
+> α1α2π
+
+= 1 + r/ LR 1
+
+1 + r/ (LR 1 · LR 2) ,
+
+where r := (1 − π)/π is the incorrect-to-correct odds ratio. Proof. Dividing (109) by (108): 
+
+ρ12 
+
+ρ1
+
+= α1α2πα1α2π + β1β2(1 − π) · α1π + β1(1 − π)
+
+α1π
+
+= α1π + β1(1 − π)
+
+α1α2π + β1β2(1 − π) · α2
+
+α2
+
+= α2[α1π + β1(1 − π)] 
+
+α1α2π + β1β2(1 − π) .
+
+Dividing numerator and denominator by α1α2π:
+
+ρ12 
+
+ρ1
+
+= 1 + β1(1 −π)
+
+> α1π
+
+1 + β1β2(1 −π)
+
+> α1α2π
+
+= 1 + r/ LR 1
+
+1 + r/ (LR 1 · LR 2) .
+
+Assumption B.16 (Discriminative Similarity Criterion) . The prototype similarity criterion has likelihood ratio LR 2 > 1,i.e., correct pseudo-labels have higher prototype similarity than incorrect ones: 
+
+P (similarity ≥ τsim | C) > P (similarity ≥ τsim | ¬ C).
+
+29 Continual Segmentation under Joint Nonstationarity 
+
+Corollary B.17 (PAS Dominates Confidence-Only) . Under Assumptions B.12 and B.16, PAS achieves strictly higher precision than confidence-only filtering: 
+
+ρPAS > ρ conf .
+
+Consequently, for equal effective coverage f γ :
+
+ϵPAS  
+
+> ∞
+
+< ϵ conf  
+
+> ∞
+
+.
+
+Proof. By Theorem B.14, ρ12 > ρ 1 iff LR 2 > 1, which holds by Assumption B.16. The asymptotic error comparison follows from Theorem 3.14(iv). B.5.2 PAS VS . C ONSISTENCY -B ASED METHODS 
+
+Definition B.18 (Consistency-Based Methods) . Consistency-based methods (e.g., Mean Teacher, Π-Model) apply pseudo-labels to all unlabeled samples without filtering, corresponding to coverage f = 1 and precision ρ = π (the base accuracy on unlabeled data). 
+
+Proposition B.19 (PAS Dominates Consistency-Based Methods) . Let ρcons = π be the precision of consistency-based methods and ρPAS be the precision of PAS with coverage fPAS ≤ 1. Under Assumptions B.12 and B.16: 
+
+ρPAS > π = ρcons .
+
+Furthermore, let γcons eff = γ and γPAS eff = fPAS γ. If γPAS eff > 0:
+
+ϵPAS  
+
+> ∞
+
+< ϵ cons  
+
+> ∞
+
+= ϵ0.
+
+Proof. For consistency-based methods with no filtering, the precision equals the base rate: ρcons = π.For PAS, by the law of total probability: 
+
+P (S1 ∩ S2) = α1α2π + β1β2(1 − π).
+
+The precision is: 
+
+ρPAS = α1α2πα1α2π + β1β2(1 − π) .
+
+We show ρPAS > π :
+
+ρPAS > π ⇐⇒ α1α2πα1α2π + β1β2(1 − π) > π 
+
+⇐⇒ α1α2π > π [α1α2π + β1β2(1 − π)] 
+
+⇐⇒ α1α2(1 − π) > β 1β2(1 − π)
+
+⇐⇒ α1α2 > β 1β2
+
+⇐⇒ LR 1 · LR 2 > 1.
+
+Since both criteria are discriminative (i.e., LR 1 ≥ 1 for confidence thresholding and LR 2 > 1 by Assumption B.16), we have LR 1 · LR 2 > 1.For the asymptotic error, consistency-based methods with ρ = π yield by Theorem 3.14: 
+
+ϵcons  
+
+> ∞
+
+= (1 − γ)ϵ0
+
+1 − γ(1 − π) .
+
+If π = 0 (all pseudo-labels incorrect), then ϵcons  
+
+> ∞
+
+= ϵ0. More generally, by Theorem 3.14(iii), ϵcons  
+
+> ∞
+
+< ϵ 0 only if π > 0.Since ρPAS > π and asymptotic error is strictly decreasing in precision (Theorem 3.14(iv)), we have ϵPAS  
+
+> ∞
+
+< ϵ cons  
+
+> ∞
+
+when comparing at equal effective pseudo-label weight, or more generally whenever PAS’s precision advantage outweighs any coverage difference. 30 Continual Segmentation under Joint Nonstationarity 
+
+B.5.3 PAS VS . M EMORY BANK METHODS 
+
+Definition B.20 (Memory Bank Methods) . Memory bank methods maintain a bank Mt = {(zi, ˜yi)}|M t| 
+
+> i=1
+
+of feature-label pairs accumulated over training. At each iteration, pseudo-labels are assigned based on nearest neighbors in Mt. The memory bank is updated by adding new pseudo-labeled samples. 
+
+Assumption B.21 (Memory Bank Update Model) . At each session t, let ηt ∈ (0 , 1] denote the fraction of memory bank entries updated with new samples. The new samples have pseudo-label error rate δt ∈ [0 , 1] . The memory bank error rate 
+
+et := P (˜ y̸ = y | (z, ˜y) ∈ M t) evolves as: 
+
+et+1 = (1 − ηt)et + ηtδt. (110) 
+
+Assumption B.22 (Self-Reinforcing Errors) . The error rate of new pseudo-labels depends on the memory bank error: 
+
+δt = g(et), (111) where g : [0 , 1] → [0 , 1] satisfies g(e) ≥ e for all e ∈ [0 , 1] (errors are at least preserved) and g(0) > 0 (some base error exists even with a perfect memory bank). 
+
+Lemma B.23 (Memory Bank Error Accumulation) . Under Assumptions B.21 and B.22 with constant update rate ηt = η > 
+
+0:1. The memory bank error sequence {et} is non-decreasing: et+1 ≥ et for all t.2. If g(e) > e for e ∈ [0 , e ∗) where e∗ > 0, then lim t→∞ et ≥ e∗.3. The precision of memory bank methods satisfies ρmem (t) = 1 − et, which is non-increasing in t.Proof. Part (i): By (110) and Assumption B.22: 
+
+et+1 − et = (1 − η)et + ηδ t − et
+
+= η(δt − et)= η(g(et) − et)
+
+≥ 0,
+
+since g(e) ≥ e by assumption. 
+
+Part (ii): The sequence {et} is non-decreasing and bounded above by 1, so it converges to some limit e∞ ∈ [0 , 1] . Taking limits in (110): 
+
+e∞ = (1 − η)e∞ + ηg (e∞) = ⇒ g(e∞) = e∞.
+
+By hypothesis, g(e) > e for e < e ∗, so any fixed point must satisfy e∞ ≥ e∗.
+
+Part (iii): The precision is ρmem (t) = 1 − et. Since et is non-decreasing, ρmem (t) is non-increasing. 
+
+Proposition B.24 (PAS Dominates Memory Bank Methods Asymptotically) . Let PAS use prototypes computed solely from labeled data with precision ρPAS that is constant across sessions. Under the conditions of Lemma B.23: 1. There exists T ∗ < ∞ such that for all t ≥ T ∗:
+
+ρPAS > ρ mem (t).
+
+2. For t ≥ T ∗ with equal effective coverage: 
+
+ϵPAS  
+
+> ∞
+
+< ϵ mem  
+
+> ∞
+
+(t).
+
+Proof. Part (i): By Lemma B.23, ρmem (t) = 1 − et → 1 − e∞ ≤ 1 − e∗.PAS computes prototypes from labeled data only: 
+
+μc = 1
+
+|D (c) 
+
+> l
+
+|
+
+X
+
+> x∈D (c)
+> l
+
+fθ (x).
+
+31 Continual Segmentation under Joint Nonstationarity    
+
+> Table 10. JASCL sensitivity/robustness analysis across ε, noise variance, and number of shots K.
+
+Setting Varying ε Noise ( ξi) variance Shots (K)10 −6 10 −7 10 −8 10 −9 0.1 1 10 3 4 5JASCL 0.443 0.437 0.460 0.482 0.460 0.460 0.408 0.414 0.434 0.460 Vanilla 0.076 Since labeled data has ground-truth labels, PAS precision ρPAS depends only on the discriminative power of the dual criteria, not on accumulated pseudo-label errors. Under Assumptions B.12 and B.16, ρPAS is constant and satisfies ρPAS > π (the base rate). If ρPAS > 1 − e∗, then since ρmem (t) → 1 − e∞ ≤ 1 − e∗, there exists T ∗ such that ρPAS > ρ mem (t) for all t ≥ T ∗.
+
+Part (ii): Follows from Theorem 3.14(iv): asymptotic error is strictly decreasing in precision. 
+
+Remark B.25 . The key distinction is that PAS’s precision depends on ground-truth prototypes from labeled data, which do not accumulate errors over sessions. Memory bank methods, by contrast, incorporate pseudo-labeled samples into the bank, causing error accumulation through the self-reinforcing feedback loop. 
+
+B.6 Summary of Theoretical Guarantees 
+
+The theoretical analysis establishes the following rigorous results: 1. Error Dynamics Framework: Under the linear mixing assumption, the asymptotic error of any filtering-based semi-supervised method is: 
+
+ϵ∞(f, ρ ) = (1 − f γ )ϵ0
+
+1 − f γ (1 − ρ) ,
+
+which is strictly decreasing in precision ρ.2. Dual-Criteria Precision Gain: Under conditional independence of criteria, adding a discriminative second criterion (LR 2 > 1) strictly improves precision: 
+
+ρ12 > ρ 1 ⇐⇒ α2 > β 2.
+
+3. PAS vs. Confidence-Only: PAS achieves ρPAS > ρ conf when the similarity criterion is discriminative. 4. PAS vs. Consistency-Based: PAS achieves ρPAS > π (the base precision), whereas consistency methods operate at precision π.5. PAS vs. Memory Bank: PAS maintains constant precision while memory bank methods suffer monotonic precision degradation due to error accumulation, leading to PAS dominance for t ≥ T ∗.6. Asymptotic Error Ordering: For sufficiently large t and equal effective coverage: 
+
+ϵPAS  
+
+> ∞
+
+< ϵ conf  
+
+> ∞
+
+< ϵ cons  
+
+> ∞
+
+= ϵ0, ϵPAS  
+
+> ∞
+
+< ϵ mem  
+
+> ∞
+
+(t).
+
+## C Robustness and sensitivity analysis of gradient adaptive stabilization (GAS) 
+
+GAS introduces no additional design hyperparameters. It follows, 
+
+ewi = wi + ˜Gi ξi, ξi ∼ N (0 , 1) ,
+
+where ˜Gi is a normalized function of 1/(g2 
+
+> i
+
++ ε). The term ε is added for stability when gi → 0. For all practical purposes, we set the noise variance of ξi to 1 and ε = 1 .0 × 10 −8.
+
+Varying ε: We vary ε using the following values: 1.0 × 10 −6, 1.0 × 10 −7, and 1.0 × 10 −9. We observe stable performance across settings. A smaller ε (e.g., 1.0 × 10 −9) performs slightly better because it allows GAS to more clearly separate 32 Continual Segmentation under Joint Nonstationarity     
+
+> Table 11. Retention analysis for different confidence and similarity thresholds. The selected setting ( τconf = 0 .7,τsim = 0 .7) achieves the best balance between pseudo-label quantity and reliability.
+
+τconf τsim Retention (%) Decision 
+
+0.6 0.6 71.7 Rejected 0.6 0.7 23.6 Rejected 0.6 0.8 1.8 Rejected 0.7 0.6 73.7 Rejected 0.7 0.7 23.2 Selected 
+
+0.7 0.8 1.9 Rejected 0.8 0.6 72.6 Rejected 0.8 0.7 22.7 Rejected 0.8 0.8 1.8 Rejected “important” parameters from “less important” ones. When ε is larger, it can dominate the denominator for small gradients, reducing contrast across parameters. Since GAS normalizes all scales to (0 , 1] , smaller ε does not cause instability and simply provides sharper contrast. 
+
+Varying the variance of ξi: We evaluate two additional noise variances: 0.1 and 10 . JASCL remains robust to changes in noise variance (0.1 and 1 perform equivalently), while the Vanilla model remains at Dice 0.076 .
+
+Varying the number of shots K: We monitor performance for different few-shot values K (labeled samples per class). JASCL retains strong performance even under severe few-shot settings (e.g., K = 3 ). Overall, these results show that JASCL remains fairly robust despite relying on only a minimal set of hyperparameters. 
+
+## D Sensitivity analysis of Prototype anchored supervision (PAS) hyperparameters 
+
+We analyse pseudo-labels selected using the confidence threshold τconf and similarity threshold τsim , where retention (%) denotes the proportion passing both filters (Table 11). Lower thresholds (e.g., 0.6) increase retention but admit many low-confidence labels, whereas higher thresholds become overly strict and drastically reduce retention. The setting τconf = 0 .7
+
+and τsim = 0 .7 offers the best balance, preserving a sufficient number of pseudo-labels while maintaining high reliability. We discarded the alternative τconf = 0 .6 and τsim = 0 .7 because it offered only a marginal 0.4% increase in retention relative to τconf = 0 .7 and τsim = 0 .7, but at the expense of lower confidence. The sensitivity analysis confirms robustness to nearby values: τconf = 0 .8, τsim = 0 .7 yields Dice 0.562 ; τconf = 0 .7, τsim = 0 .75 yields Dice 0.567 ; and τconf = 0 .7, τsim = 0 .7
+
+yields Dice 0.554 .
+
+## E Choice of layer for GAS 
+
+We evaluated the effect of applying GAS to different parts of the network when the entire model was unfrozen. Specifically, we injected GAS into (i) a deep feature extractor layer in the encoder, (ii) an intermediate decoder layer, and (iii) the final classifier layer. The results show a clear degradation when GAS is applied to deep feature extractors, and a consistent improvement when applied exclusively to the classifier: • GAS at encoder feature extractor layer: IoU 22.67 
+
+• GAS at decoder feature extractor layer: IoU 24.86 
+
+• GAS at final classifier layer F : IoU 27.84 
+
+These results motivate restricting GAS to the final classifier layer F .The rationale is threefold: 33 Continual Segmentation under Joint Nonstationarity 
+
+• Parameter sensitivity differs across the network: Early encoder-decoder layers encode generic features that are reused across all sessions, whereas the final classifier layer is highly task-specific and receives the strongest gradient signals associated with class boundaries. Injecting noise into deep layers would perturb shared low-level representations and destabilize all previously learned classes, while injecting noise into F regularizes only the task-specific decision boundaries where overfitting is the highest. • Local curvature is highest at the classifier layer: In few-shot segmentation, most curvature and gradient magnitude variation appears in the final logits, not in the deep feature extractor. GAS relies on per-parameter gradient magnitude to allocate noise; applying it to layers with uniformly low curvature would add noise where it provides minimal benefit but risks corrupting the global feature space. Applying GAS to F concentrates perturbations exactly where the loss landscape is sharpest and overfitting is most pronounced. • The feature extractor is shared across tasks; the classifier is task-adaptive: Deeper layers must remain stable to preserve knowledge from previous sessions. The classifier layer is the part of the model that adapts to new domains and novel classes, and therefore benefits the most from geometry-aware noise. Perturbing shared layers would amplify forgetting, whereas perturbing only F provides regularization without harming the backbone. 
+
+## F JASCL benchmarks 
+
+Med JASCL-Disjoint: The dataset details are present in the Table 12. The models with U-Net backbone are evaluated for their robustness and ability to handle a large number of incremental sessions while facing diverse domain shifts and a scarce few-shot data. This represents a highly realistic setting in clinical domains, where annotations are costly, and data is collected over time from multiple medical institutions. We evaluated the baselines from this benchmark on only two incremental sessions, as nearly all baselines collapsed after two sessions. We evaluated JASCL with a U-Net backbone across all five incremental sessions. The results demonstrate that the framework effectively handles the constraints and maintains strong performance throughout all sessions. This underscores the inability of existing baselines to effectively handle multiple constraints in continual segmentation across a large number of sessions. NC-FSCIL, which performs well for classification in few-shot class-incremental learning, fails on this benchmark. This highlights that a semantic segmentation model with a classifier fixed as a simplex equiangular tight frame (ETF) performs significantly worse than a model with a learnable classifier. MDIL, despite handling different domains with a shared encoder, struggles under strict constraints and suffers a drop in performance. Moreover, having multiple domains is not a practical solution when the number of domains increases. Approaches like generative replay (Gen-Replay) struggle to generate 3D medical volumes even with a diffusion model, which leads to poor performance. Most methods that perform well in incremental or few-shot incremental learning fail when confronted with domain shifts, including segmentation approaches such as MiB, PIFS, and CLIP-CT. Representation and meta-learning-based approaches, such as MAML, SupCL, UnSupCL, and MTL, also fail to retain performance over the sessions. It is observed that feature replay and prototype-based methods, such as C-FSCIL, SoftNet, and our JASCL framework, as well as data synthesis-based methods like GAPS, perform significantly better under these constraints. 
+
+Med JASCL-Mixed: The dataset details are present in the Table 13. This is a more realistic clinical setting that involves the same classes appearing across different domains. The goal is to evaluate the model’s ability to learn previously seen classes in new domains while retaining performance on the original domains. Additionally, multiple domains may appear within the same session, making learning and adaptation more challenging, as the model must simultaneously learn from diverse domains while managing the usual constraints. In this setting, we evaluated different transformer backbones, including MedFormer, SwinUNetr, and a large pre-trained CLIP-driven U-Net model, which had already been exposed to most of the 35 classes. Results show that even robust transformer backbones are unable to maintain model performance across sessions. An interesting observation is that the CLIP-driven model, already pre-trained on 21 of the 35 classes, experiences a drop in performance across sessions, highlighting the severity of the constraints in the benchmark. 
+
+Med Semi-Supervised-JASCL: This benchmark is a variant of Med JASCL-Disjoint, where few-shot classes have access to unlabeled data. The details of unlabeled data are present in the Table 14. The inclusion of unlabeled data significantly boosts the performance of JASCL, an improvement not observed with other methods. Benchmark also highlights how existing semi-supervised approaches fail to handle the constraints and are unable to effectively leverage unlabeled data. JASCL clearly demonstrates that using readily available unlabeled data can significantly improve multi-constraint continual learning for semantic segmentation. Natural-JASCL: The dataset details are present in the Table 15. In autonomous driving, scenes evolve over time with distributional shifts and limited labeled data, making this a highly realistic benchmark. Even large-scale pre-trained models 34 Continual Segmentation under Joint Nonstationarity 
+
+like SAM (trained on over a billion natural scene masks) exhibit forgetting in this realistic and challenging setting. It can be observed that JASCL with a SAM backbone achieves further improvements, highlighting that the proposed framework enhances not only simple backbones (e.g., U-Net) and transformer-based backbones (e.g., MedFormer, SwinUNetr) but also heavily pre-trained models like SAM. 
+
+Semi-Supervised Natural-JASCL: The dataset details are present in the Table 16. This benchmark provides access to abundant unlabeled data, and all baselines are evaluated with a DeepLab backbone. In this setting, we employ JASCL as a plug-and-play module on top of the GAPS baseline, further improving its results, by leveraging unlabeled data. This demonstrates that unlabeled data can significantly enhance performance and that JASCL can effectively boost existing baselines. Similar to the medical benchmarks, existing semi-supervised methods perform poorly in this setting and are unable to effectively leverage unlabeled data. We also evaluated active learning approaches, such as HALO, and coreset selection methods, like RETRIEVE, to select the most informative data; however, these methods fail to achieve significant improvements. 
+
+2D robotic surgery: We designed a 2D robotic surgery benchmark using two domains, CholecSeg8k 1 and m2caiseg 2,across three sessions. We vary both the classes and the domains to segment different organs and surgical instruments, creating a challenging and realistic setting under a few-shot data regime. The base session (Session 0) includes larger organs to segment, Session 1 introduces tubular structures such as the intestine, and Session 2 contains surgical instruments to segment. In the incremental sessions, we use 50 samples per novel class. The dataset details are present in the Table 17. This benchmark is difficult due to the wide variation in the size, shape, and appearance of the objects to be segmented. Even under these constraints, JASCL achieves significantly better performance (Dice score) than CAT 3, which is a specialized baseline for this task as shown in Table 29. 
+
+## G Detection results 
+
+To check the effectiveness of JASCL on detection tasks with distributional shifts, we tested JASCL on the detection dataset COCO-O 4 having different domains with RCNN 5 backbone as shown in Table 18. We created base session with 77 classes from ‘Painting’ domain and incremental session 1 from ‘Weather’ domain with three novel disjoint few-shot classes, ‘person’, ‘car’, and ‘bench’. The performance of base model is 0.2840 mAP. We took 41, 224, 174 unlabeled samples from ‘bench’, ‘car’, and ‘person’ classes, respectively with 30 few-shot labeled samples from each class for session 1. Table 18 illustrates that JASCL is able to improve the performance over the Vanilla backbones like RCNN, even on detection tasks with large domain shifts. 
+
+## H Implementation details 
+
+We have re-implemented and adapted the following baselines - Class-incremental Learning : UCL, MiB, CLIP-CT, Sav-ing100x, C-Flat, UCB, STAR, YoooP, Adapt_replay; Domain Incremental learning : MDIL; Few-shot Class-incremental Learning : PIFS, Subspace, C-FSCIL, FACT, NC-FSCIL, Gen-Replay, GAPS, SoftNet, FSCIL-SS, FeCAM, BCM, CAT. 
+
+Regularization based methods: Dropout/Weight Decay 6, Variational Dropout 7, Adagrad 8; Semi-Supervised Learning based approaches : RETRIEVE, NNCSL, UaD-CE, CSL. Other methods : SupCL, UnSupCL, UnSupCL-HNM, MTL, MAML, CLIP-driven, HALO. All baselines were adapted with their original settings and hyperparameters. Medical experiments were run for 200 epochs for both base and incremental sessions, while natural and 2D robotic surgery experiments were run for 100 epochs per session. All SAM experiments were run for 10 epochs. We used one A100 40GB GPU for all experiments. Table 19 shows the layers frozen in the JASCL models for each benchmark. 
+
+> 1https://arxiv.org/pdf/2012.12453
+> 2https://arxiv.org/abs/2008.10134
+> 3https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=10443356
+> 4https://openaccess.thecvf.com/content/ICCV2023/papers/Mao_COCO-O_A_Benchmark_for_ Object_Detectors_under_Natural_Distribution_Shifts_ICCV_2023_paper.pdf
+> 5https://github.com/microsoft/SoftTeacher
+> 6https://proceedings.neurips.cc/paper_files/paper/2020/file/518a38cc9a0173d0b2dc088166981cf8-Paper. pdf
+> 7https://link.springer.com/article/10.1007/s10994-023-06487-7
+> 8https://openreview.net/pdf?id=WwQKl1OrMX
+
+35 Continual Segmentation under Joint Nonstationarity 
+
+## I GAS vs. existing regularization-based continual learning methods 
+
+I.1 GAS as a Gradient-Guided Stochastic Regularizer 
+
+Gradient adaptive stabilization (GAS) introduces parameter-wise stochastic perturbations whose magnitudes depend on instantaneous gradient sensitivity. For each parameter wi, GAS computes the squared gradient, 
+
+Gi =
+
+ ∂L ∂w i
+
+2
+
+,
+
+and defines an inverse sensitivity, 
+
+G−1 
+
+> i
+
+= 1
+
+Gi + ε .
+
+These values are then normalized into the interval (0 , 1] to produce noise scales ˜Gi, and each parameter is perturbed as, 
+
+wi ← wi + ˜Giξi, ξi ∼ N (0 , 1) .
+
+Large-gradient parameters receive minimal perturbation, while flat or low-gradient directions receive proportionally larger perturbations. This produces a parameter-level perturbation scheme whose magnitude is determined by local curvature, allowing the model to explore flat regions while preserving stability along sharp directions. 
+
+I.2 GAS vs. Adaptive Optimizers 
+
+Adaptive optimizers such as Adam, RMSProp, and Adagrad rescale gradients using accumulated statistics but do not inject 
+
+structured perturbations into the parameters. For example, Adam updates a parameter wt as, 
+
+wt+1 = wt − η mt
+
+√vt + ε ,
+
+where mt and vt are exponential moving averages of the gradient and its square. The second moment term vt acts as a diagonal preconditioner that provides a coarse and history based approximation of local curvature. However, these methods do not perform explicit exploration of the loss surface and do not incorporate true second order information that requires evaluation in a neighborhood of the current parameters. Their behavior depends on accumulated gradient statistics, which can become stale when the data distribution changes, leading to slower or less reliable adaptation in continual settings. GAS differs fundamentally by applying noise directly to the parameters and by basing its magnitude solely on the current sensitivity G−1 
+
+> i
+
+, enabling selective stability and plasticity even in few-shot incremental settings. 
+
+I.3 GAS vs. Uncertainty-Based Regularization 
+
+Uncertainty-Based adaptive methods, such as UCL, maintain per-node uncertainty values σ2 
+
+> t
+
+that are tied across all incoming weights of a neuron, which reduces the memory overhead relative to per-weight variational approaches. However, these uncertainty estimates depend on statistics accumulated from previous tasks and may become less informative under strong domain shift, since few-shot updates provide limited evidence to revise them. Because a single variance is shared at the node level, the resulting anisotropy is coarse. In contrast, GAS computes inverse-squared gradient values directly from the current data, requires no stored task-level statistics, and provides full parameter-level anisotropy. 
+
+I.4 GAS vs. Dropout and Variational Dropout 
+
+Standard dropout introduces fixed noise independent of parameter sensitivity, while variational dropout can learn per-weight or per-unit dropout rates. The methods may permanently reduce the capacity of weights once they are heavily dropped, and neither variant uses curvature or gradient information to guide noise placement. As a result, dropout methods may struggle under domain shift and few-shot conditions because they inject noise independently of parameter sensitivity. GAS avoids these issues by deriving a parameter-specific noise scale from instantaneous gradients, assigning low noise to important weights and higher noise to less relevant ones. This dynamic adjustment preserves capacity across sessions and enables far more effective adaptation than static dropout mechanisms. 36 Continual Segmentation under Joint Nonstationarity 
+
+I.5 GAS vs. Weight Decay 
+
+Weight decay introduces a uniform penalty, 
+
+Lwd = λ∥W ∥2,
+
+which shrinks all parameters equally regardless of their relevance or curvature. Important parameters may be unnec-essarily suppressed, while flat directions receive no preferential treatment. GAS replaces such uniform shrinkage with gradient-guided noise whose magnitude is inversely related to curvature. The behaviour of ˜Gi is theoretically justified by analyzing the perturbed loss under a second-order Taylor approximation. This analysis shows that, after normalization, the resulting perturbations remain stable and bounded. The formulation suppresses noise in high-curvature (large-gradient) directions while promoting exploration along flat directions, thereby providing a geometry-aware alternative to classical ℓ2
+
+regularization. 
+
+I.6 GAS vs. Sharpness-Based Methods (SAM and C-Flat) 
+
+Sharpness-Aware Minimization (SAM) 9 performs a deterministic min-max optimization step that perturbs the parameters within a fixed-radius neighborhood and then updates them using the resulting worst-case gradient. This produces a perturbation defined over a fixed-radius neighborhood of the full parameter vector, which does not provide parameter-wise differentiation. As a result, SAM alters the optimization trajectory but provides no mechanism to identify which weights are important for previous tasks or which directions should be preserved for subsequent ones. C-Flat extends SAM to continual learning by optimizing a surrogate objective that couples neighborhood perturbations with Hessian-vector directional curvature terms. This encourages the model to remain in locally smooth regions of the loss landscape and reduces sensitivity to task specific sharp minima. However, because its flatness and curvature terms operate on neighborhoods of the full parameter vector rather than individual parameters, C-Flat does not provide weight-level control over which directions should remain stable and which should remain adaptable. Consequently, C-Flat enforces a uniform notion of flatness across the network rather than assigning stability or plasticity based on parameter importance. In addition, its neighborhood radius and curvature coefficients introduce multiple interacting hyperparameters, increasing optimization complexity and limiting interpretability. GAS is built on a fundamentally different design principle. Instead of imposing global stability constraints, it injects parameter wise adaptive noise derived directly from the instantaneous gradient. For each weight wi, the corresponding gradient gi determines a noise scale ˜Gi which provides an automatic, data driven stability plasticity trade off at the parameter level. Weights with large gradients, which actively contribute to current task performance, receive negligible noise, preserving critical information. Weights with small gradients receive larger perturbations, enabling rapid adaptation without interfering with previously consolidated structure. This yields a local, lightweight, and interpretable mechanism for continual learning that avoids global curvature estimation and removes the need for complex objective balancing. Unlike C-Flat’s uniform landscape smoothing, GAS selectively preserves what is important and selectively explores what is flexible, using a simple rule rooted in gradient geometry. 
+
+I.7 GAS vs. Perturbation-Based Stability Methods (STAR) 
+
+The STAR method stabilizes learning by introducing an adversarial-style perturbation ∆w that amplifies model sensitivity on stored buffer samples and then penalizing the resulting output drift through a KL divergence term, 
+
+LSTAR = KL  f (x; w) ∥ f (x; w + ∆ w).
+
+The perturbation is obtained by initializing each layer with small noise to avoid zero gradients, then performing one gradient-ascent step on the KL divergence at the perturbed point, and finally normalizing the gradient per layer to control the perturbation magnitude. This layer-wise normalization controls the perturbation scale at the layer granularity, rather than at the level of individual parameters. STAR also relies on stored buffer samples and requires additional forward and backward passes to compute both the perturbed outputs and the ascent direction, introducing nontrivial memory and computational overhead. In contrast, GAS requires no buffer and no auxiliary training passes. Its stability mechanism arises directly from the instantaneous local gradient structure, enabling parameter-wise, curvature-sensitive regularization with minimal overhead. 
+
+> 9https://arxiv.org/pdf/2010.01412
+
+37 Continual Segmentation under Joint Nonstationarity 
+
+Table 20 summarizes results on the Med JASCL-Disjoint benchmark, demonstrating the superior performance of JASCL with GAS. 
+
+## J Limitations & future work 
+
+J.1 Severe Domain Shift 
+
+Tables 3 and 8 reveal an extreme failure case at Session 4 , where the Dice score for a U-Net backbone drops to nearly zero. This behavior is expected given the session ordering: • Session 0: TotalSegmentator ( CT )• Session 1: AMOS (dominantly CT )• Session 2: BCV ( CT )• Session 3: MOTS ( CT )• Session 4: BraTS ( MRI )• Session 5: Verse ( CT )Across the first four sessions, the model is exposed almost exclusively to CT scans. When the distribution abruptly shifts to MRI at Session 4, lightweight encoder-decoder architectures such as U-Net exhibit catastrophic forgetting of the CT domain, causing the Dice score to collapse to near-zero values. JASCL alleviates this drop to a limited extent: the Dice score improves from 0.025 (Table 3) to 0.0576 (Table 8) under the semi-supervised setting. This trend underscores both the severity and practical relevance of the proposed JASCL benchmarks, while also exposing the limitations of simple convolutional architectures. 
+
+Mitigation Strategies: (1) Transformer backbones - Transformer-based architectures such as MedFormer exhibit stronger cross-domain stability and retain meaningful performance under severe shifts, achieving a Dice score of 0.323 in Session 4 with JASCL (Table 8). We recommend transformer backbones when facing substantial domain heterogeneity. (2) Leveraging more unlabeled data - we further study the effect of additional publicly available unlabeled CT data (TotalSegmentator, AMOS, BCV, MOTS) under a U-Net backbone. The steady improvement demonstrates the strength of the prototype anchored supervision (PAS) mechanism in utilizing unlabeled data under domain shift. 
+
+J.2 Noisy Unlabeled Data 
+
+In real clinical scenarios, medical scans often suffer from noise, blur, and contrast degradation. To assess robustness under such realistic artifacts, we evaluate JASCL under moderate and heavy noise settings applied to the unlabeled data. 
+
+Boundary-Aware Noise Generation: We employ a boundary-aware degradation module. Sobel filtering extracts structural boundaries, which are converted into a soft mask B(x, y, z ) ∈ [0 , 1] . Blur, contrast shifts, and additive Gaussian noise are then applied primarily to high-boundary regions (Table 22), while homogeneous regions remain minimally affected. This degradation is applied to 70% of unlabeled samples to mimic natural variability. JASCL shows strong resilience as heavy noise reduces performance by only 0.002 compared to the moderate setting. This indicates that the method is highly robust to substantial degradations in unlabeled images. Nevertheless, further improving robustness to noise in continual semi-supervised segmentation remains an important direction for future work. 
+
+J.3 3D Medical Domain (i) Organ size and few-shot: Segmentation performance in 3D medical datasets strongly depends on organ size. Small structures (e.g., adrenal glands, colon tumors, BraTS tumor subregions) 10 are known to be difficult to segment, and this 
+
+> 10 https://arxiv.org/pdf/2501.09138
+
+38 Continual Segmentation under Joint Nonstationarity 
+
+difficulty is amplified in few-shot continual learning. (ii) Base model accuracy affects retention: Retention in continual learning depends on the initial accuracy of the base model. Methods starting near Dice 0.9 may retain high absolute performance after several sessions, whereas methods starting near Dice 0.6-0.7 may naturally yield lower absolute values even with good retention. Most JASCL medical benchmarks fall within the 0.6-0.7 range, which explains the absolute performance levels observed across sessions. (iii) Long multi-session continual learning is inherently harder: Existing medical continual segmentation works typically perform only 1-3 incremental steps (CLIP-CT), whereas JASCL stress-tests up to six incremental sessions across multiple modalities and classes. More sessions naturally lead to lower absolute accuracy, even when relative improvements and stability are strong. 
+
+J.4 Autonomous Driving (i) Dataset complexity and backbone capacity: Recent foundation models 11 achieve 50-60% IoU on BDD and Cityscapes even with a powerful ViT-H ( ∼630M parameters) backbone. JASCL uses substantially smaller backbones (ViT-B, ∼90M parameters). The challenging nature of the dataset inherently restricts the maximum IoU that models can achieve. (ii) Continual segmentation performance is generally low: State-of-the-art continual semantic segmentation typically achieves only 20-50% IoU under realistic multi-domain settings 12 . JASCL additionally operates in a few-shot regime, where the scarcity of labels further reduces absolute accuracy. 
+
+J.5 2D Robotic Surgery 
+
+This domain is exceptionally challenging due to rapid appearance changes in organs, tools, lighting, and camera viewpoints. As shown in CAT, existing methods achieve only 5-30% IoU for incremental classes in continual setups, underscoring the inherent difficulty of the task. 
+
+## K Additional ablations 
+
+We evaluated JASCL across class-incremental learning, domain incremental learning, mixed class and domain shifts, and semi-supervised CIL settings with scarce labeled data, spanning 2D robotic surgery, 3D medical segmentation, and autonomous driving. Across all tasks, specialized methods, whether designed for CIL (CAT, BCM), DIL (SAM, CLIP), mixed class and domain shifts (MDIL), or semi-supervised CIL (UaD-CE), exhibit severe performance degradation over incremental sessions. In contrast, JASCL consistently maintains strong performance across all benchmarks, demonstrating robustness to class shifts, domain shifts, scarce labels, and unlabeled data, both individually and in combination. 
+
+K.1 2D robotic surgery task 
+
+To study the effect of each setup, we performed class-incremental learning, domain incremental learning, and their combination (CDIL) under data-scarce conditions. We evaluated widely used backbones such as Medformer (a Transformer-based model) and U-Net for semantic segmentation. This task uses two domains, CholecSeg8k and m2caiseg, and varies both the class set and the domain across sessions. For class-incremental learning, we vary the classes within CholecSeg8k. For domain incremental learning, we shift the domain from CholecSeg8k (Session 0) to m2caiseg (Session 1). For combined class and domain incremental learning, we vary both the domain and the class set when moving from CholecSeg8k (Session 0) to m2caiseg (Session 1). In Table 24, we observe that all models are affected, and their performance drops significantly across these settings. Interestingly, transformer-based models show poorer performance compared to simpler encoder-decoder models such as U-Net. 
+
+K.2 Autonomous driving 
+
+To study the effect of each setup, we performed class-incremental learning, domain incremental learning, and their combination under data scarce conditions. We used SAM as the backbone. For class-incremental learning, we varied the classes within BDD (Berkeley Deep Drive). For domain incremental learning, we shifted the domain from BDD (Session 0) to IDD (Indian Driving Dataset, Session 1). For combined class and domain incremental learning, we varied both the domain 
+
+> 11 https://arxiv.org/pdf/2510.27047
+> 12 https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=10521870
+
+39 Continual Segmentation under Joint Nonstationarity 
+
+and the class set when moving from BDD (Session 0) to IDD (Session 1). Even heavily pre-trained models such as SAM show a noticeable drop in performance (Table 25) when evaluated under class-incremental and domain incremental learning setups. 
+
+The above settings clearly show that models specifically designed for class-incremental learning, domain incremental learning, data scarcity, or the use of unlabeled data still fail to perform reliably. In contrast, the JASCL framework is able to handle each of these setups individually, as well as the more complex continual scenarios captured in the JASCL benchmarks. 
+
+## L Practical guidelines for reliable performance 
+
+Below, we provide key recommendations for effectively deploying the JASCL framework in multi-constrained continual semantic segmentation settings. 
+
+L.1 Role of Unlabeled Data 
+
+Domain-relevant unlabeled data plays a crucial role in JASCL. As observed in Session 4 when BraTS (MRI modality) was introduced, unlabeled data substantially augments novel few-shot classes and helps the model retain modality- and domain-specific structure when supervision is scarce. Since unlabeled data is far cheaper to acquire than labeled samples, it provides large practical gains (0.025 → 0.058 → 0.197). We therefore recommend using unlabeled data whenever possible. 
+
+L.2 Role of ε
+
+The hyperparameter ε can be selected using a small validation set based on the deployment scenario. Preliminary observations show that appropriate choices of ε consistently improve performance. 
+
+L.3 Total Drop (%) 
+
+Absolute Dice scores at the final session may recover despite catastrophic collapses during intermediate sessions, particularly in real-world incremental settings like medical imaging (scanner/protocol drift), autonomous driving (weather/city changes), robotics (task-by-task updates), and continual deployment scenarios. Total Drop (%) captures the full forgetting trajectory and provides a more reliable measure of stability over time. Total Drop =
+
+ P  
+
+> i
+
+max(0 , S i − Si+1 )
+
+S0
+
+
+
+× 100 .
+
+where S0 is the base session and Si is the incremental session i. Table 26 shows that JASCL is the most reliable method, with the lowest Total Drop. 
+
+L.4 Model Choice Under Budget Constraints 
+
+When resources permit, pre-trained models combined with JASCL offer the best performance and robustness. Under moderate budgets, U-Net or transformer backbones are effective choices. Transformers show greater resilience to severe domain shifts, whereas U-Nets remain strong in standard settings. For lightweight backbones, JASCL with unlabeled data provides the best trade-off, since unlabeled data is easy to obtain and significantly improves performance. This is especially useful when models must be updated frequently or across many continual sessions. 
+
+L.5 Extreme Data-Scarce Settings 
+
+JASCL performs reliably even under extreme label scarcity. For Med JASCL-Disjoint, Session 1 performance with K = 4 
+
+and K = 3 labeled samples reaches 0.4343 and 0.4141, respectively, remaining close to the K = 5 performance of 0.460 and consistently outperforming baselines. This makes JASCL highly practical in settings where annotation is severely limited. 40 Continual Segmentation under Joint Nonstationarity 
+
+## M Additional results 
+
+We report class-wise results for JASCL and some baselines. We show how class performance varies across sessions. We report results of JASCL without gradient adaptive stabilization in Table 34 and without prototype anchored supervision in Table 36. Table 32 and Table 44 highlight that the performance of pre-trained models deteriorates in the proposed multi-constraint benchmark. Figure 6 shows the performance of seen and new classes in different settings. 41 Continual Segmentation under Joint Nonstationarity           
+
+> Table 12. Dataset splits for the Med JASCL-Disjoint benchmark. Session 0 (base) uses the TotalSegmentator (TS) domain; Session 1 uses AMOS ; Session 2 uses BCV ; Session 3 uses MOTS ; Session 4 uses BraTS ; and Session 5 uses VerSe . All incremental-session training sets follow a 5-shot protocol.
+
+Class Source Train Val Test Sacrum - 1 TS 136 27 43 Stomach - 2 TS 124 29 53 Lung upper lobe left - 3 TS 188 41 92 Lung lower lobe left - 4 TS 179 39 83 Brain - 5 TS 125 35 79 Atrium (left) - 6 TS 127 25 52 Ventricle (left) - 7 TS 123 24 50 Pulmonary artery - 8 TS 116 17 43 Aorta - 9 TS 200 39 85 Gallbladder - 10 TS 120 27 47 Trachea - 11 TS 157 30 68 Rib left1 - 12 TS 156 28 66 Rib right1 - 13 TS 156 29 67 Rib left2 - 14 TS 156 29 67 Rib right2 - 15 TS 155 29 66 Pancreas - 16 Amos 120 30 60 Duodenum - 17 Amos 120 30 60 Bladder - 18 Amos 99 26 47 Prostate/uterus - 19 Amos 96 26 47 Postcava - 20 Amos 120 30 60 Spleen - 21 BCV 18 4 8Liver - 22 BCV 18 4 8Left kidney - 23 BCV 18 4 8Right kidney - 24 BCV 18 4 8Left adrenal - 25 BCV 18 4 8Right adrenal - 26 BCV 18 4 8Hepatic Vessel - 27,28 MOTS 7 4 4Hepatic Vessel Tumor MOTS 7 4 4Colon Tumor - 29 MOTS 7 4 4Lung Tumor - 30 MOTS 7 4 4NCR — label 1 BraTS 40 4 8ED — label 2 BraTS 40 4 8ET — label 4 BraTS 37 4 8C3(3) VerSe 12 5 6C4(4) VerSe 12 5 6T1(8) VerSe 31 5 8T2(9) VerSe 26 5 742 Continual Segmentation under Joint Nonstationarity                    
+
+> Table 13. Dataset splits for the Med JASCL-Mixed benchmark, where both classes and domains may repeat across sessions. Session 0 (base) uses the AMOS domain. Session 1 uses BCV and MOTS . Session 2 uses TS and AMOS , with three classes repeating ( Right kidney ,Left kidney ,Stomach ) from the TS domain. Session 3 uses MOTS and TS , and Session 4 uses BraTS and VerSe . All incremental sessions follow a 5-shot training protocol.
+
+Class Source Train Val Test Spleen - 1 Amos 203 66 68 Right kidney - 2 Amos 234 77 77 Left kidney - 3 Amos 233 78 78 Gall bladder - 4 Amos 190 61 67 Esophagus - 5 Amos 204 67 68 Prostate/uterus - 6 Amos 167 55 52 Stomach - 7 Amos 233 77 77 Arota / aorta - 8 Amos 204 68 68 Duodenum - 9 Amos 203 68 68 Postcava - 10 Amos 204 68 68 Pancreas - 11 BCV 18 6 6Inferior vena cava - 12 BCV 18 6 6Portal vein and splenic vein - 13 BCV 18 6 6Left adrenal - 14 BCV 18 6 6Right adrenal - 15 BCV 18 6 6Liver - 16 BCV 18 6 6Hepatic Vessel - 17 MOTS 7 4 4Hepatic Vessel Tumor - 18 MOTS 7 4 4Small bowel - 19 TS 60 20 20 Hip_left - 20 TS 60 20 20 Hip_right - 21 TS 60 20 20 Lung upper lobe left - 22 TS 60 20 20 Lung lower lobe left - 23 TS 60 20 20 Bladder - 24 Amos 9 4 4Colon Tumor - 25 MOTS 7 4 4Lung Tumor - 26 MOTS 7 4 4Femur_left - 27 TS 18 6 6Femur_right - 28 TS 18 6 6T1 BraTS 40 4 8T2 BraTS 40 4 8Flair BraTS 37 4 8C3(3) VerSe 12 5 6C4(4) VerSe 12 5 6T1(8) VerSe 31 5 8T2(9) VerSe 26 5 7 
+
+> Table 14. Unlabeled sample counts per session in Med Semi-Supervised-JASCL benchmark.
+
+Session Count Session 1 - Amos 25 Session 2 - BCV 30 Session 3 - MOTS 8Session 4 - BraTS 15 Session 5 - VerSe 20 43 Continual Segmentation under Joint Nonstationarity    
+
+> Table 15. Dataset splits for the Natural-JASCL benchmark. All incremental sessions follow a 10-shot training protocol, with 3 validation samples per class.
+
+Class Source Train Val Test road - 0 BDD - Session 0 4691 1184 847 sidewalk - 1 BDD - Session 0 3173 796 612 building - 2 BDD - Session 0 4270 1070 758 wall - 3 BDD - Session 0 772 189 111 fence - 4 BDD - Session 0 1494 360 206 traffic light - 5 BDD - Session 0 2187 556 443 traffic sign - 6 BDD - Session 0 3625 919 660 person - 7 BDD - Session 0 1562 393 305 car - 8 BDD - Session 0 4738 1180 833 truck - 9 BDD - Session 0 1451 389 283 Bridge/tunnel - 10 IDD - Session 1 10 3 54 Parking - 11 IDD - Session 1 10 3 173 rail track - 12 IDD - Session 1 10 3 155 Autorickshaw - 13 IDD - Session 1 10 3 139 pole - 14 IDD - Session 1 10 3 220 Bus - 15 (from BDD) BDD - Session 2 10 3 58 Sky - 16 (from BDD) BDD - Session 2 10 3 139 bicycle - 17 (from BDD) BDD - Session 2 10 3 45 person - 7 (repeat from IDD) - 18 IDD - Session 2 10 3 82 car - 8 (repeat from IDD) - 19 IDD - Session 2 10 3 91     
+
+> Table 16. Dataset splits for the Semi-Supervised Natural-JASCL benchmark, which includes 400 unlabeled samples per class . All incremental sessions use a 10-shot training protocol and 3 validation samples per class.
+
+Class Source Train Val Test road - 0 BDD : Session 0 4691 1184 847 sidewalk - 1 BDD : Session 0 3173 796 612 building - 2 BDD : Session 0 4270 1070 758 wall - 3 BDD : Session 0 772 189 111 fence - 4 BDD : Session 0 1494 360 206 traffic light - 5 BDD : Session 0 2187 556 443 traffic sign - 6 BDD : Session 0 3625 919 660 person - 7 BDD : Session 0 1562 393 305 car - 8 BDD : Session 0 4738 1180 833 truck - 9 BDD : Session 0 1451 389 283 parking - 10 Cityscapes : Session 1 10 3 111 vegetation - 11 Cityscapes : Session 1 10 3 486 rail track - 12 IDD : Session 2 10 3 214 sky - 13 IDD : Session 2 10 3 300 motorcycle - 14 IDD : Session 3 10 3 609 autorickshaw - 15 IDD : Session 3 10 3 361 bridge/tunnel - 16 IDD : Session 3 10 3 65 44 Continual Segmentation under Joint Nonstationarity 
+
+Table 17. Dataset splits for 2D robotic surgery benchmark. 
+
+Category Class Source Train Val Test misc Background CholecSeg8k 3246 713 1304 organ Abdominal Wall CholecSeg8k 2774 639 1158 organ Liver CholecSeg8k 3246 713 1304 organ Gastrointestinal Tract CholecSeg8k 1832 399 715 organ Fat CholecSeg8k 2991 662 1199 organ Gallbladder CholecSeg8k 2810 594 1124 organ Connective Tissue CholecSeg8k 1116 154 330 organ Upper wall m2caiseg 50 50 142 organ Intestine m2caiseg 50 4 10 instrument Grasper m2caiseg 50 50 132 instrument Clipper m2caiseg 50 15 39 
+
+Table 18. Performance of JASCL on COCO-O detection benchmark with one incremental session on three few-shot novel classes. We compared JASCL without Gradient Adaptive Stabilization (GAS) and Prototype Anchored Supervision (PAS). 
+
+Method Session 1 (mAP) RCNN (Vanilla with only unlabeled data) 0.000 JASCL 0.063 JASCL w/o GAS 0.004 JASCL w/o PAS 0.051 
+
+Table 19. Configuration of JASCL in different settings.                       
+
+> Method Base Frozen (Yes/No) Incremental Sessions Frozen (which layers) Med JASCL-Disjoint (U-Net) No Yes (All but last) Med JASCL-Mixed (MedFormer) No Yes (All but last) Med JASCL-Mixed (SwinUNetr) No Yes (All but last) Natural-JASCL (DeepLab) No No Semi-Supervised Natural-JASCL (Deeplab) No No Med Semi-Supervised-JASCL (U-Net) No Yes (All but last) Med Semi-Supervised-JASCL (MedFormer) No Yes (All but last) Natural-JASCL (SAM) No Yes (All but last) 2D robotic surgery (U-Net) No No 2D robotic surgery (MedFormer) No No
+
+Table 20. Performance comparison on Med JASCL-Disjoint benchmark showing that GAS provides substantial gains over existing regularization-based methods for continual learning. 
+
+Method Session 0 Session 1 Session 2 Dropout / Weight Decay 0.700 0.191 –Variational Dropout 0.700 0.260 –Adagrad 0.700 0.024 –UCL 0.700 0.430 0.325 C-Flat 0.700 0.174 0.030 STAR 0.700 0.050 0.020 JASCL (GAS) 0.736 0.460 0.398 
+
+Table 21. Impact of additional unlabeled CT data on Session 4 performance. 
+
+Model (U-Net backbone) Session 4 
+
+JASCL (no unlabeled data) 0.025 JASCL (15 unlabeled samples) 0.058 JASCL (42 unlabeled samples) 0.197 45 Continual Segmentation under Joint Nonstationarity 
+
+Table 22. Noise schedules used for unlabeled image degradation. 
+
+Operation Randomness Moderate Heavy 
+
+Blur Uniform σ ∈ [0 .5, 1.5] σ ∈ [1 .0, 2.5] 
+
+Contrast Uniform 1.0 ± 0.15 1.0 ± 0.30 
+
+Additive Noise Gaussian σ = 0 .02 σ = 0 .05 
+
+Table 23. Performance of JASCL under noise-corrupted unlabeled data. 
+
+Method Session 1 
+
+JASCL (no noise) 0.554 JASCL (moderate noise) 0.477 JASCL (heavy noise) 0.475 UaD-CE 0.082 
+
+Table 24. Performance of class-incremental learning (CIL), domain incremental learning (DIL), and their combination (CDIL) under data-scarce settings. S denotes the session; for example, S0 corresponds to Session 0.                                                 
+
+> Model CIL S0 CIL S1 CIL S2 DIL S0 DIL S1 CDIL S0 CDIL S1 CDIL S2 U-Net Vanilla 0.770 0.003 0.000 0.770 0.223 0.770 0.033 0.007 Medformer Vanilla 0.762 0.026 0.002 0.762 0.166 0.762 0.011 0.002 CAT U-Net 0.770 0.102 0.006 0.770 0.258 0.770 0.166 0.001 JASCL Medformer 0.762 0.166 0.144 0.762 0.279 0.762 0.169 0.156 JASCL U-Net 0.770 0.212 0.159 0.770 0.305 0.770 0.244 0.163
+
+Table 25. Performance of class-incremental learning (CIL), domain incremental learning (DIL), and their combination (CDIL) under data-scarce settings. S denotes the session; for example, S0 corresponds to Session 0. 
+
+Model CIL S0 CIL S1 DIL S0 DIL S1 CDIL S0 CDIL S1 CDIL S2 SAM Vanilla 66.0 30.49 66.0 30.43 66.0 32.6 30.81 SAM JASCL 66.0 31.39 66.0 30.64 66.0 33.2 31.22 46 Continual Segmentation under Joint Nonstationarity  
+
+> Table 26. Total Drop (%) for all baselines on Med JASCL-Disjoint (lower is better).
+
+Method Total Drop (%) 
+
+PIFS 88.9 NC-FSCIL 80.4 CLIP-CT 70.3 MiB 86.3 MDIL 87.5 C-FSCIL 62.3 SoftNet 82.2 GAPS 63.8 FSCIL-SS 87.3 Subspace 84.4 Gen-Replay 89.1 FeCAM 94.0 FACT 92.2 MAML 99.9 MAML + Reg. 99.9 MTL 88.7 UnSupCL 94.4 SupCL 94.0 UnSupCL-HNM 95.0 C-Flat 95.7 STAR 96.9 Saving100x 92.6 YoooP 96.9 UCB 81.6 BCM 100.0 Adapt_replay 96.4 UCL 53.6 
+
+JASCL (U-Net) 45.9 
+
+47 Continual Segmentation under Joint Nonstationarity 
+
+(a) (b) (c) 
+
+(d) (e) (f) 
+
+(g) (h) (i) Figure 6. (a-c) Performance of JASCL on the Med JASCL-Disjoint benchmark and its variant, Med Semi-Supervised-JASCL (which includes additional unlabeled data), evaluated across incremental sessions (TS (Base) → AMOS → BCV → MOTS → BraTS → VerSe). SS refers to Semi-Supervised. SS JASCL denotes the performance of JASCL on the Med Semi-Supervised-JASCL benchmark. The reported results confirm that unlabeled data helps to boost the performance. (d-f) Performance of JASCL on the Semi-Supervised Natural-JASCL benchmark (which includes additional unlabeled data), evaluated across incremental sessions (BDD100K (Base) →
+
+Cityscapes → IDD → IDD-diff (with different classes from the previous session)). The results show that prototype anchored supervision (PAS) enhances the performance of JASCL compared to JASCL without prototype anchored supervision (w/o PAS). (g-i) Performance of JASCL (MedFormer) on the Med JASCL-Mixed benchmark evaluated across incremental sessions (Session 0 (Base) → Session 1 →
+
+Session 2 → Session 3 → Session 4) The results show that gradient adaptive stabilization (GAS) enhances the performance of JASCL compared to JASCL without gradient adaptive stabilization (w/o GAS). Seen refers to the average performance on classes the model has encountered in previous sessions, while New refers to the average performance on classes introduced in the current session. HM refers to Harmonic Mean. 
+
+48 Continual Segmentation under Joint Nonstationarity  
+
+> Table 27. Class-wise performance of JASCL on Med JASCL-Disjoint with U-Net.
+
+Class Session 0 Session 1 Session 2 Session 3 Session 4 Session 5 class_0 0.979 0.962 0.848 0.764 0.944 0.672 class_1 0.792 0.614 0.611 0.553 0.002 0.791 class_2 0.613 0.209 0.341 0.454 0.002 0.541 class_3 0.856 0.762 0.739 0.717 0.003 0.834 class_4 0.756 0.636 0.623 0.646 0.003 0.736 class_5 0.910 0.769 0.730 0.601 0.458 0.877 class_6 0.653 0.611 0.596 0.557 0.127 0.622 class_7 0.704 0.551 0.559 0.568 0.029 0.656 class_8 0.875 0.835 0.802 0.733 0.182 0.810 class_9 0.768 0.719 0.711 0.687 0.048 0.753 class_10 0.610 0.272 0.480 0.542 0.002 0.444 class_11 0.803 0.711 0.687 0.683 0.030 0.825 class_12 0.824 0.674 0.681 0.650 0.082 0.732 class_13 0.729 0.638 0.592 0.579 0.069 0.652 class_14 0.732 0.635 0.595 0.397 0.046 0.689 class_15 0.705 0.431 0.500 0.539 0.019 0.654 class_16 – 0.129 0.142 0.134 0.040 0.122 class_17 – 0.043 0.058 0.062 0.017 0.084 class_18 – 0.050 0.068 0.071 0.021 0.072 class_19 – 0.053 0.017 0.012 0.016 0.015 class_20 – 0.096 0.073 0.070 0.017 0.062 class_21 – – 0.032 0.432 0.031 0.165 class_22 – – 0.287 0.125 0.024 0.111 class_23 – – 0.073 0.093 0.003 0.018 class_24 – – 0.037 0.031 0.001 0.042 class_25 – – 0.004 0.008 0.015 0.010 class_26 – – 0.000 0.003 0.002 0.001 class_27 – – – 0.075 0.000 0.087 class_28 – – – 0.031 0.000 0.032 class_29 – – – 0.338 0.000 0.292 class_30 – – – 0.277 0.014 0.043 class_31 – – – – 0.109 0.060 class_32 – – – – 0.185 0.008 class_33 – – – – 0.299 0.158 class_34 – – – – – 0.056 class_35 – – – – – 0.133 class_36 – – – – – 0.222 class_37 – – – – – 0.066 
+
+Average 0.736 0.459 0.398 0.329 0.025 0.324 49 Continual Segmentation under Joint Nonstationarity  
+
+> Table 28. Class-wise performance of JASCL on Med JASCL-Mixed with MedFormer.
+
+Class Session 0 Session 1 Session 2 Session 3 Session 4 class_0 0.973 0.892 0.916 0.855 0.842 class_1 0.695 0.708 0.641 0.629 0.690 class_2 0.705 0.524 0.606 0.682 0.653 class_3 0.608 0.527 0.585 0.589 0.411 class_4 0.367 0.263 0.300 0.318 0.300 class_5 0.646 0.530 0.540 0.611 0.615 class_6 0.533 0.341 0.437 0.462 0.442 class_7 0.562 0.546 0.548 0.526 0.525 class_8 0.870 0.861 0.693 0.867 0.734 class_9 0.570 0.449 0.456 0.484 0.371 class_10 0.709 0.592 0.483 0.514 0.512 class_11 – 0.208 0.225 0.222 0.102 class_12 – 0.466 0.436 0.248 0.404 class_13 – 0.025 0.196 0.205 0.200 class_14 – 0.002 0.042 0.050 0.046 class_15 – 0.002 0.067 0.072 0.076 class_16 – 0.520 0.294 0.232 0.224 class_17 – 0.023 0.097 0.101 0.099 class_18 – 0.029 0.087 0.073 0.076 class_19 – – 0.159 0.231 0.236 class_20 – – 0.084 0.164 0.085 class_21 – – 0.025 0.155 0.167 class_22 – – 0.045 0.073 0.069 class_23 – – 0.120 0.173 0.184 class_24 – – 0.018 0.120 0.115 class_25 – – – 0.099 0.079 class_26 – – – 0.067 0.184 class_27 – – – 0.013 0.036 class_28 – – – 0.008 0.071 class_29 – – – – 0.018 class_30 – – – – 0.101 class_31 – – – – 0.086 class_32 – – – – 0.025 class_33 – – – – 0.014 class_34 – – – – 0.019 class_35 – – – – 0.020 
+
+Average 0.626 0.367 0.299 0.285 0.228  
+
+> Table 29. Performance of JASCL on 2D robotic surgery.
+
+Model Session 0 Session 1 Session 2 UNet Vanilla 0.770 0.033 0.007 Medformer Vanilla 0.762 0.011 0.002 CAT (UNet) 0.770 0.166 0.001 JASCL - Medformer 0.762 0.169 0.156 JASCL - UNet 0.770 0.244 0.163 50 Continual Segmentation under Joint Nonstationarity  
+
+> Table 30. Class-wise performance of JASCL on Med JASCL-Mixed with SwinUNetr.
+
+Class Session 0 Session 1 Session 2 Session 3 Session 4 class_0 0.972 0.943 0.961 0.938 0.960 class_1 0.802 0.805 0.754 0.749 0.788 class_2 0.415 0.199 0.391 0.388 0.399 class_3 0.551 0.576 0.506 0.526 0.560 class_4 0.301 0.213 0.163 0.145 0.190 class_5 0.657 0.567 0.618 0.548 0.593 class_6 0.574 0.428 0.465 0.472 0.458 class_7 0.592 0.306 0.531 0.549 0.537 class_8 0.847 0.497 0.729 0.844 0.845 class_9 0.524 0.363 0.463 0.471 0.444 class_10 0.694 0.089 0.352 0.377 0.222 class_11 – 0.339 0.124 0.159 0.192 class_12 – 0.754 0.709 0.734 0.749 class_13 – 0.044 0.048 0.032 0.028 class_14 – 0.000 0.028 0.025 0.021 class_15 – 0.000 0.025 0.030 0.016 class_16 – 0.538 0.114 0.073 0.065 class_17 – 0.011 0.058 0.045 0.048 class_18 – 0.009 0.014 0.006 0.003 class_19 – – 0.181 0.027 0.016 class_20 – – 0.034 0.065 0.063 class_21 – – 0.082 0.094 0.088 class_22 – – 0.016 0.001 0.000 class_23 – – 0.086 0.011 0.011 class_24 – – 0.112 0.128 0.116 class_25 – – – 0.337 0.017 class_26 – – – 0.269 0.003 class_27 – – – 0.000 0.004 class_28 – – – 0.013 0.055 class_29 – – – – 0.050 class_30 – – – – 0.311 class_31 – – – – 0.000 class_32 – – – – 0.000 class_33 – – – – 0.169 class_34 – – – – 0.074 
+
+Average 0.596 0.319 0.275 0.254 0.211 51 Continual Segmentation under Joint Nonstationarity  
+
+> Table 31. Per-class performance of JASCL across incremental Sessions on Med Semi-Supervised-JASCL benchmark.
+
+Class Session 0 Session 1 Session 2 Session 3 Session 4 Session 5 class_0 0.985 0.969 0.842 0.763 0.936 0.709 class_1 0.881 0.659 0.628 0.709 0.019 0.779 class_2 0.575 0.250 0.478 0.540 0.001 0.575 class_3 0.852 0.883 0.886 0.874 0.025 0.896 class_4 0.770 0.720 0.711 0.712 0.022 0.735 class_5 0.786 0.849 0.856 0.830 0.133 0.862 class_6 0.733 0.715 0.713 0.715 0.081 0.695 class_7 0.696 0.760 0.713 0.731 0.014 0.793 class_8 0.665 0.710 0.762 0.782 0.151 0.771 class_9 0.799 0.828 0.797 0.812 0.118 0.791 class_10 0.280 0.572 0.517 0.549 0.002 0.447 class_11 0.864 0.809 0.827 0.834 0.235 0.835 class_12 0.697 0.760 0.748 0.729 0.119 0.828 class_13 0.776 0.641 0.653 0.695 0.054 0.757 class_14 0.761 0.720 0.749 0.739 0.086 0.797 class_15 0.769 0.712 0.671 0.511 0.026 0.804 class_16 – 0.178 0.172 0.171 0.051 0.165 class_17 – 0.060 0.087 0.112 0.008 0.105 class_18 – 0.109 0.089 0.077 0.004 0.106 class_19 – 0.074 0.048 0.068 0.000 0.042 class_20 – 0.074 0.112 0.104 0.007 0.092 class_21 – – 0.049 0.072 0.004 0.056 class_22 – – 0.165 0.079 0.026 0.138 class_23 – – 0.091 0.060 0.001 0.084 class_24 – – 0.039 0.002 0.000 0.010 class_25 – – 0.032 0.019 0.011 0.023 class_26 – – 0.014 0.023 0.000 0.054 class_27 – – – 0.182 0.001 0.190 class_28 – – – 0.026 0.000 0.050 class_29 – – – 0.366 0.001 0.168 class_30 – – – 0.298 0.052 0.099 class_31 – – – – 0.252 0.106 class_32 – – – – 0.171 0.106 class_33 – – – – 0.227 0.044 class_34 – – – – – 0.160 class_35 – – – – – 0.105 class_36 – – – – – 0.201 class_37 – – – – – 0.286 
+
+Average 0.736 0.554 0.449 0.414 0.058 0.374 52 Continual Segmentation under Joint Nonstationarity  
+
+> Table 32. Performance of SAM and JASCL on Natural-JASCL benchmark.
+
+Class Base SAM Session 1 JASCL Session 1 SAM Session 2 JASCL Session 2 1 95.29 86.54 88.42 88.18 88.72 2 64.01 35.13 34.07 40.03 39.89 3 92.77 89.24 89.12 82.23 84.21 4 46.02 21.70 24.45 35.56 39.80 5 57.90 16.48 17.70 42.10 40.99 6 48.19 16.31 18.14 17.24 15.33 7 53.94 33.65 37.09 39.76 37.75 8 60.06 28.26 39.18 56.20 57.56 9 90.56 87.93 87.03 84.44 80.50 10 51.58 45.65 38.13 35.77 37.38 11 – 16.96 16.23 2.17 2.13 12 – 1.67 1.23 0.03 0.02 13 – 3.01 3.48 0.19 0.21 14 – 1.98 0.53 0.00 0.01 15 – 4.42 3.72 1.01 0.98 16 – – – 0.65 1.13 17 – – – 28.94 35.42 18 – – – 0.00 0.01 
+
+Average 66.03 32.59 33.23 30.80 31.22  
+
+> Table 33. Per-class performance of JASCL on Semi-Supervised Natural-JASCL benchmark.
+
+Class Session 0 Session 1 Session 2 Session 3 road - 0 91.18 82.36 81.35 81.48 sidewalk - 1 48.82 31.20 24.84 22.94 building - 2 86.42 71.03 72.53 67.41 wall - 3 20.84 1.95 1.39 1.14 fence - 4 25.28 2.81 1.41 2.49 traffic light - 5 38.34 10.82 0.53 1.23 traffic sign - 6 31.79 4.12 0.18 0.06 person - 7 28.33 0.59 0.81 0.08 car - 8 81.19 56.30 42.89 41.92 truck - 9 25.40 12.12 7.94 8.96 parking - 10 – 5.20 7.69 6.23 vegetation - 11 – 54.76 53.41 48.49 rail track - 12 – – 12.03 13.23 sky - 13 – – 79.62 73.67 motorcycle - 14 – – – 17.53 autorickshaw - 15 – – – 20.59 bridge/tunnel - 16 – – – 24.58 
+
+Average 47.75 27.8 27.68 25.47 53 Continual Segmentation under Joint Nonstationarity  
+
+> Table 34. JASCL performance on Med JASCL-Mixed benchmark without gradient adaptive stabilization. The results highlight the importance of the proposed mechanism.
+
+Class Session 0 Session 1 Session 2 Session 3 Session 4 class_0 0.971 0.746 0.810 0.792 0.804 class_1 0.727 0.155 0.180 0.181 0.273 class_2 0.738 0.103 0.120 0.119 0.194 class_3 0.613 0.077 0.091 0.094 0.159 class_4 0.373 0.038 0.047 0.050 0.094 class_5 0.665 0.099 0.133 0.137 0.244 class_6 0.573 0.116 0.147 0.158 0.250 class_7 0.580 0.128 0.143 0.137 0.177 class_8 0.859 0.133 0.162 0.170 0.289 class_9 0.566 0.082 0.103 0.105 0.164 class_10 0.701 0.122 0.149 0.147 0.204 class_11 – 0.023 0.029 0.031 0.053 class_12 – 0.016 0.025 0.026 0.092 class_13 – 0.008 0.012 0.014 0.025 class_14 – 0.013 0.018 0.019 0.026 class_15 – 0.013 0.014 0.014 0.016 class_16 – 0.096 0.082 0.080 0.091 class_17 – 0.035 0.033 0.033 0.037 class_18 – 0.007 0.006 0.006 0.008 class_19 – – 0.037 0.037 0.041 class_20 – – 0.009 0.010 0.015 class_21 – – 0.020 0.022 0.037 class_22 – – 0.004 0.004 0.006 class_23 – – 0.026 0.027 0.030 class_24 – – 0.027 0.026 0.042 class_25 – – – 0.018 0.025 class_26 – – – 0.049 0.055 class_27 – – – 0.048 0.043 class_28 – – – 0.009 0.014 class_29 – – – – 0.006 class_30 – – – – 0.022 class_31 – – – – 0.008 class_32 – – – – 0.016 class_33 – – – – 0.049 class_34 – – – – 0.009 class_35 – – – – 0.016 
+
+Average 0.623 0.070 0.067 0.063 0.080 54 Continual Segmentation under Joint Nonstationarity  
+
+> Table 35. Class-wise performance of MedFormer Vanilla on Med JASCL-Mixed benchmark.
+
+Class Session 0 Session 1 Session 2 Session 3 Session 4 class_0 0.969 0.955 0.965 0.957 0.956 class_1 0.639 0.000 0.000 0.000 0.000 class_2 0.660 0.000 0.117 0.000 0.000 class_3 0.704 0.000 0.053 0.000 0.000 class_4 0.371 0.000 0.000 0.000 0.000 class_5 0.596 0.000 0.000 0.000 0.000 class_6 0.589 0.000 0.000 0.000 0.000 class_7 0.565 0.000 0.232 0.000 0.000 class_8 0.835 0.000 0.000 0.000 0.000 class_9 0.454 0.000 0.000 0.000 0.000 class_10 0.717 0.000 0.000 0.000 0.000 class_11 – 0.404 0.000 0.000 0.000 class_12 – 0.698 0.000 0.000 0.000 class_13 – 0.468 0.000 0.000 0.000 class_14 – 0.262 0.000 0.000 0.000 class_15 – 0.236 0.000 0.000 0.000 class_16 – 0.870 0.000 0.000 0.000 class_17 – 0.532 0.000 0.000 0.000 class_18 – 0.096 0.000 0.000 0.000 class_19 – – 0.530 0.000 0.000 class_20 – – 0.580 0.000 0.000 class_21 – – 0.587 0.000 0.000 class_22 – – 0.395 0.000 0.000 class_23 – – 0.473 0.000 0.000 class_24 – – 0.247 0.000 0.000 class_25 – – – 0.720 0.000 class_26 – – – 0.700 0.000 class_27 – – – 0.030 0.000 class_28 – – – 0.000 0.000 class_29 – – – – 0.277 class_30 – – – – 0.401 class_31 – – – – 0.586 class_32 – – – – 0.247 class_33 – – – – 0.279 class_34 – – – – 0.376 class_35 – – – – 0.153 
+
+Average 0.636 0.280 0.167 0.086 0.090 55 Continual Segmentation under Joint Nonstationarity  
+
+> Table 36. JASCL performance on Semi-Supervised Natural-JASCL benchmark without Prototype Anchored Supervision.
+
+Class Session 0 Session 1 Session 2 Session 3 road - 0 91.18 81.79 77.50 78.68 sidewalk - 1 48.82 27.03 26.18 24.36 building - 2 86.42 70.01 66.08 62.76 wall - 3 20.84 3.13 0.75 0.78 fence - 4 25.28 4.06 0.81 0.88 traffic light - 5 38.34 6.35 1.31 4.36 traffic sign - 6 31.79 2.64 0.45 0.45 person - 7 28.33 0.63 0.02 0.03 car - 8 81.19 49.48 43.93 42.89 truck - 9 25.40 11.19 6.89 9.09 parking - 10 – 4.16 4.29 8.90 vegetation - 11 – 51.60 53.31 60.64 rail track - 12 – – 9.24 12.86 sky - 13 – – 73.77 78.93 motorcycle - 14 – – – 14.33 autorickshaw - 15 – – – 17.82 bridge/tunnel - 16 – – – 15.08 
+
+Average 47.75 26.00 26.04 25.12  
+
+> Table 37. Performance of GAPS on Natural-JASCL benchmark.
+
+Class Session 0 Session 1 Session 2 road - 0 91.18 81.01 66.32 sidewalk - 1 48.82 29.91 5.24 building - 2 86.42 77.24 62.31 wall - 3 20.84 0.00 0.00 fence - 4 25.28 3.93 0.04 traffic light - 5 38.34 6.01 6.64 traffic sign - 6 31.79 2.64 1.95 person - 7 28.33 6.48 10.33 car - 8 81.19 68.94 45.45 truck - 9 25.40 1.97 0.01 Bridge/tunnel - 10 – 7.48 8.55 Parking - 11 – 22.11 20.01 rail track - 12 – 14.03 6.20 Autorickshaw - 13 – 16.80 8.02 pole - 14 – 12.67 9.69 Bus - 15 (from BDD) – – 0.02 Sky - 16 (from BDD) – – 48.76 bicycle - 17 (from BDD) – – 0.81 person - 7 (repeat from IDD) - 18 – – –car - 8 (repeat from IDD) - 19 – – –
+
+Average 47.76 23.42 16.69 56 Continual Segmentation under Joint Nonstationarity  
+
+> Table 38. Performance of C-FSCIL on Med JASCL-Disjoint benchmark.
+
+Class Session 0 Session 1 Session 2 class_0 0.982 0.715 0.606 class_1 0.779 0.438 0.552 class_2 0.735 0.300 0.444 class_3 0.877 0.725 0.563 class_4 0.794 0.669 0.615 class_5 0.802 0.810 0.821 class_6 0.742 0.438 0.471 class_7 0.866 0.519 0.439 class_8 0.844 0.364 0.350 class_9 0.869 0.476 0.521 class_10 0.639 0.271 0.275 class_11 0.854 0.492 0.300 class_12 0.780 0.095 0.145 class_13 0.780 0.288 0.326 class_14 0.752 0.103 0.282 class_15 0.688 0.139 0.247 class_16 – 0.112 0.053 class_17 – 0.067 0.068 class_18 – 0.188 0.231 class_19 – 0.088 0.067 class_20 – 0.092 0.079 class_21 – – 0.410 class_22 – – 0.286 class_23 – – 0.054 class_24 – – 0.078 class_25 – – 0.010 class_26 – – 0.037 
+
+Average 0.787 0.334 0.253 57 Continual Segmentation under Joint Nonstationarity  
+
+> Table 39. Performance of GAPS on Semi-Supervised Natural-JASCL benchmark.
+
+Class Session 0 Session 1 Session 2 Session 3 road - 0 91.18 79.10 69.08 67.17 sidewalk - 1 48.82 21.52 3.48 1.20 building - 2 86.42 60.16 46.16 42.60 wall - 3 20.84 1.31 0.49 0.33 fence - 4 25.28 0.00 0.00 0.09 traffic light - 5 38.34 0.00 0.01 0.00 traffic sign - 6 31.79 0.00 0.00 0.00 person - 7 28.33 0.00 0.00 0.00 car - 8 81.19 25.79 20.09 8.85 truck - 9 25.40 8.55 5.09 0.55 parking - 10 – 2.18 1.57 3.34 vegetation - 11 – 38.12 31.43 25.91 rail track - 12 – – 5.04 5.68 sky - 13 – – 80.24 69.65 motorcycle - 14 – – – 9.45 autorickshaw - 15 – – – 9.87 bridge/tunnel - 16 – – – 1.04 
+
+Average 47.76 19.73 18.76 14.45 58 Continual Segmentation under Joint Nonstationarity  
+
+> Table 40. Performance of NNCSL on Med Semi-Supervised-JASCL benchmark.
+
+Class Session 0 Session 1 Session 2 Session 3 Session 4 Session 5 class_0 0.985 0.814 0.925 0.957 0.959 0.962 class_1 0.831 0.068 0.024 0.015 0.011 0.009 class_2 0.575 0.039 0.029 0.011 0.009 0.008 class_3 0.802 0.038 0.022 0.011 0.010 0.006 class_4 0.720 0.017 0.008 0.005 0.001 0.002 class_5 0.786 0.034 0.012 0.017 0.014 0.010 class_6 0.733 0.050 0.029 0.018 0.019 0.015 class_7 0.695 0.005 0.008 0.005 0.004 0.005 class_8 0.665 0.030 0.022 0.009 0.008 0.004 class_9 0.799 0.023 0.008 0.005 0.003 0.008 class_10 0.230 0.042 0.019 0.016 0.013 0.011 class_11 0.814 0.016 0.013 0.004 0.004 0.002 class_12 0.697 0.017 0.025 0.023 0.018 0.017 class_13 0.726 0.013 0.007 0.008 0.003 0.003 class_14 0.711 0.013 0.015 0.014 0.011 0.009 class_15 0.719 0.020 0.018 0.015 0.012 0.010 class_16 – 0.121 0.012 0.007 0.012 0.017 class_17 – 0.071 0.022 0.012 0.016 0.024 class_18 – 0.093 0.015 0.011 0.012 0.013 class_19 – 0.189 0.012 0.008 0.007 0.005 class_20 – 0.044 0.023 0.014 0.015 0.026 class_21 – – 0.023 0.003 0.002 0.002 class_22 – – 0.518 0.032 0.018 0.029 class_23 – – 0.276 0.021 0.019 0.018 class_24 – – 0.013 0.005 0.003 0.003 class_25 – – 0.019 0.008 0.008 0.012 class_26 – – 0.049 0.009 0.004 0.007 class_27 – – – 0.166 0.011 0.005 class_28 – – – 0.052 0.006 0.005 class_29 – – – 0.276 0.016 0.014 class_30 – – – 0.106 0.006 0.007 class_31 – – – – 0.023 0.016 class_32 – – – – 0.048 0.013 class_33 – – – – 0.002 0.003 class_34 – – – – – 0.216 class_35 – – – – – 0.413 class_36 – – – – – 0.237 class_37 – – – – – 0.289 
+
+Average 0.700 0.047 0.047 0.030 0.011 0.040 59 Continual Segmentation under Joint Nonstationarity  
+
+> Table 41. Performance of HALO on Semi-Supervised Natural-JASCL.
+
+Class Session 0 Session 1 Session 2 Session 3 road - 0 91.18 0.00 0.00 0.00 sidewalk - 1 48.82 0.00 0.00 0.00 building - 2 86.42 0.00 0.00 0.00 wall - 3 20.84 0.00 0.00 0.00 fence - 4 25.28 0.00 0.00 0.00 traffic light - 5 38.34 0.00 0.00 0.00 traffic sign - 6 31.79 0.00 0.00 0.00 person - 7 28.33 0.00 0.00 0.00 car - 8 81.19 0.00 0.00 0.00 truck - 9 25.40 0.00 0.00 0.00 parking - 10 – 0.55 0.00 0.00 vegetation - 11 – 20.87 0.00 0.00 rail track - 12 – – 0.90 0.00 sky - 13 – – 27.32 0.00 motorcycle - 14 – – – 1.15 autorickshaw - 15 – – – 17.82 bridge/tunnel - 16 – – – 2.60 
+
+Average 47.76 1.78 2.02 1.27 60 Continual Segmentation under Joint Nonstationarity  
+
+> Table 42. Performance of MDIL (domain incremental) on Med JASCL-Disjoint benchmark.
+
+Class Session 0 Session 1 Session 2 class_0 0.982 0.972 0.967 class_1 0.851 0.000 0.000 class_2 0.790 0.000 0.000 class_3 0.864 0.000 0.003 class_4 0.785 0.000 0.000 class_5 0.767 0.000 0.001 class_6 0.733 0.000 0.000 class_7 0.798 0.000 0.000 class_8 0.787 0.000 0.002 class_9 0.791 0.000 0.000 class_10 0.475 0.000 0.001 class_11 0.817 0.000 0.001 class_12 0.825 0.000 0.000 class_13 0.846 0.000 0.000 class_14 0.784 0.000 0.001 class_15 0.774 0.000 0.000 class_16 – 0.374 0.000 class_17 – 0.256 0.000 class_18 – 0.599 0.000 class_19 – 0.541 0.000 class_20 – 0.522 0.001 class_21 – – 0.288 class_22 – – 0.618 class_23 – – 0.514 class_24 – – 0.451 class_25 – – 0.366 class_26 – – 0.298 
+
+Average 0.779 0.115 0.098 61 Continual Segmentation under Joint Nonstationarity  
+
+> Table 43. Performance of Gen-Replay (generative replay with diffusion) on Med JASCL-Disjoint benchmark.
+
+Class Session 0 Session 1 Session 2 class_0 0.985 0.966 0.960 class_1 0.831 0.008 0.018 class_2 0.575 0.013 0.002 class_3 0.802 0.002 0.003 class_4 0.720 0.002 0.009 class_5 0.786 0.006 0.023 class_6 0.733 0.001 0.000 class_7 0.696 0.000 0.000 class_8 0.665 0.001 0.000 class_9 0.799 0.017 0.001 class_10 0.230 0.003 0.000 class_11 0.814 0.000 0.000 class_12 0.697 0.001 0.000 class_13 0.726 0.000 0.000 class_14 0.711 0.003 0.000 class_15 0.719 0.002 0.001 class_16 – 0.192 0.000 class_17 – 0.070 0.000 class_18 – 0.546 0.002 class_19 – 0.334 0.024 class_20 – 0.329 0.001 class_21 – – 0.507 class_22 – – 0.637 class_23 – – 0.411 class_24 – – 0.415 class_25 – – 0.166 class_26 – – 0.430 
+
+Average 0.700 0.076 0.102 62 Continual Segmentation under Joint Nonstationarity  
+
+> Table 44. Performance of CLIP-driven method on Med JASCL-Mixed benchmark. The model is pre-trained on a large number of classes in the benchmark.
+
+Class Session 0 Session 1 Session 2 Session 3 Session 4 class_1 0.881 0.825 0.702 0.702 0.036 class_2 0.844 0.460 0.368 0.368 0.000 class_3 0.844 0.829 0.218 0.218 0.000 class_4 0.699 0.598 0.174 0.174 0.000 class_5 0.628 0.085 0.001 0.001 0.000 class_6 0.273 0.009 0.001 0.001 0.000 class_7 0.757 0.696 0.139 0.139 0.000 class_8 0.850 0.013 0.000 0.000 0.000 class_9 0.652 0.233 0.002 0.002 0.000 class_10 0.740 0.726 0.000 0.000 0.000 class_11 – 0.808 0.048 0.048 0.000 class_12 – 0.834 0.000 0.000 0.014 class_13 – 0.002 0.002 0.002 0.026 class_14 – 0.013 0.000 0.000 0.000 class_15 – 0.012 0.000 0.000 0.000 class_16 – 0.946 0.941 0.941 0.241 class_17 – 0.106 0.000 0.000 0.030 class_18 – 0.314 0.261 0.261 0.006 class_19 – – 0.800 0.802 0.177 class_20 – – 0.840 0.842 0.000 class_21 – – 0.855 0.855 0.180 class_22 – – 0.000 0.000 0.000 class_23 – – 0.000 0.000 0.000 class_24 – – 0.098 0.098 0.000 class_25 – – – 0.020 0.137 class_26 – – – 0.000 0.000 class_27 – – – 0.010 0.000 class_28 – – – 0.009 0.001 class_29 – – – – 0.025 class_30 – – – – 0.148 class_31 – – – – 0.050 class_32 – – – – 0.430 class_33 – – – – 0.417 class_34 – – – – 0.729 class_35 – – – – 0.471 
+
+Average 0.716 0.417 0.227 0.196 0.089 63

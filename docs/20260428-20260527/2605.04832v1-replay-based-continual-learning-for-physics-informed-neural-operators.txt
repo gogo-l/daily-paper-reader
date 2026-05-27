@@ -1,0 +1,1060 @@
+Title: Replay-Based Continual Learning for Physics-Informed Neural Operators
+
+URL Source: https://arxiv.org/pdf/2605.04832v1
+
+Published Time: Thu, 07 May 2026 01:09:41 GMT
+
+Number of Pages: 41
+
+Markdown Content:
+# Replay-Based Continual Learning for Physics-Informed Neural Operators 
+
+Yizheng Wang a,b , Mohammad Sadegh Eshaghi c, Xiaoying Zhuang c, Timon Rabczuk b, ∗, Yinghua Liu a, ∗ 
+
+> aDepartment of Engineering Mechanics, Tsinghua University, Beijing 100084, China
+> bInstitute of Structural Mechanics, Bauhaus-Universität Weimar, Marienstr. 15, D-99423 Weimar, Germany
+> cInstitute of Photonics, Department of Mathematics and Physics, Leibniz University Hannover, Germany
+
+Abstract 
+
+Neural operators generally demonstrate strong predictive performance on in-distribution (ID) problems. However, a critical limitation of existing methods is their significant performance degradation when encoun-tering out-of-distribution (OOD) data. To address this issue, this work introduces continual learning into physics-informed neural operators, with particular emphasis on neural operators built upon the Transolver ar-chitecture, and proposes a simple yet effective replay-based continual learning strategy. The proposed method is fully physics-informed and does not require labeled data, relying solely on input fields together with physical constraints for training. When new OOD data become available, a small number of past data are incorporated through a distillation-based constraint to preserve previously acquired knowledge and alleviate catastrophic forgetting. Meanwhile, a transfer learning LoRA is employed to enable rapid adaptation to the new data. The proposed framework is systematically validated on three representative physical problems, including the Darcy flow problem in fluid mechanics, a two-dimensional hyperelastic brain tumor problem in biomechanics, and a three-dimensional linear elastic Triply Periodic Minimal Surfaces problem in solid mechanics. The re-sults demonstrate that the proposed method effectively mitigates catastrophic forgetting on previously learned data while maintaining fast adaptability to new data. Compared with conventional joint training strategies, the proposed method significantly improves training efficiency while reducing additional memory usage and computational cost. 
+
+Keywords: Continual Learning, Physics-informed neural operator, Transolver, Computational mechanics, AI for PDEs 
+
+1. Introduction 
+
+Partial differential equations (PDEs) are fundamental for understanding and predicting physical processes. Traditional numerical methods typically require solving each new problem instance independently, meaning that whenever material distributions, geometries, or boundary conditions change, the governing equations must be solved again from scratch [1]. For complex large-scale problems, such repeated computations often incur prohibitively high computational cost. In recent years, neural operators have emerged as a promising paradigm for the rapid solution of PDEs [2]. By directly learning mappings from input function spaces to output solution spaces, neural operators can efficiently predict target solutions even when material parameters, geometries, or boundary conditions vary. Compared with conventional numerical solvers, neural operators often achieve speedups of several orders of magnitude, thereby significantly reducing online computational cost [3]. Representative neural operator architectures currently include DeepONet [4], FNO [5], and transformer-based neural operators [6, 7]. Although existing neural operators generally perform well on in-distribution (ID) problems, a critical limitation remains their poor generalization under out-of-distribution (OOD) scenarios. OOD problems refer to situations where     
+
+> ∗Corresponding author
+> Email addresses: wang-yz19@tsinghua.org.cn (Yizheng Wang), yhliu@mail.tsinghua.edu.cn (Yinghua Liu)
+> arXiv:2605.04832v1 [cs.LG] 6 May 2026
+
+2the training and testing data follow different distributions, leading to substantial deterioration in predictive accuracy. To partially address the OOD issue, continual learning provides a promising solution [8]. It is well recognized that the ability to learn tasks in a sequential fashion is crucial to the development of artificial intelligence [9]. Continual learning refers to a learning paradigm in which a model continuously acquires knowledge from a sequence of tasks while attempting to preserve previously learned information and mitigate catastrophic forgetting [8]. This capability is particularly important in practical applications because data from different distributions often arrive sequentially over time. Consequently, models must be periodically updated to absorb newly available data, thereby progressively improving generalization under evolving distributions. Since neural operators also suffer from OOD degradation, exploring continual learning strategies for neural operators is of significant importance [10, 11]. With the continuous accumulation of data, continual learning is expected to play a central role in future scientific foundation models [12, 13], especially in the emerging context of pretrained large-scale physics models [14, 15, 16]. However, research on continual learning for neural operators remains relatively limited. Below we review some representative works. Tripura et al. [10] proposed a continual transfer framework based on modular neural operators, where shared experts are frozen and only gate parameters are updated to adapt to new PDE tasks. Nevertheless, when new tasks differ substantially from previously learned tasks, relying solely on gate recombination often leads to limited adaptability. Moreover, Elhadidy et al. [11] introduced continual learning into FNO by expanding model parameters; however, their approach remains purely data-driven and does not incorporate physical constraints from PDEs. Transformer-based neural operators have recently demonstrated remarkable potential in complex problems, such as multiphysics weather forecasting [17] and automotive problems involving complex geometries [7]. How-ever, these transformer-based neural operators are typically trained in a fully data-driven manner. More recently, physics-driven neural operator training has shown significant promise, particularly in PFEM [18] and VINO [19]. Since PDE-driven training avoids expensive data generation from conventional numerical solvers, it offers sub-stantial advantages in training efficiency. With the rapid development of scientific machine learning, scientific foundation models are expected to emerge in the near future [13, 12]. In particular, transformer-based neural operators trained directly from governing physical equations are likely to become a key enabling technology for future physics foundation models. Because future foundation models will inevitably encounter continuously evolving datasets, exploring continual learning for transformer-based neural operators trained directly from PDEs becomes critically important. To the best of our knowledge, however, no existing work has systematically investigated this direction. Therefore, this work presents a systematic study of continual learning for transformer-based physics-informed neural operators trained directly from governing equations. In particular, we propose a simple yet efficient replay-based continual learning strategy that focuses on a small number of poorly performing samples, thereby improving training efficiency while reducing memory usage. The main characteristics of the proposed replay-based continual learning framework are summarized as follows: 
+
+• Pure physics-driven training : We train a Transolver-based physics-informed neural operator directly from governing equations, completely without relying on labeled data. 
+
+• Focusing on poorly performing samples : A PDE-based scoring strategy is introduced to rank all sam-ples, and poorly performing samples are selectively replayed to improve training efficiency while reducing memory cost. 
+
+• Mitigation of catastrophic forgetting : We exploit the old model via distillation to preserve perfor-mance on past data, thereby mitigating catastrophic forgetting. 
+
+• Adaptation to new data : The model can adapt well to newly introduced distributions, absorbing new data and partially alleviating the OOD problem. 
+
+• Supervised fine-tuning : Inspired by supervised fine-tuning in foundation models, we incorporate this technique into neural operator training to further improve predictive accuracy. 3Neural Operator Train 
+
+Data Driven Data + PDEs PDEs Driven 
+
+# Fourier Neural Operator Transformer-based Neural Operator  
+
+> Fig. 1. Introduction to neural operators and several training paradigms
+
+The proposed replay-based continual learning framework is systematically validated on three representative physical problems, including the Darcy flow problem in fluid mechanics, a two-dimensional hyperelastic brain tumor problem in biomechanics, and a three-dimensional linear elastic Triply Periodic Minimal Surfaces (TPMS) problem in solid mechanics [20]. The results demonstrate that the replay-based continual learning approach effectively mitigates catastrophic forgetting on past data while maintaining strong adaptability to new data. Moreover, substantial improvements in training efficiency are achieved. The outline of the paper is as follows. Section 2 introduces neural operators and continual learning. Section 3 classifies the OOD scenarios encountered by neural operators and presents our proposed replay-based continual learning together with the supervised fine-tuning (SFT) strategy. Section 4 provides extensive validation of the replay-based continual learning and demonstrates its effectiveness. Section 5 and Section 6 present discussions and concluding remarks. 
+
+2. Preparatory knowledge 
+
+We first introduce two mainstream paradigms of neural operators, namely data-driven and physics (PDEs)-driven, and then we introduce continual learning. 
+
+2.1. Neural operator 
+
+The core of neural operators lies in learning mappings between different function spaces, which has broad applications in science and engineering [3]. For example, the input function to a neural operator can be the boundary conditions of a partial differential equation, and the output is the function field of interest. Although mathematically functions are infinite-dimensional, in practice we approximate continuous functions by inputting discrete data. Fortunately, neural operators often possess the advantage of discretization invariance. Currently, there are three commonly used types of neural operators: DeepONet [4], FNO [5], and transformer-based neural operators [6, 7]. Here we mainly focus on FNO and transformer-based neural operators [6, 7], because empirically DeepONet proposes a generalized architecture, and the original DeepONet faces challenges on some complex problems. In the following we introduce FNO and transformer-based neural operators. Given that FNO is already a very well-known method, we will not elaborate on it here; for details please refer to the original paper [5]. The accuracy and efficiency of FNO are generally quite good, but a key limitation of FNO is the requirement of a regular grid, as shown in Appendix A. Regarding transformer-based neural op-erators, we adopt the recently highly influential Transolver [7]. We provide a detailed explanation of Transolver in Appendix B; details can also be found in the original paper [7]. Training neural operators can generally 4be divided into three approaches: data-driven, physics (PDEs)-driven, and a hybrid of data and physics. We describe these three training paradigms below. The most common way to train neural operators is purely data-driven. The data-driven approach is very straightforward. Suppose we have obtained corresponding data {X(i), Y (i)}Ni=1 under different geometries G,different materials M , and different boundary conditions B, where X(i) and Y (i) are the input and output, respectively, and N is the total number of data samples. The optimization process of the purely data-driven approach is: 
+
+Hθ (x; X) = arg min  
+
+> θ
+
+Ldata 
+
+Ldata = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+|| H(X(i); θ) − Y (i)|| 2 (1) where θ denotes the trainable parameters of H(X(i); θ), and ||·|| 2 is the squared L2 norm. Note that H(X(i); θ)
+
+is the operator approximated by the neural operator, abbreviated as Hθ (x; X(i)), and x represents different spatial coordinates. X(i) and Y (i) are functions that contain data at various locations. It is worth noting that the advantage of training operator learning in a data-driven manner is its simplicity and directness. The disadvantage is also obvious: high-quality datasets must be obtained beforehand. In many scenarios data contain errors, the amount of data may be insufficient, and acquiring data can be extremely time-consuming. Therefore, the traditional data-driven way of training neural operators faces significant challenges, making it highly meaningful to train neural operators using PDEs, i.e., Physics-informed Neural Operator (PINO). Based on the type of neural operator, PINO can be classified into three categories: those with DeepONet architectures [1], those with FNO architectures [21, 19], and those with Transolver architectures [18]. Furthermore, PINO can be divided into two categories according to the form of the PDEs: strong form [1, 21] and energy form [19, 18]. Again, it is emphasized that PINO does not require data to train neural operators; it can train them solely through the governing PDEs. Fortunately, most computational physics problems are governed by corresponding PDEs. The core of computational physics is to solve PDEs numerically. Thus, the core of "PDEs Driven" is to incorporate PDEs into the training of neural operators. The loss function of PINO is typically: 
+
+Hθ (x; X) = arg min  
+
+> θ
+
+Lpde (2) The PDE forms in PINO are of two types: strong form and energy form. For the strong form: 
+
+Lpde −s = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+{ 1
+
+NdNdX
+
+> j=1
+
+|| P (Hθ (x(j); X(i))) || 2 + 1
+
+NbNbX
+
+> j=1
+
+|| I(Hθ (x(j); X(i))) || 2} (3) where P and I represent the governing PDE in the interior domain and the boundary conditions, respectively. 
+
+Nd and Nb are the total number of interior points and boundary points, respectively, and N is the total number of data samples. For simplicity, we consider a simple steady-state heat conduction problem with a heterogeneous thermal conductivity field in two dimensions for illustration: 
+
+
+
+−∇ · [k(x)∇T (x)] = f (x) x ∈ Ω
+
+T (x) = ¯T (x) x ∈ ΓT
+
+k(x) ∂T (x) 
+
+> ∂n
+
+= ¯ q(x) x ∈ Γq
+
+. (4) where k(x) is the heterogeneous thermal conductivity field; T (x) is the temperature field; f (x) is the heat source field; ¯T (x) and ¯q(x) are the prescribed temperature on the Dirichlet boundary and the prescribed heat flux on the Neumann boundary, respectively. Here the neural operator learns the mapping {k(x), f (x), ¯T (x), ¯q(x)} Hθ
+
+→5
+
+T (x). The expression of Eq. (4) in the form of Eq. (3) is: 
+
+Lpde −s = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+{ 1
+
+NdNdX
+
+> j=1
+
+||∇ · [k(i)(x(j))∇H θ (x(j); k(i), f (i), ¯T (i), ¯q(i))] + f (i)(x(j))|| 2
+
++ 1
+
+NbNbT X
+
+> j=1
+
+||H θ (x(j); k(i), f (i), ¯T (i), ¯q(i)) − ¯T (i)(x(j))|| 2
+
++ 1
+
+NbNbq 
+
+X
+
+> j=1
+
+|| k(i)(x(j))n · ∇H θ (x(j); k(i), f (i), ¯T (i), ¯q(i)) − ¯q(i)(x(j))|| 2}
+
+(5) where NbT and Nbq are the total numbers of points on the Dirichlet boundary and Neumann boundary, respec-tively. We can also use the variational principle to write the loss function in energy form: 
+
+Lpde −v = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+{
+
+ˆ
+
+> Ω
+
+12 k(i)[∇H θ (x; k(i), f (i), ¯T (i), ¯q(i))] · [∇H θ (x; k(i), f (i), ¯T (i), ¯q(i))] dΩ
+
+−
+
+ˆ
+
+> Ω
+
+f (i)Hθ (x; k(i), f (i), ¯T (i), ¯q(i))dΩ
+
+−
+
+ˆ
+
+> Γq
+
+¯q(i)Hθ (x; k(i), f (i), ¯T (i), ¯q(i))dΓ}
+
+(6) It is worth noting that the choice between the strong form Lpde −s and the energy form Lpde −v depends on the nature of the PDEs. It is worth noting that the applicability of energy-based formulations is not restricted to steady-state or quasi-static problems. For variational transient problems, an incremental energy functional can often be constructed through time discretization, so that the solution at each time step is obtained by minimizing the corresponding incremental potential. Such an energy minimization formulation generally requires appropriate coercivity of the functional, which is satisfied by nonlinear associated plasticity and phase-field models, including J2 plasticity and Allen–Cahn equation. For further discussions on DEM-based variational formulations for PDEs, please refer to Appendix A of [22]. Empirically, the energy form achieves better efficiency and accuracy than the strong form, mainly because the order of derivatives in the energy form is lower. Moreover, the number of hyperparameters in the energy form is greatly reduced compared to the strong form, making it much easier to train neural operators via the energy form. However, the disadvantage of the energy form is that it involves integration and that not all problems have a corresponding energy form. The final approach for training neural operators is to combine data and PDEs, namely "Data + PDEs": 
+
+L = Ldata + λLpde (7) where λ is an additional hyperparameter. 
+
+2.2. Continual learning 
+
+We have introduced neural operators above. Generally speaking, once a neural operator is successfully trained, its efficiency during the inference stage is extremely high, enabling real-time computation. Compared with traditional algorithms, the efficiency can often be improved by several thousand or even tens of thousands of times [17]. However, neural operators also face the OOD problem, i.e., when the training and testing sets differ too much, the accuracy drops significantly. We elaborate on the challenges of neural operators in handling OOD problems in Section 4.1. Fortunately, continual learning can address the OOD issue, making the study of continual learning very important. Continual learning aims to enable a model to maintain performance on past tasks as much as possible while adapting to new tasks during the process of receiving new tasks. The ideal outcome of continual learning approaches the effect of joint training on both past and new tasks, as shown in Fig. 2: 
+
+f (x; θcl ) ≈ f (x; θjoint ) (8) 6where x is the input, f is the prediction of the model, and θcl and θjoint are the model parameters of continual learning and joint training, respectively. It is worth noting that typically f (x; θcl ) cannot achieve the perfor-mance of f (x; θjoint ). The closer f (x; θcl ) approximates f (x; θjoint ), the better the continual learning effect usually is. Joint learning is computationally very expensive, as it requires using all past and new data to train the neural operator. In contrast, continual learning only needs to focus on a small amount of data, thereby significantly reducing both memory usage and computational cost. Traditional machine learning learns from static data, while continual learning learns from dynamic data. An important issue brought by dynamic data is catastrophic forgetting, which manifests as performance degra-dation on past tasks while adapting to new tasks. Essentially, continual learning involves a trade-off between learning plasticity and memory stability [8]. Learning plasticity refers to the model’s ability to generalize to new tasks, whereas memory stability refers to the model’s stability on past tasks. Often these two cannot be achieved simultaneously, reminiscent of the no-free-lunch theorem. Continual learning is essentially about finding an optimal balance between learning plasticity and memory stability, so that the model possesses strong generalization ability. Theoretically, when new data arrives, training on both new and past data together does not lead to catas-trophic forgetting. However, in practice, this is extremely costly in terms of computational resources and storage under large-scale data. Therefore, the core of continual learning is to improve the efficiency of model updates when encountering new data. The ideal scenario is to achieve the effect of training on all new and past data by training solely on new data. An excellent continual learning algorithm aims to minimize the use of past data for training and only train on new data. Fig. 2 illustrates the five common categories of continual learning; for details please refer to [8]. Empirically, replay-based methods are usually the simplest and yield good results [23]. Considering that research on continual learning for neural operators is still limited, we adopt a simple past data, mixes it with new data, and then retrains. 
+
+3. Method 
+
+Continual learning in operator learning requires not only strong adaptability on new data, i.e., possessing learning plasticity, but also the avoidance of catastrophic forgetting on past data, i.e., having memory stability. In this section, we first propose several categories of problems that continual learning needs to address in neural operators, and then we present a replay-based continual learning approach for neural operators. 
+
+3.1. Classification of continual learning problems in neural operators 
+
+In operator learning, we classify the problems that continual learning needs to handle into the following four types, as illustrated in Fig. 3. For simplicity, we denote past data as Dpast = {Xpast , Y past } and new data as 
+
+Dnew = {Xnew , Y new }. X represents the input of operator learning, such as geometry, material, and boundary conditions; Y is the output of operator learning, such as the displacement field in elasticity. 
+
+• Same physics and same distribution: The new data and past data share the same physical equations, and the distributions are completely identical, i.e., p(Dpast ) = p(Dnew ). For instance, Xpast and Xnew are samples generated under the same probability density function. If Dpast is sufficiently large, the neural operator usually performs well on Dnew without special training. 
+
+• Same physics and different distribution: The physical equations are the same, but the distributions of new and past data differ, i.e., p(Dpast )̸ = p(Dnew ). For example, Xpast and Xnew are samples generated under different probability density functions. Typically, the larger the gap between p(Dpast ) and p(Dnew ), the worse the neural operator performs on Dnew .
+
+• Different physics and same distribution: The physical equations differ, but the distribution of input X
+
+is the same, i.e., p(Xpast ) = p(Xnew ), while p(Ypast )̸ = p(Ynew ). For example, solving different physical equations on the same structure. Usually, the neural operator needs to take additional information about the different equations as input [15]. 7Regularization Optimization Past Data New Data Architecture Training Data Replay Pick and Mix Representation 
+
+Joint Training Train Train Train Train Train All Data Simultaneously 
+
+( ; )cl f x θ
+
+Data 1 Data 1 Data 2 Model 2 Data 3 Model 3 Data M Model M Data 2 Model 1 Data 3 Data M 
+
+Continual Learning Sequence of Contents Sequentially 
+
+( ; )joint f x θ
+
+Model 
+
+Fig. 2. Comparison between continual learning and joint training: f (x; θcl ) and f (x; θjoint ) are the outputs of the continual learning and joint training models, respectively. Continual learning learns a sequence of contents one by one and aims to approximate the effect of joint training on all tasks simultaneously. Joint learning refers to training on all data at once. Continual learning includes five common categories: regularization-based, replay-based, optimization-based, architecture-based, and representation-based methods. Considering that replay-based methods are simple and highly effective and have been widely used in large language models [23], this work focuses on replay-based continual learning. 8Same Physics + Same Distribution Different Physics + Same Distribution Same Physics + Different Distribution Different Physics + Different Distribution 
+
+# Physics Distribution Elasticity Elasticity Elasticity Heat Elasticity Elasticity Elasticity Heat    
+
+> Fig. 3. Illustration of the four types of problems that continual learning needs to handle in operator learning, categorized by differences in physical equations and input distributions. The greater the difference, the more necessary continual learning becomes.
+
+• Different physics and different distribution: The physical equations differ, and the distribution of input X
+
+also differs, i.e., p(Xpast )̸ = p(Xnew ) and p(Ypast )̸ = p(Ynew ). This is typically the most challenging case. There have been some attempts [15, 24], but challenges still remain. It is worth noting that the above classification is based on data-driven operator learning. For physics-informed learning, labels Y are not required. Generally speaking, regardless of whether it is data-driven or PDE-driven operator learning, performance on new data Dnew deteriorates in the latter three scenarios. Therefore, continual learning is crucial. 
+
+3.2. A Replay-Based Continual Learning in Neural Operators 
+
+Given the numerous continual learning methods, we adopt the simplest and most efficient replay-based approach. The core idea is very straightforward: mix the poorly performing data with the new data and retrain, as shown in Fig. 4. Analogous to human vocabulary learning, before memorizing new words, one mixes previously unmemorized words with new words to maximize time and memory efficiency. Below we elaborate on the method illustrated in Fig. 4. Suppose the model has already been trained on past data Dpast = {Xpast , Y past } with parameters θpast .When new data Dnew = {Xnew , Y new } arrive, we first use the old model to predict on both the new data and past data: 
+
+˜Y (old ) 
+
+> past
+
+, ˜Y (old ) 
+
+> new
+
+= f (Xpast , X new ; θpast ) (9) If data-driven, compare L( ˜Y (old ) 
+
+> past
+
+, Y past ) and L( ˜Y (old ) 
+
+> new
+
+, Y new ), where L is the relative error. If PDE-driven, theoretically there are no labels Y . In this case, we need to use the PDEs to judge the error, e.g., by inserting 9the model prediction f into the PDEs: 
+
+P (f ) = Epdes (10) where P denotes the PDE physical equations, usually in strong or energy form. Then we analyze Epdes to assess the error, requiring a normalization of Epdes , because different problems have different loads and scales, i.e., we need to establish a relative value through normalization. As an example, we take the Darcy problem shown in Eq. (18): 
+
+Eerr =
+
+vuut 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+{∇ · [k(xi, y i)∇f (xi, y i)] + q(xi, y i)}2
+
+q(xi, y i)2 (11) For the energy form, the energy must be normalized: 
+
+Eerr =
+
+> 12
+
+´ 
+
+> Ω
+
+k(x, y )[ ∇f (x, y )] · [∇f (x, y )] dV − ´ 
+
+> Ω
+
+q(x, y )f (x, y )dV A ´ 
+
+> Ω
+
+q(x, y )f (x, y )dV , (12) where A is the area of the domain. We rank the errors Eerr separately for past data and new data, selecting the worst M samples as "bad data", and then randomly select N samples from the remaining data as "random data". The M "bad data" and N "random data" together form the training set Dmix for retraining the neural operator. Below we detail the replay-based continual learning procedure for training the neural operator. Training the neural operator with Dmix is highly susceptible to catastrophic forgetting, meaning we need to enhance the memory stability of continual learning. Our approach is to split the neural operator into two models: the "new neural operator" and the "teacher model". Note that both the "new neural operator" and the "teacher model" are initialized with parameters θpast ; the difference is that the parameters of the "new neural operator" are trainable, while those of the "teacher model" are frozen and not updated. Use Dmix as input to both the "new neural operator" and the "teacher model", and construct the distillation loss: 
+
+Ldistill = MSE( ˜Y (new ) 
+
+> mix
+
+, ˜Y (teacher ) 
+
+> mix
+
+) (13) where ˜Y (new ) 
+
+> mix
+
+and ˜Y (teacher ) 
+
+> mix
+
+are the outputs of the "new neural operator" and the "teacher model" respectively, and MSE is the standard mean squared error. To enhance the model’s adaptability to new data, i.e., learning plasticity, we construct a task loss Lcurrent on 
+
+˜Y (new ) 
+
+> mix
+
+using either the data-driven approach in Eq. (1) or the physics-driven approach in Eq. (2) as introduced in 2.1. Finally, Ldistill and Lcurrent are combined to form the loss function L:
+
+L = Lcurrent + λLdistill (14) where λ is a hyperparameter; we set it to 0.3. Generally it should be chosen according to the proportion of past and new data; if past data are more abundant, λ should be larger. Finally, we fine-tune the model using L. Considering that future physics foundation models [14, 15, 16] are highly likely to emerge, we adopt LoRA (Low-Rank Adaptation of Large Language Models) [25], currently the most commonly used fine-tuning technique for large models. LoRA can drastically reduce the number of trainable parameters and is a generalized form of fine-tuning; for details please refer to [26]. We discuss the technical details of LoRA in Appendix C. 
+
+3.3. Supervised Fine-Tuning 
+
+As is well known, Supervised Fine-Tuning (SFT) is a key technique for aligning large language models with human instructions [27], enabling them to better satisfy human preferences. Analogous to large models, we can apply the idea of SFT to neural operators with the goal of further improving predictive accuracy. The core idea is to follow PDE-driven pretraining with data-driven fine-tuning, as illustrated in Fig. 5. The central concept is to further supervise and fine-tune the model using data, thereby further enhancing its accuracy. Below we describe the specific approach. 10 Past Data New Data Training Data Select Replayed Data Avoid Catastrophic forgetting Copy Parameters 
+
+> Bad + Random Data Teacher Model New Neural Operator Data-driven
+> Physics-driven
+> Data-driven
+> Physics-driven
+> Score
+
+Select Predict Distill Loss Current Loss Loss Predict 
+
+Update Trainable Parameters of New Neural Operator Old Neural Operator 
+
+# LoRA 
+
+Fig. 4. Illustration of a replay-based continual learning in neural operators: first, mix past and new data to form mixed data. Use the old neural operator model to predict on the mixed data, rank by error to obtain a score. Select data based on the score as the training set, which is often much smaller than the full dataset. Then retrain the neural operator using this training set. 11 Data without Label Data with Label Avoid Catastrophic forgetting 
+
+Teacher Model Trainable Fix SFT Neural Operator 
+
+# Predict Distill Loss Loss Predict Predict SFT Loss 
+
+> Update Trainable Parameters of New Neural Operator
+
+# LoRA         
+
+> Fig. 5. Illustration of Supervised Fine-Tuning in neural operators: we copy the parameters of the PDE-driven pretrained model to the "teacher model" and the "SFT neural operator." The unlabeled data Dlef t ={Xlef t }are fed into both the "teacher model" and the "SFT neural operator" for distillation, constructing the "Distill loss." The labeled high-fidelity data Dsf t ={Xsf t , Y sf t }
+> are fed into the "SFT neural operator" to construct the data loss ("SFT loss"). Then LoRA is used to fine-tune the "SFT neural operator."
+
+Suppose that among the overall data we have a portion of labeled, high-fidelity data Dsf t = {Xsf t , Y sf t },and the remaining unlabeled data are Dlef t = {Xlef t }. The labeled high-fidelity data are used to improve accuracy, while the unlabeled data are used to mitigate catastrophic forgetting. We first copy the parameters of the PDE-driven pretrained model to two identical neural networks: the "teacher model" and the "SFT neural operator." The parameters of the "teacher model" are frozen and not trainable, while the parameters of the "SFT neural operator" are trainable. Then, we feed Dlef t as input to both the "teacher model" and the "SFT neural operator," obtaining the corresponding outputs ˜Y (sf t ) 
+
+> lef t
+
+and ˜Y (teacher ) 
+
+> lef t
+
+, and construct a distillation loss 
+
+Ldistill :
+
+Ldistill = MSE( ˜Y (sf t ) 
+
+> lef t
+
+, ˜Y (teacher ) 
+
+> lef t
+
+) (15) (Note: there was a typographical error in the original subscript; it should be ˜Y (teacher ) 
+
+> lef t
+
+to match the input. The original text had mix , but the context indicates Dlef t . We’ll correct this to maintain consistency.) Next, we feed the labeled high-fidelity data Dsf t = {Xsf t , Y sf t } into the "SFT neural operator" and construct the SFT loss Lsf t :
+
+Lsf t = MSE( ˜Y (sf t ) 
+
+> sf t
+
+, Y sf t ) (16) Finally, we couple Ldistill and Lsf t through a hyperparameter: 
+
+L = Lsf t + λLdistill (17) and then fine-tune the "SFT neural operator" using LoRA. Here λ is a hyperparameter, and we set it to 0.3.
+
+4. Result 
+
+We test the performance of the replay-based continual learning on three examples: the Darcy flow problem in fluid mechanics, a 2D brain tumor problem in biomechanics, and a 3D TPMS problem in solid mechanics. The 12 
+
+> Table 1
+> Performance of neural operators FNO and Transolver on the Darcy problem using all data for joint learning. Relative error refers to the average error over the 10 groups of data.
+
+Training way Layer Mode or Slice Parameters Learning rate Relative error Optimizer FNO + Data 4 16 4735073 0.001 0.0962 Adam FNO + PDEs 4 16 4735073 0.001 0.0559 Adam Transolver + Data 4 32 372129 0.001 0.0212 Adam Transolver + PDEs 4 32 372129 0.001 0.0157 Adam Darcy flow example features a clear sequential data stream, where the model receives and learns from group 1 to group 10 in order, simulating a typical continual learning scenario. The 2D brain tumor example is a nonlinear hyperelastic problem with a small amount of new task data, used to examine the method’s adaptability under few-shot new data conditions. The 3D TPMS example is a linear elastic problem with a large amount of new task data, used to evaluate the method’s stability and forgetting mitigation capability under large-scale new data. 
+
+4.1. Darcy: Challenges of neural operators in handling OOD problems 
+
+Generally speaking, machine learning methods tend to perform poorly on out-of-distribution (OOD) prob-lems. Below we use an example to demonstrate that neural operators also perform poorly on OOD problems. We first use the Darcy problem to illustrate that neural operators, whether data-driven or PDE-driven, cannot handle OOD problems well. Darcy flow is a simple classical benchmark in fluid mechanics [5]: 
+
+−∇ · [k(x, y )∇T (x, y )] = q(x, y ), {x, y } ∈ [0 , 1] 2
+
+T (x, y ) = 0 , {x, y } ∈ Γ (18) where k is the permeability field, q(x, y ) is the forcing function, T is the flow velocity, and Γ is the boundary. We need the neural operator to learn the mapping k(x) → T (x). To test the OOD problem, we divide the dataset into 10 groups, each containing 300 samples. We generate the dataset using a Gaussian random field (GRF): 
+
+k ∼ exp( μ + σ ∗ GRF ) (19) where GRF is a standard Gaussian random field. We set different {μ, σ } for the 10 groups, specifically {μ, σ } =
+
+{(−1.0, 0.2) , (−0.7, 0.35) , (−0.4, 0.5) , (−0.1, 0.6) , (0 .2, 0.7) , (0 .5, 0.8) , (0 .8, 0.9) , (1 .1, 1.0) , (1 .4, 1.1) , (1 .7, 1.3) }, as shown in Fig. 6a. Next we test the performance of FNO and Transolver on the data from the above ten different distributions, i.e., we use all ten groups together as the training set for joint learning. Note that in FNO, we applied group norm [16] because traditional global norm performs poorly on data from multiple distributions. Specifically, we perform group norm after the first fully connected layer in FNO. Fig. 6b and c respectively show the relative errors of FNO and Transolver under data-driven and PDE-driven training, both using 100 epochs. We can see that basically both FNO and Transolver can generalize well across different data distributions. Table 1 shows that Transolver has fewer parameters than FNO and better generalization capability across different data distributions, suggesting that transformer-based neural operators have the potential to serve as the backbone of future physics foundation models. Fig. 7 compares the data-driven and PDEs-driven Transolver models across 10 groups with different distri-butions. We count the number of samples whose relative L2 and H1 errors exceed different thresholds. The results show that the PDEs-driven model significantly reduces the number of high-error samples, with the most pronounced improvement observed in the relative H1 error. This observation is consistent with the optimization objective of the PDEs-driven model, which directly constrains derivative information rather than merely fitting the solution function itself as in the data-driven approach. Most predictions of the PDEs-driven model exhibit errors below 5% , demonstrating better stability across different distribution groups. 13 (a) (b) (c) 
+
+Fig. 6. Joint learning performance on the Darcy problem: (a) Ten groups of permeability field datasets generated from ten different random distributions; (b) Relative errors of data-driven trained FNO and Transolver on each dataset; (c) Relative errors of PDE-driven trained FNO and Transolver on each dataset. 14 > 0.01 > 0.02 > 0.03 > 0.05 > 0.1              
+
+> Error threshold
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Samples above threshold (%)
+> 2,039
+> 1,181
+> 678
+> 197
+> 4
+> 2,291
+> 889
+> 208
+> 14 0
+> (a) Relative L2
+> > 0.01 > 0.02 > 0.03 > 0.05 > 0.1
+> Error threshold
+> 3,000
+> 3,000
+> 2,647
+> 1,659
+> 547
+> 2,855
+> 1,837
+> 759
+> 122
+> 0
+> (b) Relative H1
+> Data-driven PDEs-driven
+> Fig. 7. Comparison between PDEs-driven and data-driven Transolver models for the Darcy problem: (a) relative L2error; (b) relative H1error.
+
+Next we demonstrate the performance of FNO and Transolver on OOD problems. We record the errors of FNO and Transolver after joint learning on {D1, D 2, · · · , D m} and testing on dataset Dj . If j ≤ m it indicates the performance of the neural operator on ID problems, and if j > m it indicates the performance on OOD problems. Fig. 8 shows that current mainstream neural operators all perform poorly on OOD data. The models were trained for 50 epochs, and the model details are the same as the architectures shown in the joint learning of Table 1. In the real world, we inevitably encounter various OOD data. However, simply fine-tuning on OOD new data usually leads to catastrophic forgetting, as we briefly illustrate below. Let {D1, D 2, · · · , D m−1} be the past data and Dm be the new data. We first perform joint learning on {D1, D 2, · · · , D m−1}, then fully fine-tune the trained model on Dm. Fig. 9 shows the effect of fine-tuning only on new data, and we can see that catastrophic forgetting is severe. After fine-tuning on new data, the model’s error on past data increases drastically. Therefore, we must mitigate catastrophic forgetting. The above experiments demonstrate that current neural operators perform poorly on OOD problems, re-gardless of whether they are data-driven or PDE-driven. Moreover, simply fine-tuning on OOD data causes severe catastrophic forgetting. Therefore, research on continual learning is crucial for handling OOD problems. Considering that PDE-driven neural operator training outperforms data-driven training in both error and effi-ciency, and that Transolver exhibits stronger generalization capability than FNO, we focus on the replay-based continual learning of the PDE-driven Transolver. Fig. 10 shows the performance of replay-based continual learning. In Fig. 10a, joint learning is performed on past data {D1, D 2, · · · , D m−1}, and then the trained model is subjected to replay-based continual learning on new data Dm. Fig. 10b shows the effect of sequential learning with replay-based continual learning: the model performs continual learning on past data and then also on new data, which means that new data are continuously handled using replay-based continual learning. We can see that replay-based continual learning performs very well on past data, thus effectively mitigating catastrophic forgetting. At the same time, it exhibits strong adaptability to new data. We further investigate the correlation between the physics-based loss and the relative error. Specifically, at a certain training stage of replay-based continual learning, we record the physics-based loss and the corresponding relative error, as shown in Fig. 11. It can be observed that the physics-based loss exhibits a clear correlation 15 (a) (b) 
+
+# (d) (c) 
+
+Fig. 8. Performance on in-distribution (ID) and out-of-distribution (OOD) data for the Darcy problem. The numbers indicate relative errors. Bold numbers represent relative errors on OOD data; otherwise, they are on ID data: (a) FNO trained via data-driven; (b) FNO trained via PDE-driven; (c) Transolver trained via data-driven; (d) Transolver trained via PDE-driven. 16 (a) (b) 
+
+# (d) (c) 
+
+Fig. 9. Performance of fine-tuning on new data for the Darcy problem. Numbers indicate relative errors; bold numbers represent relative errors on new data: (a) FNO trained via data-driven; (b) FNO trained via PDE-driven; (c) Transolver trained via data-driven; (d) Transolver trained via PDE-driven. 17 (a) (b)  
+
+> Fig. 10. Performance of replay-based continual learning on Darcy flow. Bold diagonal numbers correspond to relative errors on new data, white numbers correspond to relative errors on training data, and black numbers correspond to data not in the training set: (a) error map of replay-based continual learning, where the model parameters are initialized by joint learning on past data; (b) error map of replay-based continual learning, where the model parameters are initialized by replay-based continual learning on past data.
+
+with the relative error. Therefore, the physics-based loss can be used as an approximate indicator of the relative error, which further provides a practical criterion for selecting samples to be replayed. It is worth noting that the physics-based loss is computed according to Eq. (11). In addition, the physics-based loss of the data-driven model shown in Fig. 11a is relatively large. This is because the data-driven model only fits the solution field itself and does not explicitly incorporate derivative information as in the physics-driven training strategy. As a result, the H1 error of the data-driven model is much larger than its L2 error. Interestingly, however, the physics-based loss of the data-driven model still shows a strong correlation with the relative error. In summary, we demonstrate that our proposed replay-based continual learning has good memory stability as well as good learning plasticity. 
+
+4.2. Brain tumors 
+
+Brain tumors represent an important biomedical problem [28]. We focus on the mechanical behavior of brain tumors, because the sustained growth of a tumor within brain tissue causes deformation of the surrounding tissue and may lead to brain function impairment [29]. The elastic modulus of the living brain was measured in [30]; we do not distinguish between grey and white matter [31] and uniformly assign an elastic modulus of E = 7 .3 kPa. Considering that the elastic moduli of different types of brain tumors vary greatly [32], we consider common meningiomas and gliomas, whose shapes are shown in Fig. 12a and b. Hyperviscoelastic, hyperviscoelastic, and linear elasticity material models can all be employed in the brain, yet [33] pointed out that different constitutive models have very little effect on practical results, and usually a simple constitutive model is sufficient. Therefore, we adopt the commonly used hyperelastic Neo-Hookean constitutive model to simulate brain tissue [34]: 
+
+ψ(F ) = G
+
+2 (I1 − 2 − 2 ln J) + λ
+
+2 (ln J)2 (20) where λ and G are the Lamé parameters 
+
+
+
+λ = υE 
+
+(1 + υ)(1 − 2υ)
+
+G = E
+
+2(1 + υ)
+
+, (21) 18 (a) (b) Data Driven PDEs Driven    
+
+> Fig. 11. Distribution of the physics-based loss and relative error of the Transolver model on the Darcy flow problem during replay-based continual learning. Points with different colors represent results from different groups. The horizontal axis denotes the relative error, while the vertical axis denotes the physics-based loss.
+
+with E and υ being the Young’s modulus and Poisson’s ratio, respectively. Furthermore, F = ∂x/∂ X is the deformation gradient, x is the spatial coordinate, X is the material coordinate, and the relationship between spatial and material coordinates is x = X + u, where u is the displacement field. I1 = trace( C), J = det( C),and C = F T F is the Green deformation tensor. Generally, meningiomas are of regular, round shape, and we set their Young’s modulus to E = 33 .1 kPa; gliomas are typically geometrically irregular, and we set their Young’s modulus to E = 17 .5 kPa. These elastic modulus settings are based on [30]. Considering that most biological materials are nearly incompressible, we set the Poisson’s ratio to υ = 0 .49 [33]. The distributions of the elastic modulus fields of meningiomas and gliomas are shown in Fig. 12c and d. In addition, a swelling zone, i.e., edema, forms around the brain tumor. Therefore, we set the growth ratio in the tumor region to simulate the compression of the swelling zone on the normal brain. Specifically, we employ the growth tensor F g from biomechanics [34]: 
+
+F = F eF g = ∂x
+
+∂XF g = gI
+
+(22) where g in the growth tensor F g is the growth ratio. For normal tissue, g = 1 ; for the tumor, g > 1, and we set it around 1.1. Substituting F e = F F −1 
+
+> g
+
+into Eq. (20), i.e., using F e to compute the hyperelastic strain energy, takes into account the growth effect. Moreover, because the brain is constrained by the skull, we set the entire peripheral boundary Γ of the brain as fixed: 
+
+L =
+
+ˆ
+
+> Ω
+
+ψ(F e)dV 
+
+u(x) = 0 , x ∈ Γ
+
+(23) Due to the displacement constraints at the brain boundary, stress builds up inside the skull when the tumor region grows. We generate simulation data based on the actual shapes of the brain and the tumor, as shown in Fig. 12c and d; more samples are provided in Appendix D. Since the brain geometry is not regular, if we were to use FNO, we would need a regular grid, which is explained in detail in Appendix A. The workaround for FNO is to set values to zero where there is no material, which is clearly very inconvenient, as it is equivalent to finding a larger rectangle to enclose the irregular geometry. Therefore, we use Transolver to handle this problem; Transolver only requires point clouds, making 19 (a) Tumor: Glioma (b) Tumor: Meningioma 
+
+# (c) Tumor: Glioma (d) Tumor: Meningioma 
+
+Fig. 12. Shapes of meningiomas and gliomas: (a) Magnetic Resonance Imaging (MRI) of a meningioma, data from https: //www.synapse.org/Synapse:syn51514106 [35]; (b) Magnetic Resonance Imaging of a glioma, glioma data from https://www.canc erimagingarchive.net/collection/ucsf-pdgm/ [36]; (c) Distribution of Young’s modulus for the meningioma; (d) Distribution of Young’s modulus for the glioma. 20 
+
+Table 2 
+
+Performance of Transolver on the brain tumor problem. Layer and slice are the architecture details of the Transolver model. Time refers to the average prediction time of Transolver and FEM on the corresponding data. Ldis and Lvon are the relative errors of displacement and Von Mises stress, with FEM as the reference solution. The FEM results have been verified through mesh convergence tests and are reliable. “M” and “G” denote meningioma and glioma. The relative errors are averaged over the test set. 
+
+→ indicates training first on past data (meningioma) and then fine-tuning on new data (glioma). In the → experiments, the initial parameters are those obtained after training on past data. “Data” and “PDEs” represent training the neural operator based on data and physical equations, respectively. “Joint” means fully mixing new and past data, while “Replay” means selecting a portion from both. “Replay PDEs with SFT” indicates performing SFT on the model obtained after replay-based continual learning.                                                 
+
+> Training way Layer Slice Learning rate Time: s (Transolver/FEM) Ldis (M/G) Lvon (M/G) Time: s/epoch Optimizer M (Data) 532 0.0008 0.02/24.24 0.033/0.249 0.037/0.205 17.83 Adam M (PDEs) 532 0.0008 0.02/24.24 0.027/0.665 0.022/0.315 18.44 Adam M→G (Joint PDEs) 532 0.0008 0.02/24.24 0.0318/0.0835 0.0242/0.0641 29.37 Adam M→G ( PDEs) 532 0.0008 0.02/24.24 0.0518/0.0836 0.0346/0.0660 6.80 Adam M→G ( PDEs with SFT) 532 0.0008 0.02/24.24 0.0397/0.0699 0.0291/0.0668 6.46 Adam
+
+Fig. 13. Evolution trends of relative errors on the test set for the meningioma problem when training the Transolver neural operator with data-driven and PDE-driven approaches. Left: relative error of displacement; Right: relative error of Von Mises stress. 
+
+it very suitable for problems with complex geometries [18]. Next, we test the performance of Transolver trained in data-driven and PDE-driven fashions, respectively. We first simulate the shapes of the brain and brain tumors based on real MRI, generating 1000 meningioma and 200 glioma samples, as shown in Fig. 12c and d, respectively. To test the model’s performance on OOD problems, we first train the model on 800 meningioma samples and test on 200 meningioma samples. The details of the model parameters are given in the first and second experiments of Table 2. We train Transolver using data-driven and PDE-driven approaches, which have been introduced in detail in Section 2.1. Fig. 13 shows the evolution trends of the relative errors for data-driven and PDE-driven training. We can see that the PDE-driven approach yields lower relative errors and converges faster. Moreover, data-driven training requires additional time for data generation; we explain the benefit of PDE-driven training over data-driven training in Section 5.1. Table 2 also shows that the average computation time for one meningioma sample is 24 .24 seconds, meaning that 1000 meningioma samples require roughly 7 hours. Training Transolver with data-driven or PDE-driven approaches to convergence (500 epochs) takes about 3 hours. In other words, the data generation time exceeds the neural operator training time, and the PDE-driven approach achieves better accuracy. Therefore, for problems with well-defined PDEs, the PDE-driven approach has almost overwhelming advantages over the data-driven approach in terms of both accuracy and efficiency. Note that the key to the efficiency improvement of the PDE-driven approach lies in explicitly constructing derivatives (e.g., using finite element shape functions) rather than employing automatic differentiation; for details please refer to Appendix A of [18]. Considering the advantage of the PDE-driven approach over the data-driven approach for the 2D brain tumor 21 Modulus Dis: Reference Dis: Prediction VonMise: Prediction  VonMise: Reference  
+
+> Fig. 14. Prediction results of the PDE-driven Transolver neural operator on the meningioma problem. Rows 1 to 5: distribution of Young’s modulus, absolute displacement field from FEM, predicted absolute displacement field from Transolver, Von Mises stress from FEM, and predicted Von Mises stress from Transolver.
+
+problem, we focus only on the PDE-driven approach in the following and no longer consider the data-driven approach. Fig. 14 shows the predicted contours of the displacement and Von Mises stress fields obtained by the PDE-driven Transolver, with FEM as the reference solution. We can see that the PDE-trained Transolver can predict the displacement and stress fields well, and during the inference stage, its efficiency can be improved by thousands of times compared to traditional FEM, as shown in Table 2. This indicates that, after obtaining MRI images, the neural operator can immediately produce the corresponding stress fields. In the future, neural operators are expected to achieve real-time prediction of displacement and stress fields in real MRI scenarios. Although Transolver performs very well on the meningioma problem, if we switch to the glioma problem (OOD problem), the accuracy drops drastically. For example, in the first and second experiments of Table 2, the first data-driven experiment yields test errors of 0.033 and 0.249 on meningioma and glioma, respectively; the second PDE-driven Transolver experiment yields test errors of 0.027 and 0.665 on meningioma and glioma, respectively. To improve the accuracy on OOD problems, the simplest method is to mix past and new data for joint learning, as shown in the third experiment of Table 2. Although the accuracy is good, the computational cost is very high, with the iteration time per epoch being around 30 seconds. Therefore, we employ replay-based continual learning to improve training efficiency, as shown in the fourth experiment of Table 2. The iteration time per epoch of the replay-based continual learning is around 6 seconds, and the accuracy can approach that of joint learning. Note that the stopping criterion for both joint and continual learning is when the relative error on past and new data falls below 0.085 . The training parameters for continual learning are set as follows: 10% 22 Modulus Dis: Reference Dis: Prediction VonMise: Prediction  VonMise: Reference Meningioma Meningioma Meningioma Glioma Glioma Glioma    
+
+> Fig. 15. Prediction results of the PDE-trained Transolver neural operator on meningioma and glioma problems. Rows 1 to 5: distribution of Young’s modulus, absolute displacement field from FEM, predicted absolute displacement field from Transolver, Von Mises stress from FEM, and predicted Von Mises stress from Transolver. The first three columns show meningioma results, and the last three columns show glioma results.
+
+of the past data are selected, of which 8% are the samples with the highest relative errors and 2% are random samples; 80% of the new data are selected, of which 64% are the samples with the highest relative errors and 
+
+16% are random samples. The rank of LoRA is set to 8. Fig. 15 shows the performance of replay-based continual learning on past data (meningioma) and new data (glioma). We can see that after replay-based continual learning, Transolver matches the FEM reference solution very well, with relative errors of only about 5% . Importantly, the prediction efficiency during inference is improved by thousands of times, as indicated by the “Time” column in Table 2. Fig. 16 shows the error evolution trends of joint and continual learning. We can see that after about 7 epochs the model can achieve relative errors below 0.085 on past and new data. Note that the per-iteration time of replay-based continual learning is significantly lower than that of joint learning, as shown in the fourth experiment of Table 2. The initial parameters of both the replay-based continual learning and joint learning models are the parameters obtained after training on meningioma data. It is worth noting that because we are PDE-driven, we do not know the labels of the training data in advance. Here we use Eq. (2) for evaluation; specifically, we use the energy functional to predict the error of each sample. Since this problem involves pure displacement loading (fixed boundaries), no body force, and roughly similar overall shape sizes, we directly use the unnormalized energy norm to rank the errors for convenience. Next, we test the performance of Supervised Fine-Tuning (SFT) as described in Section 3.3 on the tumors 23         
+
+> Fig. 16. Evolution trends of relative errors of joint learning and replay-based continual learning on past data (meningioma) and new data (glioma). Left: relative error of displacement; Right: relative error of Von Mises stress.
+> Fig. 17. Effect of Supervised Fine-Tuning (SFT) on the PDE-trained Transolver neural operator. Left: relative error of dis-placement; Right: relative error of Von Mises stress. We select 10% of the worst-performing samples for SFT fine-tuning, and the remaining 90% of the data are used for model distillation.
+
+problem. We apply SFT on top of the model obtained after replay-based continual learning. We evaluate the errors on 1200 samples, including 1000 meningioma and 200 glioma samples. We select the 10% of samples with the largest errors, then fine-tune the model using data-driven learning on these 10% samples, while the remaining 90% of the samples are used for distillation. Fig. 17 shows that the model performance is significantly improved after SFT, and the quantitative results are given in the fifth experiment of Table 2. 
+
+4.3. TPMS 
+
+Homogenization plays a fundamental role in multiscale modeling in solid mechanics [37, 38, 39] and is often closely tied to the Representative Volume Element (RVE). Homogenization is the process of obtaining macroscopic effective material parameters using the RVE, making it an important tool for studying multiscale physical phenomena. Traditional numerical homogenization methods, heavily reliant on finite element analysis, demand significant computational resources, especially for complex geometries, materials, and high-resolution problems. Recently, using operator learning to study the mechanical behavior of multiscale phenomena in solid mechanics has attracted considerable attention [40, 41, 18]. Therefore, in this subsection we demonstrate the performance of continual learning on a 3D solid mechanics homogenization problem. Among the many homogenization theories, we select the classical numerical homogenization approach pro-posed by Andreassen et al. [42], which aims to calculate the effective macroscopic elastic tensor of periodic 24                                                            
+
+> Table 3
+> Performance of Transolver on 3D TPMS. Layer and slice are the architecture details of the Transolver model. Time refers to the average prediction time of Transolver and FEM on all data (“Solid-networks” + “Sheet-networks”). Ldis is the relative error of the displacement field (the displacement component along the tensile direction in the x-direction), with FEM as the reference solution. The first experiment uses “Solid-networks” as the training set; the second uses “Sheet-networks”; the third uses both “Solid-networks” and “Sheet-networks”. The fourth and sixth experiments have past data as “Solid-networks” and new data as “Sheet-networks”. The fifth and seventh experiments have past data as “Sheet-networks” and new data as “Solid-networks”. All results above are after convergence.
+> Training data Layer Slice Learning rate Time: s (Transolver/FEM) Ldis (Solid/Sheet) Time: s/epoch Optimizer Solid 464 0.0005 0.074/150.0 0.0863/3.809 1067 Adam Sheet 464 0.0005 0.074/150.0 1.152/0.0729 1111 Adam Solid+Sheet (joint learning) 464 0.0005 0.074/150.0 0.0733/0.0696 2261 Adam Solid →Sheet (joint learning) 464 0.0005 0.074/150.0 0.0741/0.0783 2236 Adam Sheet →Solid (joint learning) 464 0.0005 0.074/150.0 0.0773/0.0667 2259 Adam Solid →Sheet (continual learning) 464 0.0005 0.074/150.0 0.0735/0.0644 1683 Adam Sheet →Solid (continual learning) 464 0.0005 0.074/150.0 0.0960/0.0773 1749 Adam
+
+composite materials. For the specific homogenization theory, refer to [41]. In [41], data-driven training is used for FNO. Here we attempt to train Transolver purely with physics-driven approach. The loss function is determined by the principle of minimum potential energy in elasticity: 
+
+L = 16
+
+> 6
+
+X
+
+> IJ
+
+Π(IJ )
+
+Π(IJ ) =
+
+ˆ
+
+> Ω
+
+12 Eklpq εkl (X(v)( IJ ))εpq (X(v)( IJ ))dΩ −
+
+ˆ
+
+> Ω
+
+Eklpq (ε(0)( IJ ) 
+
+> kl
+
+)dΩ
+
+(24) where X(v) is the fluctuation displacement, i.e., our output target. ε(0) represents the six loading cases applied during homogenization, i.e., 6 unit strain fields. For a detailed introduction of the homogenization theory, please see Appendix E. Our data are 3D TPMS structures at a resolution of 64 in each dimension, with six types as shown in Fig. 18. Broadly, we classify them as “Solid-networks” and “Sheet-networks”. For each TPMS type, we have 600 3D structures with 64 resolution, totaling 600 data samples per type. The data size is approximately 103 GB, and the data link is https://1drv.ms/f/c/f999b24db97d074b/UgBLB325TbKZIID5YoUEAAAAAK57y3r7MVu56Ds .The geometries and material distributions are all random. The geometric volume fractions range from 0.26 to 0.66, and Poisson’s ratios range from 0.1 to 0.4. Details of the geometric volume fractions can be found in Appendix F. Both volume fractions and Poisson’s ratios are uniformly distributed. Given our focus on linear elasticity homogenization, we set Young’s modulus to 1 during training, simplifying the final calculation of the effective elastic tensor by linearly multiplying by Young’s modulus. It is worth noting that our 64-resolution data include the full cube, containing both material and void information; however, we train Transolver using only the point cloud of the material, so the resolution (number of points) varies for each sample. To test the effect of replay-based continual learning, we first show that the current PDE-trained Transolver performs mediocrely on OOD problems. We divide the experiments into three groups: the first uses “Solid-networks” (1800 samples) as the training set; the second uses “Sheet-networks” (1800 samples); the third uses both “Solid-networks” and “Sheet-networks” (3600 samples in total). The results of these three experiments are shown in Table 3 in rows 1, 2, and 3. We can draw the same conclusion as for the 2D brain tumors in Table 2: physics-based neural operators do not perform well on OOD problems. Therefore, we need continual learning to address the OOD issue. Next, we test the effect of replay-based continual learning. We test the replay-based continual learning through four groups of experiments, as shown in rows 4, 5, 6, and 7 of Table 3. Below we describe these four experiments in detail. The first group uses “Solid-networks” (1800 samples) as past data and “Sheet-networks” (1800 samples) as new data, trained with joint learning. The second group uses “Sheet-networks” (1800 samples) as past data and “Solid-networks” (1800 samples) as new data, trained with joint learning. The third group uses “Solid-networks” (1800 samples) as past data and “Sheet-networks” (1800 samples) as new data, trained with replay-based continual learning. The fourth group 25 Solid Sheet 
+
+Fig. 18. Six different types of TPMS structures: from left to right, Schoen Gyroid, Fischer Koch S, and Schwarz Diamond. From top to bottom, “Solid-networks” and “Sheet-networks”. 26 Reference Prediction Error Error Slice (a) (b) (c)  
+
+> Fig. 19. Prediction of replay-based continual learning with PDE-trained Transolver on “Solid-networks” TPMS. From top to bottom: Schoen Gyroid, Fischer Koch S, and Schwarz Diamond. From left to right: FEM reference solution of absolute displacement field, Transolver prediction of absolute displacement field, corresponding absolute displacement error contour, and cross-sectional error contour.
+
+uses “Sheet-networks” (1800 samples) as past data and “Solid-networks” (1800 samples) as new data, trained with replay-based continual learning. From the relative errors in rows 4, 5, 6, and 7 of Table 3, we can see that both joint learning and replay-based continual learning achieve good accuracy. Since the amount of new task data in this experiment is large, equal to the amount of past data, the reduction in per-step computation time of replay-based continual learning compared to joint learning is not as significant. Specifically, since the numbers of new-task and past-task samples are identical in this case, we use all new-task samples and select 50% of the past-task samples for replay during continual learning. Fig. 19 and Fig. 20 show the absolute displacement field contours of the x-direction tension predicted by replay-based continual learning on TPMS structures. We can see that replay-based continual learning achieves accuracy comparable to the finite element reference solution on both “Solid-networks” and “Sheet-networks” structures, with relative errors below 10% , while improving efficiency by thousands of times, as shown in Table 3. Next, we further demonstrate the catastrophic forgetting on past data and the adaptation capability on new data of replay-based continual learning during training. Fig. 21a and b show the relative errors of replay-based continual learning on past data. We can see that the relative errors on past data are close to those of joint learning, thus successfully avoiding catastrophic forgetting. Additionally, Fig. 21c and d show the relative errors on new data; we can see that replay-based continual learning achieves relative errors close to those of joint learning, indicating good generalization on new data. Note that the time per epoch of replay-based continual learning is less than that of joint learning, as shown in “Time: s/epoch” in Table 3. However, because the amount of new data in this problem is very large, the training efficiency gain of replay-based continual learning is not as high as that for the 2D brain tumor in Section 4.2. 27 Reference Prediction Error Error Slice (a) (b) (c) 
+
+Fig. 20. Prediction of replay-based continual learning with PDE-trained Transolver on “Sheet-networks” TPMS. From top to bottom: Schoen Gyroid, Fischer Koch S, and Schwarz Diamond. From left to right: FEM reference solution of absolute displacement field, Transolver prediction of absolute displacement field, corresponding absolute displacement error contour, and cross-sectional error contour. 28 (a) (b) 
+
+# (c) (d)  
+
+> Fig. 21. Variation of relative error with iterations for joint learning and replay-based continual learning on 3D TPMS: (a) past data are “Solid-networks”, new data are “Sheet-networks”, relative error on “Solid-networks”; (b) past data are “Sheet-networks”, new data are “Solid-networks”, relative error on “Sheet-networks”; (c) past data are “Solid-networks”, new data are “Sheet-networks”, relative error on “Sheet-networks”; (d) past data are “Sheet-networks”, new data are “Solid-networks”, relative error on “Solid-networks”. Here, “solid + sheet joint learning” means training from scratch by mixing all solid and sheet data; “solid2sheet joint” means using the parameters obtained after training on “Solid-networks” as the initial model parameters, then performing joint learning on “Solid-networks” and “Sheet-networks”; “solid2sheet replay” means using the parameters obtained after training on “Solid-networks” as the initial model parameters, then performing replay-based continual learning on “Solid-networks” and “Sheet-networks”.
+
+It is worth noting that the relative error on the past data in Fig. 21 initially increases abruptly. This is because, at the early stage of adaptation to the new data, the neural network has not yet found an appropriate balance between the past and new tasks. However, this balance is quickly recovered during training, enabling the model to prevent catastrophic forgetting on the past data while maintaining strong adaptation capability on the new data. 
+
+5. Discussion 
+
+5.1. Benefits of PDE-driven methods compared to data-driven methods 
+
+From the above experiments, we find that on problems where the PDEs are well understood, PDE-driven methods yield significantly greater benefits than data-driven methods when training neural operators. These benefits arise because PDE-driven methods do not require precomputing labels for the corresponding problems, thus saving time on data generation, as shown in Fig. 22. In addition, PDE-driven methods can employ explicit differentiation similar to shape functions, which greatly reduces the computational cost of differentiation; typically, the efficiency per epoch can be comparable to that of data-driven methods. On problems where the PDEs are clear, we strongly recommend PDE-driven methods. In data-driven approaches, conventional solvers are usually used to generate data based on the PDEs, and then neural operators are trained with that data. For some large and complex problems, this is often very time-consuming and 29 Input Traditional Solver Output 
+
+# Neural Operator 
+
+# PDEs Output Data Driven Physics Driven   
+
+> Fig. 22. Comparison of the data-driven and PDE-driven workflows: solid lines indicate the PDE-driven workflow; solid plus dashed lines indicate the data-driven workflow; the dashed line represents the extra steps in the data-driven workflow compared to the PDE-driven one.
+
+unnecessary. Since the source of data-driven methods is the PDEs, the PDEs constitute a complete source of all data. Therefore, it is entirely feasible to train operators using the PDEs themselves. Although PDE-driven methods do not explicitly require data labels, in the process of iterating with PDE information, the neural operator essentially computes the label for each data point. Hence, whether data-driven or PDE-driven, the accuracy on out-of-distribution (OOD) problems will degrade significantly. 
+
+5.2. Closed-loop computational framework 
+
+A notable advantage of continual learning is that it can continuously absorb new data at low cost, making the model increasingly powerful. It can also be combined with supervised fine-tuning (SFT) techniques to further improve accuracy. Therefore, broadly speaking, this constitutes a closed-loop computational framework capable of self-learning, as illustrated in Fig. 23. Overall, this closed-loop computational framework consists of two stages. The first stage is large-scale pre-training using the PDEs. All data are processed into point clouds, where each point is a high-dimensional information field containing all key simulation information, and then fed into the neural operator. In the manuscript, we adopted Transolver. In the future, new and more powerful neural operator models will emerge; we only need to replace the model with a stronger neural operator, while the overall closed-loop framework shown in Fig. 23 remains unchanged. After large-scale PDE pre-training, if some labeled data are already available, we can use SFT techniques for fine-tuning, similar to the alignment operation in large models, to better adapt to changing scenarios. 
+
+6. Conclusion 
+
+We propose a replay-based continual learning method for neural operators, focusing on physics-driven Tran-solver. The proposed replay-based continual learning not only significantly reduces catastrophic forgetting on past data, but also exhibits good adaptability on new data. The core idea of the proposed replay-based continual learning is to focus on a small set of poor data, thereby accelerating model updates when incorporating new data. We have extensively validated our method on problems in fluid mechanics (Darcy flow), biology (brain tu-mor), and solid mechanics (3D TPMS). The results show that the proposed replay-based continual learning can 30 A Self-Learning Closed-Loop Framework Pretraining Phase of Neural Operator Supervised Fine-Tuning Prediction New Input PDEs Driven Fine-tuning the trainable parameters of the neural opertor Geometry Material Boundary   
+
+> Fig. 23. Schematic diagram of the closed-loop computational framework: geometries, materials, and boundary conditions are processed into point cloud data and fed into the Transolver neural operator, which is then pre-trained using the PDEs. Subsequently, the neural operator undergoes supervised fine-tuning training based on the available labeled data.
+
+successfully update the model. When the new data are small, the update efficiency of the proposed replay-based continual learning is greatly improved compared to joint learning. The proposed replay-based continual learning also generalizes successfully when the new data are large. In addition, we incorporate supervised fine-tuning (SFT) techniques into neural operators to further enhance accuracy. Although the proposed replay-based continual learning shows great potential, several key issues and direc-tions merit future research. Currently, the PDE error in the proposed replay-based continual learning is not suffi-ciently refined; it only directly measures the degree to which the PDEs are satisfied. In the future, we can focus on goal-oriented PDE error estimation for fields of interest, referring to [43]. For example, in crack problems, we are usually concerned with the stress intensity factor at the crack tip. Even if the field far from the crack tip deviates significantly from the reference solution, it generally does not affect the stress intensity factor of interest. The re-gion that influences the stress intensity factor is mainly the displacement field near the crack tip; hence, we need to increase the weight around the crack tip to construct a goal-oriented error estimation [43]. Moreover, the brain tumor problem is currently based on simulated data; in the future, we will incorporate real MRI data for mechan-ical analysis, with data available from https://www.cancerimagingarchive.net/collection/ucsf-pdgm/ 
+
+[36]. At present, we mainly focus on the PDE-driven Transolver model. The proposed replay-based continual learning is theoretically not limited to data-driven or physics-driven approaches, nor to the choice of neural operator model, such as DeepONet or FNO. Future work is warranted to apply and compare the proposed replay-based continual learning on both data-driven and physics-driven methods, as well as on mainstream neural operators. In the future, large physics models will undoubtedly emerge [12, 13]. As data increase, it will be necessary to continuously update the parameters of these large physics models. The proposed replay-based continual learning provides an excellent continual learning strategy for handling new data in large physics models, with the key advantages of being very simple while achieving strong performance. 
+
+Declaration of competing interest 
+
+The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper. 31 
+
+Acknowledgement 
+
+The study was supported by the Key Project of the National Natural Science Foundation of China (12332005) and scholarship from Bauhaus University in Weimar. We would like to thank Zhongkai Hao for the insightful discussions. 
+
+CRediT authorship contribution statement Yizheng Wang : Conceptualization, Methodology, Formal analysis, Investigation, Data curation, Valida-tion, Visualization, Writing – original draft, Writing – review & editing. Mohammad Sadegh Eshaghi :Conceptualization, Methodology, Investigation. Xiaoying Zhuang : Supervision, Writing – review & editing. 
+
+Timon Rabczuk : Supervision, Writing – review & editing, Funding acquisition. Yinghua Liu : Supervision, Funding acquisition. 
+
+Appendix A. Input and output of Fourier Neural Operator 
+
+FNO[5] is one of the most representative neural operators. The input and output of FNO typically require regular grids, often described using a large matrix, as shown in Fig. A.24. Consider a simple scenario, such as describing a cat-shaped material in Fig. A.24, where material is present (labeled 1) and absent (labeled 0). Clearly, FNO has limited capability in describing complex geometries, which introduces considerable errors. Although some studies aim to improve FNO’s performance on complex geometries, such as Geo-FNO[44], these approaches still face challenges in generalizing to complex geometries. Therefore, can we abandon the grid-based description of complex geometries? Unfortunately, this is very difficult within the FNO architecture, because the core of the FNO algorithm is the FFT, which achieves high computational efficiency only on regular grid matrices. This limitation arises from the FFT algorithm. For details of FNO, please refer to [5]. 
+
+Appendix B. Introduction to Transolver 
+
+The core idea of Transolver is to perform attention on low-complexity physics-aware tokens. The algorithm flow is shown in Fig. B.25. Traditional GNOT[6] performs attention on points, with complexity O(N 2), where 
+
+N is the total number of input points. In contrast, Transolver[7] performs attention on physics-aware tokens, reducing the complexity to O(N +S2), where S is the number of physics-aware tokens. Since S ≪ N , Transolver demonstrates great potential for very complex problems. We explain the algorithm flow of Transolver. First, we encode all points in the domain: {x(i), y (i), m (i), b (i)}Ni=1 ,where x(i) and y(i) are coordinates, m(i) is the material information at that location (e.g., elastic modulus), and b(i) is the boundary condition at that point. Notably, these points do not need to be regular. These points are passed through an MLP, followed by a Layer Normalization to improve convergence speed by normalizing each feature. The output is X ∈ RN ×C , where C is the number of channels of point information. Then, the core physics-attention module of Transolver is applied. X is passed through two different MLPs, producing 
+
+U ∈ RN ×C and M ∈ RN ×S , respectively, where S is the number of physics-aware tokens. The slice weights M
+
+are subjected to a softmax operation along the S dimension to give them a weight interpretation. Then, using 
+
+M as weights, a weighted sum of U is computed to obtain the physics-aware tokens Z ∈ RS×C :
+
+ZJK =
+
+PNI=1 MIJ UIK 
+
+PNI=1 MIJ 
+
+(B.1) Note that the size of Z is much smaller than that of X because S ≪ N . Then, we apply the multi-head attention mechanism from transformers along the S dimension of Z:
+
+Q, K, V = MLP (Z); Zt = softmax (QK T )V (B.2) 32 Fourier Neural Operator Input Output ua Fourier Layer 1 Fourier Layer t Fourier Layer T 
+
+ℜ
+
+# mode 
+
+# mode 
+
+> 1−
+
+
+
+WP Q  
+
+> (1) t−
+
+v ( ) t
+
+v
+
+σ
+
+Fig. A.24. Input and output of Fourier Neural Operator 33 ( ) 1
+
+x( ) 1
+
+y
+
+> ( ) 1
+
+m( ) 1
+
+b 
+
+> The number of points: N Points prompts: N
+
+Slice weights Slice norm Deslice Complexity Sum N Coordinates Materials Boundary Conditions 
+
+> MLP MLP MLP
+
+Transolver Layer Physics-Aware Tokens Heads MLP LayerNorm LayerNorm Physics-Attention  
+
+> ()N
+
+x 
+
+> ()N
+
+y  
+
+> ()Nm
+> ()N
+
+b NCNSCNC NCNCNCSCCCSCCCSCCCNS SSoftmax NCSum N 
+
+# Attention ( )2
+
+## O NSC S C +
+
+# M ZU
+
+> t
+
+# ZX
+
+t
+
+# X
+
+Fig. B.25. The architecture of Transolver layer 
+
+After obtaining Zt ∈ RS×C , we use M again to deslice and obtain the final output of physics attention, Xt:
+
+XtIK =
+
+> S
+
+X
+
+> J=1
+
+MIJ ZtJK (B.3) The subsequent operations, as shown in Fig. B.25, are very straightforward and we will not elaborate further. The core of Transolver is the physics-attention module, which greatly reduces the quadratic complexity O(N 2)
+
+of processing points in transformers to a linear complexity O(N + S2) for processing physics-aware tokens. At the same time, Transolver has strong approximation capabilities. [7] demonstrated its potential on complex 3D geometry problems, especially on ShapeNet Car. Therefore, Transolver has great research value and promise. It is worth noting that we can stack multiple Transolver layers, similar to Fourier layers in FNO, which improves generalization but also increases computational cost. Depending on the complexity of the problem, we can adjust the number of Transolver layers and the size of S. Typically, the more complex the problem, the larger the number of Transolver layers and S. S essentially transforms the original point-based description of the problem into a description of physical spatial regions. The core idea of Transolver is that physical problems often exhibit continuous similarities, so the information at each point is redundant. 
+
+Appendix C. Introduction to LoRA 
+
+Transfer learning has always been a research hotspot in deep learning. Since there are many transfer learning methods, here we focus only on the most common parameter-based transfer learning. Parameter-based transfer learning generally has three approaches: full fine-tuning, lightweight fine-tuning, and LoRA (Low-Rank Adaptation of Large Language Models) [25]. The difference between full fine-tuning and lightweight fine-tuning is shown in Fig. C.26 a and b. 34 Input Hidden Layer Output (a) Full fine-tuning (b) Lightweight fine-tuning (c) LoRA: Low-rank adaptation Trainable parameters Fixed parameters Input Hidden Layer Output Trainable parameters Choose any trainable parameters 
+
+# W * = W +AB 
+
+d mW ×⊆  d mAB ×⊆  
+
+> dr
+
+A ×⊆  
+
+> rm
+
+B ×⊆ 
+
+Pretrained Weights (Fixed) Trainable Weights Trainable weights Trainable weights dm Low Rank: r 
+
+> Full Fine-tuning Original model Full-rank updates: r=max
+
+# LoRA 
+
+Fig. C.26. Three common approaches for parameter-based transfer learning: (a) Full fine-tuning: fine-tune all parameters of the model; the red arrows indicate parameters that need fine-tuning. (b) Lightweight fine-tuning: fine-tune part of the model’s parameters; the red arrows indicate parameters that need fine-tuning. (c) LoRA: the blue matrix W is fixed (no training required) and comes from a previously pre-trained model. The yellow matrices A and B are the parameters to be trained in LoRA; AB is a low-rank matrix with rank r. A and B are trained on the new dataset. W ∗ = W + AB is the neural network weight during testing. 
+
+Given that the most common transfer learning technique currently is LoRA, we focus on introducing LoRA here. The idea of LoRA (Low-Rank Adaptation of Large Language Models) [25] is to multiply low-rank matrices 
+
+AB (A ⊆ Rd×r , B ⊆ Rr×m) and then add them to the original pre-trained parameters W ⊆ Rd×m, as shown in Fig. C.26 c. The parameter update formula for LoRA is: 
+
+W ∗ = W + αAB (C.1) where r is the rank in LoRA, r ≪ min( d, m ). Notably, W is a fixed parameter from the past task and does not require training. We only train AB ; the number of trainable model parameters in AB is r ∗ (d + m). The number of trainable parameters in AB is far smaller than that in W , where the number of trainable parameters in W is d ∗ m. α is the scaling factor of LoRA, used to allocate the attention weights between the pre-trained 
+
+W and the LoRA-trained parameters AB ; we set it to 16 by default. A and B are initialized with a Gaussian distribution with mean 0 and standard deviation 0.02 .LoRA is essentially a form of lightweight fine-tuning, but more flexible. Moreover, full fine-tuning can be seen as an extreme case of LoRA, i.e., when r = min( d, m ). In summary, the core idea of LoRA is to decompose some weight matrices of the model into the product of two low-rank matrices, thereby reducing the number of parameters that need to be trained. 35  
+
+> Fig. D.27. Sampling of meningioma data
+
+Appendix D. 2D brain tumor data sampling 
+
+We generate 2D brain tumor data based on the shape of the brain and the tumor. Sampling is performed according to random distributions; the specific random sampling parameters are as follows. The left-right width of the brain is U (0 .34 , 0.48) , and the top-bottom height is U (0 .36 , 0.52) . The radius of the tumor is U (0 .03 , 0.10) ,and the tumor growth factor is U (0 .06 , 0.15) . Fig. D.27 and Fig. D.28 show sampling for meningioma and glioma. Meningioma is circular, while glioma has an irregular shape. 
+
+Appendix E. Numerical homogenization theory 
+
+We introduce the homogenization theory of Andreassen et al. [42], which aims to calculate the effective macroscopic elastic tensor of periodic composite materials. We will briefly introduce this method below. For simplicity, we consider a material consisting of solid material and void. ESijkl denotes the elastic matrix of the solid material. For calculating the homogenized elastic matrix EHIJKL , we applied 6 unit strain fields over the unit cell, including three normal strain and three shear strain fields. The 6 unit strain fields ε(0)( IJ ) 
+
+> pq
+
+are defined as 
+
+ε(0)(11) =
+
+
+
+1 0 00 0 00 0 0
+
+ ; ε(0)(22) =
+
+
+
+0 0 00 1 00 0 0
+
+ ; ε(0)(33) =
+
+
+
+0 0 00 0 00 0 1
+
+
+
+ε(0)(12) =
+
+
+
+0 1 01 0 00 0 0
+
+ ; ε(0)(13) =
+
+
+
+0 0 10 0 01 0 0
+
+ ; ε(0)(23) =
+
+
+
+0 0 00 0 10 1 0
+
+
+
+(E.1) where ε(0)( IJ ) 
+
+> pq
+
+denotes a macroscopic unit strain field imposed on Ω, where the capital indices IJ (as shown in Eq. (E.1)) correspond to the six different loading cases and do not follow the Einstein summation convention. These six load cases are shown in Fig. E.29. 36 
+
+Fig. D.28. Sampling of glioma data Displacement 6 Loads Homogenization 
+
+Fig. E.29. Schematic diagram of homogenization: a body under six unit strain fields produces six corresponding displacements, and then the displacement responses are processed using the homogenization formula to obtain the elastic tensor. 37 The homogenized elastic matrix EHIJKL is calculated according to the following equation 
+
+EHIJKL = 1
+
+|Ω|
+
+ˆ
+
+> Ω
+
+Epqrs (ε(0)( IJ ) 
+
+> pq
+
+− ε(v)( IJ ) 
+
+> pq
+
+) ∗ (ε(0)( KL ) 
+
+> rs
+
+− ε(v)( KL ) 
+
+> rs
+
+)dΩ (E.2) In this equation, Epqrs denotes the local elastic matrix of the TPMS unit cell, and Epqrs obeys 
+
+Eijkl =
+
+(
+
+ESijkl for solid material ,
+
+0 for void . (E.3) 
+
+|Ω| represents the volume of the unit cell domain. ε(v)( IJ ) 
+
+> pq
+
+denotes fluctuation strain field calculated by 
+
+ε(v)( IJ ) 
+
+> pq
+
+= εpq 
+
+
+
+X(v)( IJ )
+
+= 12
+
+
+
+X(v)( IJ ) 
+
+> p,q
+
++ X(v)( IJ )
+
+> q,p
+
+
+
+(E.4) In this equation, X(v)( IJ ) denotes the fluctuation displacement field under applying the macroscopic unit strain field shown in Eq. (E.1) over Ω. It is worth noting that the total displacement field is expressed as X(IJ ) =
+
+X(0)( IJ ) − X(v)( IJ ). Physically, X(0)( IJ ) represents the macroscopic affine displacement field corresponding to the uniform strain shown in Eq. (E.1), while X(v)( IJ ) denotes the fluctuation displacement field induced by the material heterogeneity. We consider the potential energy: 
+
+Π(IJ ) =
+
+ˆ
+
+> Ω
+
+12 Eklpq ε(IJ ) 
+
+> kl
+
+ε(IJ ) 
+
+> pq
+
+dΩ
+
+ε(IJ ) 
+
+> kl
+
+= 12 (X(IJ ) 
+
+> k,l
+
++ X(IJ ) 
+
+> l,k
+
+) = 12 (X(0)( IJ ) 
+
+> k,l
+
+− X(v)( IJ ) 
+
+> k,l
+
++ X(0)( IJ ) 
+
+> l,k
+
+− X(v)( IJ ) 
+
+> l,k
+
+) = ε(0)( IJ ) 
+
+> kl
+
+− ε(v)( IJ )
+
+> kl
+
+(E.5) Taking the first variation of Π(IJ ) and using Eklpq = Epqkl , we obtain: 
+
+δΠ(IJ ) =
+
+ˆ
+
+> Ω
+
+Eklpq ε(IJ ) 
+
+> kl
+
+δε (IJ ) 
+
+> pq
+
+dΩ = −
+
+ˆ
+
+> Ω
+
+Eklpq (ε(0)( IJ ) 
+
+> kl
+
+− ε(v)( IJ ) 
+
+> kl
+
+)δε (v)( IJ ) 
+
+> pq
+
+dΩ (E.6) Setting δΠ(IJ ) = 0 , εpq (X(v)( IJ )) is calculated by solving the following weak-form of the equilibrium equation: 
+
+ˆ
+
+> Ω
+
+Eklpq εkl (X(v)( IJ )∗)εpq (X(v)( IJ ))dΩ = 
+
+ˆ
+
+> Ω
+
+Eklpq εkl (X(v)( IJ )∗)ε(0)( IJ ) 
+
+> pq
+
+dΩ (E.7) , where X(v)( IJ )∗ refers to a virtual fluctuation displacement field. The finite element method is usually used to solve the fluctuation displacement field X(v)( IJ ) in the above equation. Then, the fluctuation strain ε(v)( IJ )
+
+can be calculated from X(v)( IJ ) and finally substituted into Eq. (E.2) to solve the homogenized elastic matrix 
+
+EHijkl .To ensure a unique solution for the fluctuation displacement field X(v)( IJ ) that correctly reflects the mate-rial’s periodicity, Eq. (E.7) is solved subject to Periodic Boundary Conditions (PBCs). These conditions require that the fluctuation displacement field X(v)( IJ ) takes identical values on opposite faces of the unit cell domain 
+
+Ω. Assuming Ω = [0 , L ]3, the PBCs are mathematically expressed as: 
+
+X(v)( IJ )(0 , x 2, x 3) = X(v)( IJ )(L, x 2, x 3),
+
+X(v)( IJ )(x1, 0, x 3) = X(v)( IJ )(x1, L, x 3),
+
+X(v)( IJ )(x1, x 2, 0) = X(v)( IJ )(x1, x 2, L ).
+
+(E.8) where the periodic constraint is essential for the homogenization problem and is enforced in the Finite Element Method implementation by constraining the degrees of freedom of corresponding nodes on opposite faces of the domain. In PFEM, we impose the periodic constraint through a "ring coupling" approach: connecting corre-sponding nodes on opposite faces with virtual elements and adding the "virtual strain energy" corresponding to 38 these virtual elements to the overall loss function. It should be emphasized that this approach based on virtual strain energy is essentially equivalent to the penalty method; the stiffness matrix of the virtual elements acts as a penalty factor to control the strength of the periodic constraint. The finite element method is usually used to solve the fluctuation displacement field X(v)( IJ ) in Eq. (E.7). We observe that the process of homogenization necessitates the computation of displacement fields under six different load conditions. Traditional approaches rely on finite element analysis introduced above, consuming substantial amounts of time for computation. Different geometry and materials should be recalculated to get the corresponding displacement field. Thus, enhancing the speed of calculating displacement fields naturally leads to a significant improvement in the efficiency of the total homogenization process. This is our motivation for using neural operators to improve homogenization problems. 
+
+Appendix F. The generation of the TPMS 
+
+We introduce the mathematical model of the TPMS. A minimal surface is characterized to have a zero value of mean curvature at any given point of the surface. TPMS is infinitely periodic in three-dimensional space. Level-set approximation is a commonly used approach to represent a minimal surface. The mathematical model of TPMS features level-set equations combined with a series of trigonometric functions, enabling TPMS flexibility to manipulate its topology and mechanical properties. Level-set equations are normally described by 
+
+ϕ(x, y, z ) = c, (F.1) where x, y, and z are the spatial coordinates. ϕ(x, y, z ) on the left-hand side of the equation represents a diffusive field in the 3D space. ϕ = c denotes that the level-set value c segments the 3d space of a TPMS unit cell into two connected sub-domains, with each sub-domain representing solid material and void, respectively. The value of c can be used to indicate the volumetric portion of the void. The porosity of the TPMS unit cell can be hence manipulated by adjusting the c value. The iso-surface of TPMS means that an iso-value equals c. A broadly utilized level-set equation of TPMS is named Schwarz Primitive formatted by 
+
+cos(2 πx ) + cos(2 πy ) + cos(2 πz ) = c (F.2) The above level-set equation denotes a zero-thickness shell-like topology, known as the minimal surface. We need to further generate load-bearing TPMS lattice material based on the minimal surfaces. Two types of TPMS lattices are formulated based on minimal surfaces. The first type is named "Solid-networks", satisfying 
+
+ϕ(x, y, z ) > c (F.3) For "solid-networks" TPMS cells, the volume with the diffusive field value ϕ(x, y, z ) > c is recognized as a solid material, while the rest of the unit cell is recognized as void or pore. The second type is named "sheet-networks". The "sheet-networks" TPMS is governed by 
+
+−c ≤ ϕ(x, y, z ) ≤ c (F.4) As its name suggests, "sheet-networks" selects a thin layer of volume around the zero-thickness shell of ϕ(x, y, z ) = 
+
+c, representing a sheet-like topology of the unit cell. The "solid-networks" and "sheet-networks" TPMS present distinguishable topology characteristics and elastic mechanical properties, offering more flexibility to its "topology-driven" capability. Another key topological parameter for TPMS is volume fraction (or relative density). Volume fraction refers to the ratio between the volume of solid material and the volume of the entire TPMS unit cell. The volume fraction is directly related to the effective elastic tensor and stiffness of a TPMS unit cell and hereby affects the homogenization elastic matrix. In this study, we created a series of TPMS unit cells for training and verifying the proposed neural operator-based homogenization method. In this study, we selected 3 different TPMS level-set equations, including 39 "Schoen Gyroid", "Schwarz Diamond", and "Fischer Kosh S". The level-set equations for each unit cell type are listed: SchoenGyroid : sin(2 πx ) cos(2 πy ) + sin(2 πy ) cos(2 πz )+ sin(2 πz ) cos(2 πx ) = cSchwarzDiamond : sin(2 πx ) sin(2 πy ) sin(2 πz )+ sin(2 πx ) cos(2 πy ) cos(2 πz )+ cos(2 πx ) sin(2 πy ) cos(2 πz )+ cos(2 πx ) cos(2 πy ) sin(2 πz ) = cF ischerKoshS : cos(4 πx ) sin(2 πy ) cos(2 πz )+ cos(2 πx ) cos(4 πy ) sin(2 πz )+ sin(2 πx ) cos(2 πy ) cos(4 πz ) = c
+
+(F.5) 
+
+Appendix G. Supplementary code 
+
+The code of this work will be available at https://github.com/yizheng-wang/Research-on-Solving-P artial-Differential-Equations-of-Solid-Mechanics-Based-on-PINN after accepted. 
+
+References 
+
+[1] S. Wang, H. Wang, P. Perdikaris, Learning the solution operator of parametric partial differential equations with physics-informed deeponets, Science advances 7 (40) (2021) eabi8605. [2] H. Wang, T. Fu, Y. Du, W. Gao, K. Huang, Z. Liu, P. Chandak, S. Liu, P. Van Katwyk, A. Deac, et al., Scientific discovery in the age of artificial intelligence, Nature 620 (7972) (2023) 47–60. [3] N. B. Kovachki, Z. Li, B. Liu, K. Azizzadenesheli, K. Bhattacharya, A. M. Stuart, A. Anandkumar, Neural operator: Learning maps between function spaces with applications to pdes., J. Mach. Learn. Res. 24 (89) (2023) 1–97. [4] L. Lu, P. Jin, G. Pang, Z. Zhang, G. E. Karniadakis, Learning nonlinear operators via deeponet based on the universal approximation theorem of operators, Nature Machine Intelligence 3 (3) (2021) 218–229. 
+
+doi:10.1038/s42256-021-00302-5 .[5] Z. Li, N. Kovachki, K. Azizzadenesheli, B. Liu, K. Bhattacharya, A. Stuart, A. Anandkumar, Fourier neural operator for parametric partial differential equations, arXiv preprint arXiv:2010.08895 (2020). [6] Z. Hao, Z. Wang, H. Su, C. Ying, Y. Dong, S. Liu, Z. Cheng, J. Song, J. Zhu, Gnot: A general neural operator transformer for operator learning, in: International Conference on Machine Learning, PMLR, 2023, pp. 12556–12569. [7] H. Wu, H. Luo, H. Wang, J. Wang, M. Long, Transolver: A fast transformer solver for pdes on general geometries, arXiv preprint arXiv:2402.02366 (2024). [8] L. Wang, X. Zhang, H. Su, J. Zhu, A comprehensive survey of continual learning: Theory, method and application, IEEE transactions on pattern analysis and machine intelligence 46 (8) (2024) 5362–5383. [9] J. Kirkpatrick, R. Pascanu, N. Rabinowitz, J. Veness, G. Desjardins, A. A. Rusu, K. Milan, J. Quan, T. Ra-malho, A. Grabska-Barwinska, et al., Overcoming catastrophic forgetting in neural networks, Proceedings of the national academy of sciences 114 (13) (2017) 3521–3526. [10] T. Tripura, S. Chakraborty, Neural combinatorial wavelet neural operator for catastrophic forgetting free in-context operator learning of multiple partial differential equations, Computer Physics Communications (2025) 109882. 40 [11] M. Elhadidy, R. M. D’Souza, A. Arzani, Sle-fno: Single-layer extensions for task-agnostic continual learning in fourier neural operators, arXiv preprint arXiv:2603.20410 (2026). [12] S. S. Menon, T. Mondal, S. Brahmachary, A. Panda, S. M. Joshi, K. Kalyanaraman, A. D. Jagtap, On scientific foundation models: Rigorous definitions, key applications, and a comprehensive survey, Neural Networks (2026) 108567. [13] Y. Choi, S. W. Cheung, Y. Kim, P.-H. Tsai, A. N. Diaz, I. Zanardi, S. W. Chung, D. M. Copeland, C. Kendrick, W. Anderson, et al., Defining foundation models for computational science: A call for clarity and rigor, arXiv preprint arXiv:2505.22904 (2025). [14] Z. Hao, C. Su, S. Liu, J. Berner, C. Ying, H. Su, A. Anandkumar, J. Song, J. Zhu, Dpot: Auto-regressive denoising operator transformer for large-scale pde pre-training, arXiv preprint arXiv:2403.03542 (2024). [15] H. Zhou, Y. Ma, H. Wu, H. Wang, M. Long, Unisolver: Pde-conditional transformers towards universal neural pde solvers, arXiv preprint arXiv:2405.17527 (2024). [16] M. McCabe, P. Mukhopadhyay, T. Marwah, B. R.-S. Blancard, F. Rozet, C. Diaconu, L. Meyer, K. W. Wong, H. Sotoudeh, A. Bietti, et al., Walrus: A cross-domain foundation model for continuum dynamics, arXiv preprint arXiv:2511.15684 (2025). [17] K. Bi, L. Xie, H. Zhang, X. Chen, X. Gu, Q. Tian, Accurate medium-range global weather forecasting with 3d neural networks, Nature (2023) 1–6. [18] Y. Wang, Z. Hao, M. S. Eshaghi, C. Anitescu, X. Zhuang, T. Rabczuk, Y. Liu, Pretrain finite element method: A pretraining and warm-start framework for pdes via physics-informed neural operators, arXiv preprint arXiv:2601.03086 (2026). [19] M. S. Eshaghi, C. Anitescu, M. Thombre, Y. Wang, X. Zhuang, T. Rabczuk, Variational physics-informed neural operator (vino) for solving partial differential equations, Computer Methods in Applied Mechanics and Engineering 437 (2025) 117785. [20] O. Al-Ketan, R. K. Abu Al-Rub, Multifunctional mechanical metamaterials based on triply periodic min-imal surface lattices, Advanced Engineering Materials 21 (10) (2019) 1900524. [21] Z. Li, H. Zheng, N. Kovachki, D. Jin, H. Chen, B. Liu, K. Azizzadenesheli, A. Anandkumar, Physics-informed neural operator for learning partial differential equations, ACM/JMS Journal of Data Science 1 (3) (2024) 1–27. [22] Y. Wang, J. Sun, J. Bai, C. Anitescu, M. S. Eshaghi, X. Zhuang, T. Rabczuk, Y. Liu, Kolmogorov arnold informed neural network: A physics-informed deep learning framework for solving forward and inverse problems based on kolmogorov–arnold networks, Computer Methods in Applied Mechanics and Engineering 433 (2025) 117518. [23] I. Abbes, G. Subbaraj, M. Riemer, N. Islah, B. Therien, T. Tabaru, H. Kingetsu, S. Chandar, I. Rish, Revisiting replay and gradient alignment for continual pre-training of large language models, arXiv preprint arXiv:2508.01908 (2025). [24] L. Yang, S. Liu, T. Meng, S. J. Osher, In-context operator learning with data prompts for differential equation problems, Proceedings of the National Academy of Sciences 120 (39) (2023) e2310142120. [25] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, W. Chen, Lora: Low-rank adaptation of large language models, arXiv preprint arXiv:2106.09685 (2021). [26] Y. Wang, J. Bai, M. S. Eshaghi, C. Anitescu, X. Zhuang, T. Rabczuk, Y. Liu, Transfer learning in physics-informed neurals networks: full fine-tuning, lightweight fine-tuning, and low-rank adaptation, International Journal of Mechanical System Dynamics 5 (2) (2025) 212–235. 41 [27] G. Dong, H. Yuan, K. Lu, C. Li, M. Xue, D. Liu, W. Wang, Z. Yuan, C. Zhou, J. Zhou, How abilities in large language models are affected by supervised fine-tuning data composition, in: Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), 2024, pp. 177–198. [28] L. M. DeAngelis, Brain tumors, New England journal of medicine 344 (2) (2001) 114–123. [29] G. Ciasca, T. E. Sassun, E. Minelli, M. Antonelli, M. Papi, A. Santoro, F. Giangaspero, R. Delfini, M. De Spirito, Nano-mechanical signature of brain tumours, Nanoscale 8 (47) (2016) 19629–19643. [30] D. Chauvet, M. Imbault, L. Capelle, C. Demene, M. Mossad, C. Karachi, A.-L. Boch, J.-L. Gennisson, M. Tanter, In vivo measurement of brain tumor elasticity using intraoperative shear wave elastography, Ultraschall in der Medizin-European Journal of Ultrasound 37 (06) (2016) 584–590. [31] K. Miller, K. Chinzei, G. Orssengo, P. Bednarz, Mechanical properties of brain tissue in-vivo: experiment and computer simulation, Journal of biomechanics 33 (11) (2000) 1369–1376. [32] A. Bunevicius, K. Schregel, R. Sinkus, A. Golby, S. Patz, Mr elastography of brain tumors, NeuroImage: Clinical 25 (2020) 102109. [33] A. Wittek, T. Hawkins, K. Miller, On the unimportance of constitutive models in computing brain defor-mation for image-guided surgery, Biomechanics and modeling in mechanobiology 8 (1) (2009) 77–84. [34] Z. Lin, J. Bai, S. Li, X. Chen, B. Li, X.-Q. Feng, A physics-informed neural network framework for sim-ulating creep buckling in growing viscoelastic biological tissues, Computer Methods in Applied Mechanics and Engineering 452 (2026) 118715. [35] E. Calabrese, D. LaBella, Brats-men (2023). doi:10.7303/SYN51514106 .URL https://repo-prod.prod.sagebase.org/repo/v1/doi/locate?id=syn51514106&type=ENTITY 
+
+[36] E. Calabrese, J. E. Villanueva-Meyer, J. D. Rudie, A. M. Rauschecker, U. Baid, S. Bakas, S. Cha, J. T. Mongan, C. P. Hess, The university of california san francisco preoperative diffuse glioma mri dataset, Radiology: Artificial Intelligence 4 (6) (2022) e220058. [37] Z. Hashin, et al., Analysis of composite materials, J. appl. Mech 50 (2) (1983) 481–505. [38] J. Guedes, N. Kikuchi, Preprocessing and postprocessing for materials based on the homogenization method with adaptive finite element methods, Computer methods in applied mechanics and engineering 83 (2) (1990) 143–198. [39] B. Hassani, E. Hinton, A review of homogenization and topology optimization i homogenization theory for media with periodic structure, Computers and Structures 69 (6) (1998) 707–717. [40] A. Harandi, H. Danesh, K. Linka, S. Reese, S. Rezaei, Spifol: A spectral-based physics-informed finite operator learning for prediction of mechanical behavior of microstructures, Journal of the Mechanics and Physics of Solids (2025) 106219. [41] Y. Wang, X. Li, Z. Yan, S. Ma, J. Bai, B. Liu, X. Zhuang, T. Rabczuk, Y. Liu, A pretraining-finetuning computational framework for material homogenization, International Journal of Mechanical Sciences (2026) 111388. [42] E. Andreassen, C. S. Andreasen, How to determine composite material properties using numerical homog-enization, Computational Materials Science 83 (2014) 488–495. [43] J. T. Oden, S. Prudhomme, Goal-oriented error estimation and adaptivity for the finite element method, Computers & mathematics with applications 41 (5-6) (2001) 735–756. [44] Z. Li, D. Z. Huang, B. Liu, A. Anandkumar, Fourier neural operator with learned deformations for pdes on general geometries, Journal of Machine Learning Research 24 (388) (2023) 1–26.

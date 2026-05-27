@@ -1,0 +1,692 @@
+Title: Evolving-RL: End-to-End Optimization of Experience-Driven Self-Evolving Capability within Agents
+
+URL Source: https://arxiv.org/pdf/2605.10663v1
+
+Published Time: Tue, 12 May 2026 02:45:13 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Evolving-RL: End-to-End Optimization of Experience-Driven Self-Evolving Capability within Agents 
+
+Zhiyuan Fan 1,2, Wenwei Jin 1,†, Feng Zhang 1, Bin Li 1, Yihong Dong 2, Yao Hu 1, Jiawei Li 11Xiaohongshu Inc. 2School of Computer Science, Peking University 
+
+> †
+
+Corresponding author. 
+
+{zyfan043, wenwei1217.jin, libin656712945, yaoohu}@gmail.com {zhangfeng4, wangdesheng}@xiaohongshu.com dongyh@stu.pku.edu.cn 
+
+Abstract 
+
+Experience-driven self-evolving agents aim to overcome the static nature of large language models by distilling reusable experience from past interactions, thus en-abling adaptation to novel tasks at deployment time. This process places substantial demands on the foundation model’s capacities for abstraction, generalization, and in-context learning. However, most existing studies focus primarily on system-level design choices, such as how experience is represented and managed, neglecting the inherent capabilities of the underlying model. While some recent works have started to optimize the experience utilization stage via reinforcement learning, they still fail to treat self-evolution as a unified process to be jointly optimized. To this end, we propose Evolving-RL , an efficient algorithmic framework that jointly improves the experience extraction and utilization capabilities required for self-evolution. Specifically, we center the learning process on experience extrac-tion and evaluation, using the two supervisory signals derived from evaluation to optimize the extractor and solver separately and thus enable their coordinated co-evolution. Experiments on ALFWorld and Mind2Web show that Evolving-RL effectively enhances LLMs’ ability to extract and reuse experience, leading to strong performance gains on out-of-distribution tasks (up to 98.7% relative im-provement over the GRPO baseline on ALFWorld unseen tasks and 35.8% on Mind2Web), and these gains are fully unlocked only through the coordinated co-evolution of experience extraction and utilization. Furthermore, Evolving-RL inherently functions as an experience-augmented RL algorithm. By internalizing reusable experience patterns directly into model parameters, it achieves remarkable performance gains over standard baselines on both seen and unseen tasks, even in the absence of test-time experience accumulation. Our code is available at 
+
+https://github.com/Fanzy27/Evolving-RL .
+
+1 Introduction 
+
+Large language models (LLMs) have demonstrated remarkable capabilities across a broad range of tasks, including complex reasoning [ 9 , 17 , 11 , 28 ] and autonomous agent decision-making [ 26 , 8, 35 ]. However, once trained, LLMs are largely static: they lack the ability to continually adapt themselves to the complex out-of-distribution environments and tasks encountered during deployment. This fundamental limitation has motivated a growing body of research into test-time self-evolution [ 3, 31 ,22 , 38 , 1]. As a prominent direction within this paradigm, experience-driven self-evolving agents         
+
+> Preprint.
+> arXiv:2605.10663v1 [cs.AI] 11 May 2026 Base Model GRPO
+> Evaluation Policy
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Overall Success Rate (%)
+> 45.5
+> 79.9
+> 44.5
+> 83.3
+> 60.4
+> 88.8
+> +14.9 vs no skill
+> +8.9 vs no skill
+> -1.0 vs no skill
+> (a) Skill Transfer on ALFWorld
+> Skill Source
+> None
+> Self-extracted
+> Evolving-RL
+> 020 40 60 80 100 120 140
+> Training Steps
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> Reward
+> (b) Mind2Web Reward During Training
+> Evolving-RL
+> Solver-only
+> GRPO
+
+Figure 1: (a) Skills accumulated by our method (“Evolving-RL”) transfer effectively to other policies and consistently improve downstream performance. Conversely, hindered by inferior skill quality, skills extracted by the base model itself (“self-extracted”) not only fail to improve, but actually degrade performance compared to no injection (“None”), demonstrating the critical role of our method in ensuring skill quality. (b) Beyond test-time self-evolution, Evolving-RL proves highly effective as an experience-augmented RL algorithm, consistently outperforming both standard GRPO and solver-only training that is constrained by a static skill library. accumulate reusable experiences from prior interactions and leverage them to solve related future tasks, thereby progressively enhancing their deployment-time capabilities. Existing experience-driven self-evolution approaches primarily focus on system-level evolutionary design, with considerable research devoted to experience representation [ 33 , 39 , 27 , 16 ], formulation, and management mechanisms [ 6, 24 , 34 ]. While these prompt-based methods have successfully demonstrated that injecting past experiences can significantly enhance downstream decision-making, their effectiveness is ultimately bounded by the underlying model’s ability to extract and leverage these experiences [ 18 ]—a process that heavily relies on the model possessing robust in-context learning [4] and abstract reasoning capabilities. Several recent studies [ 30 , 29 ] have explored reinforcement learning as a way to enhance the model’s ability to utilize experience. However, these methods do not optimize self-evolution as a unified process. They improve only the utilization phase, while relying on stronger external models or hand-crafted filtering mechanisms to ensure the quality of extracted experience. Such a decoupled design is inherently limited, as extraction and utilization are not merely complementary capabilities, but mutually constitutive during learning. The quality of extracted experience directly influences the reinforcement learning dynamics for experience utilization. When the provided experience is noisy, conditioning on it introduces variance and ambiguity into the optimization process. Consequently, the policy often converges to a degenerate behavior: it learns to systematically ignore the provided experience, as bypassing unreliable guidance yields more stable returns than attempting to exploit it. To bridge this gap, we propose Evolving-RL , an efficient algorithmic framework that jointly op-timizes both experience extraction and utilization within a unified training paradigm. To make this joint optimization tractable and interpretable, we specifically instantiate experience as textual skills—compact procedural abstractions that capture actionable regularities regarding what to do, when to intervene, and how to recover from failures. Anchored by this representation, Evolving-RL employs an extractor-centric design: for each source interaction, a shared policy generates candidate textual skills. Each candidate is then rigorously evaluated by applying it to multiple retrieved instances and receiving reward according to downstream feedback. Concurrently, the trajectories collected during this downstream evaluation are recycled to refine the model’s skill-utilization capability. By utilizing downstream transfer performance as the primary supervisory signal, extractor and solver co-evolve, naturally coupling advancements in transferable skill abstraction with robust skill-conditioned execution. We evaluate our method on ALFWorld, a text-based embodied task environment, and Mind2Web, a web-based task benchmark. Empirical results show that Evolving-RL significantly improves the model’s ability to explicitly extract and reuse skills, thereby leading to markedly better generalization on out-of-distribution tasks. Specifically, when augmented with extracted skills, Evolving-RL boosts 2the success rate on ALFWorld unseen tasks from 44.6% (the GRPO [ 19 ] baseline) to 88.6%, and increases overall action accuracy on Mind2Web from 22.73% to 30.87%. Moreover, in the skill transfer experiments, the high-quality skills extracted by Evolving-RL-trained models exhibit strong transferability to other models (Figure 1a). In addition, Evolving-RL also strengthens the underlying policy itself by internalizing reusable experience patterns into the model parameters. Even without test-time skill injection, our trained policy still achieves an 81.1% success rate on ALFWorld unseen tasks and a 28.05% overall action accuracy on Mind2Web, substantially outperforming the standard GRPO baselines (33.7% and 22.83%, respectively), demonstrating its value not only for self-evolution, but also as a form of experience-augmented reinforcement learning (Figure 1b). 
+
+2 Related Work 
+
+2.1 Experience-Driven Self-Evolving Agent 
+
+Experience-driven self-evolution enables agents to continuously accumulate and reuse knowledge, overcoming the static nature of their post-training capabilities [ 38 , 3]. Existing literature in this domain has advanced this paradigm across multiple dimensions. In terms of experience representation, prior studies have explored diverse granularities, ranging from raw interaction trajectories [ 40 , 33 ], reusable workflows [ 27 ] to executable skills [ 39 , 2, 41 ], strategic principles [ 16 ]. Beyond represen-tation, parallel efforts have also developed sophisticated mechanisms for autonomous experience extraction [ 2, 14 , 20 ] and efficient memory management [ 24 , 5, 34 ]. Despite these advancements, these systems predominantly rely on the base model’s pre-existing ability to extract and utilize effec-tive experience. Consequently, the benefits of experience-driven evolution are fundamentally bounded by the underlying model’s intrinsic capacities [ 18 ]. While recent methods [ 29 , 30 , 25 ] attempt to employ Reinforcement Learning (RL) to enhance the underlying model’s capabilities, they typically optimize experience utilization in isolation, failing to treat extraction and utilization as a unified process for joint optimization. Instead, their experience extraction phases remain heavily dependent on hand-crafted filtering heuristics or more capable external models. Motivated by this limitation, our work optimizes the entire self-evolution loop: rather than treating experience generation as an external component, we drive the end-to-end evolution process based on the transfer value of the extracted skills. 
+
+2.2 Experience-Augmented Reinforcement Learning 
+
+Enhancing experience utilization through reinforcement learning (RL) inherently constitutes an experience-augmented RL paradigm [ 21 , 30 , 12 ], which can significantly boost training efficiency. Therefore, some recent works also define this process as an RL paradigm. ERL [ 21 ] and RetroA-gent [ 36 ] leverage task-specific reflections as experience to augment the learning process. Although yielding effective within-task gains, such experience lacks generalizability and is difficult to transfer across tasks. Alternatively, frameworks like EvolveR [ 29 ], SkillRL [ 30 ] and D2Skill [ 25 ] distill trajectories into reusable experience libraries that are consumed during RL training. However, their experience-construction pipelines remain weakly optimized, as their extraction processes still rely heavily on manually crafted filtering mechanisms or stronger external models. In contrast, Evolving-RL treats experience extraction and utilization as a unified optimization problem. We instantiate experience as transferable textual skills, evaluate them by their impact on retrieved downstream tasks, and leverage the resulting feedback to co-train the extractor and the solver within a single RL loop, thereby ensuring that the extracted experience consistently provides effective utility for RL training. Notably, a concurrent work [ 15 ] shares a similar motivation of co-optimizing experience extraction and utilization. However, they erroneously attribute the training instability during co-evolution to parameter conflicts, ultimately training the two capabilities separately across two distinct models. Furthermore, their experience validation remains confined to single-task scenarios, which limits cross-task generalizability. In contrast, Evolving-RL explicitly ensures generalizability through evaluation-centric training, and as we detail in Appendix A, effectively resolves the underlying instability to train both capabilities within a truly unified, single model. 33. Downstream Evaluation                          
+
+> (Solver)
+> 1. Source Trajectory
+> Rollout
+> 2. Skill Extraction
+> (Extractor) 4. Joint Optimization
+> Source Task
+> 𝑥 !"#
+> Environmental
+> Reward 𝑟 !"#
+> Trajectory 𝜏
+> 𝑁 Candidate Skills
+> ℰ={𝑒 $,…,𝑒 %}
+> 𝑒 !∼𝜋 "⋅𝑠 #
+> Extractor
+> (𝝅 𝜽 )
+> Extraction State
+> 𝑠 '=𝑥 !"# ,𝜏 ,𝑟 !"#
+> 𝑒 !∼𝜋 "⋅𝑠 #
+> 𝑒 !∼𝜋 "⋅𝑠 #
+> …
+> Retriever
+> ℛ(𝑥 !"# )
+
+𝒟                               
+
+> 𝐾 Related Downstream Tasks
+> {𝑥 $,…,𝑥 %}
+> 𝑁 𝐾 Downstream
+> Trajectory 𝑡 ()
+> …
+> Solver
+> (𝝅 𝜽 )
+> Environmental
+> Reward 𝑟 ()
+> 𝑁 skills ×
+> 𝐾 tasks
+> Calculate Extractor
+> Reward
+> 𝑅 (
+> '=1
+> 𝐾 5𝑟 ()
+> *
+> ),$
+> Mean performance
+> across tasks
+> Compute Solver
+> Advantages 𝐴 !"
+> #
+> 𝐴 !$
+> %=𝑟 !$ −mean {𝑟 !!$}!!&'
+> (
+> std {𝑟 !!$}!!&'
+> (
+> Cross -Skill Group
+> Joint Loss
+> 𝓛 =𝝀 𝒆 𝓛 𝓮 +𝝀 𝒔 𝓛 𝒔
+> Compute Solver
+> Advantages
+> GRPO
+> Advantages
+> Estimation
+> shared update ∆𝜃
+> Solver Loss
+> 𝓛 𝒔
+> Extractor
+> Loss 𝓛 0
+> +𝐴 !
+> $
+
+Figure 2: Overview of Evolving-RL. The framework begins with online skill extraction, followed by downstream evaluation of the extracted skills. This evaluation process produces training signals for both the extractor and the solver, enabling their joint optimization within a unified co-evolutionary framework. 
+
+3 Evolving-RL 
+
+3.1 Framework Overview 
+
+We propose Evolving-RL , a unified algorithmic framework that jointly improves the model’s skill extraction and skill utilization capabilities within a single shared policy. As illustrated in Figure 2, our method generates skills online and evaluates them on downstream tasks. This process produces two coupled learning signals. Aggregated downstream rewards across multiple tasks provide direct supervision on the quality and generality of the extracted skills, thereby improving the model’s skill extraction capability. Meanwhile, the skill-conditioned trajectories collected during downstream evaluation are reused to improve its skill utilization capability. In this way, all sampled trajectories are fully exploited, enabling these two capabilities to co-evolve within a unified algorithmic framework. 
+
+Roles and shared policy. Our method involves two key roles, the extractor and the solver , which share the same policy parameters. The extractor takes a completed source interaction as input and produces a compact textual skill —a procedural abstraction that encodes reusable decision rules, workflow steps, and error-handling strategies extracted from that experience. The solver takes a new task together with an injected skill and produces an action trajectory. 
+
+Rollout structure. Each training iteration begins by solving a source task xsrc ∼ D without any injected skill. The solver, parameterized by the shared policy πθ , interacts with the environment conditioned on xsrc and produces a trajectory: 
+
+τ ∼ πθ (· | xsrc ).
+
+The resulting trajectory τ and environment reward rsrc form the extraction state se = ( xsrc , τ, r src ),which conditions the extractor to produce N candidate skills. A retriever R then fetches K semanti-cally related downstream tasks, and for every (skill, task) pair the solver rolls out a skill-conditioned trajectory. This structure—source solving → skill extraction → downstream evaluation—produces two coupled sample families within a single iteration: extractor samples and solver trajectories, both of which are consumed by the joint objective. 
+
+3.2 Extractor Training Online skill generation. In Evolving-RL, the extractor is optimized in a fully online manner, such that each training iteration begins with the generation of new experience. Given the extraction state 
+
+se, the extractor samples a set of N candidate skills: 
+
+E = {e1, . . . , e N }, ei ∼ πθ (· | se).
+
+4Each candidate ei is instantiated as a skill, a structured textual abstraction that encodes both high-level procedural knowledge and concrete operational details distilled from the source interaction. The resulting N candidates constitute the comparison set for GRPO-based advantage estimation in extractor optimization. 
+
+Generalization-Oriented Evaluation. We evaluate the quality and generalization of a skill by its ability to improve solver performance on related tasks. To ensure fair evaluation, all candidate skills within the same comparison group must be assessed on an identical set of downstream tasks. Therefore, we do not use the skill content itself as the retrieval query, as this would cause different skills to be evaluated on different sets of downstream tasks. Instead, downstream tasks are retrieved based on the embedding of the task description. Concretely, given a source task xsrc , the retrieval function R returns a set of top-K semantically similar downstream tasks: 
+
+X ret = R(xsrc ) = TopK x∈D s (ϕ(xsrc ), ϕ (x)) , (1) where ϕ(·) denotes the embedding of the task description and s(·, ·) is instantiated as cosine similarity. We additionally include the source task itself in X ret , since skill quality should reflect not only transfer to related tasks but also its effect on the original task. For each candidate skill ei and each retrieved downstream task xj ∈ X ret , the solver generates a skill-conditioned trajectory tij ∼ πθ (· | xj , e i) and receives environment reward rij . The reward assigned to skill ei is defined as its mean downstream performance: 
+
+Rei = 1
+
+K
+
+> K
+
+X
+
+> j=1
+
+rij . (2) A skill receives a high reward only if it consistently improves solver performance across multiple related tasks, thereby directly aligning the extraction objective with cross-task transfer utility. 
+
+Extractor Objective. The N candidate skills derived from the same source interaction con-stitute a single GRPO comparison group. We compute the group-normalized advantage as 
+
+Aei = Rei −mean ({Rei′ }Ni′=1 )
+
+> std
+
+({Rei′ }Ni′=1 ) . The extractor loss is 
+
+Le(θ) = − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+min  ρei Aei , clip( ρei , 1 − ϵ, 1 + ϵ)Aei
+
+ + βe DKL (πθ ∥πref ) − ηe H(πθ ), (3) where ρei = πθ (ei|se)  
+
+> πθold (ei|se)
+
+is the importance sampling ratio, DKL denotes the KL regularization term, and H(πθ ) denotes the entropy term. Contrary to its standard use for encouraging exploration, we employ entropy regularization with a negative coefficient ηe to penalize entropy growth and bias the extraction policy toward deterministic predictions. This constraint is necessary because skills naturally admit diverse representations, meaning there is no single deterministic target for extraction. This characteristic renders the process inherently high-entropy. Compounded by the noise introduced during skill evaluation (see Appendix A), these factors could otherwise cause the policy entropy to grow continuously during training, ultimately resulting in training collapse. 
+
+3.3 Solver Training Cross-Skill Group Advantage Estimation. During downstream evaluation, each retrieved task xj
+
+yields a set of N trajectories {tij }Ni=1 , where each trajectory is conditioned on a distinct candidate skill. While these trajectories arise from heterogeneous prompts owing to the injected skills, they remain directly comparable, as the underlying task semantics, objective, and contextual structure are shared across all N rollouts for the same task xj . We accordingly aggregate the N skill-conditioned trajectories of each task into a single GRPO comparison group and compute the solver-side advantage through within-group reward normalization: 
+
+Asij = rij − mean  {ri′j }Ni′=1 
+
+
+
+std  {ri′j }Ni′=1 
+
+ . (4) 5Under this grouping mechanism, the correctness of the solver’s response on the downstream task emerges as the dominant optimization signal. In the presence of a beneficial skill, the solver is rewarded for exploiting it to surpass trajectories conditioned on suboptimal skills for the same task. Conversely, when provided with spurious or misleading skills, the solver incurs a penalty for deviating from optimal behavior relative to its alternatives, thereby learning to remain robust against degraded guidance. Together, these dual incentives foster a solver that can effectively capitalize on high-quality skills while maintaining stable performance under poor skill conditioning. 
+
+Solver objective. We reuse all N × K skill-conditioned trajectories collected during downstream evaluation. Let Asij be the heterogeneous-context advantage from Eq. (4). The solver loss is 
+
+Ls(θ) = − 1
+
+N K 
+
+> K
+
+X
+
+> j=1
+> N
+
+X
+
+> i=1
+
+min  ρsij Asij , clip( ρsij , 1 − ϵ, 1 + ϵ)Asij 
+
+ + βs DKL (πθ ∥πref ), (5) where ρsij = πθ (tij |xj ,e i)    
+
+> πθold (tij |xj,e i)
+
+, and DKL (πθ ∥πref ) is the KL-divergence regularization term measuring the deviation of the current policy πθ from the reference policy πref .
+
+3.4 Joint Objective and Co-Evolution Dynamics 
+
+The final training objective is a weighted combination of the extractor and solver losses: 
+
+L = λeLe + λsLs. (6) Because both losses operate on the same parameter vector θ, they are tightly coupled: a gradient step that improves extraction quality also updates the solver weights. Concretely, the mechanism operates in two directions. On the extraction side, the extractor is incentivized to produce skills that are broadly useful — skills that help the solver on diverse retrieved tasks. On the utilization side, the solver is trained under a realistic distribution of skill quality: it encounters both informative and noisy skills during the same rollout, which mirrors the conditions it faces at test time and builds robustness accordingly. 
+
+4 Experiments 
+
+4.1 Experimental Setup 
+
+We instantiate all methods with Qwen2.5-7B-Instruct [ 32 ] as the base model and evaluate them on two benchmarks with explicit task-level splits: ALFWorld [ 23 ] and Mind2Web [ 7 ]. We primarily compare our approach against two categories of baselines: prompt-based experience-driven self-evolution methods ExpeL [ 38 ], Memento [ 40 ] and ReasoningBank [ 16 ] and the RL-based method, GRPO [ 19 ] and SkillRL [ 30 ]. However, since SkillRL relies on a certain amount of cold-start data, we are unable to evaluate it on Mind2Web. To ensure robustness, all reported results are averaged over five runs. We briefly describe the experimental settings below, and defer detailed implementation choices to Appendix C. 
+
+ALFWorld. ALFWorld is a text-based embodied benchmark for household task completion via multi-turn interaction. To evaluate generalization in test-time self-evolution, we split the original training set into seen and unseen subsets by task type. During training, both experience extraction and policy optimization are performed exclusively on the seen subset. At test time, the agent is additionally allowed to collect skills from the unseen training subset. We report success rate as the evaluation metric on ALFWorld. 
+
+Mind2Web. Mind2Web is a benchmark for grounded web navigation across diverse real-world websites. We train on the official training split (1009 tasks) and report results on its three standard evaluation settings: cross-task (252 tasks), cross-website (177 tasks), and cross-domain (912 tasks). At test time, given the relatively small size of the original training split and its substantial distribution shift from the evaluation settings, we allow the model to generate trajectories and extract skills on the test set. On Mind2Web, we report two metrics: action accuracy (Act. Acc.) and success rate (SR) . Action accuracy is defined as the proportion of correctly predicted actions among all executed actions. 6Table 1: Performance on ALFWorld. Rows labeled “w/ skills” evaluate each method augmented with its own extracted skills. The best and second-best results in each column are highlighted in bold and underline, respectively. ∗ denotes the results replicated from [30].                                                                                                      
+
+> Seen tasks Unseen tasks All Method Pick Heat Cool Clean Avg. Look Pick2 Avg. Overall Base Model 75.0 13.0 60.0 57.4 51.9 18.9 36.5 27.4 45.5 Base Model (w/ skills) 74.2 28.7 56.2 45.8 50.9 16.7 36.5 26.3 44.5
+> Prompt-based methods
+> ReasoningBank 75.0 21.7 47.6 45.2 47.5 11.1 35.3 22.9 41.1 ExpeL ∗21.0 52.0 71.0 55.0 49.5 67.0 6.0 37.4 46.3 Memento 79.2 39.1 76.2 64.5 64.6 0.0 41.2 20.0 53.0
+> RL-based methods
+> GRPO 96.7 100.0 100.0 90.3 96.2 53.3 12.9 33.7 79.9 GRPO (w/ skills) 95.8 98.3 98.1 96.1 97.0 61.1 27.1 44.6 83.3 SkillRL 93.3 72.2 80.0 95.2 86.2 81.2 55.6 68.8 81.7 Ours (w/o skills) 94.2 99.1 100.0 96.8 97.4 100.0 61.2 81.1 93.1 Ours (w/ skills) 97.5 100.0 100.0 97.4 98.6 95.6 81.2 88.6 96.0
+
+Table 2: Results on Mind2Web under the cross-task, cross-website, cross-domain, and overall evaluation settings. We report both action accuracy (Act. Acc.) and success rate (SR), with the best and second-best results marked in bold and underline, respectively.                                                                            
+
+> Cross-task Cross-website Cross-domain Overall Method Act. Acc. SR Act. Acc. SR Act. Acc. SR Act. Acc. SR Base Model 12.57 0.24 7.95 0.00 7.91 0.44 8.79 0.34 Base Model (w/ skills) 14.92 0.40 15.01 0.00 12.68 0.50 13.41 0.42 ReasoningBank 11.84 0.00 17.76 0.56 12.09 0.66 12.79 0.52 Memento 15.27 0.40 15.46 0.56 13.13 0.88 13.84 0.75 GRPO 28.79 1.51 24.61 0.00 20.84 1.67 22.83 1.42 GRPO (w/ skills) 28.98 0.87 26.20 0.90 20.33 1.69 22.73 1.43 Ours (w/o skills) 35.32 1.59 35.15 3.39 24.67 1.21 28.05 1.57 Ours (w/ skills) 41.99 2.38 35.14 1.81 26.97 1.91 30.87 1.99
+
+4.2 Main Results 
+
+Tables 1 and 2 report the main results on ALFWorld and Mind2Web, respectively. Across both benchmarks, Evolving-RL consistently outperforms all baselines, validating both of our main claims: it improves test-time self-evolution by strengthening the model’s ability to extract and leverage experience, and it also serves as an effective experience-augmented RL method that improves the underlying policy even without skill injection at evaluation time. On ALFWorld, Evolving-RL achieves the best overall success rate of 96.0% with skill injection, substantially outperforming all baselines. The gain is especially large on unseen tasks, where it improves over GRPO (w/ skills) from 44.6 to 88.6. Even without skill injection, our method still reaches 93.1 overall success rate. On Mind2Web, we observe the same qualitative trend in a noisier and more challenging web environment. Evolving-RL consistently improves over GRPO across the cross-task, cross-website, and cross-domain settings. With skill injection, our method achieves a relative improvement in action accuracy over GRPO by 45.9%, 42.8%, and 29.4% on the cross-task, cross-website, and cross-domain settings, respectively. However, we also observe that on the cross-website split, providing skills does not lead to a clear improvement over the no-skill setting. A possible explanation is that the trajectories generated by the agent on cross-website tasks differ substantially from the trajectory distribution seen during training, making it difficult for the extractor to distill useful skills from such trajectories. Overall, the results show that Evolving-RL improves performance in two complementary ways. First, our method effectively enhances test-time self-evolution : injecting skills at inference time leads 7to clear and consistent performance gains. Second, the strong performance without skill injection indicates that Evolving-RL is also an effective training algorithm for improving policy generalization itself. In other words, repeated exposure to experience-augmented contexts during training enables the model to internalize reusable procedural patterns into its parameters. 
+
+4.3 Ablations and Analysis 
+
+In this section, we present a more comprehensive empirical analysis of Evolving-RL, with the goal of answering the following three questions: Table 3: Objective ablation on ALFWorld. The co-evolution objective corresponds to the full Evolving-RL training. 
+
+Objective Eval. Seen Unseen Overall Base Model w/o skills 51.9 27.4 45.5 Base Model w/ skills 50.9 26.3 44.5 Extractor-only w/o skills 62.6 28.6 53.7 Extractor-only w/ skills 73.7 27.6 61.7 Solver-only w/o skills 98.2 70.3 90.9 Solver-only w/ skills 97.8 69.7 90.4 Co-evolution w/o skills 97.4 81.1 93.1 Co-evolution w/ skills 98.6 88.6 96.0 
+
+Q1: What drives the generalization gains of Evolving-RL? In the main experiments, Evolving-RL exhibits strong generalization even without skill injection at test time. This indi-cates that its performance gains are not solely attributable to test-time evolution; rather, a sub-stantial portion of the improvement is internalized within the policy parameters. To better isolate the source of this gain, we conducted a controlled ablation study, with results shown in Table 3. No-tably, even the solver-only objective—which trains the solver using experience-conditioned contexts without co-evolving the extractor—substantially outperforms GRPO, yielding a 73.2% relative im-provement in generalization. This pattern suggests that injected skills serve as a form of structured auxiliary supervision: during RL training, the policy’s repeated exposure to procedural guidance allows it to absorb these regularities directly into its weights, underscoring the efficacy of experience-augmented RL for enhancing generalization. A critical nuance, however, is that under the solver-only objective, test-time skill injection yields no further improvement. This occurs because the policy’s self-extracted skills are not sufficiently reliable to support direct conditioning—a limitation evidenced by the performance drop of the Base Model when evaluated w/ skills . Consequently, when training only optimizes the policy’s ability to utilize skill, the model is repeatedly exposed to noisy skill signals. Under this setup, the most effective strategy is to become insensitive to the injected skills rather than rely on them. This explains why the solver-only objective still improves generalization through parameter-level internalization, yet does not benefit further from skill injection at evaluation time. Seen Unseen Overall Mind2Web   
+
+> 70
+> 80
+> 90
+> 100
+> ALFWorld Success Rate (%)  97.4
+> 81.1
+> 93.1
+> 98.6
+> 88.6
+> 96.0
+> 98.2
+> 78.9
+> 93.1
+> ALFWorld
+> 24
+> 26
+> 28
+> 30
+> 32
+> Mind2Web Aggregate Score (%)
+> 28.1
+> 30.9
+> 27.6
+> Mind2Web
+> Skill
+> None Relevant Irrelevant
+
+Figure 3: Ablation on skill relevance on ALFWorld and Mind2Web. We compare three settings: no skill injected ( None ), relevant skills injected, and 
+
+irrelevant skills injected. Conversely, the extractor-only objective offers a complementary perspective. Even without ex-plicitly training the solver, the base model’s in-herent problem-solving capabilities still exhibit measurable improvement, suggesting a funda-mental alignment between the parameter op-timization directions of the extractor and the solver. However, optimizing the extractor in isolation causes its skill-extraction capability to overfit to seen trajectories. As reported in Table 3, compared with the base model, the extractor-only variant with skills achieves a sub-stantial gain on seen tasks but virtually no im-provement on unseen tasks. Considered together with the limitations of the solver-only setup, this overfitting behavior strongly underscores the ne-cessity of co-evolution, which harmonizes the two components to achieve robust and generalizable performance. 
+
+Q2: Are the skill-conditioned gains merely due to overfitting to the injected skill context? To answer this question, we conduct a controlled ablation study on skill relevance . Specifically, we evaluate the model under three conditions: (1) with relevant skills, (2) with irrelevant skills, and 8(3) with no skill injected. The irrelevant skills are constructed by using the retrieval function R to identify the least relevant questions and then extracting skills from them. As illustrated in Figure 3, injecting irrelevant skills yields performance comparable to the no-skill baseline, whereas providing relevant skills leads to a distinct improvement. This contrast demonstrates that the observed gains are not merely artifacts of overfitting to the presence or format of the context prompts; rather, the policy is genuinely grounded in the semantic content of the provided skills. Furthermore, the fact that irrelevant skills do not degrade performance relative to the no-skill setting highlights the robustness of our method: the model can effectively ignore noisy or uninformative signals without suffering a performance penalty. 
+
+Q3: Are the extracted skills reusable beyond the training policy? We further investigate whether the two capabilities improved by Evolving-RL—skill extraction and skill utilization—are tightly coupled, by examining whether skills extracted by an Evolving-RL-trained policy can transfer to other policies. Specifically, we inject the skills produced by Evolving-RL into both the foundation model and a GRPO-trained model, and additionally measure the number of action steps taken by the agent on successfully completed tasks. Since failed trajectories typically hit the predefined step limit, for a fair comparison we restrict this measurement to 10 successful samples per task type. Table 4: Cross-policy transferability of Evolving-RL skills on ALFWorld. We report success rates and av-erage steps for successful tasks. Skills generated by Evolving-RL provide a greater performance boost than the evaluator’s self-extracted skills, highlighting strong cross-policy reusability.                                    
+
+> Solver Skill Source Seen Unseen Overall Steps Base Model None 51.9 27.4 45.5 12.58 Base Model Self-extracted 50.9 26.3 44.5 12.40 Base Model Evolving-RL 70.3 32.6 60.4 12.20
+> GRPO None 96.2 33.7 79.9 12.08 GRPO Self-extracted 97.0 44.6 83.3 11.25 GRPO Evolving-RL 98.0 62.9 88.8 10.04
+
+As shown in Table 4, the skills extracted by Evolving-RL yield substantially larger performance gains than those generated by the evaluation policy itself. Notably, when transferred to the base model, the overall success rate improves markedly from 45.5 to 60.4. This indicates that the skills ac-quired by Evolving-RL are not narrowly specialized to the training policy, but are broadly reusable across different policies. Such cross-policy transferability suggests that Evolving-RL enhances the quality of skill extraction itself, rather than merely inducing a private communication protocol between the extractor and the solver. A detailed case study elucidating this improvement is provided in Appendix B. 
+
+5 Conclusion 
+
+We present Evolving-RL , an end-to-end algorithmic framework for optimizing experience-driven self-evolving capabilities. Evolving-RL conceptualizes the extraction and utilization of experience as a unified process. Anchored in experience extraction and transfer evaluation, it effectively aligns the experience reward with its practical utility, while seamlessly reusing the skill-conditioned trajectories produced during evaluation to jointly train the solver. This design establishes a closed loop in which the quality of experience extraction and the ability to exploit that experience mutually reinforce each other within a single shared policy. In experiments, models trained with Evolving-RL consistently outperform the GRPO baseline in both in-domain performance and out-of-domain generalization. Further analysis suggests that these performance gains arise from both explicit skill conditioning at inference time and the internalization of reusable procedural patterns into the policy parameters, highlighting the dual value of Evolving-RL—both as a means of enhancing self-evolving capabilities and as an experience-augmented RL algorithm. 
+
+Limitations and future work. 1) Our work primarily focuses on designing a framework to co-optimize experience-driven self-evolution capabilities. Consequently, we employ relatively straight-forward strategies for skill management and retrieval. However, we believe that experience evolution mechanisms are crucial not only during the training phase but also for post-deployment adaptation. Therefore, a promising direction for future work is to integrate this framework with more sophisti-cated evolutionary mechanisms. 2) We theoretically analyzed the estimation error introduced by our evaluation mechanism. Such error can inject noise into training and may even lead to instability in 9some cases. Reducing this noise and improving the robustness of the evaluation process remains an important direction for future research. 
+
+References 
+
+[1] Lakshya A Agrawal, Shangyin Tan, Dilara Soylu, Noah Ziems, Rishi Khare, Krista Opsahl-Ong, Arnav Singhvi, Herumb Shandilya, Michael J Ryan, Meng Jiang, Christopher Potts, Koushik Sen, Alexandros G. Dimakis, Ion Stoica, Dan Klein, Matei Zaharia, and Omar Khattab. Gepa: Reflective prompt evolution can outperform reinforcement learning, 2026. URL https://arxiv.org/abs/2507.19457 .[2] Salaheddin Alzubi, Noah Provenzano, Jaydon Bingham, Weiyuan Chen, and Tu Vu. Evoskill: Automated skill discovery for multi-agent systems, 2026. URL https://arxiv.org/abs/2603.02766 .[3] Huan ang Gao, Jiayi Geng, Wenyue Hua, Mengkang Hu, Xinzhe Juan, Hongzhang Liu, Shilong Liu, Jiahao Qiu, Xuan Qi, Yiran Wu, Hongru Wang, Han Xiao, Yuhang Zhou, Shaokun Zhang, Jiayi Zhang, Jinyu Xiang, Yixiong Fang, Qiwen Zhao, Dongrui Liu, Qihan Ren, Cheng Qian, Zhenhailong Wang, Minda Hu, Huazheng Wang, Qingyun Wu, Heng Ji, and Mengdi Wang. A survey of self-evolving agents: What, when, how, and where to evolve on the path to artificial super intelligence, 2026. URL 
+
+https://arxiv.org/abs/2507.21046 .[4] Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are few-shot learners. 
+
+Advances in neural information processing systems , 33:1877–1901, 2020. [5] Zhicheng Cai, Xinyuan Guo, Yu Pei, Jiangtao Feng, Jinsong Su, Jiangjie Chen, Ya-Qin Zhang, Wei-Ying Ma, Mingxuan Wang, and Hao Zhou. FLEX: Continuous agent evolution via forward learning from experience. arXiv preprint arXiv:2511.06449 , 2025. doi: 10.48550/arXiv.2511.06449. [6] Zouying Cao, Jiaji Deng, Li Yu, Weikang Zhou, Zhaoyang Liu, Bolin Ding, and Hai Zhao. Remember me, refine me: A dynamic procedural memory framework for experience-driven agent evolution, 2026. URL 
+
+https://arxiv.org/abs/2512.10696 .[7] Xiang Deng, Yu Gu, Boyuan Zheng, Shijie Chen, Samuel Stevens, Boshi Wang, Huan Sun, and Yu Su. Mind2web: Towards a generalist agent for the web. arXiv preprint arXiv:2306.06070 , 2023. doi: 10.48550/arXiv.2306.06070. [8] Taicheng Guo, Xiuying Chen, Yaqi Wang, Ruidi Chang, Shichao Pei, Nitesh V. Chawla, Olaf Wiest, and Xiangliang Zhang. Large language model based multi-agents: A survey of progress and challenges. arXiv preprint arXiv:2402.01680 , 2024. URL https://arxiv.org/abs/2402.01680 .[9] Jie Huang and Kevin Chen-Chuan Chang. Towards reasoning in large language models: A survey. In Findings of the Association for Computational Linguistics: ACL 2023 , pages 1049–1065, Toronto, Canada, 2023. Association for Computational Linguistics. doi: 10.18653/v1/2023.findings-acl.67. URL 
+
+https://aclanthology.org/2023.findings-acl.67/ .[10] Bowen Jin, Hansi Zeng, Zhenrui Yue, Jinsung Yoon, Sercan Arik, Dong Wang, Hamed Zamani, and Jiawei Han. Search-r1: Training llms to reason and leverage search engines with reinforcement learning, 2025. URL https://arxiv.org/abs/2503.09516 .[11] Takeshi Kojima, Shixiang (Shane) Gu, Machel Reid, Yutaka Matsuo, and Yusuke Iwasawa. Large language models are zero-shot reasoners. In Advances in Neural Information Processing Systems , volume 35, pages 22199–22213. Curran Associates, Inc., 2022. URL https://proceedings.neurips.cc/paper_ files/paper/2022/file/8bb0d291acd4acf06ef112099c16f326-Paper-Conference.pdf .[12] Yu Li, Rui Miao, Zhengling Qi, and Tian Lan. Arise: Agent reasoning with intrinsic skill evolution in hierarchical reinforcement learning, 2026. URL https://arxiv.org/abs/2603.16060 .[13] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. International Conference on Learning Representations (ICLR) , 2019. [14] Ziyu Ma, Shidong Yang, Yuxiang Ji, Xucong Wang, Yong Wang, Yiming Hu, Tongwen Huang, and Xiangxiang Chu. Skillclaw: Let skills evolve collectively with agentic evolver, 2026. URL https: //arxiv.org/abs/2604.08377 .[15] Dilxat Muhtar, Jiashun Liu, Wei Gao, Weixun Wang, Shaopan Xiong, Ju Huang, Siran Yang, Wenbo Su, Jiamang Wang, Ling Pan, and Bo Zheng. Complementary reinforcement learning, 2026. URL 
+
+https://arxiv.org/abs/2603.17621 .
+
+10 [16] Siru Ouyang, Jun Yan, I-Hung Hsu, Yanfei Chen, Ke Jiang, Zifeng Wang, Rujun Han, Long T Le, Samira Daruki, Xiangru Tang, Vishy Tirumalashetty, George Lee, Mahsan Rofouei, Hangfei Lin, Jiawei Han, Chen-Yu Lee, and Tomas Pfister. Reasoningbank: Scaling agent self-evolving with reasoning memory. In The Fourteenth International Conference on Learning Representations , 2026. URL https: //openreview.net/forum?id=jL7fwchScm .[17] Shuofei Qiao, Yixin Ou, Ningyu Zhang, Xiang Chen, Yunzhi Yao, Shumin Deng, Chuanqi Tan, Fei Huang, and Huajun Chen. Reasoning with language model prompting: A survey. In Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 5368–5393, Toronto, Canada, 2023. Association for Computational Linguistics. doi: 10.18653/v1/2023.acl-long.294. URL https://aclanthology.org/2023.acl-long.294/ .[18] Shuai Shao, Qihan Ren, Chen Qian, Boyi Wei, Dadi Guo, Jingyi Yang, Xinhao Song, Linfeng Zhang, Weinan Zhang, Dongrui Liu, and Jing Shao. Your agent may misevolve: Emergent risks in self-evolving llm agents, 2026. URL https://arxiv.org/abs/2509.26354 .[19] Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang, Mingchuan Zhang, YK Li, Y Wu, Daya Guo, et al. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300 , 2024. URL https://arxiv.org/abs/2402. 03300 .[20] Shuaike Shen, Wenduo Cheng, Mingqian Ma, Alistair Turcan, Martin Jinye Zhang, and Jian Ma. Skill-foundry: Building self-evolving agent skill libraries from heterogeneous scientific resources, 2026. URL 
+
+https://arxiv.org/abs/2604.03964 .[21] Taiwei Shi, Sihao Chen, Bowen Jiang, Linxin Song, Longqi Yang, and Jieyu Zhao. Experiential reinforce-ment learning, 2026. URL https://arxiv.org/abs/2602.13949 .[22] Noah Shinn, Federico Cassano, Ashwin Gopinath, Karthik Narasimhan, and Shunyu Yao. Reflexion: language agents with verbal reinforcement learning. In Advances in Neu-ral Information Processing Systems , volume 36, pages 8634–8652. Curran Associates, Inc., 2023. URL https://proceedings.neurips.cc/paper_files/paper/2023/file/ 1b44b878bb782e6954cd888628510e90-Paper-Conference.pdf .[23] Mohit Shridhar, Xingdi Yuan, Marc-Alexandre Côté, Yonatan Bisk, Adam Trischler, and Matthew Hausknecht. ALFWorld: Aligning text and embodied environments for interactive learning. arXiv preprint arXiv:2010.03768 , 2021. doi: 10.48550/arXiv.2010.03768. [24] Xiangru Tang, Ge Zhang, Sirui Hong, Chenglin Wu, Hao Cheng, Jiaheng Liu, Wangchunshu Zhou, Xingyao Wang, He Zhu, Chi Wang, Peng Xia, Daniel Shao, Fang Wu, Xinming Wei, Tianhao Peng, Ziyang Zhou, Tingting Du, and Tianrui Qin. Agent kb: Leveraging cross-domain experience for agentic problem solving, 2025. URL https://arxiv.org/abs/2507.06229 .[25] Songjun Tu, Chengdong Xu, Qichao Zhang, Yaocheng Zhang, Xiangyuan Lan, Linjing Li, and Dongbin Zhao. Dynamic dual-granularity skill bank for agentic rl, 2026. URL https://arxiv.org/abs/2603. 28716 .[26] Lei Wang, Chen Ma, Xueyang Feng, Zeyu Zhang, Hao Yang, Jingsen Zhang, Zhiyuan Chen, Ji-akai Tang, Xu Chen, Yankai Lin, Wayne Xin Zhao, Zhewei Wei, and Jirong Wen. A survey on large language model based autonomous agents. Frontiers of Computer Science , 18(6):186345, 2024. doi: 10.1007/s11704-024-40231-1. URL https://link.springer.com/article/10.1007/ s11704-024-40231-1 .[27] Zora Zhiruo Wang, Jiayuan Mao, Daniel Fried, and Graham Neubig. Agent workflow memory, 2024. URL 
+
+https://arxiv.org/abs/2409.07429 .[28] Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia, Ed Chi, Quoc V. Le, and Denny Zhou. Chain-of-thought prompting elicits reasoning in large language models. In 
+
+Advances in Neural Information Processing Systems , volume 35, pages 24824–24837. Curran Asso-ciates, Inc., 2022. URL https://proceedings.neurips.cc/paper_files/paper/2022/file/ 9d5609613524ecf4f15af0f7b31abca4-Paper-Conference.pdf .[29] Rong Wu, Xiaoman Wang, Jianbiao Mei, Pinlong Cai, Daocheng Fu, Cheng Yang, Licheng Wen, Xuemeng Yang, Yufan Shen, Yuxin Wang, and Botian Shi. Evolver: Self-evolving llm agents through an experience-driven lifecycle, 2025. URL https://arxiv.org/abs/2510.16079 .
+
+11 [30] Peng Xia, Jianwen Chen, Hanyang Wang, Jiaqi Liu, Kaide Zeng, Yu Wang, Siwei Han, Yiyang Zhou, Xujiang Zhao, Haifeng Chen, Zeyu Zheng, Cihang Xie, and Huaxiu Yao. Skillrl: Evolving agents via recursive skill-augmented reinforcement learning. arXiv preprint arXiv:2602.08234 , 2026. doi: 10.48550/arXiv.2602.08234. [31] Zhishang Xiang, Chengyi Yang, Zerui Chen, Zhimin Wei, Yunbo Tang, Zongpei Teng, Zexi Peng, Zongxia Li, Chengsong Huang, Yicheng He, Chang Yang, Xinrun Wang, Xiao Huang, Qinggang Zhang, and Jinsong Su. A systematic survey of self-evolving agents: From model-centric to environment-driven co-evolution, February 2026. URL https://doi.org/10.36227/techrxiv.177203250.05832634/v2 . Preprint. [32] An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayiheng Liu, Fei Huang, Haoran Wei, Huan Lin, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang, Jingren Zhou, Junyang Lin, Kai Dang, Keming Lu, Keqin Bao, Kexin Yang, Le Yu, Mei Li, Mingfeng Xue, Pei Zhang, Qin Zhu, Rui Men, Runji Lin, Tianhao Li, Tianyi Tang, Tingyu Xia, Xingzhang Ren, Xuancheng Ren, Yang Fan, Yang Su, Yichang Zhang, Yu Wan, Yuqiong Liu, Zeyu Cui, Zhenru Zhang, Zihan Qiu, et al. Qwen2.5 technical report. arXiv preprint arXiv:2412.15115 , 2024. URL 
+
+https://arxiv.org/abs/2412.15115 .[33] Chen Yang, Quanquan Gu, Chenyang Zhao, and Dongruo Zhou. Cops: Empowering llm agents with provable cross-task experience sharing, 2024. URL https://arxiv.org/abs/2410.16670 .[34] Cheng Yang, Xuemeng Yang, Licheng Wen, Daocheng Fu, Jianbiao Mei, Rong Wu, Pinlong Cai, Yufan Shen, Nianchen Deng, Botian Shi, Yu Qiao, and Haifeng Li. Learning on the job: An experience-driven self-evolving agent for long-horizon tasks, 2025. URL https://arxiv.org/abs/2510.08002 .[35] Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, and Yuan Cao. React: Synergizing reasoning and acting in language models, 2023. URL https://arxiv.org/abs/2210. 03629 .[36] Xiaoying Zhang, Zichen Liu, Yipeng Zhang, Xia Hu, and Wenqi Shao. Retroagent: From solving to evolving via retrospective dual intrinsic feedback, 2026. URL https://arxiv.org/abs/2603.08561 .[37] Yanzhao Zhang, Mingxin Li, Dingkun Long, Xin Zhang, Huan Lin, Baosong Yang, Pengjun Xie, An Yang, Dayiheng Liu, Junyang Lin, Fei Huang, and Jingren Zhou. Qwen3 embedding: Advancing text embedding and reranking through foundation models. arXiv preprint arXiv:2506.05176 , 2025. URL https://arxiv. org/abs/2506.05176 .[38] Andrew Zhao, Daniel Huang, Quentin Xu, Matthieu Lin, Yong-Jin Liu, and Gao Huang. Expel: LLM agents are experiential learners. arXiv preprint arXiv:2308.10144 , 2023. doi: 10.48550/arXiv.2308.10144. [39] Boyuan Zheng, Michael Y. Fatemi, Xiaolong Jin, Zora Zhiruo Wang, Apurva Gandhi, Yueqi Song, Yu Gu, Jayanth Srinivasa, Gaowen Liu, Graham Neubig, and Yu Su. Skillweaver: Web agents can self-improve by discovering and honing skills, 2025. URL https://arxiv.org/abs/2504.07079 .[40] Huichi Zhou, Yihang Chen, Siyuan Guo, Xue Yan, Kin Hei Lee, Zihan Wang, Ka Yiu Lee, Guchun Zhang, Kun Shao, Linyi Yang, and Jun Wang. Memento: Fine-tuning LLM agents without fine-tuning LLMs. 
+
+arXiv preprint arXiv:2508.16153 , 2025. doi: 10.48550/arXiv.2508.16153. [41] Huichi Zhou, Siyuan Guo, Anjie Liu, Zhongwei Yu, Ziqin Gong, Bowen Zhao, Zhixun Chen, Menglong Zhang, Yihang Chen, Jinsong Li, Runyu Yang, Qiangbin Liu, Xinlei Yu, Jianmin Zhou, Na Wang, Chunyang Sun, and Jun Wang. Memento-skills: Let agents design agents, 2026. URL https://arxiv. org/abs/2603.18743 .
+
+12 A Co-Evolution Stability 
+
+A.1 Reliability of skill evaluation 
+
+Because Rei is estimated from a finite number of downstream tasks and rollouts, we analyze how reliably it can rank two competing candidate skills ea and eb. For a retrieved task xi, let 
+
+uai = E[r(xi, t ) | t ∼ πθ (· | xi, e a)] , ubi = E[r(xi, t ) | t ∼ πθ (· | xi, e b)] ,
+
+denote the true expected rewards of the two skills on task xi. Their true average utilities over the K
+
+retrieved tasks are 
+
+Ra = 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+uai , Rb = 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+ubi .
+
+In our implementation, each skill is evaluated with a single rollout on each retrieved task. Let 
+
+Yai = r(xi, t ai ), tai ∼ πθ (· | xi, e a),Ybi = r(xi, t bi ), tbi ∼ πθ (· | xi, e b),
+
+be the corresponding realized rewards. Then the empirical estimates of the two skills are 
+
+ˆRa = 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+Yai , ˆRb = 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+Ybi ,
+
+which are unbiased estimators of Ra and Rb, respectively. Define the true and empirical performance gaps as 
+
+∆ab = Ra − Rb, ˆ∆ab = ˆRa − ˆRb.
+
+For each task xi, the observed rewards Yai and Ybi are bounded random variables with means uai 
+
+and ubi , respectively. Although these variables are not necessarily identically distributed across tasks, they are mutually independent under independent rollout sampling. Consequently, ˆ∆ab is an average of independent, bounded, non-identically distributed random variables, and a central limit theorem for such sums implies that its distribution is approximately Gaussian when K is moderately large. Let 
+
+vai = Var( Yai ), vbi = Var( Ybi ).
+
+Under independent rollout sampling, the variance of the estimated gap is 
+
+σ2 
+
+> ab
+
+= Var( ˆ∆ab ) = 1
+
+K2
+
+> K
+
+X
+
+> i=1
+
+vai + vbi 
+
+. (7) Hence, for moderately large K,
+
+ˆ∆ab ˙∼ N (∆ ab , σ 2
+
+> ab
+
+).
+
+Therefore, if Ra > R b (equivalently ∆ab > 0), the probability that finite-sample evaluation preserves the correct ordering is approximately 
+
+Pr( ˆRa > ˆRb | Ra > R b) ≈ Φ
+
+ ∆ab 
+
+σab 
+
+
+
+, (8) where Φ( ·) denotes the cumulative distribution function of the standard normal distribution. This expression indicates that the reliability of skill evaluation is jointly determined by the true performance gap ∆ab and the variance σ2 
+
+> ab
+
+of the estimated gap. The larger the reward difference induced by the two skills, and the smaller the sampling variance, the more likely the evaluation is to recover their true ordering. Finally, if rewards are bounded in an interval [m, M ], then 
+
+vai ≤ (M − m)2
+
+4 , vbi ≤ (M − m)2
+
+4 ,
+
+13 0 20 40 60 80          
+
+> Training Steps
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Reward
+> (a) Reward
+> 020 40 60 80
+> Training Steps
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> KL Loss
+> (b) KL Loss
+> 020 40 60 80
+> Training Steps
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> Entropy Loss
+> (c) Entropy Loss
+> Stability-Controlled Co-Evolution Naive Co-Evolution
+
+Figure 4: Training stability comparison between stability-controlled co-evolution and naive co-evolution. While naive co-evolution exhibits rapid growth in KL loss and entropy loss, stability-controlled co-evolution keeps both quantities bounded and yields smoother, more reliable reward improvement. which gives 
+
+σ2 
+
+> ab
+
+≤ (M − m)2
+
+2K . (9) Substituting this into Equation (8) yields the conservative lower bound 
+
+Pr( ˆRa > ˆRb | Ra > R b) ≳ Φ ∆ab 
+
+√2KM − m
+
+!
+
+. (10) The Bernoulli-reward case is a special instance of this formulation. When r ∈ { 0, 1}, we have 
+
+uai = pai and vai = pai (1 − pai ), which recovers the binary-reward derivation used for ALFWorld. 
+
+A.2 Training Stability 
+
+As indicated by Equation 8, the reliability of skill evaluation depends critically on the true performance gap ∆ab between candidate skills: the larger the gap, the more accurately the evaluation can recover their relative quality. However, RL training involves extensive sampling, and the extractor may occasionally generate rare expressions or anomalous characters. Since textual skill extraction inherently lacks a deterministic ground truth and is fundamentally a high-entropy generation process, the likelihood of producing such irregular outputs is significantly amplified. Importantly, these anomalies do not always cause a substantial drop in downstream solver performance. As a result, the performance gap ∆ab between a malformed skill and a semantically similar but well-formed skill may remain very small. When this margin is small, our empirical evaluation mechanism may fail to reliably distinguish between the two skills. Consequently, malformed skills can be assigned positive extractor-side advantages Aei by chance. This creates a pathological feedback loop: low-probability tokens that happen to appear in such skills are repeatedly reinforced, causing the extractor policy entropy H(πθ )
+
+to grow over time. Furthermore, since the extractor and the solver operate on highly similar textual contexts within a shared model, this entropy-driven noise easily bleeds from the extraction process into the solver, further exacerbating the overall instability. Once the entropy exceeds a critical threshold, training becomes unstable and may eventually collapse, as illustrated in Figure 4. To mitigate this issue, we introduce two explicit stability controls. First, we apply a rule-based filter that assigns zero reward to any candidate skill containing abnormal characters. Second, as defined in Equation 3, we include the entropy regularization term −ηeH(πθ ) in the extractor objective to prevent the extraction policy from becoming excessively diffuse. Unlike the standard use of entropy regularization to encourage exploration, our goal here is to suppress uncontrolled entropy growth and constrain the extraction distribution. As shown in Figure 4, these two measures together substantially improve the stability of co-evolutionary training. The first measure can be viewed as a lightweight modification of the reward function: in addition to transfer-based evaluation, we incorporate a small rule-based reward correction. We also experimented 14 Case Study 
+
+> Task: put the vase in the safe
+
+(a) Skill Extracted by Evolving-RL 
+
+> Preserves the correct object-first manipulation workflow.
+> Skill name: move-object-to-target-location
+> Category: object-handling | Source: object-movement
+> Level: medium | Signal: success
+> Overview: Search the room for the object, pick it up, navigate to the target location, and place it.
+
+1 Identify the object's current location. 
+
+> Strategy: Systematically search the room.
+> Done when: Object location identified.
+
+2 Pick up the object. 
+
+> Strategy: Use hands to pick up the object.
+> Done when: Object picked up.
+
+3 Navigate to the target location. 
+
+> Strategy: Follow the path to the target location.
+> Done when: Arrived at target location.
+
+4 Place the object in the target location. 
+
+> Strategy: Place the object gently in the target location.
+> Done when: Object placed.
+
+Executable workflow -> reusable transferred skill 
+
+(b) Skill Extracted by the Base Model 
+
+> Reorders the workflow and omits the pick-up action.
+> Skill name: put-object-in-container
+> Category: object-handling | Source: object-movement
+> Level: medium | Signal: success
+> Overview: Identify the object and container, move to them, and place the object in the container.
+
+1 Identify the object to be moved. 
+
+> Strategy: visual inspection
+> Done when: Object is identified and its location is known.
+
+2 Identify the target container. 
+
+> Strategy: visual inspection
+> Done when: Target container is identified and its location is known.
+
+3 Move to the object's current location. 
+
+> Strategy: navigation
+> Done when: Arrived at the object's current location.
+
+4 Move to the target container. 
+
+> Strategy: navigation
+> Done when: Arrived at the target container.
+
+5 Place the object in the target container. 
+
+> Strategy: manipulation
+> Done when: Object is placed in the target container.
+> Order mismatch
+> Missing action: missing pick-up step
+
+Figure 5: Case study. The skill extracted by the Evolving-RL-trained model is concise and provides a correct procedural guide, whereas the skill extracted by the untrained base model contains misordered steps and omits critical actions. with replacing this rule-based filter by an LLM-based assessment of whether the extracted skill is linguistically natural and fluent. This alternative produced stabilizing effects similar to those of the rule-based correction. 
+
+Discussion on Co-Evolution Instability. The severe instability encountered during co-evolution has also been observed in recent concurrent literature [ 15 ]. They encountered similar training collapse and attributed it to inherent parameter conflicts between the extractor and the solver, ultimately opting to decouple the system into two separate models. However, our analysis above reveals that the true bottleneck lies not in parameter interference, but in the pathological feedback loop driven by evaluation noise and unconstrained extraction entropy. By explicitly identifying this root cause and introducing the corresponding stability controls (rule-based gating and negative entropy regularization), Evolving-RL successfully prevents this collapse. This demonstrates that experience extraction and utilization can indeed be smoothly and jointly optimized within a single, unified policy, eliminating the need for a decoupled architecture. 
+
+B Case Study 
+
+To better understand how Evolving-RL improves the quality of skill extraction, we compare the skills produced by different models from the same interaction trajectory. As shown in Figure 5, for a trajectory corresponding to the task put the vase in the safe , the Evolving-RL-trained model extracts a coherent and actionable skill that correctly captures the procedure of locating the target object, picking it up, finding the target container, and placing the object into it. In contrast, the skill extracted by the Base Model contains clear procedural flaws. It introduces the step of confirming the container location before moving to the object, resulting in an incorrect ordering of subgoals. Moreover, after locating the object, it fails to include the crucial instruction to 
+
+pick up the object. When such a flawed skill is injected into the solver, it can substantially reduce the solver’s success rate. 15 C Implementation Details 
+
+In this section, we describe the experimental setup in detail, including the environment configuration and training implementation. 
+
+C.1 Environment Configuration ALFWorld. ALFWorld is a text-based interactive environment for embodied household task completion. At each step, the agent receives a textual observation describing the currently visible objects, together with a set of admissible actions. We use the full interaction history as the model context, including all previous observations and executed actions. Consequently, each optimization sample in ALFWorld corresponds to a complete trajectory . Following [ 10 ], we apply a loss mask to environment observations within the trajectory, such that they are provided as conditioning context but do not contribute to the policy optimization loss. The environment reward is defined at the trajectory level. If the task is successfully completed, the trajectory receives reward 10 ; otherwise, it receives reward 0. Formally, for a trajectory τ , the reward is 
+
+r(τ ) = 
+
+10 , if the task is completed successfully ,
+
+0, otherwise .
+
+Mind2Web. Mind2Web is a benchmark for grounded web navigation. In the official dataset, each task is paired with a reference action trajectory and the corresponding HTML state at each step. However, raw HTML is prohibitively long and noisy to be directly used as model input. We therefore preprocess each page by filtering the HTML and retaining only interactive elements, such as buttons, input fields, and hyperlinks; the resulting filtered text is used as the agent’s observation. Due to context-length constraints, we adopt a turn-level state representation. At each decision step, the agent is given the current filtered observation together with a textual history of previously executed actions, but not the full history of past observations. Therefore, each optimization sample in Mind2Web corresponds to a single interaction step , rather than an entire trajectory. A key property of Mind2Web is that the dataset only provides the next state along the ground-truth trajectory. If the agent selects an incorrect action at any step, the corresponding next state is unavailable, and the trajectory is terminated immediately. As a result, the agent can proceed to the next decision step only if it predicts the correct action at the current step. Our reported action accuracy is computed under this setting, i.e., as the proportion of correctly predicted actions over all executed actions. For solver optimization on Mind2Web, since correctness feedback is available at every step, we apply 
+
+turn-wise GRPO to train the solver. Specifically, for the trajectory generated by skill ei on retrieved task xj , the reward at step t is defined as 
+
+rij,t =
+
+1, if the action predicted at step t is correct ,
+
+0, otherwise .
+
+The extractor reward is computed using trajectory-level rewards. Specifically, for the downstream trajectory generated by skill ei on retrieved task xj , its trajectory-level reward is defined as the sum of step-level rewards: 
+
+rtraj  
+
+> ij
+
+=
+
+> Tij
+
+X
+
+> t=1
+
+rij,t ,
+
+where rij,t denotes the reward at step t, and Tij is the trajectory length. The extractor reward for skill 
+
+ei is then computed as the average trajectory-level reward over the K retrieved downstream tasks: 
+
+Rei = 1
+
+K
+
+> K
+
+X
+
+> j=1
+
+rtraj  
+
+> ij
+
+.
+
+In this way, solver training exploits fine-grained step-level supervision, while extractor evalua-tion remains aligned with the overall quality of the procedural experience distilled from complete trajectories. 16 Table 5: Main training hyperparameters for ALFWorld and Mind2Web.                                    
+
+> Hyperparameter ALFWorld Mind2Web
+> Base model Qwen2.5-7B-Instruct Qwen2.5-7B-Instruct Policy clip ϵlow 0.1 0.1 Policy clip ϵhigh 0.15 0.15 Number of candidate skills N88Number of retrieved tasks K44Extractor reward weight λe0.2 0.1 Solver reward weight λs1.0 1.0 Rollout batch size B16 16 Rollout temperature 1.0 1.0 Rollout top-p0.9 0.85 KL loss coefficient 0.01 0.01 Extractor entropy coefficient -0.03 0.0 Training steps 75 150
+
+C.2 Training Setup 
+
+All experiments are initialized from Qwen2.5-7B-Instruct and trained with AdamW [ 13 ]. Unless otherwise stated, we use a constant learning rate of 1 × 10 −6, weight decay 0.1, β1 = 0 .9, and 
+
+β2 = 0 .98 . Training is performed with GRPO-style policy optimization, using low-variance KL regularization and clipped policy updates. In each rollout, we sample 16 source tasks from the training set, i.e., the rollout batch size is 16. For similar task retrieval, task description embeddings are pre-computed offline using Qwen3-Embedding-4B [ 37 ] and cached for use during training. All experiments are conducted on 8 NVIDIA H800 GPUs. Each Evolving-RL training run takes approximately 10 hours on ALFWorld and 17 hours on Mind2Web. Table 5 summarizes the main task-specific and method-specific hyperparameters used on ALFWorld and Mind2Web. We train for 75 steps on ALFWorld and 150 steps on Mind2Web. For the GRPO baseline, we use the same number of training steps and match the number of solver samples per update for a fair comparison. Specifically, each GRPO update uses B × N × K samples. Among these hyperparameters, the most important method-specific ones are the number of candidate skills N , the number of retrieved downstream tasks K, and the extractor/solver reward weights λe
+
+and λs. The parameter N determines the comparison set used for extractor-side GRPO, while K
+
+controls how broadly each extracted skill is evaluated for transferability. The weights λe and λs
+
+balance the contributions of skill extraction and skill utilization during joint optimization. 17

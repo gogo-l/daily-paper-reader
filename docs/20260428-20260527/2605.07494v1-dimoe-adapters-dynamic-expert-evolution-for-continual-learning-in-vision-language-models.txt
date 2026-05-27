@@ -1,0 +1,1186 @@
+Title: DIMoE-Adapters: Dynamic Expert Evolution for Continual Learning in Vision-Language Models
+
+URL Source: https://arxiv.org/pdf/2605.07494v1
+
+Published Time: Mon, 11 May 2026 00:57:44 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+# DIMoE-Adapters: Dynamic Expert Evolution for Continual Learning in Vision–Language Models 
+
+Mengxin Qin Xiang Zhang Xi Wang Kun Wei ∗ Xu Yang Cheng Deng 
+
+School of Electronic Engineering, Xidian University Xi’an 710071, China 
+
+Abstract 
+
+Continual learning (CL) enables Vision–Language Models (VLMs) to accumulate knowledge and adapt to evolving tasks without the need for retraining from scratch. However, in the context of Multi-domain Task-Incremental Learning (MTIL), significant domain shifts exacerbate the stability–plasticity dilemma. Most ex-isting methods rely on fixed architectures with statically allocated parameters, constraining adaptation to new domains and aggravating catastrophic forgetting. To address these challenges, we propose DIMoE-Adapters ( Dynamic Incremental 
+
+Mixture-of-Experts Adapters ), a framework that introduces a Dynamic Expert Evolution paradigm to balance stability and plasticity. This paradigm is realized through two collaborative components: Self-Calibrated Expert Evolution (SCEE) and Prototype-Guided Expert Selection (PGES). Specifically, SCEE constructs and evolves a sparse expert pool through expert optimization dynamics, thereby enhancing plasticity while minimizing redundant capacity. PGES governs expert utilization based on the pool shaped by SCEE, improving model stability across previously encountered and unseen tasks. Extensive experiments show that our approach outperforms previous state-of-the-art methods across various settings. 
+
+1 Introduction 
+
+Continual learning (CL) [ 1– 3] aims to enable models to acquire new knowledge incrementally while reducing catastrophic forgetting of previously learned information, a challenge known as the stability–plasticity dilemma [ 4–6]. With the emergence of Vision–Language Models (VLMs) such as CLIP [ 7 ], the focus of CL has shifted from training models from scratch to adapting pretrained representations [ 8]. Although pretrained VLMs exhibit strong generalization, preserving it during continual adaptation further exacerbates the stability–plasticity trade-off. This challenge becomes particularly severe in Multi-domain Task-Incremental Learning (MTIL) [ 9 ], where tasks arrive sequentially from different visual domains, causing distribution shifts. Adapting to such shifts requires strong plasticity to capture domain-specific patterns, yet aggressive updates often undermine stability in two critical aspects: ( i) performance on previously learned tasks deteriorates due to catastrophic forgetting, and ( ii ) pretrained vision–language alignment is disrupted, leading to degraded zero-shot generalization. Therefore, the central challenge in MTIL lies in balancing plasticity for new tasks and stability for old knowledge while preserving zero-shot generalization. Most existing methods struggle to achieve this balance. Early approaches like ZSCL [ 9], as shown in Figure 1(a), reduce forgetting via knowledge distillation with external data and parameter regulariza-tion, but incur high data and computational costs. Recent parameter-efficient fine-tuning approaches like MoE-Adapters [ 10 ], as illustrated in Figure 1(b), reduce interference by assigning task-specific knowledge to different experts. Despite their effectiveness, these methods rely on fixed architectures with statically allocated parameter capacity, resulting in an inflexible stability–plasticity trade-off that limits long-term continual learning. 
+
+> ∗Corresponding author. Preprint.
+> arXiv:2605.07494v1 [cs.CV] 8 May 2026
+
+Recent dynamic expansion methods attempt to address this limitation by enabling adaptive model growth. For instance, SEMA [ 11 ] expands task-specific modules upon detecting distribution shifts, im-proving plasticity. However, it relies on additional detection modules to trigger expansion, increasing complexity and making expansion decisions sensitive to detection errors. External    
+
+> Data
+> Distillation
+> Task
+> Stream
+> CLIP
+> Encoder
+> Full FT
+> Encoder
+> (a) ZSCL
+> Task
+> Stream
+> Router t
+> Expert
+> 1
+> Expert
+> 2
+> Expert
+> 3
+> Expert
+> 4
+> CLIP Encoder
+> (b) MoE -Adapters
+> SCEE
+> New
+> Expert
+> Expert
+> 4
+> Expert
+> 1
+> Expert
+> 2
+> Prune
+> Expand
+> Train
+> Task
+> PGES
+> .
+> Expert
+> 3
+> Expert
+> 5Router 3
+> Router 2
+> Router 1
+> Test
+> Task
+> (c) DIMoE -Adapters
+
+Figure 1: Comparison of three paradigms for continual learning of vision–language models: (a) ZSCL [ 9], (b) MoE-Adapters [ 10 ], and (c) DIMoE-Adapters. To overcome these limitations, continual learn-ing in VLMs requires a dynamic expert man-agement mechanism that jointly governs both expert evolution and utilization across tasks. Therefore, we propose DIMoE-Adapters (Fig-ure 1(c)), a dynamic mixture-of-experts frame-work that introduces a Dynamic Expert Evolu-tion paradigm to balance stability and plasticity through Self-Calibrated Expert Evolution (SCEE) and Prototype-Guided Expert Selection (PGES). SCEE is an optimization-driven strategy designed to enhance model plasticity. It monitors expert optimization dynamics and activation behaviors during training, enabling adaptive expansion, prun-ing, and freezing of experts. Building upon the expert pool shaped by SCEE, PGES governs ex-pert utilization at inference via prototype-guided task identification, ensuring stable performance on seen tasks while preserving CLIP’s zero-shot generalization on unseen ones. Our contributions are summarized as follows: • We propose a Dynamic Expert Evolution paradigm for continual learning of VLMs, address-ing the stability–plasticity dilemma in MTIL. • We design DIMoE-Adapters, a framework that integrates SCEE for expert evolution during training and PGES for stable expert utilization at inference. • Extensive experiments on MTIL and standard CL benchmarks demonstrate that DIMoE-Adapters consistently outperforms existing state-of-the-art methods in both forgetting miti-gation and zero-shot preservation. 
+
+2 Related Work 
+
+Continual Learning. Existing continual learning methods can be broadly categorized into regularization-based, architecture-based, and replay-based approaches. Regularization-based meth-ods [ 12 , 4] constrain parameter updates by importance estimation, but may overly restrict model plasticity. Architecture-based methods [ 13 , 14 ] allocate task-specific parameters to reduce forgetting, but may hinder knowledge transfer across tasks. Replay-based methods [ 15 , 16 ] mitigate forgetting by rehearsing stored or generated samples. However, most existing approaches focus on a single incremental setting, such as class-incremental [ 17 ] or domain-incremental [ 18 ] learning, which limits their applicability to complex scenarios. In contrast, this work investigates catastrophic forgetting under the more challenging Multi-domain Task-Incremental Learning setting [ 9], which better reflects practical real-world applications. 
+
+Parameter-Efficient Fine-Tuning. Parameter-efficient fine-tuning (PEFT) adapts large pretrained models by introducing a small set of trainable parameters while keeping the majority of pretrained weights fixed, thereby avoiding the high computational cost and optimization instability associated with full fine-tuning. Representative techniques include prompt learning [ 19 , 20 ], adapters [ 21 , 22 ], and low-rank adaptation (LoRA) [ 23 ], which have demonstrated strong performance in adapting foun-dation models to downstream tasks with minimal parameter overhead. Recently, several CLIP-based continual learning methods have incorporated PEFT to alleviate catastrophic forgetting by selectively updating task-specific parameters or freezing subsets of the model [ 8, 24 ]. These approaches are primarily designed for class-incremental learning, emphasizing knowledge retention on previously learned tasks while placing less emphasis on preserving CLIP’s zero-shot generalization [ 3, 25 ]. In 2this work, we propose a PEFT-based continual learning framework that jointly addresses catastrophic forgetting and zero-shot generalization. 
+
+Mixture-of-Experts. Mixture-of-Experts (MoE) [ 26 , 27 ] models comprise multiple expert modules coordinated by a routing mechanism that selectively assigns inputs to experts and aggregates their outputs. Their modular structure has been used in continual learning to reduce cross-task interfer-ence [ 28 , 29 ]. Prior work [ 10 ] explores task-specific experts with gating mechanisms to improve knowledge isolation and reuse. These approaches suggest that MoE can be an effective paradigm for mitigating catastrophic forgetting in continual learning. Following this line of research, we propose a dynamic incremental MoE adapter framework, where adapters serve as experts and a Dynamic Expert Evolution paradigm adjusts expert behaviors to balance stability and plasticity. 
+
+3 Methodology 
+
+3.1 Problem Definition 
+
+We consider the Multi-domain Task-Incremental Learning (MTIL) setting [ 9], where a model learns from a sequence of T tasks {τ (1) , . . . , τ (T )}. At each step t, the current task τ (t) provides a dataset 
+
+S(t) = ( x(t) 
+
+> k
+
+, y (t) 
+
+> k
+
+)Nt 
+
+> k=1
+
+with inputs x(t) 
+
+> k
+
+∈ X (t) and labels y(t) 
+
+> k
+
+∈ Y (t). MTIL is characterized by disjoint label spaces ( Y(i) ∩ Y (j) = ∅ for i̸ = j) and significant domain shifts ( D(i)̸ = D(j)). The goal is to maintain strong performance on all seen tasks {τ (1) , . . . , τ (t)} while preserving zero-shot generalization to unseen tasks, without access to task identities during inference. 
+
+3.2 Dynamic Incremental Mixture-of-Experts Adapters 
+
+As shown in Figure 2, we propose DIMoE-Adapters, a dynamic mixture-of-experts framework for continual learning in VLMs. Our framework adapts a frozen CLIP backbone [ 30 ] by residually inserting Mixture-of-Experts (MoE) adapters into the feedforward layers. At task t, we maintain a dynamically evolving expert pool E(t) = {Ei}Nt
+
+> i=1
+
+, which contains frozen experts from previous tasks and newly introduced experts. All experts are accessible through a task-specific router R(t). Given an input xMoE ∈ RD , the MoE layer computes: 
+
+y = xMoE +
+
+> Nt
+
+X
+
+> i=1
+
+wiEi(xMoE ), (1) where wi is the sparse routing weight assigned to expert Ei.
+
+Top-p Probability Accumulation Gating. We use the [CLS] token c from xMoE , obtained from its visual or textual token sequence, as the routing query and compute expert selection probabilities: 
+
+p = Softmax (R(t)(c)) . (2) We adopt an adaptive Top-p gating strategy [ 31 ] for expert selection. The probabilities are sorted in descending order, and the smallest set S is selected such that their cumulative probability exceeds p0
+
+(default 0.6). The routing weights are re-normalized as: 
+
+wi =
+
+
+
+pi
+
+P 
+
+> j∈S
+
+pj
+
+, i ∈ S ,
+
+0, otherwise .
+
+(3) 
+
+Task-Aware Load Balancing Loss. To further regulate expert utilization during continual training, we introduce a task-aware load balancing loss: 
+
+Lbalance = NtNtX
+
+> i=1
+
+βi · (fi Qi), (4) where Nt denotes the number of experts at step t, fi denotes the fraction of tokens routed to expert 
+
+Ei, and Qi is the average routing probability assigned to Ei, following prior MoE work [32, 33]. 3Multi -Head 
+
+> Attention
+> LayerNorm
+> MLP
+> LN
+> DIMoE -
+> Adapters
+> ID
+
+(𝜺 𝑰 , 𝜺 𝑻 )
+
+> Task
+> Construction
+> Task
+> Identification
+> Manage
+> Plasticity
+
+(b) Self -Calibrated Expert Evolution (SCEE)       
+
+> Dynamic Metrics Collection
+> Collect Gradients
+> And frequency
+> Dynamic Expert Evolution
+> Train Window Update
+> Historical
+> Baselines
+> (EMA)
+> Calc. EOC
+> By Eq.5
+> Calc. EOI
+> By Eq.6 By Eq.7
+> Activation
+> Contribution
+> Instability
+> Prune Expert
+> By Eq.8
+> Expand Expert
+> By Eq.9
+> Decision
+> Boundary
+> Overload
+> Underused
+> ID & CLS
+> Router t
+> Expert 1 Expert iExpert j
+> Expert
+> 1
+> Expert
+> i
+> Expert
+> k
+> Router t
+> Expert
+> j
+> Router 1 Previous Task
+> Current Task
+
+(a) Dynamic Incremental Mixture -of -Experts Adapters 
+
+(DIMoE -Adapters)  
+
+> ID
+> Output y Train Stage Output y Inference Stage
+
+Image & Text 
+
+Transformer Encoder       
+
+> Similarity
+> ID
+> Stability
+> 𝐒 𝐦𝐚𝐱 ?𝑻𝒉𝒓𝒆𝒔 .
+> 𝐒 𝐦𝐚𝐱 ={{𝐒 𝐭 }𝐭 =𝟏
+> 𝐓 }𝐦𝐚𝐱
+> classification zero -shot
+
+(c) Prototype -Guided 
+
+Expert Selection (PGES)             
+
+> 𝐒 𝐦𝐚𝐱 ≥𝑻𝒉𝒓𝒆𝒔
+> DIMoE -
+> Adapters
+> 𝒕 =𝒕 𝒕𝒉
+> Frozen
+> CLIP
+> 𝐒 𝐦𝐚𝐱 <𝑻𝒉𝒓𝒆𝒔
+> 𝒕 =𝟎
+> Task 1 Task t Task T Task agnostic
+> Airbus A300,…,
+> …,ATR -42
+> Residential,…,
+> …, River
+> auditorium,…,
+> …, yard
+> banded,…,
+> …, zigzagged
+> Router 1 Router T
+
+Figure 2: Overall framework of the proposed method. (a) DIMoE-Adapters. During training, a task-specific router and a set of experts are introduced to learn from Dt, while previously learned routers and experts are frozen. At inference, task-specific routers activate a sparse subset of experts for efficient prediction. (b) SCEE. At the training stage, SCEE integrates Dynamic Metrics Collection and Dynamic Expert Evolution to manage the expert pool. (c) PGES. At the inference stage, PGES performs task identification via task-specific prototypes and routes samples to either DIMoE-Adapters for classification or the frozen CLIP model for zero-shot inference. Unlike standard load balancing objectives, we adapt the weighting coefficient βi according to expert type. For experts inherited from previous tasks, we use βi = 1 to maintain stable utilization. For newly introduced experts in the current task, we set βi ∈ (0 , 1) (default 0.6) to encourage exploration and promote their utilization during early adaptation. 
+
+Continual Training Protocol. We adopt a Freeze and Evolve training protocol. 
+
+Phase 1: Freeze. Routers and experts associated with previously learned tasks are frozen to preserve knowledge, while the frozen experts remain in the expert pool for selection by the new router. 
+
+Phase 2: Evolve. When a new task arrives, a task-specific router and a set of candidate experts are introduced to model the novel distribution. Within a limited evolutionary window, these experts are governed by the proposed SCEE (subsection 3.3), which expands and prunes experts. 
+
+3.3 Self-Calibrated Expert Evolution 
+
+We introduce Self-Calibrated Expert Evolution (SCEE), a mechanism for controlling expert expansion and pruning during continual training. For each task, expert behaviors are tracked within a sliding window of length W using gradient-based statistics. 
+
+Gradient-Based Metrics. For expert Ei with parameters θi, we compute the average gradient norm to measure Expert Optimization Contribution (EOC) over the window: 
+
+I(i)curr = 1
+
+W
+
+WX
+
+k=1 
+
+∂L(Dk)
+
+∂θ i 2
+
+. (5) We compute the gradient variance to measure Expert Optimization Instability (EOI) over the window: 
+
+V(i)curr = 1
+
+W
+
+WX
+
+k=1 
+
+∂L(Dk)
+
+∂θ i
+
+22
+
+− 1
+
+W
+
+WX
+
+k=1 
+
+∂L(Dk)
+
+∂θ i
+
+22
+
+, (6) where Dk denotes the mini-batch of training data sampled at the k-th training step within the window. 4Historical Adaptive Baselines. For each expert, we maintain exponential moving averages as historical references: 
+
+H(i) 
+
+> I
+
+= α H(i) 
+
+> I
+
++ (1 − α) I(i)curr ,
+
+H(i) 
+
+> V
+
+= α H(i) 
+
+> V
+
++ (1 − α) V(i)curr , (7) where α is the momentum coefficient (default 0.9), and H(i) 
+
+> I
+
+and H(i) 
+
+> V
+
+represent long-term reference levels for optimization contribution and instability. 
+
+Expert Evolution. Within an evolutionary window, SCEE updates the expert pool at fixed intervals. • Expert Pruning. An expert is removed if it has low optimization contribution and low activation frequency: 
+
+Pi = I (fi < γ prune ) · I I(i)curr 
+
+H(i)
+
+> I
+
+< 1 − γprune 
+
+!
+
+. (8) where fi denotes the activation frequency of expert Ei, and γprune is the pruning threshold (default 
+
+0.05 ). Expert Ei is pruned if Pi = 1 .• Expert Expansion. A new expert is spawned when a frequently activated expert exhibits unusually high optimization instability: 
+
+fi · V(i)curr 
+
+H(i)
+
+> V
+
+> γ expand . (9) where γexpand is the expansion threshold (default 0.95 ). The expanded expert is initialized as 
+
+θnew = θi + ϵ, where ϵ ∼ N (0 , σ 2).
+
+3.4 Prototype-Guided Expert Selection 
+
+The proposed DIMoE-Adapters require selecting task-specific expert routes at inference. Therefore, we introduce Prototype-Guided Expert Selection (PGES), a training-free mechanism that infers the target task based on feature distributions, thereby enabling reliable expert selection. 
+
+Prototype Construction. For each task τ (t), the features X (t) are partitioned into K clusters. Each cluster is modeled as a multivariate Gaussian component, yielding the task-specific prototypes: 
+
+μt,k = 1
+
+|C k|
+
+X
+
+> x∈C k
+
+x,
+
+Σt,k = 1
+
+|C k| − 1
+
+X
+
+> x∈C k
+
+(x − μt,k )( x − μt,k )⊤,
+
+(10) where Ck denotes the set of features assigned to the k-th cluster, |C k| is the number of samples in this cluster, μt,k is the mean vector of cluster k for task τ (t), and Σt,k is the corresponding covariance matrix. 
+
+Inference. Given a test sample x, PGES computes its log-likelihood under each task-specific Gaussian mixture. The task confidence score is defined as: 
+
+St(x) = max 
+
+> k
+
+
+
+− 12 d2
+
+> t,k
+
+(x) − 12 ln |Σt,k |
+
+
+
+,
+
+with d2
+
+> t,k
+
+(x) = ( x − μt,k )⊤Σ−1 
+
+> t,k
+
+(x − μt,k ),
+
+(11) where d2
+
+> t,k
+
+(x) represents the squared Mahalanobis distance. The predicted task is ˆt = arg max t St(x).If the maximum score is below a threshold δ, the sample is routed to the frozen CLIP model. Otherwise, the corresponding task-specific router R(ˆ t) is activated. 5Table 1: Comparison with state-of-the-art methods on MTIL benchmark ( Order I ) in terms of “Transfer”, “Avg”, and “Last” scores (%). We label the best methods with bold styles. The top block indicates the upper-bound solutions to adapt the CLIP on each task. 
+
+Method 
+
+> Aircraft
+> Caltech101
+> CIFAR100
+> DTD
+> EuroSAT
+> Flowers
+> Food
+> MNIST
+> OxfordPet
+> Cars
+> SUN397
+
+Average Zero-shot 24.3 88.4 68.2 44.6 54.9 71.0 88.5 59.4 89.0 64.7 65.2 65.3 Fine-tune 62.0 95.1 89.6 79.5 98.9 97.5 92.7 99.6 94.7 89.6 81.8 89.2 
+
+Transfer 
+
+LwF [34] – 74.5 56.9 39.1 51.1 52.6 72.8 60.6 75.1 30.3 55.9 58.9 iCaRL [17] – 56.6 44.6 32.7 39.3 46.6 68.0 46.0 77.4 31.9 60.5 50.4 WiSE-FT [35] – 73.5 55.6 35.6 41.5 47.0 68.3 53.9 69.3 26.8 51.9 52.3 ZSCL [9] – 86.0 67.4 45.4 50.4 69.1 87.6 61.8 86.8 60.1 66.8 68.1 MoE-Adapters [10] – 87.9 68.2 44.4 49.9 70.7 88.7 59.7 89.1 64.5 65.5 68.9 GIFT [36] – 88.5 69.8 46.0 49.4 68.5 87.1 69.9 88.9 57.7 67.7 69.3 
+
+LEBA [37] – 88.5 68.3 44.8 49.4 70.2 88.6 60.9 89.1 64.8 64.2 69.2 
+
+Ours – 88.5 68.2 44.7 55.0 69.5 88.5 58.9 89.1 64.7 65.9 69.3 Avg. 
+
+LwF [34] 36.3 86.9 72.0 59.0 73.7 60.0 73.6 74.8 80.0 37.3 58.1 64.7 iCaRL [17] 35.5 89.2 72.2 60.6 68.8 70.0 78.2 62.3 81.8 41.2 62.5 65.7 WiSE-FT [38] 26.7 86.5 64.3 57.1 65.7 58.7 71.1 70.5 75.8 36.9 54.6 60.7 ZSCL [9] 45.1 92.0 80.1 64.3 79.5 81.6 89.6 75.2 88.9 64.7 68.0 75.4 MoE-Adapters [10] 50.2 91.9 83.1 69.4 78.9 84.0 89.1 73.7 89.3 67.7 66.9 76.7 GIFT [36] 51.9 93.9 81.4 67.7 80.3 82.8 89.3 80.6 90.3 63.1 68.9 77.3 LEBA [37] 53.9 94.9 83.8 70.8 79.8 85.1 89.1 74.8 89.3 69.2 65.8 77.9 
+
+Ours 61.6 96.4 85.1 69.7 82.9 84.3 90.4 73.7 90.0 69.1 67.4 79.1 Last 
+
+LwF [34] 26.3 87.5 71.9 66.6 79.9 66.9 83.8 99.6 92.1 66.1 80.4 74.6 iCaRL [17] 35.8 93.0 77.0 70.2 83.3 88.5 90.4 86.7 93.2 81.2 81.9 80.1 WiSE-FT [38] 27.2 90.8 68.0 68.9 86.9 74.0 87.6 99.6 92.6 77.8 81.3 77.7 ZSCL [9] 40.6 92.2 81.3 70.5 94.8 90.5 91.9 98.7 93.9 85.3 80.2 83.6 MoE-Adapters [10] 49.8 92.2 86.1 78.1 95.7 94.3 89.5 98.1 89.9 81.6 80.0 85.0 GIFT [36] 47.9 95.6 82.8 75.1 97.3 94.2 91.7 99.2 94.2 87.0 80.9 86.0 LEBA [37] 55.1 95.2 87.4 78.8 97.2 97.3 89.5 99.1 89.6 88.8 82.4 87.3 
+
+Ours 61.7 97.2 88.8 79.1 98.9 96.6 92.6 99.6 92.6 88.8 82.9 89.0 
+
+4 Experiments 
+
+4.1 Experimental Setting Datasets. We evaluate our method under three continual learning settings: Multi-domain Task-Incremental Learning (MTIL), Class-Incremental Learning (CIL), and Domain-Incremental Learning (DIL). MTIL is a challenging benchmark for vision–language continual learning, comprising 11 datasets across diverse domains with 1,201 classes. We follow the two-order training protocol defined in the original benchmark. We further adopt a few-shot MTIL setting with 5 samples per class to evaluate performance under limited data. Results for CIL and DIL are provided in the supplementary material (see Appendix B and Appendix C). 
+
+Metrics. For MTIL and DIL, we adopt the metrics from [ 9], including “Transfer”, “Avg.”, and “Last”. “Transfer” measures zero-shot generalization performance on unseen tasks, while “Last” reflects retention of previously learned knowledge. “Avg.” summarizes overall performance across tasks. For CIL, following [ 39 ], we report the average accuracy over all steps(“Average”), and the accuracy on the final steps (“Last”). 
+
+Implementation Details. Following [ 9], we adopt CLIP with a ViT-B/16 backbone. Each expert is implemented as a LoRA [ 23 ] module, and the router is a single-layer MLP with Top-p gating. SCEE dynamically updates the expert pool during training. We use the AdamW optimizer [ 40 ] with label 6Table 2: Comparison with state-of-the-art methods on few-shot MTIL benchmark ( Order I ) in terms of “Transfer”, “Avg.”, and “Last” scores (%). We label the best methods with bold styles. The top block indicates the upper-bound solutions to adapt the CLIP on each task.                                                                                                                                                                                                                                                 
+
+> Method
+> Aircraft
+> Caltech101
+> CIFAR100
+> DTD
+> EuroSAT
+> Flowers
+> Food
+> MNIST
+> OxfordPet
+> Cars
+> SUN397
+> Average Zero-shot 24.3 88.4 68.2 44.6 54.9 71.0 88.5 59.4 89.0 64.7 65.2 65.3
+> 5-shot Full Fine-tune 30.6 93.5 76.8 65.1 91.7 92.9 83.3 96.6 84.9 65.4 71.3 77.5
+> Transfer
+> LwF [34] –72.1 49.2 35.9 44.5 41.1 66.6 50.5 69.0 19.0 51.7 50.0 LwF-VR [38] –82.2 62.5 40.1 40.1 56.3 80.0 60.9 77.6 40.5 60.8 60.1 WiSE-FT [35] –77.6 60.0 41.3 39.4 53.0 76.6 58.1 75.5 37.3 58.2 57.7 ZSCL [9] –84.0 68.1 44.8 46.8 63.6 84.9 61.4 81.4 55.5 62.2 65.3 MoE-Adapters [10] –87.9 68.2 44.1 48.1 64.7 88.8 69.0 89.1 64.5 65.1 68.9
+> Ours –88.5 68.2 44.7 55.0 71.0 88.5 58.9 89.1 64.7 65.9 69.5 Avg.
+> LwF [34] 23.5 77.4 43.5 41.7 43.5 52.2 54.6 63.4 68.0 21.3 52.6 49.2 LwF-VR [38] 24.9 89.1 64.2 53.4 54.3 70.8 79.2 66.5 79.2 44.1 61.6 62.5 WiSE-FT [35] 32.0 87.7 61.0 55.8 68.1 69.3 76.8 71.5 77.6 42.0 59.3 63.7 ZSCL [9] 28.2 88.6 66.5 53.5 56.3 73.4 83.1 56.4 82.4 57.5 62.9 64.4 MoE-Adapters [10] 30.0 89.6 73.9 58.7 69.3 79.3 88.1 76.5 89.1 65.3 65.8 71.4
+> Ours 35.3 92.5 74.7 59.3 74.6 81.0 88.4 70.4 89.8 65.4 66.5 72.5 Last
+> LwF [34] 22.1 58.2 17.9 32.1 28.1 66.7 46.0 84.3 64.1 31.5 60.1 46.5 LwF-VR [38] 22.9 89.8 59.3 57.1 57.6 79.2 78.3 77.7 83.6 60.1 69.8 66.9 WiSE-FT [35] 30.8 88.9 59.6 60.3 80.9 81.7 77.1 94.9 83.2 62.8 70.0 71.9 ZSCL [9] 26.8 88.5 63.7 55.7 60.2 82.1 82.6 58.6 85.9 66.7 70.4 67.4 MoE-Adapters [10] 30.1 89.3 74.9 64.0 82.3 89.4 87.1 89.0 89.1 69.5 72.5 76.1
+> Ours 35.3 92.9 76.1 64.7 86.0 89.3 88.2 90.8 91.6 68.7 72.4 77.8
+
+smoothing [ 41 ], and all experiments are conducted on a single NVIDIA A6000 GPU. Additional implementation details are provided in the supplementary material (see Appendix A). 
+
+4.2 Comparison with State-of-the-art Methods Multi-domain Task-Incremental Learning. Table 1 compares our method with traditional contin-ual learning approaches and methods specifically designed for the MTIL setting under the Order-I protocol [ 9 ]. In this setting, tasks are learned sequentially, following a fixed order. Additional results under Order-II are provided in the supplementary material (Appendix D). The upper block of Table 1 reports the results obtained via zero-shot inference and full fine-tuning. The “Zero-shot” results reflect CLIP’s inherent zero-shot transferability, while “Fine-tune” represents the best performance achievable by fully fine-tuning CLIP on each individual task. As shown in Table 1, our method achieves the best overall performance across most datasets. Compared with MoE-Adapters [ 10 ], our method improves the “Transfer”, “Avg.”, and “Last” metrics by 0.4%, 2.4%, and 4.0%, respectively. Moreover, our method consistently outperforms existing state-of-the-art approaches on MTIL Order-I, achieving the highest overall scores across all three evaluation metrics. These results indicate that our approach achieves a favorable balance between plasticity and stability, by dynamically allocating model capacity across tasks while mitigating interference between domains. 
+
+Few-shot Multi-domain Task-Incremental Learning. We further evaluate our method under the few-shot MTIL setting, where only a limited number of training samples are available for each task. All experiments follow the same Order-I protocol and evaluation metrics as in the full-shot setting. Under the 5-shot setting, the comparison results are summarized in Table 2, with additional Order-II results reported in the supplementary material(Appendix D). 7As shown in Table 2, our method achieves the best overall performance across most datasets. When compared with MoE-Adapters, our method improves the “Transfer”, “Avg.”, and “Last” metrics by 0.6%, 1.1%, and 1.7%, respectively. These results indicate that our method more effectively mitigates forgetting in the few-shot MTIL setting. Table 3: Comparison of computational cost during training.                   
+
+> Method Train Params ↓GPU ↓Train Times ↓
+> LWF 149.6M 32172MiB 1.54s/it ZSCL 149.6M 26290MiB 3.94s/it MoE-Adapters 59.8M 22358MiB 1.58s/it Ours 39.5M 16352MiB 1.24s/it
+
+Computational Cost. Table 3 com-pares the computational cost of our method with other approaches. Compared with MoE-Adapters [ 10 ], our approach achieves reductions of 33.9% in trainable parameters, 26.9% in GPU memory usage, and 21.5% in training time per itera-tion. These results demonstrate that DIMoE-Adapters achieve strong performance in MTIL while reducing training costs. 
+
+4.3 Ablation Study 
+
+Table 4: Ablation studies on different modules.                                           
+
+> Method Transfer ∆Avg. ∆Last ∆
+> CLIP Zero-shot 69.4 +0.1 65.3 -13.8 65.3 -23.7 +Adapter 49.0 -20.3 58.9 -20.2 72.5 -16.5 +Single-R 54.9 -14.4 61.3 -17.8 68.5 -20.5 +Single-R + PGES 69.1 -0.2 68.1 -11.0 68.0 -21.0 +Task-R + PGES 69.0 -0.3 76.9 -2.2 85.6 -3.4
+> Ours (Full) 69.3 0.0 79.1 0.0 89.0 0.0
+
+Analysis of DIMoE-Adapters We analyze design choices of DIMoE-Adapters with Top-p routing and task-aware load balancing, as summarized in Table 4. The Single-R configura-tion employs a shared router whose output dimension expands as new tasks arrive, whereas Task-R utilizes task-specific routers that are intro-duced incrementally. Compared with Single-R, adding PGES substantially improves the “Transfer” score, bringing it close to the CLIP zero-shot baseline. This indicates that PGES routes test samples to either DIMoE-Adapters or the frozen CLIP, thereby preserving zero-shot generalization. Replacing Single-R with Task-R further improves the “Avg.” and “Last” metrics, suggesting reduced cross-task interference and better retention of task-specific knowledge. Finally, combining Task-R, PGES, and SCEE achieves the best performance across all metrics. These results demonstrate the effectiveness of SCEE in regulating expert evolution based on expert behavior. Table 5: Ablation studies on SCEE components.                                                              
+
+> Configuration Metrics Add Prune LB Router Transfer ∆Avg. ∆Last ∆
+> ✗✗✓Top-p69.0 -0.3 76.9 -2.2 85.6 -3.4
+> ✓✗✓Top-p68.9 -0.4 77.6 -1.5 87.3 -1.7
+> ✗✓✓Top-p69.4 +0.1 77.2 -1.9 86.6 -2.4
+> ✓✓✗Top-p69.1 -0.2 78.7 -0.4 88.0 -1.0
+> ✓✓✓Top-2 69.2 -0.1 78.4 -0.7 87.5 -1.5
+> ✓✓✓Top-p69.3 0.0 79.1 0.0 89.0 0.0
+
+Analysis of SCEE for DIMoE-Adapters. We conduct ablation studies on the key components of SCEE, with results summarized in Table 5. We analyze the roles of expert expansion, expert pruning, task-aware load balancing, and routing strategies. When only expert expansion is en-abled, the model exhibits improved adaptation to new tasks. However, without pruning, redundant experts accumulate as training progresses, which dilutes routing selectivity and limits gains on the “Avg.” and “Last” metrics. In contrast, enabling expert pruning alone improves model stability by reducing interference, but the lack of additional capacity restricts adaptation to new tasks, leading to lower overall performance. When both expert expansion and pruning are enabled, removing task-aware load balancing or replac-ing Top-p routing with fixed Top-2 routing results in degraded long-term performance, particularly on the “Last” metric. This indicates that effective expert utilization requires both balanced expert participation and adaptive routing decisions. 8The full configuration achieves the best performance across “Transfer”, “Avg.”, and “Last” metrics. By jointly introducing new experts when needed and removing redundant or ineffective ones, while regulating expert participation through load balancing and Top-p routing, SCEE maintains sufficient capacity for new tasks and mitigates interference among experts. This regulation enables stable and effective continual learning in DIMoE-Adapters. 1 2 3 4 5 6 7 8 9 10 11    
+
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Experts
+> (a) Layer-wise Expert Evolution
+> Layer 0 Layer 3 Layer 6 Layer 9
+> MoE-Adapters (Fixed 22 Experts)
+> 1 2 3 4 5 6 7 8 910 11 12 13 14 15 16 17 18 19 20 21 22
+> Aircraft
+> Caltech101
+> CIFAR100
+> DTD
+> EuroSAT
+> Flowers
+> Food
+> MNIST
+> OxfordPet
+> Cars
+> SUN397
+> Layer 3
+> 1 2 3 4 5 6 7 8 910 11 12 13 14 15 16 17 18 19 20 21 22
+> Layer 9
+> (b) Expert Usage Heatmap
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Frequency
+
+Figure 3: Layer-wise behavior of dynamic expert evolution. (a) Number of experts across layers. (b) Expert usage heatmaps. 
+
+Layer-wise Behavior of Dynamic Expert Evo-lution. Figure 3 reveals a clear layer-wise be-havior in expert evolution. As shown in Fig-ure 3(a), in contrast to the fixed expert allocation adopted by MoE-Adapters, DIMoE-Adapters progressively accumulate more experts in shal-low layers, while maintaining a more compact expert set in deeper layers. This behavior in-dicates a depth-dependent capacity allocation strategy induced by SCEE, where model capac-ity is adaptively redistributed across layers. Figure 3(b) further visualizes the correspond-ing expert usage patterns through expert usage heatmaps. In shallow layers, the representa-tions mainly capture low- and mid-level visual statistics that are shared across domains [ 42 , 43 ]. When new tasks are introduced, variations in tex-tures, backgrounds, and local patterns lead to more distributed routing decisions across experts. As a result, a larger set of experts is activated, and SCEE introduces new experts to model the newly observed distributions. In contrast, deeper layers encode higher-level semantic information [ 44 ]. Routing decisions in these layers are typically concentrated on a small number of experts, indicating more stable and task-specific semantic responses. Accordingly, SCEE triggers expert expansion less frequently at greater depths and instead prunes experts with low contribution, maintaining a compact expert set focused on semantic discrimination. We provide more comprehensive visualizations of expert evolution in the supplementary material(Appendix E). 1.0 0.95 0.9 0.8 0.7                                             
+
+> expand
+> 0.01 0.05 0.1 0.2 0.3
+> prune
+> 78.2 78.8 78.4 77.9 77.5
+> 78.6 79.1 78.7 78.2 77.8
+> 78.3 78.7 78.4 77.9 77.4
+> 77.9 78.2 77.9 77.3 76.8
+> 77.5 77.8 77.4 76.9 76.3
+> (a) Avg.
+> 1.0 0.95 0.9 0.8 0.7
+> expand
+> 0.01 0.05 0.1 0.2 0.3
+> 88.1 88.6 88.3 87.7 87.2
+> 88.7 89.0 88.5 88.1 87.6
+> 88.4 88.8 88.2 87.8 87.1
+> 87.8 88.3 87.7 87.0 86.6
+> 87.3 87.9 87.2 86.7 86.1
+> (b) Last
+> 86.0
+> 86.5
+> 87.0
+> 87.5
+> 88.0
+> 88.5
+> 89.0
+> 89.5
+> Accuracy (%)
+
+Figure 4: Joint sensitivity analysis of γexpand and 
+
+γprune . (a) Avg. accuracy. (b) Last accuracy. 
+
+Hyperparameter Sensitivity Analysis. We analyze the joint sensitivity of DIMoE-Adapters to γexpand and γprune . As shown in Figure 4. The best performance is achieved at γexpand =0.95 and γprune = 0 .05 , indicating a balanced trade-off between expert expansion and pruning. When γexpand is too small, frequent expansion introduces redundant experts and increases inter-ference. Conversely, overly large values delay expansion and limit the model’s adaptability to new tasks. Similarly, a large γprune aggressively removes experts, leading to underfitting, while overly small values retain redundant experts and reduce efficiency. We present additional sensitivity analyses and more comprehensive experimental results in the supplementary material(Appendix E). 
+
+5 Conclusion 
+
+In this paper, we propose DIMoE-Adapters, a dynamic mixture-of-experts framework for continual learning of vision–language models under significant domain shifts. By introducing a Dynamic Expert Evolution paradigm, DIMoE-Adapters balance stability and plasticity in MTIL while preserving zero-shot generalization. Through Self-Calibrated Expert Evolution (SCEE) and Prototype-Guided Expert Selection (PGES), the framework dynamically adapts model capacity during training and ensures reliable expert utilization at inference. Extensive experiments on MTIL and standard continual learning benchmarks demonstrate consistent improvements over existing state-of-the-art methods, and layer-wise analyses further reveal meaningful depth-dependent expert evolution patterns. 9Impact Statement 
+
+This work proposes DIMoE-Adapters, a dynamic continual learning framework for CLIP-based VLMs. All training and evaluation are conducted on publicly available benchmark datasets under standard experimental settings that are consistent with prior continual learning methods. The proposed approach focuses on algorithmic improvements and does not involve new data collection or real-world deployment, and therefore does not introduce additional privacy, security, or ethical concerns beyond those commonly considered in existing continual learning research. However, our method still has some limitations: it is relatively more complex than standard adapter-based methods, since it involves task identification, dynamic expert expansion, and expert pruning, and it also introduces several hyperparameters, such as the expansion threshold, pruning threshold, and confidence threshold. 
+
+References 
+
+[1] German I Parisi, Ronald Kemker, Jose L Part, Christopher Kanan, and Stefan Wermter. Continual lifelong learning with neural networks: A review. Neural networks , 2019. [2] Matthias De Lange, Rahaf Aljundi, Marc Masana, Sarah Parisot, Xu Jia, Aleš Leonardis, Gregory Slabaugh, and Tinne Tuytelaars. A continual learning survey: Defying forgetting in classification tasks. IEEE transactions on pattern analysis and machine intelligence (TPAMI) ,2021. [3] Pietro Buzzega, Matteo Boschini, Angelo Porrello, Davide Abati, and Simone Calderara. Dark experience for general continual learning: a strong, simple baseline. Advances in neural information processing systems (NeurIPS) , 2020. [4] Friedemann Zenke, Ben Poole, and Surya Ganguli. Continual learning through synaptic intelligence. In International conference on machine learning (ICML) , 2017. [5] Hanul Shin, Jung Kwon Lee, Jaehong Kim, and Jiwon Kim. Continual learning with deep generative replay. Advances in neural information processing systems (NeurIPS) , 2017. [6] Rishabh Tiwari, Krishnateja Killamsetty, Rishabh Iyer, and Pradeep Shenoy. Gcr: Gradient coreset based replay buffer selection for continual learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2022. [7] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervision. In International conference on machine learning (ICML) , 2021. [8] Kaiyang Zhou, Jingkang Yang, Chen Change Loy, and Ziwei Liu. Learning to prompt for vision-language models. International Journal of Computer Vision (IJCV) , 2022. [9] Zangwei Zheng, Mingyuan Ma, Kai Wang, Ziheng Qin, Xiangyu Yue, and Yang You. Preventing zero-shot transfer degradation in continual learning of vision-language models. In Proceedings of the IEEE/CVF international conference on computer vision (ICCV) , 2023. [10] Jiazuo Yu, Yunzhi Zhuge, Lu Zhang, Ping Hu, Dong Wang, Huchuan Lu, and You He. Boosting continual learning of vision-language models via mixture-of-experts adapters. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024. [11] Huiyi Wang, Haodong Lu, Lina Yao, and Dong Gong. Self-expansion of pre-trained models with mixture of adapters for continual learning. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 10087–10098, 2025. [12] Kun Wei, Cheng Deng, Xu Yang, and Maosen Li. Incremental embedding learning via zero-shot translation. In Proceedings of the AAAI Conference on Artificial Intelligence (AAAI) , 2021. [13] Andrei A Rusu, Neil C Rabinowitz, Guillaume Desjardins, Hubert Soyer, James Kirkpatrick, Koray Kavukcuoglu, Razvan Pascanu, and Raia Hadsell. Progressive neural networks. arXiv preprint arXiv:1606.04671 , 2016. 10 [14] Arun Mallya and Svetlana Lazebnik. Packnet: Adding multiple tasks to a single network by iterative pruning. In Proceedings of the IEEE conference on Computer Vision and Pattern Recognition (CVPR) , 2018. [15] Kun Wei, Zhe Xu, and Cheng Deng. Compress to one point: neural collapse for pre-trained model-based class-incremental learning. In Proceedings of the AAAI Conference on Artificial Intelligence (AAAI) , 2025. [16] David Lopez-Paz and Marc’Aurelio Ranzato. Gradient episodic memory for continual learning. 
+
+Advances in neural information processing systems (NeurIPS) , 2017. [17] Sylvestre-Alvise Rebuffi, Alexander Kolesnikov, Georg Sperl, and Christoph H Lampert. icarl: Incremental classifier and representation learning. In Proceedings of the IEEE conference on Computer Vision and Pattern Recognition (CVPR , 2017. [18] Riccardo Volpi, Hongseok Namkoong, Ozan Sener, John C Duchi, Vittorio Murino, and Silvio Savarese. Generalizing to unseen domains via adversarial data augmentation. Advances in neural information processing systems (NeurIPS) , 2018. [19] Menglin Jia, Luming Tang, Bor-Chun Chen, Claire Cardie, Serge Belongie, Bharath Hariharan, and Ser-Nam Lim. Visual prompt tuning. In European conference on computer vision (ECCV) .Springer, 2022. [20] Pengfei Liu, Weizhe Yuan, Jinlan Fu, Zhengbao Jiang, Hiroaki Hayashi, and Graham Neubig. Pre-train, prompt, and predict: A systematic survey of prompting methods in natural language processing. ACM computing surveys , 2023. [21] Neil Houlsby, Andrei Giurgiu, Stanislaw Jastrzebski, Bruna Morrone, Quentin De Laroussilhe, Andrea Gesmundo, Mona Attariyan, and Sylvain Gelly. Parameter-efficient transfer learning for nlp. In International conference on machine learning (ICML) , 2019. [22] Ruize Wang, Duyu Tang, Nan Duan, Zhongyu Wei, Xuan-Jing Huang, Jianshu Ji, Guihong Cao, Daxin Jiang, and Ming Zhou. K-adapter: Infusing knowledge into pre-trained models with adapters. In Findings of the Association for Computational Linguistics (ACL) , 2021. [23] Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. In 
+
+International Conference on Learning Representations (ICLR) , 2022. [24] Saurav Jha, Dong Gong, and Lina Yao. Clap4clip: Continual learning with probabilistic finetuning for vision-language models. Advances in neural information processing systems (NeurIPS) , 2024. [25] Zifeng Wang, Zizhao Zhang, Sayna Ebrahimi, Ruoxi Sun, Han Zhang, Chen-Yu Lee, Xiaoqi Ren, Guolong Su, Vincent Perot, Jennifer Dy, et al. Dualprompt: Complementary prompting for rehearsal-free continual learning. In European conference on computer vision (ECCV) .Springer, 2022. [26] Robert A Jacobs, Michael I Jordan, Steven J Nowlan, and Geoffrey E Hinton. Adaptive mixtures of local experts. Neural computation , 1991. [27] Noam Shazeer, Azalia Mirhoseini, Krzysztof Maziarz, Andy Davis, Quoc Le, Geoffrey Hinton, and Jeff Dean. Outrageously large neural networks: The sparsely-gated mixture-of-experts layer. arXiv preprint arXiv:1701.06538 , 2017. [28] Rahaf Aljundi, Punarjay Chakravarty, and Tinne Tuytelaars. Expert gate: Lifelong learning with a network of experts. In Proceedings of the IEEE conference on computer vision and pattern recognition (CVPR) , 2017. [29] Wuyang Chen, Yanqi Zhou, Nan Du, Yanping Huang, James Laudon, Zhifeng Chen, and Claire Cui. Lifelong language pretraining with distribution-specialized experts. In International Conference on Machine Learning (ICML) , 2023. 11 [30] Peng Gao, Shijie Geng, Renrui Zhang, Teli Ma, Rongyao Fang, Yongfeng Zhang, Hongsheng Li, and Yu Qiao. Clip-adapter: Better vision-language models with feature adapters. International Journal of Computer Vision (IJCV) , 2024. [31] Quzhe Huang, Zhenwei An, Nan Zhuang, Mingxu Tao, Chen Zhang, Yang Jin, Kun Xu, Liwei Chen, Songfang Huang, and Yansong Feng. Harder tasks need more experts: Dynamic routing in moe models. arXiv preprint arXiv:2403.07652 , 2024. [32] Dmitry Lepikhin, HyoukJoong Lee, Yuanzhong Xu, Dehao Chen, Orhan Firat, Yanping Huang, Maxim Krikun, Noam Shazeer, and Zhifeng Chen. Gshard: Scaling giant models with condi-tional computation and automatic sharding. arXiv preprint arXiv:2006.16668 , 2020. [33] William Fedus, Barret Zoph, and Noam Shazeer. Switch transformers: Scaling to trillion parameter models with simple and efficient sparsity. Journal of Machine Learning Research ,2022. [34] Zhizhong Li and Derek Hoiem. Learning without forgetting. IEEE transactions on pattern analysis and machine intelligence (TPAMI) , 2017. [35] Mitchell Wortsman, Gabriel Ilharco, Jong Wook Kim, Mike Li, Simon Kornblith, Rebecca Roelofs, Raphael Gontijo Lopes, Hannaneh Hajishirzi, Ali Farhadi, Hongseok Namkoong, et al. Robust fine-tuning of zero-shot models. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition (CVPR) , 2022. [36] Bin Wu, Wuxuan Shi, Jinqiao Wang, and Mang Ye. Synthetic data is an elegant gift for continual vision-language models. In Proceedings of the Computer Vision and Pattern Recognition Conference (CVPR) , 2025. [37] Ziqi Gu, Chunyan Xu, Wenxuan Fang, Xin Liu, Yide Qiu, and Zhen Cui. Learn and ensemble bridge adapters for multi-domain task incremental learning. In Advances in neural information processing systems (NeurIPS) , 2025. [38] Yuxuan Ding, Lingqiao Liu, Chunna Tian, Jingyuan Yang, and Haoxuan Ding. Don’t stop learning: Towards continual learning for the clip model. arXiv preprint arXiv:2207.09248 ,2022. [39] Arthur Douillard, Alexandre Ramé, Guillaume Couairon, and Matthieu Cord. Dytox: Trans-formers for continual learning with dynamic token expansion. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition (CVPR) , 2022. [40] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. arXiv preprint arXiv:1711.05101 , 2017. [41] Rafael Müller, Simon Kornblith, and Geoffrey E Hinton. When does label smoothing help? 
+
+Advances in neural information processing systems (NeurIPS) , 2019. [42] Matthew D Zeiler and Rob Fergus. Visualizing and understanding convolutional networks. In 
+
+European conference on computer vision (ECCV) . Springer, 2014. [43] Jason Yosinski, Jeff Clune, Yoshua Bengio, and Hod Lipson. How transferable are features in deep neural networks? Advances in neural information processing systems (NeurIPS) , 27, 2014. [44] Maithra Raghu, Chiyuan Zhang, Jon Kleinberg, and Samy Bengio. Transfusion: Understanding transfer learning for medical imaging. Advances in neural information processing systems (NeurIPS) , 2019. [45] Boris T Polyak and Anatoli B Juditsky. Acceleration of stochastic approximation by averaging. 
+
+SIAM journal on control and optimization , 1992. [46] Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images. 2009. 12 [47] Shipeng Yan, Jiangwei Xie, and Xuming He. Der: Dynamically expandable representation for class incremental learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition (CVPR) , 2021. [48] Prithviraj Dhar, Rajat Vikram Singh, Kuan-Chuan Peng, Ziyan Wu, and Rama Chellappa. Learning without memorizing. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition (CVPR) , 2019. [49] Xingchao Peng, Qinxun Bai, Xide Xia, Zijun Huang, Kate Saenko, and Bo Wang. Moment matching for multi-source domain adaptation. In Proceedings of the IEEE/CVF international conference on computer vision (ICCV) , 2019. [50] Subhransu Maji, Esa Rahtu, Juho Kannala, Matthew Blaschko, and Andrea Vedaldi. Fine-grained visual classification of aircraft. arXiv preprint arXiv:1306.5151 , 2013. [51] Li Fei-Fei, Rob Fergus, and Pietro Perona. Learning generative visual models from few training examples: An incremental bayesian approach tested on 101 object categories. In 2004 conference on computer vision and pattern recognition workshop (CVPRW) . IEEE, 2004. [52] Mircea Cimpoi, Subhransu Maji, Iasonas Kokkinos, Sammy Mohamed, and Andrea Vedaldi. Describing textures in the wild. In Proceedings of the IEEE conference on computer vision and pattern recognition (CVPR) , 2014. [53] Patrick Helber, Benjamin Bischke, Andreas Dengel, and Damian Borth. Eurosat: A novel dataset and deep learning benchmark for land use and land cover classification. IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing , 2019. [54] Maria-Elena Nilsback and Andrew Zisserman. Automated flower classification over a large number of classes. In 2008 Sixth Indian conference on computer vision, graphics & image processing . IEEE, 2008. [55] Lukas Bossard, Matthieu Guillaumin, and Luc Van Gool. Food-101–mining discriminative components with random forests. In European conference on computer vision (ECCV) . Springer, 2014. [56] Li Deng. The mnist database of handwritten digit images for machine learning research [best of the web]. IEEE signal processing magazine , 2012. [57] Omkar M Parkhi, Andrea Vedaldi, Andrew Zisserman, and CV Jawahar. Cats and dogs. In 
+
+2012 IEEE conference on computer vision and pattern recognition (CVPR) . IEEE, 2012. [58] Jonathan Krause, Michael Stark, Jia Deng, and Li Fei-Fei. 3d object representations for fine-grained categorization. In Proceedings of the IEEE international conference on computer vision workshops (ICCVW) , 2013. [59] Jianxiong Xiao, James Hays, Krista A Ehinger, Aude Oliva, and Antonio Torralba. Sun database: Large-scale scene recognition from abbey to zoo. In 2010 IEEE computer society conference on computer vision and pattern recognition (CVPR) . IEEE, 2010. 13 A Additional Implementation Details 
+
+Hyperparameter Settings. For the MTIL benchmark, we use a batch size of 128 during training and 256 during evaluation. All models are optimized using AdamW [ 40 ] with β1 = 0 .9, β2 = 0 .999 ,and a weight decay of 0. Label smoothing [ 41 ] is employed to improve training stability and generalization, with the smoothing factor set to 0.2. The expert expansion threshold is set to 
+
+γexpand = 0 .95 , while the pruning threshold is γprune = 0 .05 . For the Historical Adaptive Baseline, an exponential moving average [ 45 ] with a momentum coefficient α = 0 .9 is maintained. The task-aware load balancing coefficient for newly introduced experts is set to β = 0 .6.
+
+Expert Architecture. Each expert is implemented as a low-rank adapter inserted into the feed-forward layers of the pretrained vision–language model. A LoRA-based expert consists of two learnable linear projections: a down-projection matrix Wdown ∈ Rd×r and an up-projection matrix 
+
+Wup ∈ Rr×d, where r ≪ d denotes the rank of the low-rank decomposition. Given an input feature sequence x ∈ RL×d, the output y ∈ RL×d of the expert is computed as: 
+
+E(x) = xW down Wup , (12) where L, d, and r denote the sequence length, original feature dimension, and low-rank dimension, respectively. 
+
+B Results on CIL Benchmarks 
+
+Benchmark Description. We further evaluate our method under the class-incremental learning (CIL) setting to verify its effectiveness in single-domain continual learning scenarios. Following the protocols of prior work [ 17 , 3 ], experiments are conducted on CIFAR100 [ 46 ] and Tiny-ImageNet [ 47 ]. For CIFAR100, the 100 classes are incrementally introduced in steps of 10, 20, and 50 classes. Similarly, for Tiny-ImageNet, step sizes of 5, 10, and 20 classes are adopted to evaluate robustness under different incremental granularities. At each incremental step, the model is trained only on the current task data and evaluated on all previously seen classes. Following standard practice [ 17 ], we report the average accuracy over all incremental steps (“Avg.”) and the final accuracy after learning all tasks (“Last”). Different from the MTIL setting, the task identity of each input image is unknown during inference in CIL. Therefore, task-specific routing cannot be directly applied. To adapt our framework to this setting, our MoE-Adapters use a single shared router and initialize two experts to handle all class subsets. During training, the proposed SCEE strategy dynamically adjusts the number of experts according to the evolving data distribution, enabling the model to expand its capacity when new class distributions are introduced while avoiding unnecessary expert redundancy. 
+
+Compared Methods. We compare our approach with representative state-of-the-art CIL methods, including knowledge distillation-based methods such as LwF [ 34 ] and LwF-VR [ 48 ], exemplar-based methods such as iCaRL [ 17 ], and recent CLIP-based continual learning approaches including ZSCL [ 9 ] and MoE-Adapters [ 10 ]. In addition, we report the performance of CLIP zero-shot inference without adaptation, denoted as CLIP Zero-shot, and continual fine-tuning without any forgetting mitigation strategy, denoted as Continual-FT. For a fair comparison, all CLIP-based methods, including ours, are implemented with the CLIP ViT-B/16 backbone [ 7] and follow the same training protocol. The comparison results on CIFAR100 and Tiny-ImageNet are reported in Table 6. 
+
+Result Analysis. As shown in Table 6, our method consistently achieves the best performance across all CIL settings on both CIFAR100 and Tiny-ImageNet. Compared with prior CLIP-based methods, our approach obtains clear improvements in both Avg. and Last metrics, demonstrating its ability to mitigate catastrophic forgetting while maintaining strong adaptability to newly introduced classes. The advantage becomes more pronounced when the incremental step size decreases, where the task sequence becomes longer and forgetting is typically more severe. In contrast, our method maintains robust performance under fine-grained incremental scenarios, indicating that the proposed dynamic expert expansion and pruning mechanism is effective for handling long class-incremental sequences. 14 Table 6: Comparison of state-of-the-art CL methods on the CIFAR100 and Tiny-ImageNet in terms of “Avg.” and “Last” scores (%).                                                                                                                   
+
+> CIFAR100 Tiny-ImageNet Method 10 step 20 step 50 step 5 step 10 step 20 step Avg. Last Avg. Last Avg. Last Avg. Last Avg. Last Avg. Last CLIP Zero-shot 74.47 65.92 75.20 65.74 75.67 65.94 69.62 65.30 69.55 65.59 69.49 65.30 Continual-FT 65.46 53.23 59.69 43.13 39.23 18.89 61.54 46.66 57.05 41.54 54.62 44.55 LwF [34] 65.86 48.04 60.64 40.56 47.69 32.90 60.97 48.77 57.60 44.00 54.79 42.26 iCaRL [17] 79.35 70.97 73.32 64.55 71.28 59.07 72.05 70.39 73.43 67.95 69.65 64.68 LwF-VR [48] 78.81 70.75 74.54 63.54 71.02 59.45 77.56 70.89 74.12 67.05 69.94 63.89 ZSCL [9] 82.15 73.65 80.39 69.58 79.92 67.36 80.27 73.57 78.61 71.62 77.18 68.30 MoE-Adapters [10] 85.21 77.52 83.72 76.20 83.60 75.24 81.12 76.81 80.23 76.35 79.96 75.77
+> Ours 86.14 78.59 84.83 76.70 84.21 76.22 82.36 78.42 81.54 77.90 80.93 77.11
+
+Expert Evolution Analysis. To further analyze how SCEE adapts the model capacity in the CIL setting, we report the average number of experts in each adapter layer on CIFAR100 with 10-task class-incremental learning. As shown in Table 7, the number of experts is larger in shallow and middle layers, while deeper layers tend to use fewer experts. This suggests that earlier layers require more diverse expert capacity to capture class-specific low- and mid-level visual variations introduced by new incremental tasks. In contrast, deeper layers mainly encode higher-level semantic representations, where the pretrained CLIP features are more stable and transferable. On average, only 2.48 experts are retained across layers, indicating that SCEE can adaptively allocate model capacity according to layer-wise demands while keeping the overall expert structure compact. Table 7: Layer-wise number of experts on CIFAR100 with 10-step class-incremental learning.                         
+
+> Layer 012345678910 Avg. #Experts 3.92 3.18 3.67 2.41 2.86 2.24 2.08 1.95 1.63 1.84 1.47 2.48
+
+C Results on DIL Benchmarks 
+
+Benchmark Description. We evaluate our method under the domain-incremental learning (DIL) setting on the DomainNet benchmark [ 49 ]. DomainNet contains images from multiple visually distinct domains, making it a challenging benchmark for evaluating continual learning under large domain shifts. Following standard protocols in prior DIL and continual domain adaptation work [ 49 ], the model is trained sequentially over six domains, where each task corresponds to one visual domain. The incremental learning follows the fixed domain order: ClipArt, Infograph, Painting, QuickDraw, Real, and Sketch. At each incremental stage, the model is trained only on the current domain and evaluated on all previously seen domains. We report the average accuracy over all incremental stages (“Avg.”), the final accuracy after learning all domains (“Last”), and the transfer performance to future domains (“Transfer”), following common practice in domain-incremental learning. 
+
+Experimental Setup. The experimental setup for DIL follows the same training protocol as the MTIL experiments. All CLIP-based methods are implemented using the CLIP ViT-B/16 backbone [ 7], and the same optimization settings, adapter architecture, and evaluation protocol are adopted for fair comparison. Different from standard CIL, where the task identity is unavailable and class boundaries change over time, DIL mainly focuses on sequential domain shifts under a shared label space. Therefore, during inference, our method employs PGES to identify the most likely domain/task for each input sample and selects the corresponding routing strategy. During training, SCEE is used to dynamically manage the expert structure by expanding experts for newly observed domain distributions and pruning redundant experts when necessary. This enables the model to adaptively allocate capacity to domain-specific variations while preserving compact and transferable representations across domains. 15 0 1 2 3 4 5 6 7 8 9 10 11                                                                              
+
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> Accuracy (%)
+> Task 1 Aircraft
+> 012345678910 11
+> 40
+> 50
+> 60
+> 70
+> 80
+> Task 4 DTD
+> 012345678910 11
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> 100
+> Task 5 EuroSAT
+> 012345678910 11
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> 100
+> Task 6 Flowers
+> LwF
+> LwF-VR
+> ZSCL
+> Ours
+> 012345678910 11
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> Accuracy (%)
+> Task 1 StanfordCars
+> 012345678910 11
+> 50
+> 60
+> 70
+> 80
+> Task 6 SUN397
+> 012345678910 11
+> 10
+> 20
+> 30
+> 40
+> 50
+> Task 7 Aircraft
+> 012345678910 11
+> 75
+> 80
+> 85
+> 90
+> 95
+> Task 8 Caltech101
+> LwF
+> LwF-VR
+> ZSCL
+> Ours
+> (a) Accuracy Changes of MTIL Datasets in Order I
+> (b) Accuracy Changes of MTIL Datasets in Order II
+
+Figure 5: Illustration of the classification accuracy changes as tasks are being learned on the MTIL in two orders. The dashed lines represent the results of zero-shot predictions for an unlearned task. At task 0, the initial CLIP model’s zero-shot accuracy is evaluated. 
+
+Compared Methods. We compare our approach with representative state-of-the-art methods for domain-incremental learning. These include knowledge distillation-based methods such as LwF [ 34 ] and LwF-VR [ 48 ], optimization-based methods such as WiSE-FT [ 35 ], and recent CLIP-based continual learning approaches including ZSCL [ 9] and MoE-Adapters [ 10 ]. We also report the performance of CLIP zero-shot inference, denoted as Zero-shot [ 7], and continual fine-tuning without any forgetting mitigation strategy, denoted as Full Fine-tune, as reference baselines. For fair comparison, all CLIP-based methods, including ours, follow the same backbone and training protocol unless otherwise specified. Table 8: Comparison of state-of-the-art methods on the DomainNet dataset in terms of “Transfer”, “Avg.”, and “Last” scores (%). 
+
+Method Transfer Avg. Last 
+
+Zero-shot 57.86 60.79 60.79 Full Fine-tune 51.25 59.03 56.09 LwF [34] 52.54 63.14 66.13 LwF-VR [48] 53.57 64.03 66.95 WiSE-FT [38] 54.02 64.57 67.95 ZSCL [9] 55.74 65.13 68.73 MoE-Adapters [10] 56.03 66.22 72.50 
+
+Ours 57.00 68.60 75.20 
+
+Result Analysis. As shown in Figure 8, our method consistently outperforms all com-pared approaches on the DomainNet bench-mark across all evaluation metrics. Compared with prior CLIP-based continual learning meth-ods, our approach achieves notable improve-ments in both “Avg.” and “Last” scores, indi-cating stronger domain-level knowledge reten-tion while maintaining effective adaptation to new domains. In particular, the improvement in “Last” demonstrates that our method suffers less from accumulated forgetting after learning all domains. Meanwhile, the competitive “Transfer” score suggests that our method largely preserves the zero-shot generalization capability of CLIP on unseen domains. These results benefit from the combination of PGES and SCEE: PGES provides reliable task-aware routing during inference, while SCEE adaptively adjusts the expert capacity to accommodate new domain distributions. Overall, these results confirm the effectiveness of our approach in the challenging domain-incremental learning setting, where substantial domain shifts intensify the stability–plasticity trade-off. 
+
+D Detailed Results on MTIL Benchmark 
+
+Additional Benchmark Description. The MTIL benchmark consists of 11 datasets spanning diverse visual domains, designed to evaluate continual learning under the Multi-Task Incremental-Learning setting [ 9]. Following prior work [ 9], we evaluate two different task sequences to in-duce varying domain shifts. Order I follows an alphabetical order of datasets: Aircraft [ 50 ], 16 Table 9: Comparison with state-of-the-art methods on MTIL benchmark ( Order II ) in terms of “Transfer”, “Avg”, and “Last” scores (%).We label the best methods with bold styles. The top block indicates the upper-bound solutions to adapt the CLIP on each task. 
+
+Method 
+
+> Cars
+> Food
+> MNIST
+> OxfordPet
+> Flowers
+> SUN397
+> Aircraft
+> Caltech101
+> DTD
+> EuroSAT
+> CIFAR100
+
+Average Zero-shot 64.7 88.5 59.4 89.0 71.0 65.2 24.3 88.4 44.6 54.9 68.2 65.4 Fine-tune 89.6 92.7 99.6 94.7 97.5 81.8 62.0 95.1 79.5 98.9 89.6 89.2 
+
+Transfer 
+
+LwF [34] – 87.8 58.5 71.9 46.6 57.3 12.8 81.4 34.5 34.5 46.8 53.2 iCaRL [17] – 86.1 51.8 67.6 50.4 57.9 11.0 72.3 31.2 32.7 48.1 50.9 WiSE-FT [35] – 87.2 57.6 67.0 45.0 54.0 12.9 78.6 35.5 28.4 44.3 51.1 ZSCL [9] – 88.3 57.5 84.7 68.1 64.8 21.1 88.2 45.3 55.2 68.2 64.1 MoE-Adapters [10] – 88.8 59.5 89.1 69.9 64.4 18.1 86.9 43.7 54.6 68.2 64.3 LEBA [37] – 88.7 60.2 89.3 71.1 65.1 18.4 88.5 45.9 55.3 68.1 65.1 
+
+Ours – 88.5 58.9 89.1 71.0 65.9 24.4 88.5 44.7 55.0 68.2 65.4 Avg. 
+
+LwF [34] 49.0 77.0 92.1 85.9 66.5 67.2 20.9 84.7 44.6 45.5 50.5 62.2 iCaRL [17] 52.0 75.9 77.4 74.6 58.4 59.3 11.7 79.6 42.1 43.2 51.7 56.9 WiSE-FT [38] 52.6 79.3 91.9 83.9 63.4 65.2 23.3 83.7 45.4 40.0 48.2 61.5 ZSCL [9] 81.7 91.3 91.1 91.0 82.9 72.5 33.6 89.7 53.3 62.8 69.9 74.5 MoE-Adapters [10] 84.9 89.9 89.3 91.4 86.2 72.2 33.4 89.4 53.3 61.4 69.9 74.7 LEBA [37] 86.0 88.9 92.1 91.9 87.2 72.8 33.9 90.9 54.7 62.7 70.1 75.6 
+
+Ours 89.0 92.3 92.2 91.7 87.4 75.0 38.3 91.8 54.0 63.0 70.1 76.8 Last 
+
+LwF [34] 34.6 69.6 99.3 88.7 61.1 72.5 32.5 88.1 65.6 90.9 87.9 71.9 iCaRL [17] 46.0 81.5 91.3 82.8 66.5 72.2 16.3 91.6 68.1 83.2 87.8 71.6 WiSE-FT [38] 35.6 76.9 99.5 89.1 62.1 71.8 27.8 90.8 67.0 85.6 87.6 72.2 ZSCL [9] 78.2 91.1 97.6 92.5 87.4 78.2 45.0 92.3 72.7 96.2 86.3 83.4 MoE-Adapters [10] 84.1 88.5 94.0 91.8 94.1 77.8 50.4 93.3 77.1 87.7 86.6 84.1 LEBA [37] 86.2 88.9 99.2 93.0 96.5 79.2 50.1 95.2 78.2 95.9 88.1 86.4 
+
+Ours 89.0 92.6 99.6 92.7 96.7 82.7 55.1 97.5 79.0 98.8 88.7 88.4 
+
+Caltech101 [ 51 ], CIFAR100 [ 46 ], DTD [ 52 ], EuroSAT [ 53 ], Flowers [ 54 ], Food [ 55 ], MNIST [ 56 ], OxfordPet [ 57 ], StanfordCars [ 58 ], and SUN397 [ 59 ]. Order II adopts a randomly permuted order: StanfordCars [ 58 ], Food [ 55 ], MNIST [ 56 ], OxfordPet [ 57 ], Flowers [ 54 ], SUN397 [ 59 ], Aircraft [50], Caltech101 [51], DTD [52], EuroSAT [53], and CIFAR100 [46]. 
+
+Additional Metrics Formulation. We evaluate continual learning performance using Transfer, Avg., and Last. Let a(j) 
+
+> k
+
+denote the test accuracy on task k after the model has been trained on the first j tasks, and let K be the total number of tasks. 
+
+Transfer k = 1
+
+k − 1
+
+> k−1
+
+X
+
+> j=1
+
+a(j) 
+
+> k
+
+, k = 2 , . . . , K. (13) 
+
+Avg k = 1
+
+K
+
+> K
+
+X
+
+> j=1
+
+a(j) 
+
+> k
+
+, k = 1 , . . . , K. (14) 
+
+Last k = a(K) 
+
+> k
+
+, k = 1 , . . . , K. (15) The Transfer metric evaluates the preservation of zero-shot capability during continual learning by averaging the model’s performance on tasks prior to their explicit training. The Last metric reports the final accuracy on each task after all training stages, reflecting the degree of knowledge retention. The Avg. metric computes the mean accuracy across all training stages, summarizing the model’s overall performance throughout the continual learning process. 17 Table 10: Comparison with state-of-the-art methods on few-shot MTIL benchmark ( Order II ) in terms of “Transfer”, “Avg.”, and “Last” scores (%). We label the best methods with bold styles. The top block indicates the upper-bound solutions to adapt the CLIP on each task.                                                                                                                                                                                                                                                 
+
+> Method
+> Cars
+> Food
+> MNIST
+> OxfordPet
+> Flowers
+> SUN397
+> Aircraft
+> Caltech101
+> DTD
+> EuroSAT
+> CIFAR100
+> Average Zero-shot 64.7 88.5 59.4 89.0 71.0 65.2 24.3 88.4 44.6 54.9 68.2 65.3 5-shot Full Fine-tune 65.4 83.3 96.6 84.9 92.9 71.3 30.6 93.5 65.1 91.7 76.8 77.5
+> Transfer
+> LwF [34] –64.2 59.1 68.1 38.4 54.9 6.7 78.0 35.5 33.5 47.4 48.6 LwF-VR [38] –80.1 55.4 77.7 50.4 61.4 9.1 83.5 40.1 31.5 54.8 54.4 WiSE-FT [35] –77.3 60.0 76.9 54.2 58.0 11.1 81.8 37.6 31.7 48.1 53.7 ZSCL [9] –87.3 64.8 85.3 67.9 64.5 18.9 86.6 43.6 43.2 65.7 62.8 MoE-Adapters [10] –88.8 59.5 89.1 71.2 65.3 18.2 87.9 44.2 54.6 68.2 64.7
+> Ours –88.5 58.9 89.1 71.0 65.9 24.4 88.5 44.7 55.0 68.2 65.4 Avg.
+> LwF [34] 64.1 55.0 79.5 69.2 55.7 58.3 10.8 81.7 41.3 39.2 47.4 54.7 LwF-VR [38] 63.3 76.9 71.4 79.1 68.9 65.0 13.4 86.0 45.7 36.3 55.3 60.1 WiSE-FT [35] 59.3 64.7 77.4 70.3 51.3 58.6 10.8 84.2 42.0 38.6 49.1 55.1 ZSCL [9] 70.0 85.0 79.8 86.1 79.4 68.3 21.8 88.8 48.8 49.3 66.5 67.6 MoE-Adapters [10] 61.2 87.0 87.3 89.1 79.3 68.5 23.4 89.4 49.9 60.8 68.8 69.5
+> Ours 70.6 87.8 85.2 90.4 83.2 69.7 29.6 89.4 49.7 60.8 69.0 71.4 Last
+> LwF [34] 57.1 40.1 84.1 58.1 50.5 57.6 14.3 87.9 54.7 64.0 47.0 56.8 LwF-VR [38] 57.3 70.1 72.1 74.6 71.9 65.8 17.4 89.5 60.0 56.0 60.2 63.5 WiSE-FT [35] 48.1 47.7 66.9 59.8 25.0 56.1 7.4 88.5 52.2 66.8 59.4 51.8 ZSCL [9] 67.4 82.7 78.7 85.7 81.3 71.2 25.0 92.5 62.0 72.2 74.4 71.8 MoE-Adapters [10] 59.4 87.0 91.8 89.0 84.1 71.9 29.4 91.4 64.2 88.8 75.0 75.7
+> Ours 70.5 87.7 91.1 90.9 90.4 72.9 35.8 91.0 62.6 86.8 77.0 77.9
+
+Detailed Results. Table 9 and Table 10 report the detailed Transfer, Avg. and Last results for each dataset on the full-shot MTIL and few-shot MTIL benchmarks under Order II. Zero-shot denotes the zero-shot prediction performance of the initial CLIP model, while Fine-tune refers to training the model on each dataset independently without task interference. Across both full-shot and few-shot MTIL Order II benchmarks, our method achieves the best or highly competitive performance on most datasets under all three metrics, demonstrating its strong ability to preserve pretrained knowledge while effectively learning new tasks under challenging domain shifts. To provide a more intuitive understanding of model behavior, we visualize the accuracy evolution of several representative tasks under both task orderings in Figure 5(a) and Figure 5(b), where dashed curves denote zero-shot performance before a task is encountered and solid curves indicate accuracy after task-specific training. An ideal continual learning approach for vision–language models should exhibit an accuracy trajectory resembling a mirrored “Z” shape, maintaining high zero-shot accuracy prior to learning a task and experiencing minimal degradation after learning subsequent tasks, a pattern that our method consistently follows under both task sequences. In contrast, most baseline methods suffer from pronounced accuracy fluctuations caused by catastrophic forgetting of both pretrained knowledge and previously learned tasks, a problem that becomes particularly severe under large domain shifts such as MNIST, corresponding to Task 8 in Order I and Task 3 in Order II, where naive fine-tuning and regularization-based approaches experience substantial performance collapse. Overall, the strong performance of our method demonstrates its ability to effectively resist domain shifts and maintain stable learning behavior over longer task sequences. 
+
+E Additional Experimental Results 
+
+Layer-wise Task-Specific Expert Similarity. To further investigate whether the proposed dynamic expert mechanism leads to redundant expert representations, we analyze the pairwise cosine similarity 18 Task 1                                                                                 
+
+> Task 3
+> Task 5
+> Task 8
+> Task 11
+> Task 1
+> Task 3
+> Task 5
+> Task 8
+> Task 11
+> 1.000 -0.001 0.001 0.003 -0.004
+> -0.001 1.000 0.007 0.016 0.006
+> 0.001 0.007 1.000 0.015 0.003
+> 0.003 0.016 0.015 1.000 0.001
+> -0.004 0.006 0.003 0.001 1.000
+> Layer 0
+> Task 1
+> Task 3
+> Task 5
+> Task 8
+> Task 11
+> Task 1
+> Task 3
+> Task 5
+> Task 8
+> Task 11
+> 1.000 0.004 -0.001 0.004 0.003
+> 0.004 1.000 -0.000 0.002 0.004
+> -0.001 -0.000 1.000 0.005 0.001
+> 0.004 0.002 0.005 1.000 -0.005
+> 0.003 0.004 0.001 -0.005 1.000
+> Layer 3
+> Task 1
+> Task 3
+> Task 5
+> Task 8
+> Task 11
+> Task 1
+> Task 3
+> Task 5
+> Task 8
+> Task 11
+> 1.000 0.004 0.006 -0.001 -0.001
+> 0.004 1.000 0.002 0.002 0.004
+> 0.006 0.002 1.000 0.006 0.011
+> -0.001 0.002 0.006 1.000 0.003
+> -0.001 0.004 0.011 0.003 1.000
+> Layer 6
+> Task 1
+> Task 3
+> Task 5
+> Task 8
+> Task 11
+> Task 1
+> Task 3
+> Task 5
+> Task 8
+> Task 11
+> 1.000 0.003 0.006 0.003 0.001
+> 0.003 1.000 0.003 0.004 0.011
+> 0.006 0.003 1.000 0.009 0.004
+> 0.003 0.004 0.009 1.000 0.009
+> 0.001 0.011 0.004 0.009 1.000
+> Layer 9
+
+Figure 6: Layer-wise task-specific expert similarity matrix. We record the cosine similarity between task-specific experts per layer on the MTIL Order I benchmark after training. The results show that the cosine similarity between experts is close to zero. among task-specific experts across different MoE layers in the visual encoder. Specifically, for each incremental task, we randomly select one expert from the set of newly introduced experts associated with that task as its representative, and compute the cosine similarity between expert parameter vectors after training. Figure 6 presents the layer-wise expert similarity matrices for selected MoE layers, with each matrix reporting the cosine similarity between experts associated with different tasks. By definition, the diagonal entries equal 1, while the off-diagonal entries remain consistently close to zero across all layers. These results indicate that the task-specific experts learned by our method are nearly orthogonal rather than redundant, suggesting that different experts capture distinct task-dependent representations. 100 150 200 250 300 350 400                         
+
+> Training step
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> EOI (instability)
+> Expand threshold (0.95)
+> Expand
+> Prune
+> Prune
+> (a) EOI trajectories for expert expansion
+> VIS-L1
+> VIS-L5
+> VIS-L7
+> 100 150 200 250 300 350 400
+> Training step
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> EOC (contribution)
+> Prune threshold (0.05)
+> Expand
+> Prune
+> Prune
+> (b) EOC trajectories for expert pruning
+> VIS-L1
+> VIS-L5
+> VIS-L7
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8
+> EOC
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> EOI
+> Expansion region
+> Pruning region
+> (c) Joint view of expert contribution and instability
+> Expanded
+> Pruned
+> Retained
+> L0 L1 L2 L3 L4 L5 L6 L7 L8 L9 L10
+> Layer
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> 16
+> # Experts
+> (d) Layer-wise expert count evolution on Task 6
+> Before expansion
+> After expansion
+> After pruning
+
+Figure 7: Analysis of expert evolution in SCEE on Task 6 (Flowers). 
+
+Analysis of Expert Evolution in SCEE. 
+
+To understand how SCEE dynamically con-trols the expert structure, we visualize the expert evolution process on Task 6 (Flow-ers), as shown in Figure 7. Subplot (a) shows the trajectory of Expert Optimiza-tion Instability (EOI), where layers L1 and L5 exceed the expansion threshold at step 200 and trigger expert expansion, while L7 remains below the threshold and does not introduce new experts. Subplot (b) presents the trajectory of Expert Optimiza-tion Contribution (EOC), showing that low-contribution experts are gradually pruned; specifically, L5 undergoes one pruning event, while L7 undergoes two pruning events. Subplot (c) further visualizes the joint distribution of EOC and EOI, where experts are clearly separated into expansion, retention, and pruning regions, verifying that expert evolution follows the proposed gradient-based criteria. Subplot (d) shows the layer-wise number of experts before expansion, after expansion, and after pruning. Shallow layers tend to expand more experts, whereas deeper layers are more likely to prune redundant ones, leading to a hierarchical expert structure. Notably, L7 keeps the same number of experts after expansion and pruning, indicating that it mainly relies on reusing existing experts. Overall, these results show that SCEE dynamically adjusts model capacity according to gradient statistics rather than static heuristics, enabling effective layer-wise expert allocation. 
+
+Analysis of PGES Routing Accuracy To further evaluate the reliability of the proposed PGES module in the MTIL setting, we report the task routing accuracy across the incremental learning process in Table 11. Each row denotes the current training stage, and each column denotes the target task to be identified. For seen tasks, corresponding to the entries on and below the diagonal, PGES achieves nearly perfect routing accuracy in most cases. The only noticeable decrease appears on DTD, where the routing accuracy is 87.5% in several stages. For unseen tasks, corresponding to the entries above the diagonal, most samples are correctly routed to the frozen CLIP branch rather than 19 Table 11: Routing accuracy of PGES in the MTIL setting. Rows indicate the current training stage, while columns indicate target tasks. Entries on and below the diagonal correspond to seen-task routing accuracy, and entries above the diagonal indicate the proportion of unseen-task samples routed to learned experts.                                                                                                                                     
+
+> Task Aircraft Caltech101 CIFAR100 DTD EuroSAT Flowers Food MNIST OxfordPet Cars SUN397 Aircraft 100.0 0000000000Caltech101 100.0 100.0 000000000CIFAR100 100.0 100.0 100.0 000.08 00000DTD 100.0 100.0 100.0 87.5 00.08 00000EuroSAT 100.0 100.0 100.0 87.5 100.0 0.08 00000Flowers 100.0 100.0 100.0 87.5 100.0 100.0 00000Food 100.0 100.0 100.0 100.0 100.0 100.0 100.0 0000MNIST 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0 000OxfordPet 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0 00Cars 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0 0SUN397 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0
+
+being assigned to existing task-specific experts. Only minor leakage is observed, such as about 8% of Flowers samples being routed to learned experts before Flowers is introduced. The impact of the small amount of misrouting is limited. For samples from seen tasks that are misrouted to the frozen CLIP branch, such as DTD, the model can still benefit from CLIP’s strong zero-shot capability, leading to only about a 1% performance drop. For unseen tasks that are incorrectly assigned to existing experts, such as Flowers before its introduction, the leakage ratio is very small and introduces only about a 2% degradation. Overall, PGES provides highly reliable task identification in MTIL, and its rare routing errors have negligible influence on the final performance. 
+
+F Algorithm Procedure 
+
+Algorithms 1 and 2 detail the training and inference procedures of the proposed DIMoE-Adapters framework. During training, we sequentially learn task-specific routers and experts while maintaining per-task distribution prototypes (μ(t,k ), Σ(t,k )) computed from frozen CLIP image features. At inference time, the learned task prototypes are used for task identification by evaluating the confidence scores of a test sample. If the maximum confidence exceeds a predefined threshold, the corresponding task-specific router is activated and the associated experts are injected into the frozen CLIP backbone for prediction; otherwise, the model falls back to the frozen CLIP to preserve zero-shot generalization. 20 Algorithm 1 Training Procedure of DIMoE-Adapters 
+
+Require: Sequential tasks {τ (t)}Tt=1 with datasets D(t); frozen CLIP image encoder f ;Top-p threshold p0; expansion threshold γexpand ; pruning thresholds γprune ;learning rate η; evolution window W ; interval ∆; max iterations Imax . 
+
+> 1:
+
+for t = 1 to T do  
+
+> 2:
+
+for j = 1 to Nt do  
+
+> 3:
+
+Extract image feature f (x(t) 
+
+> j
+
+) 
+
+> 4:
+
+Bfeat ← B feat ∪ { f (x(t) 
+
+> j
+
+)} 
+
+> 5:
+
+end for  
+
+> 6:
+
+Compute task prototype (μ(t,k ), Σ(t,k )) from Bfeat ▷ Eq. (10)  
+
+> 7:
+
+Initialize router R(t) 
+
+> 8:
+
+Initialize new experts E(t) 
+
+> new
+> 9:
+
+if t > 1 then  
+
+> 10:
+
+Freeze {R(1) , . . . , R (t−1) } and E(t−1)  
+
+> 11:
+
+E(t) ← E (t−1) ∪ E (t) 
+
+> new
+> 12:
+
+else  
+
+> 13:
+
+E(t) ← E (t) 
+
+> new
+> 14:
+
+end if  
+
+> 15:
+
+for ℓ = 1 to Imax do  
+
+> 16:
+
+Sample mini-batch B ∼ D (t) 
+
+> 17:
+
+Forward image and text encoders with DIMoE-Adapters  
+
+> 18:
+
+Update R(t) and E(t) 
+
+> new
+
+by minimizing L 
+
+> 19:
+
+Accumulate gradients for experts  
+
+> 20:
+
+Accumulate expert usage counts  
+
+> 21:
+
+if ℓ mod ∆ = 0 then  
+
+> 22:
+
+Compute {Ii, V i} from accumulated gradients ▷ Eq. (5) (6)  
+
+> 23:
+
+Compute activation frequency fi by normalizing usage counts  
+
+> 24:
+
+if ℓ ∈ W then  
+
+> 25:
+
+Perform expert pruning and expansion for E(t) 
+
+> new
+
+▷ Eq. (8) (9)  
+
+> 26:
+
+end if  
+
+> 27:
+
+Update historical adaptive baselines ▷ Eq. (7)  
+
+> 28:
+
+Reset accumulated gradients and usage counts  
+
+> 29:
+
+end if  
+
+> 30:
+
+end for  
+
+> 31:
+
+end for Algorithm 2 Inference Procedure of DIMoE-Adapters 
+
+Require: test sample x; frozen CLIP image encoder f ;task prototypes {(μ(i,k ), Σ(i,k ))}ti=1 ; task-specific routers {R(i)}ti=1 ; expert pools E(t); confi-dence threshold δ. 
+
+> 1:
+
+Compute image feature z = f (x) 
+
+> 2:
+
+Compute task scores {Si(z)}ti=1 ▷ Eq. (11)  
+
+> 3:
+
+ˆt ← arg max i Si(z), Smax ← Sˆt 
+
+> 4:
+
+if Smax ≥ δ then  
+
+> 5:
+
+Activate router R(ˆ t) 
+
+> 6:
+
+Forward image and text encoders with DIMoE-Adapters  
+
+> 7:
+
+else  
+
+> 8:
+
+Forward image and text encoders with frozen CLIP  
+
+> 9:
+
+end if 
+
+21

@@ -1,0 +1,254 @@
+Title: Balancing Stability and Plasticity in Sequentially Trained Early-Exiting Neural Networks
+
+URL Source: https://arxiv.org/pdf/2605.05358v1
+
+Published Time: Fri, 08 May 2026 00:10:42 GMT
+
+Number of Pages: 6
+
+Markdown Content:
+## BALANCING STABILITY AND PLASTICITY IN SEQUENTIALLY TRAINED EARLY-EXITING NEURAL NETWORKS 
+
+## Alaa Zniber ⋆, Ouassim Karrakchou ⋆, Mounir Ghogho †‡  
+
+> ⋆
+
+## TICLab, International University of Rabat, Morocco  
+
+> †
+
+## College of Computing, University Mohammed VI Polytechnic, Morocco  
+
+> ‡
+
+## School of Electronic and Electrical Engineering, University of Leeds, UK 
+
+ABSTRACT 
+
+Early-exiting neural networks enable adaptive inference by allowing inputs to exit at intermediate classifiers, reduc-ing computation for easy samples while maintaining high accuracy. In practice, exits can be trained sequentially by incrementally adding them to a shared backbone; however, this sequential training can cause newly introduced exits to interfere with previously learned ones, degrading the per-formance of earlier classifiers. We address this problem by retaining the knowledge embedded in existing exits while allowing new ones to specialize. We propose two alterna-tive approaches that operate at different levels of the model. The first constrains learning by protecting parameters that are important for previously trained exits, while the second preserves the output distributions of earlier exits as the net-work adapts. These alternatives directly reflect the stability-plasticity trade-off studied in continual learning. Accord-ingly, we leverage Elastic Weight Consolidation to constrain critical weights and Learning without Forgetting to preserve output distributions. Experiments on standard benchmarks show that our approaches consistently improve early-exit per-formance, achieving higher accuracy over existing sequential training methods and significant performance speedups at low computational budgets. 
+
+Index Terms — Early-exiting neural networks, Sequential training, Catastrophic Forgetting, Continual learning 
+
+1. INTRODUCTION 
+
+The increasing deployment of deep learning models under strict latency, energy, and memory constraints has motivated the development of resource-efficient dynamic architectures. Rather than executing a fixed computation graph for all in-puts, such architectures adapt their computational cost to in-put difficulty, enabling efficient inference while maintaining high accuracy [1]. Early-exiting neural networks (EENNs) are a representative instance of this paradigm. EENNs aug-ment a backbone network with multiple internal classifiers 
+
+> This research has received funding from the European Union’s Horizon research and innovation program under grant agreement No 101070374.
+
+(ICs) placed at increasing depths, allowing inference to termi-nate early once sufficient confidence is reached. Easy samples can be classified using shallow representations, while more challenging inputs propagate deeper into the network. This exit-based adaptivity significantly reduces average inference cost and makes EENNs well-suited for resource-constrained applications [2]. To realize these benefits in practice, a critical design choice concerns how to train the multiple exits within an EENN. Most prior work has focused on joint training strate-gies, which optimize the backbone along with all exits simul-taneously in an end-to-end manner. Joint training has shown to deliver strong empirical performance and has therefore become the predominant approach [3, 4, 5, 6]. In contrast, se-quential training performs the training incrementally as exits are added to an existing backbone. Sequential training nat-urally aligns with pretrained backbones by enabling a more rapid design time and an efficient analysis of where meaning-ful predictions emerge within the network – a useful property for large models where the computational cost of full joint training can be prohibitive or even undesirable [7, 8]. Sequential training approaches for EENNs are catego-rized into three main groups based on the specific training methodology employed for each successive exit [6]. Dis-joint training (also referred to as two-stage training) first trains the backbone independently and then freezes it while learning ICs [9, 10]. This approach is particularly effec-tive for retrofitting pretrained models with early exits at the cost of limited adaptability; new exits cannot refine earlier representations to better support their specific objectives. 
+
+Branch-wise training introduces exits sequentially while unfreezing only the backbone segment associated with the current exit, offering moderate flexibility and helping to alle-viate vanishing or exploding gradients in deep architectures [11]. However, this forward-thinking approach suffers from premature freezing: once an exit is trained and the training process moves deeper, that exit’s parameters become fixed, preventing further refinement even as later exits reveal useful representational structures. Separate training further relaxes these constraints by unfreezing the full network [6]. The exits 
+
+> arXiv:2605.05358v1 [cs.LG] 6 May 2026
+
+are also introduced sequentially, however the training of each exit is done jointly with previous exits, allowing each branch to capture features at different abstraction levels through po-tentially distinct objectives. Although this approach provides greater flexibility, it applies uniform updates to all backbone parameters during each iteration, without identifying which parameters are essential for earlier exits and which can be modified for new ones. A key challenge unifies these methods: introducing new exits disrupts previously learned representations through gra-dient interference, with degradation intensifying as more ex-its are added [12]. This results from current approaches dis-regarding the heterogeneous importance of parameters, par-ticularly those that have already been tuned for earlier exits. Indeed, some weights encode critical features that earlier ex-its depend on, while others are less consequential and could be freely adapted. Therefore, distinguishing between these parameter types is essential as it enables selective protection of critical knowledge while maintaining the plasticity needed for new exits to specialize effectively. Importantly, this chal-lenge is not unique to early-exit networks. In continual learn-ing (CL), models face a similar dilemma when learning se-quential tasks; they must acquire new capabilities (plastic-ity) while preserving previously learned knowledge (stability) to mitigate catastrophic forgetting [13]. We thus recognize that sequential early-exit training exhibits this same stability-plasticity trade-off. This conceptual alignment suggests that CL techniques can be adapted to protect salient features of earlier exits from being forgotten during sequential training. It is worth noting that the goal here is not to implement CL on EENN (e.g., Szatkowski et al. [14]), but to benefit from some of the regularization techniques of CL to mitigate representa-tion degradation in sequential training of EENN. Building on this perspective, we propose a novel two-stage sequential training approach. In the first stage, we pre-train the backbone using only the final exit in order for deep layers to develop rich abstract representations before early ex-its are introduced [15, 16]. In the second stage, we perform sequential training by explicitly preserving the knowledge ac-quired by earlier exits as new exits are introduced. Consistent with the CL perspective, our goal is to counteract the for-getting induced by gradient interference. Without protection mechanisms, optimizing a new exit inevitably overwrites rep-resentations that previous exits depend on, leading to progres-sive degradation. Therefore, we aim to regularize sequential training from two alternative standpoints, namely at the pa-rameter and output distribution levels, each addressing for-getting from a different aspect. At the parameter level, for-getting occurs because optimization updates treat all weights equally, although some are critical for the performance of existing exits. By identifying which parameters are essen-tial, we can selectively protect them, allowing the network to adapt safely while preserving knowledge that earlier exits rely on. This motivates the use of Elastic Weight Consolidation       
+
+> x
+> Θ1
+> Θ2
+> Θ3
+> Θ4
+> IC 1IC 2IC 3IC 4
+> ˆy1ˆy2ˆy3ˆy4
+
+ˆy1 ˆy2
+
+Fig. 1 : Flow of the proposed sequential training scheme. Grey refers to regularized parameters or output distributions; dashed lines refer to frozen segments. The backbone is repre-sented by rotated blocks Θμ’s and intermediate classifiers by horizontal blocks IC μ’s. Each IC μ outputs a distribution ˆyμ.(EWC) [17, 18], which estimates parameter importance via Fisher information and constrains updates on crucial weights, thus weighting the learning process to balance stability and plasticity. At the output distribution level, however, what ul-timately matters is that the predictive behavior of the earlier exits remains stable as new exits are trained. To achieve this, we adopt Learning without Forgetting (LwF) [19], which reg-ularizes the outputs of earlier exits to match their original pre-dictions, maintaining functional consistency as new exits are trained. Both EWC and LwF are governed by tunable hyper-parameters, giving explicit control over the trade-off between preserving early-exit performance and enabling adaptation for new exits. The main contributions of this work are threefold: • We propose a novel technique to mitigate the degrada-tion of previously learnt representation in order to ad-dress the stability-plasticity trade-off faced during se-quential training of EENN. • We adapt two CL regularization strategies, EWC for parameter-level protection and LwF for output distribution-level consistency, to enable principled se-quential training that balances exit specialization with knowledge preservation. • We demonstrate consistent improvements over existing sequential training methods across benchmark architec-tures, validating the effectiveness of the CL approach for EENNs. 
+
+2. PROPOSED METHODOLOGY 
+
+We consider an EENN consisting of M ICs, where each backbone subnetwork μ is parameterized by {Θ1, . . . , Θμ}
+
+and produces class probability vector ˆyμ (see Figure 1), with 
+
+ˆyμ(c) (for c ∈ { 1, . . . , C }) being the probability associated with class c. We frame the sequential training of ICs as a sequence of learning tasks indexed by μ ∈ { 1, 2, . . . , M },where task μ corresponds to training IC μ while preserv-ing the predictive capabilities of all previously trained ICs 
+
+{1, . . . , μ − 1}. The shared backbone parameters must ac-commodate the objectives of all trained ICs, balancing plas-ticity (i.e., the ability to refine representations for the current task) against stability (i.e., maintaining performance on ear-lier tasks). To address this stability-plasticity trade-off, we augment the standard classification loss with a regularization term that protects previously acquired knowledge. The loss function for training exit μ takes the general form: 
+
+L(μ)total = L(μ)CE + s λ R(μ)EWC + (1 − s) ρR(μ)LwF (1) where L(μ)CE denotes the cross-entropy loss for exit μ which de-pends on {Θ1, . . . , Θμ} and the parameters of IC μ; R(μ)EWC 
+
+and R(μ)LwF are regularization terms that mitigate the degrada-tion of earlier exits, corresponding to EWC (parameter-level) and LwF (output-distribution-level), respectively. Their rela-tive strengths are controlled by the hyperparameters λ and ρ.The binary variable s ∈ { 0, 1} indicates which regularization strategy is active. To illustrate the training procedure, Figure 1 shows the status of each subnetwork when training exit 3. At this stage, the first two blocks (parameterized by Θ1 and Θ2) and their respective classifiers (producing predictions ˆy1 and ˆy2) have already been trained. We now add IC 3 and therefore, we need to train the full network up to exit 3. We minimize the cross-entropy loss L(3)  
+
+> CE
+
+augmented with regularization R(3) applied to the previously trained blocks, either constraining their pa-rameters (EWC) or preserving their predictions (LwF). The final block ( Θ4) and its corresponding classifier remain frozen throughout this stage. 
+
+2.1. Parameter-level Regularization 
+
+The first approach employs parameter-level regularization through EWC, which protects parameters that are critical for previously trained exits by penalizing changes to important weights. This importance score is computed using Fisher Information [20]. Parameters with large Fisher values corre-spond to directions in parameter space where small perturba-tions would strongly increase the cross-entropy loss L(ν)CE on previous exits and are therefore prioritized for protection. Following the online EWC framework [18], the parameter-level regularization is defined as 
+
+R(μ)EWC = X  
+
+> θk∈∪ μ−1
+> i=1 Θi
+> μ−1
+
+X
+
+> ν=1
+
+F (ν)
+
+> k
+
+!
+
+(θk − θ∗
+
+> k
+
+)2 (2) Here, θ∗ 
+
+> k
+
+∈ R denotes the value of parameter θk ∈ ∪ μ−1 
+
+> i=1
+
+Θi
+
+after training up to exit μ − 1. The term F (ν) 
+
+> k
+
+∈ R represents the Fisher information measuring the importance of param-eter θk for exit ν. In practice, we use the empirical Fisher information [21], which is computed as: 
+
+F (ν) 
+
+> k
+
+= 1
+
+N
+
+X
+
+> x∈D
+
+∂∂θ k
+
+log ˆ yν (C(x))  
+
+> θk=θ∗
+> k
+
+!2
+
+(3) where D denotes the training dataset, N is the total number of training samples, and ˆyν (C(x)) is the probability associated with the true label C(x) ∈ { 1, . . . , C } for input x at exit ν.
+
+2.2. Output distribution-level Regularization 
+
+The second proposed approach takes a fundamentally differ-ent perspective by operating at the output distribution level. Rather than protecting individual parameters, LwF preserves knowledge by enforcing that the current model maintains the input-output mappings learned by previously trained exits. In contrast to EWC, LwF imposes a functional constraint that is agnostic to specific parameter values and instead focuses on preserving decision boundaries. Under LwF, parameters are free to change substantially as long as the output distribu-tions of previous exits is minimally shifted by the training of this new exit, allowing the network to adapt its internal rep-resentations while maintaining stable behavior. Importantly, the LwF loss enables gradient flow through both the shared backbone and the classifier heads of earlier exits; this added flexibility allows earlier classifiers to compensate for moder-ate backbone drift, potentially mitigating performance degra-dation. The output distribution-level regularization is thus de-fined as: 
+
+R(μ)LwF =
+
+> μ−1
+
+X
+
+> ν=1
+
+KL (ˆyν ∥ ˆy∗ 
+
+> ν
+
+) (4) where ˆyν denotes the output distribution of IC ν when train-ing exit μ, ˆy∗ 
+
+> ν
+
+denotes the output distribution obtained with the training of IC ν, and KL (·∥· ) is the Kullback-Leibler di-vergence. 
+
+3. EXPERIMENTS 
+
+We evaluate our approach on standard early-exit benchmarks following the experimental setup proposed in [6]. Our evalua-tion focuses on comparing the proposed EWC and LwF regu-larization strategies against existing sequential training meth-ods across different architectures and computational budgets. 
+
+3.1. Experimental Setup Dataset. We conduct experiments on CIFAR-100 [22], a widely-used image classification benchmark consisting of 60,000 32×32 RGB images across 100 fine-grained classes. The dataset is split into 50,000 training images and 10,000 test images. Table 1 : Top-1 accuracy for ResNet-34 and MSDNet on CIFAR-100 compared to baselines.                                                      
+
+> Model Method 25% 50% 75% 100%
+> ResNet34 Disjoint 52 .57 67 .56 73 .49 73 .79
+> Branch-wise 64 .19 67 .03 66 .88 66 .75
+> Separate 66 .25 72 .57 72 .87 72 .82
+> Joint 62 .84 72 .80 74.32 74.17
+> EWC 70 .50 74.07 73 .90 73 .84
+> LwF 70.71 73 .84 73 .61 73 .55
+> MSDNet Disjoint 56 .74 63 .96 68 .59 70 .36
+> Branch-wise 58 .24 59 .73 60 .16 59 .97
+> Separate 64 .90 67 .84 69 .02 69 .21
+> Joint 65 .93 72 .02 74.73 75.86
+> EWC 65 .10 71 .03 71 .98 71 .89
+> LwF 66.50 73.04 73 .33 73 .20
+
+Architectures. We adopt the same architectures as in [6]. We evaluate two complementary architectures: ResNet-34 [23] and MSDNet [11]. For ResNet-34, we augment the standard architecture with 8 internal classifiers positioned at layers {2, 4, · · · , 16 }, where each exit consists of an SDN-type pooling [24], except for the last classifier, which uses an adaptive average pooling, followed by a linear classifier. For MSDNet, we employ the CIFAR variant with 7 blocks. 
+
+Baselines: All baseline accuracy scores are taken from [6]. We primarily compare our method against three sequen-tial training baselines: disjoint, branch-wise, and separate training, and include joint training for completeness. For our proposed approach, we set λ = 100 and ρ = 0 .7 for ResNet34, and λ = 1000 and ρ = 0 .2 for MSDNet, unless stated otherwise. 
+
+Training Details. We first pretrain each backbone network with only the final exit using conventional supervised train-ing. Then, following [6], for ResNet-34, we use a batch size of 128, a learning rate of 5 · 10 −4, and no weight decay. For MSDNet, we use a batch size of 512 and a learning rate of 
+
+10 −3 with no weight decay. Both models employ CutMix and Mixup augmentation strategies and early stopping with a patience of 50 epochs. After pretraining the backbones, we add ICs sequentially from shallow to deep, applying our proposed regularization at each stage. 
+
+3.2. Results and Discussion 
+
+Table 1 presents top-1 accuracy across exits corresponding to different computational budgets ( 25% , 50% , 75% , and 100% 
+
+FLOPs) for our two EENN models on CIFAR-100. Our pro-posed method consistently outperforms all baseline sequen-tial training approaches. Compared to the strongest sequential baseline (separate training), both EWC and LwF achieve sub-stantial improvements, particularly at low budgets: +4 .25% 
+
+and +4 .46% at 25% budget, respectively. This demonstrates that our approach effectively balances early exit specializa-tion with deep representation learning. 
+
+Table 2 : Ablation study on MSDNet for different hyperpa-rameters. Reg. stands for Regularization and defines which type of regularization is used. W.U stands for Warm-up and defines whether the backbone is pretrained.                                                        
+
+> Reg. λρW.U 25% 50% 75% 100%
+> EWC
+> 10 –True 58 .33 69 .27 73 .15 73 .39 10 2–True 62 .54 71 .05 72 .59 72 .43 10 3–True 65 .10 71 .03 71 .98 71 .89 10 3–False 66 .11 68 .91 67 .25 66 .93
+> LwF –0.2True 66 .50 73 .04 73 .33 73 .20
+> –0.5True 68 .57 72 .63 72 .56 72 .44
+> –0.7True 67 .51 72 .74 73 .07 72 .85
+> –0.7False 67 .49 70 .04 68 .99 68 .67
+
+The comparison across architectures highlights the inter-play between regularization type and backbone topology. In ResNet34, both EWC and LwF improve early-exit perfor-mance, with EWC slightly outperforming LwF at the deepest exit, suggesting that parameter-level stabilization is sufficient in sequential residual blocks. The skip connections facilitate feature reuse, so anchoring parameters preserves shallow-exit performance without constraining deeper layers. In contrast, MSDNet’s densely connected, multi-scale structure links many layers to multiple exits. Here, LwF consistently outper-forms EWC across both early and late exits, indicating that output-distribution regularization better accommodates func-tional dependencies among exits. By constraining predictions rather than parameters, LwF maintains early-exit accuracy while allowing the backbone to adapt flexibly for later classi-fiers, effectively balancing stability and plasticity in a highly entangled multi-exit architecture. Furthermore, we consistently observe improvements over joint training at earlier exits while maintaining comparable performance at later exits. This difference stems from the distinct optimization dynamics of the two approaches. Joint training drives all exits toward a shared compromise solution, whereas our method progressively increases regularization as new exits are added, limiting deeper layers’ ability to mod-ify earlier representations. Although this can slightly con-strain later adaptation, it yields substantially stronger early exits, aligning with the core goal of EENNs. Further gains may be possible by dynamically scheduling the regularization strength to better balance early and late exits. To better understand the impact of our design choices, we conduct an ablation study on MSDNet (see Table 2). Our ablation explores two main dimensions: (i) the regulariza-tion strengths, namely λ and ρ, and (ii) the impact of an ini-tial pretraining, or warm-up, phase where the full model is trained while optimizing only the final classifier. Across both methods, the strength of the regularization plays a central role in controlling the stability–plasticity trade-off: stronger regularization protects early exits but reduces the backbone’s flexibility for deeper layers, while weaker regularization al-20 30 40 50 60 70 80     
+
+> FLOPs (M)
+> 55.0
+> 57.5
+> 60.0
+> 62.5
+> 65.0
+> 67.5
+> 70.0
+> 72.5
+> Accuracy (%)
+> EWC ( = 10)
+> EWC ( = 1000)
+> LwF ( = 0.2)
+> LwF ( = 0.5)
+
+Fig. 2 : Top-1 accuracy given different FLOPs budgets for MSDNet. lows adaptation at the cost of shallow-exit performance. The key difference lies in how this constraint is applied. EWC rigidly anchors parameters important for earlier exits, stabiliz-ing low-level features but limiting the backbone’s ability to re-organize representations for deeper classifiers. This explains why early-exit performance improves steadily with larger λ,while high-budget exits are slightly constrained. In contrast, LwF constrains the outputs of earlier exits rather than the pa-rameters themselves, allowing internal representations to ad-just as long as the output distribution is preserved. Moderate 
+
+ρ achieves a balance, maintaining early-exit accuracy while enabling deep exits to benefit from flexible feature adapta-tion, whereas high ρ overemphasizes shallow classifiers and reduces high-budget performance. Furthermore, backbone warm-up further interacts with both methods by providing an initial alignment of features across layers before regulariza-tion is applied. Without a warm-up, both methods struggle: EWC may freeze suboptimal parameters, and LwF may over-constrain features that are not yet meaningfully structured, leading to lower accuracy across all exits. Overall, this ab-lation study validates the effectiveness of our proposed two-stage strategy: pretraining the final exit establishes rich hier-archical features, and selective regularization allows each exit to adapt effectively without compromising the network’s full representational capacity. Figure 2 follows the budgeted classification approach (e.g., [5, 6]) by evaluating the top-1 accuracy of a subset of configurations on MSDNet within a given computational budget. EWC with λ = 10 (blue curve) exhibits delayed accuracy growth, starting at only 55% and requiring approx-imately 40M FLOPs to reach 70% accuracy, nearly double the computation needed by well-regularized methods. This indicates that weak regularization fails to protect early-layer representations and forces reliance on deeper layers, thus heavier computational load. In contrast, stronger regulariza-tion enables substantially faster convergence: LwF variants and well-tuned EWC configurations reach 70% accuracy at 0.5 0.6 0.7 0.8      
+
+> Threshold
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> Exit ratio
+> EWC ( = 1000)
+> 0.5 0.6 0.7 0.8
+> Threshold
+> LwF ( = 0.5)
+
+Fig. 3 : Exit ratios of MSDNet on the CIFAR-100 test set for different thresholds for EWC ( λ = 1000 ) and LwF ( ρ = 0 .5)models. For each threshold, exits 1 through 7 are shown from left to right. roughly 20-25M FLOPs, yielding about a 2x computational speedup. Finally, Figure 3 further analyzes how confidence thresh-olds control the dynamic behavior of MSDNet by reporting exit ratios across all intermediate classifiers. As the threshold increases, predictions are progressively shifted toward deeper exits, indicating that harder samples are routed to later clas-sifiers with richer representations. Comparing EWC ( λ =1000 ) and LwF ( ρ = 0 .5) reveals a systematic difference: LwF exits fewer samples at early classifiers under the same thresholds, while EWC commits earlier. Interpreted together with Figure 2, where LwF achieves higher accuracy at sub-stantially lower FLOPs, this shows that LwF provides a higher effective speedup despite exiting later on average. This be-havior suggests that LwF learns more accurate but less confi-dent early classifiers, deferring decisions more often, whereas EWC produces earlier but less accurate exits. 
+
+4. CONCLUSION 
+
+In this work, we propose a novel strategy for training EENNs to mitigate the degradation of previously learned representa-tions caused by incremental exit addition. By incorporating parameter-level protection via EWC and output-distribution consistency via LwF, we establish a principled sequential training framework that balances exit specialization with knowledge preservation. Our experimental study demon-strates that the proposed approach consistently outperforms existing sequential training methods and achieves better early exit accuracy than joint training. Future work will investigate adaptive regularization scheduling and more structured pro-tection mechanisms, e.g., at the level of convolutional kernels or attention heads. 5. REFERENCES 
+
+[1] Yizeng Han, Gao Huang, Shiji Song, Le Yang, Honghui Wang, and Yulin Wang, “Dynamic Neural Networks: A Survey,” IEEE Transactions on Pattern Analysis & Machine Intelligence , vol. 44, no. 11, pp. 7436–7456, Nov. 2022. [2] Rongkang Dong, Yuyi Mao, and Jun Zhang, “Resource-constrained edge ai with early exit prediction,” Journal of Com-munications and Information Networks , vol. 7, no. 2, pp. 122–134, 2022. [3] Surat Teerapittayanon, Bradley McDanel, and H.T. Kung, “Branchynet: Fast inference via early exiting from deep neural networks,” in 2016 23rd International Conference on Pattern Recognition (ICPR) , 2016, pp. 2464–2469. [4] Dong-Jun Han, Jungwuk Park, Seokil Ham, Namjin Lee, and Jaekyun Moon, “Improving low-latency predictions in multi-exit neural networks via block-dependent losses,” IEEE Transactions on Neural Networks and Learning Systems , vol. 35, no. 11, pp. 16927–16935, 2024. [5] Cheng Gong, Yao Chen, Qiuyang Luo, Ye Lu, Tao Li, Yuzhi Zhang, Yufei Sun, and Le Zhang, “Deep feature surgery: To-wards accurate and efficient multi-exit networks,” in Computer Vision – ECCV 2024 , Cham, 2025, pp. 435–451, Springer Nature Switzerland. [6] Piotr Kubaty, Bartosz W´ ojcik, Bartłomiej Tomasz Krzepkowski, Monika Michaluk, Tomasz Trzcinski, Jary Pomponi, and Kamil Adamczewski, “How to train your multi-exit model? analyzing the impact of training strategies,” in Forty-second International Conference on Machine Learning , 2025. [7] Wei Zhu, Xiaoling Wang, Yuan Ni, and Guotong Xie, “GAML-BERT: Improving BERT early exiting by gradient aligned mu-tual learning,” in Proceedings of the 2021 Conference on Empir-ical Methods in Natural Language Processing , Online and Punta Cana, Dominican Republic, Nov. 2021, pp. 3033–3044, Associa-tion for Computational Linguistics. [8] Ji Xin, Raphael Tang, Yaoliang Yu, and Jimmy Lin, “BERxiT: Early exiting for BERT with better fine-tuning and extension to re-gression,” in Proceedings of the 16th Conference of the European Chapter of the Association for Computational Linguistics: Main Volume , Online, Apr. 2021, pp. 91–104, Association for Compu-tational Linguistics. [9] Bartosz Wojcik, Marcin Przewiezlikowski, Filip Szatkowski, Ma-ciej Wolczyk, Klaudia Balazy, Bartlomiej Krzepkowski, Igor Podolak, Jacek Tabor, Marek Smieja, and Tomasz Trzcinski, “Zero time waste in pre-trained early exit neural networks,” Neu-ral Networks , vol. 168, pp. 580–601, 2023. [10] Guanyu Xu, Jiawei Hao, Li Shen, Han Hu, Yong Luo, Hui Lin, and Jialie Shen, “Lgvit: Dynamic early exiting for accelerating vision transformer,” in Proceedings of the 31st ACM International Conference on Multimedia , New York, NY, USA, 2023, MM ’23, p. 9103–9114, Association for Computing Machinery. [11] Gao Huang, Danlu Chen, Tianhong Li, Felix Wu, Laurens van der Maaten, and Kilian Q. Weinberger, “Multi-scale dense networks for resource efficient image classification,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2018, pp. 284–293. [12] Haseena Rahmath P, Vishal Srivastava, Kuldeep Chaurasia, Roberto G. Pacheco, and Rodrigo S. Couto, “Early-exit deep neu-ral network - a comprehensive survey,” ACM Comput. Surv. , vol. 57, no. 3, Nov. 2024. [13] Liyuan Wang, Xingxing Zhang, Hang Su, and Jun Zhu, “A com-prehensive survey of continual learning: Theory, method and ap-plication,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 46, no. 8, pp. 5362–5383, 2024. [14] Filip Szatkowski, Fei Yang, Bartłomiej Twardowski, Tomasz Trzcinski, and Joost van de Weijer, “Accelerated inference and reduced forgetting: The dual benefits of early-exit networks in continual learning,” in 5th Workshop on Continual Learning in Computer Vision, CVPR , Seattle, USA, June 2024. [15] Ji Xin, Raphael Tang, Jaejun Lee, Yaoliang Yu, and Jimmy Lin, “DeeBERT: Dynamic early exiting for accelerating BERT infer-ence,” in Proceedings of the 58th Annual Meeting of the Associa-tion for Computational Linguistics , Online, July 2020, pp. 2246– 2251, Association for Computational Linguistics. [16] Weijie Liu, Peng Zhou, Zhiruo Wang, Zhe Zhao, Haotang Deng, and Qi Ju, “FastBERT: a self-distilling BERT with adaptive in-ference time,” in Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics , Online, July 2020, pp. 6035–6044, Association for Computational Linguistics. [17] James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Ve-ness, Guillaume Desjardins, Andrei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, Demis Hassabis, Claudia Clopath, Dharshan Kumaran, and Raia Had-sell, “Overcoming catastrophic forgetting in neural networks,” 
+
+Proceedings of the National Academy of Sciences , vol. 114, no. 13, pp. 3521–3526, 2017. [18] Jonathan Schwarz, Wojciech Czarnecki, Jelena Luketina, Ag-nieszka Grabska-Barwinska, Yee Whye Teh, Razvan Pascanu, and Raia Hadsell, “Progress & compress: A scalable framework for continual learning,” in Proceedings of the 35th International Con-ference on Machine Learning . 10–15 Jul 2018, vol. 80 of Proceed-ings of Machine Learning Research , pp. 4528–4537, PMLR. [19] Zhizhong Li and Derek Hoiem, “Learning without forgetting,” 
+
+IEEE Trans. Pattern Anal. Mach. Intell. , vol. 40, no. 12, pp. 2935–2947, Dec. 2018. [20] Shun-ichi Amari, “Natural gradient works efficiently in learning,” 
+
+Neural Computation , vol. 10, no. 2, pp. 251–276, 1998. [21] Gido M. van de Ven, “On the computation of the fisher infor-mation in continual learning,” in ICLR Blogposts 2025 , 2025, https://iclr-blogposts.github.io/2025/blog/fisher/. [22] Alex Krizhevsky, “Learning multiple layers of features from tiny images,” Tech. Rep., University of Toronto, 2009. [23] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun, “Deep residual learning for image recognition,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2016, pp. 770–778. [24] Yigitcan Kaya, Sanghyun Hong, and Tudor Dumitras, “Shallow-deep networks: Understanding and mitigating network overthink-ing,” in Proceedings of the 36th International Conference on Ma-chine Learning . 09–15 Jun 2019, vol. 97 of Proceedings of Ma-chine Learning Research , pp. 3301–3310, PMLR.

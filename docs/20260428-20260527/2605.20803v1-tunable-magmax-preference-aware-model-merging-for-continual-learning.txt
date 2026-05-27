@@ -1,0 +1,591 @@
+Title: Tunable MAGMAX: Preference-Aware Model Merging for Continual Learning
+
+URL Source: https://arxiv.org/pdf/2605.20803v1
+
+Published Time: Thu, 21 May 2026 00:39:57 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+## Tunable MAGMAX: Preference-Aware Model Merging for Continual Learning 
+
+Kei Hiroshima, Kento Uchida, and Shinichi Shirakawa 
+
+Yokohama National University, Yokohama Kanagawa 240-8501, Japan 
+
+Abstract. Continual learning (CL) aims to train models sequentially on multiple tasks while mitigating catastrophic forgetting of previously learned knowledge. Recent advances in large pre-trained models (LPMs) and model merging techniques, such as MAGMAX, have demonstrated effective CL performance by combining task-specific parameters. How-ever, existing methods primarily focus on average performance across all tasks and do not adequately address how to construct models ac-commodating different deployment environments or varying user prefer-ences. This paper proposes a model merging framework, termed Tunable MAGMAX, which enables preference-aware control of task-specific per-formance in CL. Our method introduces a preference vector that con-trols the number of elements selected from each task vector during model merging, allowing us to adjust the merged model performance according to their deployment needs. We further propose a method for automat-ically constructing appropriate preference vectors by leveraging small amounts of target environment data and datasets from model training tasks, thereby eliminating the need for manual specification. The ex-perimental result on CL benchmark tasks demonstrates that Tunable MAGMAX effectively controls task-wise performance and successfully adapts merged models to various target environments. The proposed Tunable MAGMAX achieves superior or comparable performance to baseline methods, making it a practical solution for deploying CL models to various environments where the preferences of each task performance differ. 
+
+Keywords: Task vector · Model merging · Continual learning · Dataset similarity. 
+
+1 Introduction 
+
+In continual learning (CL), a machine learning model is trained sequentially on a series of tasks without access to data from previous tasks [19]. The objective of CL is to obtain a generalized model across all tasks by adapting to incoming tasks while retaining knowledge from previously trained tasks. Models trained in CL often suffer from catastrophic forgetting (CF), a phenomenon where perfor-mance on previous tasks degrades due to biased training on the current task. To alleviate CF, many CL techniques have been developed. The major techniques can be categorized into three groups: adding regularization terms to the loss  
+
+> arXiv:2605.20803v1 [cs.LG] 20 May 2026 2K. Hiroshima et al.
+
+function to maintain knowledge of previously trained tasks [11, 13], expanding the model architecture to avoid parameter interference among training tasks [17], and utilizing replay buffers that store small amounts of data from previous tasks to enable retraining [2]. These traditional techniques have mainly been evaluated on relatively sim-ple models with limited capacity, such as deep and convolutional neural net-works. Nowadays, large pre-trained models (LPMs), including large-scale Vision Transformers pre-trained on extensive datasets (e.g., ImageNet [6] and LAION-400M [18]), have become a common tool, owing to rapid advancements in deep learning technology [4, 15]. These models have a large capacity and perform re-markably well on a wide variety of tasks. In addition, model merging, a cost-efficient approach to developing mod-els tailored to specific tasks [1, 3], has been investigated [9, 21]. Model merging creates a new model tailored to a given task by combining multiple model pa-rameters fine-tuned on different tasks from a common LPM. LPMs are also adopted as base models in CL. In such scenarios, it is cru-cial not only to mitigate CF during training but also to effectively leverage the general capabilities of LPMs. Maximum Magnitude Selection (MAGMAX) [14] demonstrated the effectiveness of LPMs and model merging in CL by utiliz-ing model parameters corresponding to sequentially fine-tuned models across a sequence of tasks. In MAGMAX, the task vector is defined as the difference be-tween the base pre-trained model parameters and those of the sequentially fine-tuned model from the base model. The task vectors obtained for each trained task are merged by selecting the value with element-wise maximum absolute magnitude across the task vectors. Despite having relatively low space and time complexities, MAGMAX outperforms other CL and model merging methods. Previous works on CL have focused on improving average performance across all trained tasks. In contrast, the importance of each task can vary depending on user demands or deployment environments in practical situations. For in-stance, in medical diagnosis systems, different hospitals may prioritize different disease detection tasks based on their specialization, such as tumor detection or cardiac abnormality detection. However, due to limited computational resources and insufficient training data available at each hospital, they often rely on a published pre-trained model trained on general medical tasks and customize it to emphasize only the most relevant tasks for their specific needs. Similarly, in autonomous driving, vehicles deployed in different geographical regions, such as rainy or snowy climates, or urban versus highway environments, require dif-ferent emphases on region-specific driving tasks, even though the base LPM is pre-trained to cover a wide range of driving conditions during pre-training. From this perspective, existing CL techniques have not adequately addressed how to construct models flexibly to reflect these diverse and deployment-specific task priorities. In that sense, it is unclear whether MAGMAX [14] remains effective. In fact, Marczak et al. [14] reported that the task vector corresponding to the last trained task accounted for more than 40% of the elements of the merged task vector. This dominance can lead to inferior performance compared to other Preference-Aware Model Merging for Continual Learning 3
+
+existing methods on some tasks, even though MAGMAX achieves the highest average performance. In this paper, we propose a novel model-merging-based CL method for preference-aware control of performances for each task by extending MAGMAX. The pro-posed method, Tunable MAGMAX, adjusts the number of elements selected from each task vector during model merging based on a preference vector. We further introduce a method that automatically sets the preference vector and constructs an appropriate merged model tailored to various target environments with a lower computational cost than training their own model from scratch. In our method, a preference vector is determined based on the dataset similarity, such as one defined using the optimal transport (OT) distance [10] and the la-bel distribution similarity, between a small amount of target environment data and datasets from the model training tasks. We conduct validation experiments based on CL benchmarks to compare our proposed method with the existing model merging methods. Experimental results demonstrate that our proposed method successfully controls task-wise performance, and our method constructs suitable merged models for given target environments by controlling the prefer-ence vector based on dataset similarity. Our contributions are summarized as follows: 
+
+– We propose Tunable MAGMAX, a preference-aware model merging for CL, that regulates the number of elements selected from each task vector to control task-wise performance. 
+
+– We propose a method to construct merged models tailored to target en-vironments based on dataset similarity between small amounts of target environment data and datasets from model training tasks. 
+
+– Through the experimental evaluation on CL benchmarks, we demonstrate that our framework successfully constructs preferable merged models for various target environments. 
+
+2 Related Works 
+
+2.1 Continual Learning 
+
+In continual learning (CL) settings, a single model is repeatedly trained on mul-tiple tasks in a sequence while being required to maintain its knowledge from previously trained tasks without access to training data from those tasks. The domain, class, and task incremental learning are widely known CL settings in classification tasks [19]. In domain incremental learning, tasks do not share their input distribution but share the same label space. In class incremental learning, tasks involve different label spaces while sharing the same input domain. In the task incremental learning, tasks share neither the input domain nor the label space. Previous approaches to mitigating the problem of catastrophic forgetting (CF) in CL settings are categorized into three groups based on their methodolo-gies: regularization-based approaches, replay-based approaches, and parameter 4 K. Hiroshima et al. 
+
+isolation-based approaches. Elastic Weight Consolidation (EWC) [11], which is a regularization-based approach, prevents certain model parameters from being updated during training on later tasks. These parameters are selected based on their importance defined by an approximated Fisher information matrix calcu-lated at the end of training on each task. Learning without Forgetting (LwF) [13] is another regularization-based approach that penalizes model updates to pre-vent drastic changes in the model’s outputs during training on later tasks. Maxi-mally Interfered Retrieval (MIR) [2], which is a replay-based approach, alleviates CF by training on new task data combined with a small amount of valuable data from previously trained tasks stored in a replay buffer. Progressive Neural Net-works [17], a parameter isolation approach, expand the model architecture by allocating new parameters for training on new tasks, thereby preserving model parameters obtained during training on previous tasks. 
+
+2.2 MAGMAX 
+
+Maximum Magnitude Selection (MAGMAX) [14] is a CL method based on model merging of fine-tuned LPMs. In MAGMAX, the LPM is sequentially fine-tuned on a sequence of tasks {D 1, . . . , DT }, and the model parameters for each task θ1, . . . , θT ∈ Rd are obtained. Then the task vectors for these tasks are computed, which are defined as τk = θk − θ0 for k = 1 , . . . , T , where θ0 ∈ Rd
+
+represents the LPM’s parameters before fine-tuning. In the model merging phase, task vectors are merged by selecting the value with the maximum absolute magnitude in the element-wise manner, i.e., for 
+
+p = 1 , . . . , d , the element of the merged task vector is computed as 
+
+[τmerged ]p =
+
+> T
+
+X
+
+> k=1
+
+[τk]p · 1{k = argmax 
+
+> i=1 ,...,T
+
+{| [τi]p|}} , (1) where [a]p denotes the p-th element of a given vector a, and 1{E} ∈ { 0, 1} is the indicator function for an event E. In addition, by iteratively merging the task vector τk for the current task and the merged task vector τmerged ,k −1 so far, MAGMAX can be performed with constant memory with respect to the number of tasks. According to experiments in [14], MAGMAX was demonstrated to perform better than other CL and model merging approaches. However, MAGMAX does not consider the importance of trained tasks, which can vary depending on user demands or deployment environments in practical situations. Therefore, it is nec-essary to extend MAGMAX for preference-aware model construction to reflect user demands. 
+
+3 Proposed Method 
+
+We explain our problem setting in Section 3.1, our proposed method called Tunable MAGMAX that controls task-wise performance via preference vector during model merging in Section 3.2, and how to compute the preference vector in Section 3.3. Figure 1 illustrates our approach. Preference-Aware Model Merging for Continual Learning 5... 
+
+<latexit sha1_base64="4Z3J3D0M4elPYUEqOBTAiK93PYE=">AAACFnicbVDLSsNAFL2pr1pfUZdugkVwY0mKVJdFXbis0Be0IUymk3boZBJmJkIJ7U+48VfcuFDErbjzb5y2WdTWAwPnnnMvc+/xY0alsu0fI7e2vrG5ld8u7Ozu7R+Yh0dNGSUCkwaOWCTaPpKEUU4aiipG2rEgKPQZafnD26nfeiRC0ojX1Sgmboj6nAYUI6Ulz7zohkgNMGLp3dhzJpPJYl1equueWbRL9gzWKnEyUoQMNc/87vYinISEK8yQlB3HjpWbIqEoZmRc6CaSxAgPUZ90NOUoJNJNZ2eNrTOt9KwgEvpxZc3UxYkUhVKOQl93TpeUy95U/M/rJCq4dlPK40QRjucfBQmzVGRNM7J6VBCs2EgThAXVu1p4gATCSidZ0CE4yyevkma55FRKlYfLYvUmiyMPJ3AK5+DAFVThHmrQAAxP8AJv8G48G6/Gh/E5b80Z2cwx/IHx9QsUoaCW</latexit> 
+
+D1 D2 DT
+
+<latexit sha1_base64="4Z3J3D0M4elPYUEqOBTAiK93PYE=">AAACFnicbVDLSsNAFL2pr1pfUZdugkVwY0mKVJdFXbis0Be0IUymk3boZBJmJkIJ7U+48VfcuFDErbjzb5y2WdTWAwPnnnMvc+/xY0alsu0fI7e2vrG5ld8u7Ozu7R+Yh0dNGSUCkwaOWCTaPpKEUU4aiipG2rEgKPQZafnD26nfeiRC0ojX1Sgmboj6nAYUI6Ulz7zohkgNMGLp3dhzJpPJYl1equueWbRL9gzWKnEyUoQMNc/87vYinISEK8yQlB3HjpWbIqEoZmRc6CaSxAgPUZ90NOUoJNJNZ2eNrTOt9KwgEvpxZc3UxYkUhVKOQl93TpeUy95U/M/rJCq4dlPK40QRjucfBQmzVGRNM7J6VBCs2EgThAXVu1p4gATCSidZ0CE4yyevkma55FRKlYfLYvUmiyMPJ3AK5+DAFVThHmrQAAxP8AJv8G48G6/Gh/E5b80Z2cwx/IHx9QsUoaCW</latexit> 
+
+D1 D2 DT
+
+<latexit sha1_base64="4Z3J3D0M4elPYUEqOBTAiK93PYE=">AAACFnicbVDLSsNAFL2pr1pfUZdugkVwY0mKVJdFXbis0Be0IUymk3boZBJmJkIJ7U+48VfcuFDErbjzb5y2WdTWAwPnnnMvc+/xY0alsu0fI7e2vrG5ld8u7Ozu7R+Yh0dNGSUCkwaOWCTaPpKEUU4aiipG2rEgKPQZafnD26nfeiRC0ojX1Sgmboj6nAYUI6Ulz7zohkgNMGLp3dhzJpPJYl1equueWbRL9gzWKnEyUoQMNc/87vYinISEK8yQlB3HjpWbIqEoZmRc6CaSxAgPUZ90NOUoJNJNZ2eNrTOt9KwgEvpxZc3UxYkUhVKOQl93TpeUy95U/M/rJCq4dlPK40QRjucfBQmzVGRNM7J6VBCs2EgThAXVu1p4gATCSidZ0CE4yyevkma55FRKlYfLYvUmiyMPJ3AK5+DAFVThHmrQAAxP8AJv8G48G6/Gh/E5b80Z2cwx/IHx9QsUoaCW</latexit> 
+
+D1 D2 DT
+
+merged model for 
+
+average performance 
+
+MAGMAX 
+
+... fine -tuned 
+
+models 
+
+<latexit sha1_base64="4Z3J3D0M4elPYUEqOBTAiK93PYE=">AAACFnicbVDLSsNAFL2pr1pfUZdugkVwY0mKVJdFXbis0Be0IUymk3boZBJmJkIJ7U+48VfcuFDErbjzb5y2WdTWAwPnnnMvc+/xY0alsu0fI7e2vrG5ld8u7Ozu7R+Yh0dNGSUCkwaOWCTaPpKEUU4aiipG2rEgKPQZafnD26nfeiRC0ojX1Sgmboj6nAYUI6Ulz7zohkgNMGLp3dhzJpPJYl1equueWbRL9gzWKnEyUoQMNc/87vYinISEK8yQlB3HjpWbIqEoZmRc6CaSxAgPUZ90NOUoJNJNZ2eNrTOt9KwgEvpxZc3UxYkUhVKOQl93TpeUy95U/M/rJCq4dlPK40QRjucfBQmzVGRNM7J6VBCs2EgThAXVu1p4gATCSidZ0CE4yyevkma55FRKlYfLYvUmiyMPJ3AK5+DAFVThHmrQAAxP8AJv8G48G6/Gh/E5b80Z2cwx/IHx9QsUoaCW</latexit> 
+
+D1 D2 DT
+
+fine -tuned models 
+
+similarity with 
+
+target environment 
+
+merged model for 
+
+target environment 
+
+training 
+
+dataset 
+
+meta dataset 
+
+for target env. 
+
+... 
+
+<latexit sha1_base64="4Z3J3D0M4elPYUEqOBTAiK93PYE=">AAACFnicbVDLSsNAFL2pr1pfUZdugkVwY0mKVJdFXbis0Be0IUymk3boZBJmJkIJ7U+48VfcuFDErbjzb5y2WdTWAwPnnnMvc+/xY0alsu0fI7e2vrG5ld8u7Ozu7R+Yh0dNGSUCkwaOWCTaPpKEUU4aiipG2rEgKPQZafnD26nfeiRC0ojX1Sgmboj6nAYUI6Ulz7zohkgNMGLp3dhzJpPJYl1equueWbRL9gzWKnEyUoQMNc/87vYinISEK8yQlB3HjpWbIqEoZmRc6CaSxAgPUZ90NOUoJNJNZ2eNrTOt9KwgEvpxZc3UxYkUhVKOQl93TpeUy95U/M/rJCq4dlPK40QRjucfBQmzVGRNM7J6VBCs2EgThAXVu1p4gATCSidZ0CE4yyevkma55FRKlYfLYvUmiyMPJ3AK5+DAFVThHmrQAAxP8AJv8G48G6/Gh/E5b80Z2cwx/IHx9QsUoaCW</latexit> 
+
+D1 D2 DT
+
+<latexit sha1_base64="4Z3J3D0M4elPYUEqOBTAiK93PYE=">AAACFnicbVDLSsNAFL2pr1pfUZdugkVwY0mKVJdFXbis0Be0IUymk3boZBJmJkIJ7U+48VfcuFDErbjzb5y2WdTWAwPnnnMvc+/xY0alsu0fI7e2vrG5ld8u7Ozu7R+Yh0dNGSUCkwaOWCTaPpKEUU4aiipG2rEgKPQZafnD26nfeiRC0ojX1Sgmboj6nAYUI6Ulz7zohkgNMGLp3dhzJpPJYl1equueWbRL9gzWKnEyUoQMNc/87vYinISEK8yQlB3HjpWbIqEoZmRc6CaSxAgPUZ90NOUoJNJNZ2eNrTOt9KwgEvpxZc3UxYkUhVKOQl93TpeUy95U/M/rJCq4dlPK40QRjucfBQmzVGRNM7J6VBCs2EgThAXVu1p4gATCSidZ0CE4yyevkma55FRKlYfLYvUmiyMPJ3AK5+DAFVThHmrQAAxP8AJv8G48G6/Gh/E5b80Z2cwx/IHx9QsUoaCW</latexit> 
+
+D1 D2 DT
+
+... 
+
+Sim Sim Sim ... 
+
+preference 
+
+vector 
+
+<latexit sha1_base64="isnnAp9JdsFhwpeAtYif1bn0nOQ=">AAAB+XicdVBLSwMxGMz6rPW16tFLsAieluy2bnssevFYoS9ol5JNs21oNrsk2UJZ+k+8eFDEq//Em//G9CGo6EDIMPN9ZDJhypnSCH1YG5tb2zu7hb3i/sHh0bF9ctpWSSYJbZGEJ7IbYkU5E7Slmea0m0qK45DTTji5XfidKZWKJaKpZykNYjwSLGIEayMNbLsfJnyoZrG5cjEfNAd2CTk13/V8DyKnUr72PWQI8qvILUPXQUuUwBqNgf3eHyYki6nQhGOlei5KdZBjqRnhdF7sZ4qmmEzwiPYMFTimKsiXyefw0ihDGCXSHKHhUv2+keNYLcKZyRjrsfrtLcS/vF6mo1qQM5FmmgqyeijKONQJXNQAh0xSovnMEEwkM1khGWOJiTZlFU0JXz+F/5O257i+499XSvWbdR0FcA4uwBVwQRXUwR1ogBYgYAoewBN4tnLr0XqxXlejG9Z65wz8gPX2CX9ZlEA=</latexit> 
+
+nT
+
+Tunable MAGMAX 
+
+Fig. 1: Our method constructs the merged model tailored to the target envi-ronment according to the preference vector nT generated by dataset similarity, while MAGMAX [14] constructs the merged model that works well on all train-ing tasks on average. 
+
+3.1 Problem Setting 
+
+We consider a traditional CL scenario where a model sequentially learns from a stream of disjoint tasks {D 1, D2, . . . , DT }, where T denotes the total num-ber of tasks. Each task has pairs of features and ground-truth labels: Dt =
+
+{(x(j)
+
+t , y (j)
+
+t )}Nt
+
+j=1 , where x(j)
+
+t ∈ X t and y(j)
+
+t ∈ Y t with feature space Xt and la-bel space Yt for Dt, and Nt is the number of data in the t-th task Dt. For deployment, we consider the target dataset on the target environment Dtar =
+
+{(x(j)
+
+tar , y (j)
+
+tar )}Ntar 
+
+j=1 , where Ntar is the number of data in Dtar which can be var-ied. The target environment Dtar has its own data distribution that may not be identical to any trained tasks {D t}Tt=1 . Our aim is to construct an ap-propriate model for each target environment without retraining the fine-tuned model in CL. Additionally, we consider the following scenarios: 1) the meta dataset Dmeta = {(x(j)
+
+meta , y (j)
+
+meta )}Nmeta 
+
+j=1 on the target environment is accessi-ble, 2) the feature set Dmeta ,x = {x(j)
+
+meta }Nmeta 
+
+j=1 is accessible, 3) the label set 
+
+Dmeta ,y = {y(j)
+
+meta }Nmeta 
+
+j=1 is accessible, and 4) no data is accessible, where Nmeta 
+
+is the number of data in Dmeta .We assume access to a pre-trained model with parameters θ0 ∈ Rd, where d
+
+represents the total number of parameters in the model. For consecutive tasks 
+
+t ∈ { 1, 2, . . . , T }, we sequentially fine-tune the model using each task-specific training dataset to obtain task-specific parameters θt. Following the task vector framework [9], we define the task vector for task t as the element-wise difference between the fine-tuned and pre-trained model parameters as τt = θt − θ0 ∈ Rd.The task vector τt encapsulates the knowledge specific to the t-th task. 6 K. Hiroshima et al. 
+
+Algorithm 1 Merge Process of Tunable MAGMAX 
+
+Input: Task vectors τ1, · · · , τT , preference vector nT = ( n1, . . . , n T ), number of as-signment processes K = 2 
+
+1: Set Iunselect = {1, · · · , d } and St = ∅ for all t = 1 , . . . , T 
+
+2: for k = 1 , . . . , K do 
+
+3: for t = T, . . . , 1 do 
+
+4: ˆSt ← Elements in Iunselect where τt has largest magnitude among {τt′ }tt′=1 .5: if |S t ∪ ˆSt| > n t then 
+
+6: ˆSt ← Select nt − |S t| elements from ˆSt randomly 7: end if 
+
+8: St ← S t ∪ ˆSt and Iunselect ← I unselect \ ˆSt
+
+9: end for 
+
+10: end for 
+
+11: for t = 1 , . . . , T do 
+
+12: ˆSt ← Select nt − |S t| elements from Iunselect randomly 13: St ← S t ∪ ˆSt and Iunselect ← I unselect \ ˆSt
+
+14: end for 
+
+15: for t = 1 , . . . , T do 
+
+16: [τmerged ]p = [ τt]p for all p ∈ S t
+
+17: end for 
+
+18: return Merged task vector τmerged 
+
+3.2 Tunable MAGMAX 
+
+In the model merging method proposed in MAGMAX [14], the number of ele-ments selected from each task vector for the merged task vector is not explicitly controlled, which can result in bias towards certain task vectors. To address this issue, we propose a new model merging method called Tunable MAGMAX that utilizes a preference vector nT = ( n1, . . . , n T ) ∈ NT . The preference vector is set to satisfy PTt=1 nt = d, where d denotes the number of model parameters, and is used to adjust the number of elements selected from T task vectors {τt}Tt=1 
+
+for the merged task vector during model merging. We can regard the t-th value in the preference vector as the importance of the t-th task in the merged model. In the merging process, Tunable MAGMAX selects the elements correspond-ing to the t-th task vector τt in descending order t = T, · · · , 1 as follows. First, for the t-th selection phase, the elements that are not selected before and have the largest magnitude in the t-th task vector among τ1, · · · , τt are selected as 
+
+ˆSt =
+
+
+
+p ∈ I \ S t+1: T t = argmax 
+
+> t′=1 ,...,t
+
+{| [τt′ ]p|} 
+
+
+
+, (2) where I = {1, . . . , d } and St+1: T = S 
+
+> t′=t+1 ,...,T
+
+St′ are the indexes of all elements and the elements selected before the t-th task vector, respectively. If the number of selected elements | ˆSt| is greater than nt, nt elements are selected randomly as 
+
+St =
+
+( ˆSt if | ˆSt| ≤ nt
+
+nt elements in ˆSt randomly selected otherwise . (3) Preference-Aware Model Merging for Continual Learning 7
+
+Then, the elements of the merged task vector are given by the selected elements in St as 
+
+[τmerged ]p = [ τt]p for p ∈ S t and t = 1 · · · , T . (4) This adjustment is performed starting from the last task because the task vector τT corresponding to the last trained task was reported to account for a large part of the merged task vector in MAGMAX [14]. We note that, when there is at least one task vector τt for which the number of selected elements 
+
+|S t| is smaller than its corresponding budget nt in the preference vector, some elements may remain unassigned after the assignment process by (2) and (3). To resolve this issue, we repeat the alignment process several times to assign the unselected elements to task vectors whose selected elements are fewer than the value of the preference vector as |S k| < n k. After repeating the assignment for 
+
+K times, the remaining elements are randomly assigned to task vectors whose selected elements are still smaller than the preference vector |S k| < n k. We set K = 2 in this paper. We empirically confirmed that randomly assigned parameters were zero in many cases, or at most 10% of the whole model, and that these parameters did not significantly affect merged models’ performance. Therefore, this randomness does not critically impact overall model performance. Algorithm 1 shows the merge procedure of Tunable MAGMAX. With this algorithm, the merged task vector can involve important elements from each task vector while keeping the number of elements selected from the task vector consistent with the preference vector. As a result, Tunable MAGMAX enables us to control the merged model’s task-wise performance flexibly with the preference vector. 
+
+3.3 Similarity-Based Preference Control 
+
+The choice of the preference vector nT affects the task-wise performance of the merged model produced by Tunable MAGMAX. It is possible to manually construct an appropriate preference vector for the target environment. However, it may be tedious work. Therefore, we propose two mechanisms for constructing the preference vector using a small amount of meta data Dmeta collected from a target environment. Our mechanisms compute the preference vector using the dataset similarities between the meta dataset and training datasets for each task. Our mechanisms focus on the case where either the feature set Dmeta ,x =
+
+{x(j)
+
+> meta
+
+}Nmeta  
+
+> j=1
+
+or the label set Dmeta ,y = {y(j)
+
+> meta
+
+}Nmeta  
+
+> j=1
+
+is accessible. We note that, when pairs of features and labels Dmeta = {(x(j)
+
+> meta
+
+, y (j)
+
+> meta
+
+)}Nmeta  
+
+> j=1
+
+are given, the preference vector can alternatively be tuned via hyperparameter optimization. 
+
+Preference Control with Feature Set When only the feature set in Dmeta ,x 
+
+is available, we use the optimal transport (OT) distance [10] of the embedded features as the dataset similarity. Specifically, the similarity sim( Dt, Dmeta ,x )8 K. Hiroshima et al. 
+
+Algorithm 2 Tunable MAGMAX with Similarlity-based Preference Control 
+
+Input: Weight parameter of LPM θ0 ∈ Rd, task sequence {D t}Tt=1 , small amount of data Dmeta from deployment environments, merge coefficient λmerge ∈ [0 , 1] 
+
+1: for t = 1 , . . . , T do 
+
+2: Get θt by fine-tuning with Dk from θt−1.3: Compute task vector as τk = θt − θ0.4: Compute dataset similarity st = sim( Dt, Dmeta ) as described in Section 3.3. 5: end for 
+
+6: nT ← Compute preference vector using similarities {st}Tt=1 with (5) and (6). 7: τmerged ← Merge task vectors {τt}Tt=1 using Tunable MAGMAX with nT .8: Compute θmerged = θ0 + λmerge τmerged 
+
+9: return θmerged 
+
+between the t-th task Dt and the meta dataset Dmeta ,x is defined as 
+
+sim( Dt, Dmeta ,x ) = exp 
+
+
+
+−γ · OT 
+
+n 
+
+fθt (x(j) 
+
+> t
+
+)
+
+o Nt
+
+> j=1
+
+,
+
+n
+
+fθt (x(j)meta )
+
+o Nmeta 
+
+> j=1
+
+ 
+
+,
+
+where fθt denotes the image encoder with the parameter θt and γ is a scaling parameter. We set the scaling parameter as γ = 100 in this paper. The OT distance OT( ·, ·) is approximated using the Sinkhorn algorithm [5]. The prefer-ence vector nT is then constructed by allocating elements proportionally to the computed similarities as 
+
+nt = ¯ nt + 1{t ≤ R} , (5) where 
+
+¯nt =
+
+$
+
+sim( Dt, Dmeta ,x )
+
+PTt′=1 sim( Dt′ , Dmeta ,x ) · d
+
+%
+
+and R = d −
+
+> T
+
+X
+
+> t=1
+
+¯nt . (6) We note that PTt=1 nt = d is always satisfied. 
+
+Preference Control with Label Set When only the label set Dmeta ,y is available, we use the label distribution similarity between each training task and the target environment, which is defined as 
+
+sim( Dt, Dmeta ,y ) = X
+
+> c∈Y meta
+
+rc(Dt) · rc(Dmeta ,y ) , (7) where Ymeta is the set of classes that appear in the meta dataset, and rc(D) = 
+
+P|D|  
+
+> j=1
+
+I{y(j) = c}/|D| is the empirical appearance probability of class c in the dataset D. We note that this similarity corresponds to the inner product between empirical label distributions. The preference vector is computed by (5) using the label-distribution similarities. Preference-Aware Model Merging for Continual Learning 9
+
+Table 1: Experimental setting for CIFAR-100 and ImageNet-R.                      
+
+> CIFAR-100-TImageNet-R-T
+> Number of tasks ( T)520 50 520 50 Number of classes per task 20 5240 10 4Number of training data per task 10,000 2,500 1,000 4,800 3,000 480 Number of test data per task 2,000 500 200 1,200 600 120
+
+Tunable MAGMAX with Similarity-Based Preference Control Algo-rithm 2 provides the overall procedure of Tunable MAGMAX with dataset similarity-based construction of the preference vector. With this procedure, our method enables users to construct merged models without requiring manual specification of preference vectors for various target environments, while main-taining reasonable computational overhead. 
+
+4 Experiments and Results 
+
+In this section, we evaluate the proposed Tunable MAGMAX on standard CL benchmarks. Section 4.1 explains the experimental setting. Section 4.2 presents the experimental results of Tunable MAGMAX with exemplary preference vec-tors. Section 4.3 evaluates the similarity-based preference control mechanism. Finally, Section 4.4 shows the result of the ablation study. 
+
+4.1 Experimental Setting Datasets Following [14], we conduct experiments in class incremental learning settings. We use CIFAR-100 [12] and ImageNet-R [8], which have 100 and 200 classes, respectively. For each dataset, we divide it into T equal subsets of disjoint classes, where T ∈ { 5, 20 , 50 }. We denote each task sequence setting as CIFAR-100-T and ImageNet-R-T . Table 1 shows the detailed settings for each dataset. The order of tasks in the task sequence is set as well as [14]. 
+
+Implementation Details We use the CLIP [16] with a ViT-B/16 [7] image encoder as a pre-trained model. We fine-tune the image encoder using a batch size of 128 and the AdamW optimizer with a learning rate of 10 −5 and a cosine annealing scheduler. Models train on each task for 10 epochs. The final classifi-cation layer is imported from CLIP’s text encoder and kept frozen during train-ing so that the model can preserve its vocabulary obtained during pre-training. These experimental settings follow [14], and the implementation is based on its official code 1. The code of Tunable MAGMAX will be made available at 
+
+https://github.com/KeiHiroshima/tunable-magmax .      
+
+> 1https://github.com/danielm1405/magmax/ 10 K. Hiroshima et al. 12345
+> Task ID
+> 1
+> 2
+> 3
+> 4
+> nt
+> 1e7
+> Alpha
+> =0.5
+> =2.0
+
+Fig. 2: Preference vector for CIFAR-100-5 with α = 0 .5, 2.0 (and d ≈ 86 × 10 6). 
+
+4.2 Evaluation of Tunable MAGMAX with Exemplary Preference Vectors 
+
+In this section, we evaluate the flexibility of the task-wise performance of the merged model constructed by Tunable MAGMAX. As an exemplary setting of the preference vector, we introduce a coefficient α ≥ 0 and define the t-th element of the preference vector nT as 
+
+nt = ¯ nt + I{t ≤ R} (8) where ¯nt =
+
+$
+
+αT −t
+
+PTt′=1 αT −t′ · d
+
+%
+
+and R = d −
+
+> T
+
+X
+
+> t=1
+
+¯nt . (9) Figure 4 illustrates the resulting preference vector for CIFAR-100-5 with α =0.5 and α = 2 . When α > 1, the task vectors corresponding to earlier tasks contribute more elements to the merged model, whereas α < 1 prioritizes later tasks. We set nT = (0 , . . . , 0, d ) when α = 0 . The case α = 1 results in an equal contribution from all task vectors. We compare our proposed method ( Tunable MAGMAX ) with MAG-MAX [14] in terms of task-wise performance to demonstrate the controllability of the preference vector. We set the scaling factor λmerge = 0 .5 for both methods, and a merged model θmerged is given as follow: θmerged = θ0 + λmerge · τmerged .All other experimental settings follow those described in Section 4.1. Figure 3 presents the average top-1 accuracy on test data from the first and last tasks on CIFAR-100-T with T ∈ { 5, 20 , 50 } among three different random seeds. When 
+
+α = 2 .0, our proposed method performs better than MAGMAX on the first task, whereas when α = 0 .5, our proposed method performs better or compa-rable compared to MAGMAX on the last task of each setting. These results demonstrate that the control of the number of elements selected from each task vector affects the model performance on the corresponding task, and Tunable MAGMAX flexibly handles the performance trade-off between earlier and later tasks as the preference vector varies. Preference-Aware Model Merging for Continual Learning 11 0.0 0.5 1.0 1.5 2.0          
+
+> alpha
+> 0.70
+> 0.73
+> 0.75
+> 0.78
+> 0.80
+> 0.83
+> 0.85
+> 0.88
+> 0.90
+> Accuracy
+> CIFAR-100-5
+> 0.0 0.5 1.0 1.5 2.0
+> alpha
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90 CIFAR-100-20
+> 0.0 0.5 1.0 1.5 2.0
+> alpha
+> 0.50
+> 0.60
+> 0.70
+> 0.80
+> 0.90
+> CIFAR-100-50
+> Task index and merge method
+> First task (MAGMAX)
+> Last task (MAGMAX)
+> First task (Tunable MAGMAX)
+> Last task (Tunable MAGMAX)
+
+Fig. 3: Top-1 accuracy for the first and last tasks on CIFAR-100-5 (left), -20 (center), -50 (right) with the preference vectors in (8) and (9) parametrized by 
+
+α. The mean and standard deviation over three runs are plotted for each setting. 
+
+4.3 Evaluation of Tunable MAGMAX with Similarity-based Preference Control 
+
+To evaluate the effectiveness of our similarity-based preference control mecha-nisms, we construct multiple target environments for CIFAR-100-T and ImageNet-R-T that simulate various real-world conditions where models encounter differ-ent data distributions from their training tasks. Following the problem setting described in Section 3.1, we design target environments with five different vari-ations. These target environments are constructed by mixing test datasets for 
+
+M ∈ { 2, 3} tasks with a pre-defined mixing ratio amix = ( a1, . . . , a M ) that sat-isfies PMj=1 aj = 1 . We prepare five configurations of the target environments 
+
+Dtar ,i (i ∈ { 1, . . . , 5}) as follows. 1. Dtar ,1: balanced mixture of two tasks ( amix = (0 .5, 0.5) )2. Dtar ,2: imbalanced mixture of two tasks ( amix = (0 .8, 0.2) )3. Dtar ,3: balanced mixture of three tasks ( amix = (1 /3, 1/3, 1/3) )4. Dtar ,4: moderately imbalanced mixture of three tasks ( amix = (0 .4, 0.4, 0.2) )5. Dtar ,5: highly imbalanced mixture of three tasks ( amix = (0 .6, 0.2, 0.2) )We randomly down-sample the test datasets to make their size identical among the five configurations. The total numbers of test data are 1,000 for CIFAR-100-5 and ImageNet-R-5, 500 for CIFAR-100-20 and ImageNet-R-20, and 200 for CIFAR-100-50 and ImageNet-R-50. For ImageNet-R-20 and ImageNet-R-50, the mixing ratio could not be strictly satisfied due to the shortage of test data; however, it was followed as much as possible. We split the down-sampled dataset and use 10% of it as the meta dataset. The remaining 90% are used for the model evaluation. In addition, 500 images sampled from each training task are used to calculate dataset similarity in all experiments. For each configuration, we generate five variants by varying random seeds for the selection of M tasks and data sampling, and use the average top-1 accuracy across these five variants as 12 K. Hiroshima et al. 
+
+Table 2: Average accuracy on the target datasets in CIFAR-100-20 
+
+Dtar ,1 Dtar ,2 Dtar ,3 Dtar ,4 Dtar ,5 Average             
+
+> Mixing Ratio amix (0 .5,0.5) (0 .8,0.2) (1 /3,1/3,1/3) (0 .4,0.4,0.2) (0 .6,0.2,0.2)
+
+Baseline 0.78 ±0.01 0.78 ±0.00 0.76 ± 0.01 0.76 ±0.00 0.77 ±0.01 0.77 Random Mix 0.77 ±0.00 0.77 ±0.02 0.75 ±0.02 0.77 ±0.01 0.76 ±0.02 0.76 Average 0.77 ±0.01 0.77 ±0.02 0.75 ±0.01 0.77 ±0.01 0.76 ±0.02 0.76 TIES-Merging 0.77 ±0.01 0.78 ±0.02 0.76 ±0.01 0.77 ±0.00 0.76 ±0.02 0.77 MAGMAX 0.78 ±0.01 0.78 ±0.02 0.77 ±0.02 0.78 ±0.01 0.76 ±0.02 0.77 Tunable MAGMAX OT 0.79 ±0.02 0.81 ±0.01 0.78 ±0.01 0.80 ±0.02 0.78 ±0.02 0.79 Label 0.81 ±0.03 0.82 ±0.02 0.80 ±0.03 0.82 ±0.02 0.81 ±0.01 0.81 
+
+Table 3: Average accuracy on the target datasets in ImageNet-R-5 
+
+Dtar ,1 Dtar ,2 Dtar ,3 Dtar ,4 Dtar ,5 Average             
+
+> Mixing Ratio amix (0 .5,0.5) (0 .8,0.2) (1 /3,1/3,1/3) (0 .4,0.4,0.2) (0 .6,0.2,0.2)
+
+Baseline 0.84 ±0.00 0.83 ±0.01 0.84 ±0.01 0.84 ±0.01 0.84 ±0.00 0.84 Random Mix 0.83 ±0.01 0.83 ±0.01 0.84 ±0.01 0.83 ±0.00 0.84 ±0.01 0.83 Average 0.84 ±0.00 0.84 ±0.00 0.84 ±0.00 0.83 ±0.01 0.83 ±0.01 0.84 TIES-Merging 0.84 ±0.00 0.84 ±0.01 0.84 ±0.01 0.84 ±0.00 0.84 ±0.01 0.84 MAGMAX 0.85 ±0.00 0.84 ±0.01 0.85 ±0.01 0.84 ±0.01 0.85 ±0.01 0.85 
+
+Tunable MAGMAX OT 0.84 ±0.00 0.85 ±0.00 0.83 ±0.01 0.85 ±0.00 0.83 ±0.01 0.84 Label 0.85 ±0.00 0.85 ±0.01 0.84 ±0.01 0.85 ±0.01 0.85 ±0.01 0.85 
+
+a performance measure. We performed three trials for each setting by changing the random seeds for the training and model merge processes. We compare Tunable MAGMAX against Baseline , which sequentially fine-tunes the model on each task without any mitigation of CF, as well as existing model merging approaches: Rand Mix [14], Model Soup ( Average ) [20], TIES Merging [21], and MAGMAX [14]. We set the scaling factor as λmerge =0.5 for all model merging methods. For our proposed method, we prepare two variations for computing the preference vector introduced in Section 3.3: OT distance-based preference control ( OT ) and label distribution-based preference control ( Label ). Tables 2 and 3 present the average accuracy on different target environments in CIFAR-100-20 and ImageNet-R-5, respectively. The results on the other set-tings are provided in supplementary materials. Tunable MAGMAX (Label) and Tunable MAGMAX (OT) consistently achieve higher or comparable performance across all experimental configurations compared to the other methods. Preference-Aware Model Merging for Continual Learning 13 
+
+4.4 Ablation Study Sensitivity for Dataset Similarity Methods We compare different methods to measure the similarity between the target environment and the training tasks. Specifically, we evaluate optimal transport distance ( OT ), cosine distance ( Cos ), and maximum mean discrepancy ( MMD ) with the RBF kernel as dataset dis-tance metrics. For the cosine distance, we compute the mean embedding vector from the feature representations of each dataset and calculate the cosine distance between the two mean vectors. Table 4: Average accuracy on all tar-get environments in CIFAR-100-T
+
+T MAGMAX Tunable MAGMAX Cos MMD OT Label 5 0.83 0.84 0.80 0.83 0.85 
+
+20 0.77 0.78 0.74 0.79 0.81 
+
+50 0.77 0.75 0.74 0.76 0.78 
+
+Table 4 shows the average accuracy in all target environments {D tar ,i }5 
+
+> i=1
+
+for CIFAR-100-T . It demonstrates that Tun-able MAGMAX (Label) achieves superior performance to the others across differ-ent settings, as it accurately reflects the target data distribution and consequently produces merged models with the highest performance for the target environment. Among the label-free methods, Tunable MAGMAX (OT) consistently outper-forms the others, suggesting that the OT distance effectively captures the simi-larity between datasets for the construction of the preference vector. 
+
+Robustness for Diversity of Target Environments Figure 4 illustrates how performance changes as the number of tasks included in the target environment varies for CIFAR-100-20. Within the target environment data, the number of samples for each task is kept equal, that is, we set amix = (1 /M, . . . , 1/M ) for 
+
+M ∈ { 1, 2, 3, 5, 10 , 20 }. We report the average accuracy over three variations of task selection for each value of M .10 0 10 1 
+
+> Number of Tasks in tar
+> 0.74
+> 0.76
+> 0.78
+> 0.80
+> 0.82
+> 0.84
+> 0.86
+> Accuracy
+> MAGMAX
+> Tunable MAGMAX (Label)
+> Tunable MAGMAX (OT)
+
+Fig. 4: Average accuracy with dif-ferent numbers of tasks in target environments in CIFAR-100-20 The results show that Tunable MAG-MAX (Label) consistently achieves high per-formance across varying numbers of tasks in the target environment, especially when the target environment involves a small number of tasks. Tunable MAGMAX (OT) also shows high accuracy when M is small, while its performance deteriorates when M becomes large. These results highlight the robustness of the label-based preference control com-pared to the OT distance-based one. 
+
+5 Conclusion 
+
+In this work, we proposed a preference-aware framework called Tunable MAG-MAX for constructing continual learning models that adapt to various target environments. We introduced a novel model merging method that controls the 14 K. Hiroshima et al. 
+
+number of elements selected from each task vector according to the preference vector, enabling flexible adjustment of task-specific performance. We further ex-tend our framework to automatically construct an appropriate preference vector using the dataset similarities between the meta dataset collected from the target environment and datasets from the model training tasks. The experimental re-sults demonstrated that our proposed method constructs suitable merged models according to the preference vector and achieves superior performance compared to other methods in various target environments. The flexibility of our approach allows practitioners with limited computa-tional resources to build suitable merged models according to their specific re-quirements, making it a practical solution for continual learning scenarios where deployment needs vary across applications and users. We conclude by discussing some limitations and future directions of our ap-proach. First, to construct a preference vector based on the dataset similarity, our approach requires a certain amount of meta- and training data collected from the target environment and the model training tasks enough to approxi-mate the whole environment or tasks. Second, our construction mechanism for the preference vector does not consider dependencies among training tasks, even though there exist cases where some fine-tuned models in later tasks may par-tially preserve the performance on earlier tasks. Some potential future works include modifying the mechanism of preference vector construction by consider-ing the task order and the potential of each task vector for other tasks.  
+
+> Acknowledgments. This study was partially funded by JSPS KAKENHI (JP23K28156 and JP23H00491).
+
+References             
+
+> 1. Akiba, T., Shing, M., Tang, Y., Sun, Q., Ha, D.: Evolutionary Optimiza-tion of Model Merging Recipes (Mar 2024), http://arxiv.org/abs/2403.13187 ,arXiv:2403.13187 [cs] 2. Aljundi, R., Belilovsky, E., Tuytelaars, T., Charlin, L., Caccia, M., Lin, M., Page-Caccia, L.: Online Continual Learning with Maximal Interfered Retrieval. In: Ad-vances in Neural Information Processing Systems. vol. 32. Curran Associates, Inc. (2019) 3. Bandarkar, L., Muller, B., Yuvraj, P., Hou, R., Singhal, N., Lv, H., Liu, B.: Layer swapping for zero-shot cross-lingual transfer in large language models. In: The Thirteenth International Conference on Learning Representations (2025) 4. Caron, M., Touvron, H., Misra, I., Jégou, H., Mairal, J., Bojanowski, P., Joulin, A.: Emerging properties in self-supervised vision transformers. In: Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV). pp. 9650–9660 (October 2021) 5. Cuturi, M.: Sinkhorn Distances: Lightspeed Computation of Optimal Transport. In: Advances in Neural Information Processing Systems. vol. 26. Curran Associates, Inc. (2013) 6. Deng, J., Dong, W., Socher, R., Li, L.J., Li, K., Fei-Fei, L.: ImageNet: A large-scale hierarchical image database. In: 2009 IEEE Conference on Computer Vision and Pattern Recognition. pp. 248–255 (2009)
+
+Preference-Aware Model Merging for Continual Learning 15 7. Dosovitskiy, A., Beyer, L., Kolesnikov, A., Weissenborn, D., Zhai, X., Unterthiner, T., Dehghani, M., Minderer, M., Heigold, G., Gelly, S., Uszkoreit, J., Houlsby, N.: An image is worth 16x16 words: Transformers for image recognition at scale. In: International Conference on Learning Representations (2021) 8. Hendrycks, D., Basart, S., Mu, N., Kadavath, S., Wang, F., Dorundo, E., Desai, R., Zhu, T., Parajuli, S., Guo, M., Song, D., Steinhardt, J., Gilmer, J.: The many faces of robustness: A critical analysis of out-of-distribution generalization. ICCV (2021) 9. Ilharco, G., Ribeiro, M.T., Wortsman, M., Schmidt, L., Hajishirzi, H., Farhadi, A.: Editing models with task arithmetic. In: The Eleventh International Conference on Learning Representations (2023) 10. Kantorovich, L.: On the translocation of masses. Journal of Mathematical Sciences 
+
+133 , 1381–1382 (2006) 11. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Desjardins, G., Rusu, A.A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., Hassabis, D., Clopath, C., Kumaran, D., Hadsell, R.: Overcoming catastrophic forgetting in neu-ral networks. Proceedings of the National Academy of Sciences 114 (13), 3521–3526 (2017) 12. Krizhevsky, A.: Learning multiple layers of features from tiny images. Master’s thesis, University of Tront (2009) 13. Li, Z., Hoiem, D.: Learning without forgetting. IEEE Transactions on Pattern Analysis and Machine Intelligence 40 (12), 2935–2947 (2018) 14. Marczak, D., Twardowski, B., Trzciński, T., Cygert, S.: MAGMAX: Leveraging Model Merging for Seamless Continual Learning. In: Computer Vision – ECCV 2024. pp. 379–395. Springer Nature Switzerland, Cham (2025) 15. Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., Krueger, G., Sutskever, I.: Learning transferable visual models from natural language supervision. CoRR abs/2103.00020 (2021) 16. Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., Krueger, G., Sutskever, I.: Learning transfer-able visual models from natural language supervision. In: Proceedings of the 38th International Conference on Machine Learning. Proceedings of Machine Learning Research, vol. 139, pp. 8748–8763. PMLR (18–24 Jul 2021) 17. Rusu, A.A., Rabinowitz, N.C., Desjardins, G., Soyer, H., Kirkpatrick, J., Kavukcuoglu, K., Pascanu, R., Hadsell, R.: Progressive neural networks. arXiv:1606.04671 (2022) 18. Schuhmann, C., Vencu, R., Beaumont, R., Kaczmarczyk, R., Mullis, C., Katta, A., Coombes, T., Jitsev, J., Komatsuzaki, A.: LAION-400M: Open dataset of CLIP-filtered 400 million image-text pairs (2021) 19. Wang, L., Zhang, X., Su, H., Zhu, J.: A comprehensive survey of continual learn-ing: Theory, method and application. IEEE Transactions on Pattern Analysis and Machine Intelligence 46 (8), 5362–5383 (2024) 20. Wortsman, M., Ilharco, G., Gadre, S.Y., Roelofs, R., Gontijo-Lopes, R., Morcos, A.S., Namkoong, H., Farhadi, A., Carmon, Y., Kornblith, S., Schmidt, L.: Model soups: averaging weights of multiple fine-tuned models improves accuracy without increasing inference time. In: Proceedings of the 39th International Conference on Machine Learning. Proceedings of Machine Learning Research, vol. 162, pp. 23965–23998. PMLR (17–23 Jul 2022) 21. Yadav, P., Tam, D., Choshen, L., Raffel, C.A., Bansal, M.: TIES-Merging: Re-solving Interference When Merging Models. In: Advances in Neural Information Processing Systems. vol. 36, pp. 7093–7115. Curran Associates, Inc. (2023) 16 K. Hiroshima et al. 
+
+A Results in Other Dataset Settings 
+
+We report our main results with the experimental settings in Section 4.3 for CIFAR-100-5, CIFAR-100-50, ImageNet-R-20, and ImageNet-R-50. For ImageNet-R-20 and ImageNet-R-50, our proposed methods perform comparably to existing methods. This is primarily due to the limited training data per task in these set-tings. With these settings, each task vector exhibits reduced representation of the corresponding task, resulting in diminishing our method’s strength. The com-petitive performance of baseline methods further supports this interpretation. Table 5: Average accuracy on the target datasets in CIFAR-100-5 
+
+Dtar ,1 Dtar ,2 Dtar ,3 Dtar ,4 Dtar ,5 Average             
+
+> Mixing Ratio amix (0 .5,0.5) (0 .8,0.2) (1 /3,1/3,1/3) (0 .4,0.4,0.2) (0 .6,0.2,0.2)
+
+Baseline 0.82 ±0.01 0.82 ±0.01 0.81 ±0.01 0.83 ±0.01 0.82 ±0.01 0.82 Random Mix 0.82 ±0.01 0.82 ±0.01 0.81 ±0.01 0.80 ±0.01 0.81 ±0.00 0.81 Average 0.82 ±0.01 0.81 ±0.01 0.81 ±0.01 0.80 ±0.01 0.81 ±0.00 0.81 TIES-Merging 0.83 ±0.01 0.82 ±0.01 0.82 ±0.01 0.81 ±0.01 0.81 ±0.00 0.82 MAGMAX 0.83 ±0.01 0.83 ±0.00 0.83 ±0.01 0.83 ±0.01 0.83 ±0.00 0.83 Tunable MAGMAX OT 0.81 ±0.01 0.87 ±0.00 0.81 ±0.01 0.83 ±0.01 0.80 ±0.00 0.83 Label 0.85 ±0.01 0.86 ±0.01 0.83 ±0.00 0.85 ±0.00 0.85 ±0.01 0.85 
+
+Table 6: Average accuracy on the target datasets in CIFAR-100-50 
+
+Dtar ,1 Dtar ,2 Dtar ,3 Dtar ,4 Dtar ,5 Average             
+
+> Mixing Ratio amix (0 .5,0.5) (0 .8,0.2) (1 /3,1/3,1/3) (0 .4,0.4,0.2) (0 .6,0.2,0.2)
+
+Baseline 0.77 ±0.01 0.74 ±0.02 0.74 ±0.03 0.75 ±0.04 0.78 ±0.04 0.76 Random Mix 0.74 ±0.03 0.75 ±0.02 0.73 ±0.02 0.73 ±0.01 0.76 ±0.04 0.74 Average 0.75 ±0.03 0.74 ±0.01 0.73 ±0.03 0.73 ±0.02 0.77 ±0.03 0.74 TIES-Merging 0.77 ±0.03 0.76 ±0.02 0.72 ±0.02 0.79 ±0.05 0.77 ±0.00 0.76 MAGMAX 0.77 ±0.01 0.77 ±0.01 0.75 ±0.02 0.75 ±0.02 0.78 ±0.02 0.77 Tunable MAGMAX OT 0.76 ±0.01 0.75 ±0.02 0.74 ±0.05 0.78 ±0.04 0.76 ±0.07 0.76 Label 0.78 ±0.03 0.80 ±0.04 0.78 ±0.04 0.77 ±0.06 0.79 ±0.02 0.78 Preference-Aware Model Merging for Continual Learning 17 
+
+Table 7: Average accuracy on the target datasets in ImageNet-R-20 
+
+Dtar ,1 Dtar ,2 Dtar ,3 Dtar ,4 Dtar ,5 Average 
+
+Mixing Ratio amix (0 .5, 0.5) (0 .8, 0.2) (1 /3, 1/3, 1/3) (0 .4, 0.4, 0.2) (0 .6, 0.2, 0.2) 
+
+Baseline 0.83 ±0.02 0.81 ±0.01 0.82 ±0.01 0.82 ±0.01 0.81 ±0.02 0.82 Random Mix 0.82 ±0.01 0.81 ±0.01 0.81 ±0.01 0.82 ±0.00 0.81 ±0.02 0.81 Average 0.82 ±0.01 0.81 ±0.01 0.81 ±0.01 0.82 ±0.01 0.81 ±0.01 0.81 TIES-Merging 0.83 ±0.02 0.82 ±0.00 0.82 ±0.01 0.82 ±0.01 0.81 ±0.01 0.82 MAGMAX 0.84 ±0.01 0.82 ±0.00 0.83 ±0.01 0.83 ±0.01 0.82 ±0.02 0.83 
+
+Tunable MAGMAX OT 0.83 ±0.01 0.82 ±0.01 0.83 ±0.01 0.82 ±0.00 0.82 ±0.01 0.82 Label 0.83 ±0.01 0.82 ±0.01 0.82 ±0.01 0.82 ±0.02 0.83 ±0.02 0.83 
+
+Table 8: Average accuracy on thet target datasets in ImageNet-R-50 
+
+Dtar ,1 Dtar ,2 Dtar ,3 Dtar ,4 Dtar ,5 Average 
+
+Mixing Ratio amix (0 .5, 0.5) (0 .8, 0.2) (1 /3, 1/3, 1/3) (0 .4, 0.4, 0.2) (0 .6, 0.2, 0.2) 
+
+Baseline 0.82 ±0.04 0.82 ±0.02 0.80 ±0.01 0.82 ±0.02 0.81 ±0.01 0.82 
+
+Random Mix 0.83 ±0.04 0.82 ±0.02 0.79 ±0.01 0.82 ±0.01 0.80 ±0.01 0.81 Average 0.82 ±0.04 0.81 ±0.02 0.79 ±0.01 0.82 ±0.02 0.80 ±0.00 0.81 TIES-Merging 0.82 ±0.04 0.81 ±0.03 0.79 ±0.01 0.82 ±0.03 0.80 ±0.01 0.81 MAGMAX 0.83 ±0.03 0.83 ±0.02 0.81 ±0.01 0.83 ±0.02 0.82 ±0.01 0.82 
+
+Tunable MAGMAX OT 0.80 ±0.02 0.79 ±0.03 0.80 ±0.03 0.80 ±0.02 0.80 ±0.01 0.80 Label 0.82 ±0.02 0.79 ±0.04 0.81 ±0.00 0.80 ±0.01 0.81 ±0.02 0.81

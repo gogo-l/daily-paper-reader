@@ -1,0 +1,1181 @@
+Title: Learning to Forget: Continual Learning with Adaptive Weight Decay
+
+URL Source: https://arxiv.org/pdf/2604.27063v1
+
+Published Time: Fri, 01 May 2026 00:07:15 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+Preprint. 
+
+# LEARNING TO FORGET : C ONTINUAL LEARNING WITH 
+
+# ADAPTIVE WEIGHT DECAY 
+
+Aditya A. Ramesh 1, Alex Lewandowski 2, J ¨ urgen Schmidhuber 3,11The Swiss AI Lab, IDSIA USI-SUPSI, Lugano, Switzerland 
+
+> 2
+
+University of Alberta, Alberta Machine Intelligence Institute, Edmonton, Canada 
+
+> 3
+
+Center of Excellence for Generative AI, KAUST, Thuwal, Saudi Arabia 
+
+{aditya, juergen }@idsia.ch, lewandowski@ualberta.ca 
+
+## ABSTRACT 
+
+Continual learning agents with finite capacity must balance acquiring new knowledge with retain-ing the old. This requires controlled forgetting of knowledge that is no longer needed, freeing up capacity to learn. Weight decay, viewed as a mechanism for forgetting, can serve this role by grad-ually discarding information stored in the weights. However, a fixed scalar weight decay drives this forgetting uniformly over time and uniformly across all parameters, even when some encode stable knowledge while others track rapidly changing targets. We introduce Forgetting through Adaptive Decay (FADE), which adapts per-parameter weight decay rates online via approximate meta-gradient descent. We derive FADE for the online linear setting and apply it to the final layer of neural networks. Our empirical analysis shows that FADE automatically discovers distinct decay rates for different parameters, complements step-size adaptation, and consistently improves over fixed weight decay across online tracking and streaming classification problems. 
+
+## 1 INTRODUCTION 
+
+Judicious forgetting is essential for continual learning. An agent with finite capacity cannot retain everything that was previously learned. Therefore, some degree of forgetting in a controlled way (French, 1999; Kumar et al., 2025a) is necessary to successfully navigate the stability-plasticity trade-off (Grossberg, 1987; Elsayed & Mahmood, 2024). For short-term memories stored in activations, gating mechanisms in recurrent neural networks provide learned for-getting (Hochreiter & Schmidhuber, 1997; Gers et al., 2000). But there is no corresponding mechanism for long-term knowledge stored in slowly changing weights. Weight decay (e.g., Hanson & Pratt, 1988; Krogh & Hertz, 1991) is widely used as a regularizer in deep learn-ing (Loshchilov & Hutter, 2019), biasing each weight toward zero at every update. In typical stationary settings, training data is revisited multiple times and weight decay primarily facilitates regularization (MacKay, 1992b). Here, we focus on the online non-stationary setting, where data arrives one sample at a time, past samples are never revisited, and task boundaries are unknown. In such settings, weight decay can serve as a forgetting mechanism that controls how much past information each weight retains. We explore the complementary interpretation of weight decay as a mechanism for forgetting. One limitation of weight decay as a forgetting mechanism is that the decay rate is a single scalar, fixed across all parameters and constant over time. While several works have explored adaptive weight decay for mini-batch training (Ishii & Sato, 2017; Nakamura & Hong, 2019; Xie et al., 2023), these methods focus on stationary settings with fixed datasets. In continual learning, a fixed decay rate, even with appropriate tuning, is fundamentally mismatched to the problem. Some parameters may encode stable knowledge that should be retained, while others track rapidly changing targets that require fast forgetting. An effective forgetting mechanism must adapt selectively, assigning each parameter its own rate. To this end, we introduce Forgetting through Adaptive DE cay (FADE) , which adapts per-parameter weight decay rates via gradient-based meta-learning. FADE uses meta-gradients (e.g. Hochreiter et al., 2001; Xu et al., 2018) that approximate forward-mode differentiation (e.g., Robinson & Fallside, 1987; Williams & Zipser, 1989), enabling online updates. Specifically, FADE derives from the same meta-gradient approximations as IDBD (Sutton, 1992; Degris et al., 2024), which adapts per-parameter step sizes (learning rates) online. FADE instead focuses on how much to forget. We derive FADE for the online linear setting and apply it to the final layer of neural networks. On a linear tracking problem, FADE discovers distinct decay rates for relevant and irrelevant features and complements per-parameter 1
+
+> arXiv:2604.27063v1 [cs.LG] 29 Apr 2026
+
+Preprint. 
+
+Algorithm 1 FADE: Forgetting through Adaptive Decay (online linear regression) 
+
+Require: step size α, meta-step size θλ, initial decay parameter γ0 ∈ Rd 
+
+> 1:
+
+Initialize weights w0 ∈ Rd, traces g0 ← 0 ∈ Rd 
+
+> 2:
+
+Initialize λi 
+
+> 0
+
+← exp( γi
+
+> 0
+
+) for all i 
+
+> 3:
+
+for t = 0 , 1, 2, . . . do  
+
+> 4:
+
+Receive input xt ∈ Rd and target y∗ 
+
+> t
+
+∈ R 
+
+> 5:
+
+Predict yt ← ⟨ wt, x t⟩ 
+
+> 6:
+
+Compute error δt ← y∗ 
+
+> t
+
+− yt 
+
+> 7:
+
+for each parameter i = 1 , . . . , d do  
+
+> 8:
+
+# Adapt decay rate  
+
+> 9:
+
+γit+1 ← γit + θλ δt xit git 
+
+> 10:
+
+λit+1 ← exp( γit+1 ) 
+
+> 11:
+
+# Update sensitivity trace  
+
+> 12:
+
+git+1 ← git
+
+1 − λit+1 − α(xit)2+ − λit+1 wit 
+
+> 13:
+
+# Update weight with adaptive decay  
+
+> 14:
+
+wit+1 ← (1 − λit+1 ) wit + α δ t xit 
+
+> 15:
+
+end for  
+
+> 16:
+
+end for 
+
+step-size adaptation via IDBD. On a nonlinear teacher-student tracking problem, FADE with SGD achieves roughly half the error of AdamW (Loshchilov & Hutter, 2019). On streaming label-permuted EMNIST, FADE outperforms weight clipping, the best prior method (Elsayed et al., 2024). Across all settings, FADE is robust to the initialization of the decay rate, recovering strong performance even from poor initializations. 
+
+## 2 FORGETTING THROUGH ADAPTIVE DECAY (FADE) 
+
+FADE replaces a static, global weight decay hyperparameter with dynamic, per-parameter decay adapted online via meta-gradients. In this section, we derive FADE for the online linear regression setting using the same forward-mode differentiation techniques and approximations as IDBD (Sutton, 1992). The key idea is to parameterize the decay rate (λi) for each parameter wi as λi = exp( γi) and update the meta-parameter γi by gradient descent on the prediction error. Since the effect of γi on the error is mediated through the weight update, this requires tracking the sensitivity 
+
+∂w i/∂γ i via an auxiliary trace gi, which is maintained online. 
+
+FADE for online linear regression. At every time step t ∈ { 0, 1, 2, . . . }, the learner receives features xt ∈ Rd and target y∗ 
+
+> t
+
+∈ R. The learner maintains weights wt ∈ Rd that are used for predicting yt = ⟨wt, x t⟩. Let δt = y∗ 
+
+> t
+
+− yt be the error, and Jt = δ2 
+
+> t
+
+/2 be the loss at time step t.We update weights with weight decay (Hanson & Pratt, 1988) and the delta-rule, equivalent to SGD for linear regres-sion with squared error (Widrow & Hoff, 1960), 
+
+wt+1 = (1 − λt+1 ) wt + α δ t xt, (1) where α is a scalar step size and λt+1 ∈ Rd controls per-parameter decay, with λit+1 controlling the decay for the 
+
+i-th component of the weight wit. Note that unrolling the weight update yields an exponentially weighted sum with an effective memory horizon of ∼ 1/λ i. FADE adapts this horizon per-parameter. Increasing λi shortens the horizon (faster forgetting), decreasing it lengthens the horizon (more retention). The weight decay coefficients λt are parameterized using γt ∈ Rd. Specifically, λit = exp( γit ), i ∈ { 1, 2, . . . d }. The meta-parameters γ are updated via gradient descent by differentiating the loss with respect to γ through the weight update (Equation 1). This can be understood as an online form of cross-validation where the weights are updated on the current sample, and the resulting performance on the next sample provides gradients for the meta-parameters (Xu et al., 2018). The meta-gradients are approximated using forward-mode differentiation (Robinson & Fallside, 1987; Williams & Zipser, 1989) with the assumption that changing γi primarily affects wi, with negligible effect on other weights. Full derivations are provided in Appendix A. 2Preprint. Concretely, FADE uses the following updates: 
+
+γit+1 ← γit + θλ δt xit git, λit+1 ← exp( γit+1 ), (2) 
+
+git+1 ← git [1 − λit+1 − α(xit)2]+ − λit+1 wit (3) 
+
+wit+1 ← (1 − λit+1 ) wit + α δ t xit. (4) Here gi is a trace tracking ∂w i/∂γ i, the sensitivity of the weight to its decay meta-parameter, and θλ is the meta step size. The [·]+ denotes max( ·, 0) , a positive-bounding operation for stability. See Algorithm 1 for the pseudocode. FADE can be combined with strategies that use adaptive coordinate-wise step sizes, like Adam (Kingma & Ba, 2014) or IDBD (Sutton, 1992). In particular, when combined with IDBD, both the decay rate and step size are adapted per-parameter via meta-gradients. We provide the derivation and pseudocode for FADE with IDBD in Appendix A.2 and Algorithm 4, respectively. 
+
+Computational cost. FADE adds two scalar states per parameter ( γi and gi) and one scalar hyperparameter ( θλ), preserving O(d) cost per step of online gradient descent. 
+
+FADE with neural networks. FADE is derived for the online linear setting, where the prediction is a linear function of the weights. In a neural network, the final layer is a linear function of the hidden representation, so FADE can be applied directly to the final layer while using any standard optimizer (SGD, Adam) for the hidden layers. This approach of applying a meta-gradient method only to the final layer has also been used successfully by Javed et al. (2024). We follow this approach in our nonlinear experiments (Sections 3.2 and 3.3). The cross-entropy extension, which replaces the squared-error gradient with the softmax gradient, is derived in Appendix A.3. 
+
+## 3 EXPERIMENTS 
+
+We evaluate FADE on three online non-stationary problems of increasing complexity † . First, we consider a linear tracking task where FADE’s derivation applies exactly (Section 3.1). Next, we investigate a nonlinear teacher-student tracking task where FADE is applied to the final layer (Section 3.2). Finally, we consider a streaming classification benchmark in which we apply FADE with the cross-entropy loss to the final layer (Section 3.3). Across all three experiments, we examine whether adaptive decay improves performance and robustness to hyperparameter choice compared to fixed decay. 3.1 LINEAR TRACKING 0 50000 100000 150000 200000 
+
+> Steps
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> (decay rate)
+> Weight group
+> Relevant
+> Irrelevant
+
+Figure 1: Evolution of FADE’s average decay rates for relevant and irrelevant weight groups on the linear tracking problem with zero noise, starting from 
+
+λ0 ≈ 0.3( γ0 = −1.2) , with α = 0 .1
+
+and θλ = 0 .01 .
+
+Setup. We consider a non-stationary tracking task that was previously used to motivate step size adaptation with meta-gradients (Degris et al., 2024). The learner is presented with a d = 20 dimensional input at every time step, sampled i.i.d. xt ∈ Rd ∼ N (0 , I d), and target y∗ 
+
+> t
+
+= w∗ 
+
+> t
+
+· xt + ϵ, where 
+
+ϵ ∼ N (0 , σ 2
+
+> n
+
+). We consider two values of σn. Of the 20 weights of w∗ 
+
+> t
+
+, 5 are relevant (either ±1) and 15 are irrelevant (fixed at 0). Every 20 steps, one randomly chosen relevant weight flips sign. 
+
+Evaluation. We compare stochastic gradient descent (SGD, equivalent to the delta rule), IDBD (Sutton, 1992) (adaptive step sizes), and FADE (adap-tive decay with SGD), along with fixed weight decay (WD) variants. In the variant with adaptive step sizes and weight decay (FADE + IDBD), we tie the meta-step sizes θλ = θα = θ. We report MSE over all 200K steps of in-teraction for the best hyperparameters per method, averaged across 10 seeds. The hyperparameter search configuration is provided in Appendix B.1. 
+
+Results. Results are presented in Table 1. SGD uses a single step size for all weights and incurs the largest error. Adding fixed-weight decay improves SGD by biasing unused weights toward zero. IDBD adapts step sizes per parameter, gradually driving those for irrelevant inputs toward zero, and substantially outperforms SGD. Fixed weight decay also benefits IDBD, reducing 
+
+> †
+
+Code is available at https://github.com/Aditya-Ramesh-10/Fade .
+
+3Preprint. Table 1: Average MSE ± standard deviation across 10 seeds on the linear tracking task across two noise levels σn.
+
+σn = 0 σn = 1 .0
+
+SGD 3.628 ± 0.021 5.119 ± 0.026 
+
+SGD + WD 2.726 ± 0.008 4.087 ± 0.012 
+
+IDBD 1.486 ± 0.007 2.937 ± 0.011 
+
+IDBD + WD 1.301 ± 0.006 2.718 ± 0.010 
+
+FADE 1.653 ± 0.009 3.044 ± 0.011 
+
+FADE + IDBD 1.246 ± 0.006 2.646 ± 0.009 
+
+lifetime MSE from 1.486 to 1.301 in the noiseless setting. FADE, which adapts decay rates rather than step sizes, improves considerably over SGD + WD ( 1.653 vs. 2.726 ). FADE discovers distinct decay rates. Weights associated with irrelevant features converge to λ ≈ 0.9, decaying toward zero. Weights for relevant features settle near λ ≈ 0.02 ,maintaining a longer memory (Figure 1). As this problem was designed to highlight step-size adaptation, IDBD’s advantage over FADE here is not particularly surprising. The key challenge is distinguishing relevant from irrelevant features, which IDBD handles by learning to stop updating irrelevant weights. Crucially, FADE + IDBD achieves the lowest error overall ( 1.246 ), outperforming both FADE and IDBD alone. This indicates that adaptive step sizes and adaptive decay are complementary mecha-nisms. IDBD controls how quickly each parameter incorporates new information, while FADE controls how much past information each parameter retains. Even on a problem tailored to step-size adaptation, dynamically adjusting the forgetting rate via FADE provides an additional benefit. 
+
+Coupled adaptation of step size and weight decay. We also compare against a ‘coupled’ variant of step size and weight decay adaptation where the decay term comes from the L2 regularized loss, i.e., the decay term is αiλi rather than λi alone, and the weight update is wit+1 = (1 − αit+1 λit+1 ) wit + αit+1 δt xit (see Appendix A.5 for the derivation). The best coupled variant achieves an MSE of 1.270 ±0.006 with σn = 0 and 2.670 ±0.009 with σn = 1 , slightly worse than (decoupled) FADE+IDBD ( 1.246 ± 0.006 and 2.646 ± 0.009 ). We observe that the coupled update introduces a shared −αiλiwit term into both traces, potentially causing some interference in adaptation. 3.2 NON -LINEAR TRACKING 
+
+Setup. Vector targets are obtained from a teacher network. Concretely, the teacher is a neural network with input dimension d = 32 and a hidden layer of size h = 256 with ReLU activations. The output layer (head) is linear and outputs a vector y∗ ∈ R20 . The learner is a student network that has the same architecture as the teacher. At each step, the learner receives a single input xt ∼ N (0 , I d) and the teacher’s output y∗ 
+
+> t
+
+as the target. Learning proceeds online from a single sample per step, with no replay buffer or resets. To introduce non-stationarity, we periodically change weights in the teacher’s final layer. Of the 20 output units, 6 are stable, and incoming weights remain fixed throughout the interaction. A further 7 are fast-changing: every P = 500 
+
+steps, each weight into these output units is independently multiplied by a random sign ( ±1 with equal probability). The remaining 7 output units are slow-changing, undergoing the same random sign perturbation every 15 P = 7500 
+
+steps. This creates three distinct rates of non-stationarity across the output units, while the teacher’s input-to-hidden weights remain fixed throughout. Table 2: Average MSE ± standard deviation over the final 500K steps across 5 seeds on the non-linear tracking problem. Method MSE (final 500K steps) SGD 0.0168 ± 0.0002 
+
+SGD + WD 0.0167 ± 0.0002 
+
+Adam 0.0170 ± 0.0002 
+
+AdamW 0.0138 ± 0.0001 
+
+FADE + SGD 0.0073 ± 0.0001 
+
+FADE + Adam 0.0087 ± 0.0001 
+
+4Preprint. 0.0 0.5 1.0 1.5 2.0  
+
+> Time steps 1e6
+> 0.0150
+> 0.0175
+> 0.0200
+> 0.0225
+> 0.0250
+> 0.0275
+> 0.0300
+> 0.0325
+> MSE
+
+(a) Fast 0.0 0.5 1.0 1.5 2.0     
+
+> Time steps 1e6
+> 0.001
+> 0.002
+> 0.003
+> 0.004
+> 0.005
+> 0.006
+> 0.007
+> 0.008
+> MSE
+> FADE ( = 0)
+> FADE ( = 2)
+
+(b) Stable 0.0 0.5 1.0 1.5 2.0    
+
+> Time steps 1e6
+> 0.000
+> 0.005
+> 0.010
+> 0.015
+> 0.020
+> 0.025
+> 0.030
+> MSE  FADE ( = 0)
+> FADE ( = 2)
+
+(c) Slow 0.95 0.96 0.97 0.98 0.99 1.00 1.01   
+
+> Time steps 1e6
+> 0.005
+> 0.010
+> 0.015
+> 0.020
+> 0.025
+> 0.030
+> MSE
+
+(d) Slow, zoomed in 
+
+Figure 2: MSE by group on nonlinear tracking problem. With γ0 = −9.2( λ0 ≈ 0.0001) , comparing FADE+SGD (θλ = 2 ) with its fixed-decay counterpart FADE+SGD ( θλ = 0 ). 
+
+Evaluation. The learner interacts for 2M steps. We report average MSE over the final 500K steps, averaged across 5 seeds. Since FADE is derived for the linear setting, we apply it only to the final layer of the student network. In FADE+SGD, SGD is used throughout the network. In FADE+Adam, Adam is used throughout, with FADE providing adaptive decay on the head. We compare SGD, SGD with weight decay (SGD+WD), Adam (no weight decay), AdamW, FADE+SGD, and FADE+Adam. For each approach, we perform a grid search over the step-size and weight decay hyperparameters. Hyperparameter search details and selected hyperparameters are provided in Appendix B.2. 0.0 0.5 1.0 1.5 2.0       
+
+> Time steps 1e6
+> 5×10 5
+> 10 4
+> 5×10 4
+> 10 3
+> 5×10 3
+> (decay rate)  Output group
+> Fast
+> Slow
+> Stable
+> 0
+
+Figure 3: Evolution of FADE’s av-erage per-group decay rates on the nonlinear tracking problem starting from a shared initialization λ0 ≈
+
+10 −4 (dashed line), and θλ = 2 .0.
+
+Results. Main results are presented in Table 2. All baseline methods (SGD, SGD+WD, Adam, AdamW) achieve similar MSE over the final 500K steps, ranging from around 0.014 to 0.017 . AdamW is the best performing base-line, achieving an average of 0.0138 . Using FADE helps both SGD and Adam. FADE+SGD achieves 0.0073 , roughly half the error of AdamW, while FADE+Adam achieves 0.0087 . We observe that FADE+SGD outperforms FADE+Adam, likely because FADE’s meta-gradient derivation holds exactly for SGD, but only approximately for Adam (Appendix A.4). To isolate FADE’s contribution, we compare FADE+SGD with adaptation ( θλ =2) against its non-adaptive counterpart ( θλ = 0 ). With θλ = 0 , FADE reduces to SGD with fixed weight decay on the head and no decay on the hidden layer. Figure 2 shows per-group MSE for γ0 = −9.2, comparing FADE (θλ = 2) with fixed decay (θλ = 0) . Across all three groups (fast, slow, and stable outputs), we see improvements from FADE’s adaptation, suggesting that the adaptation is effective for a wide range of non-stationarity rates. Figure 3 shows the corresponding evolution of weight decay across the groups starting from a shared initialization. Here, FADE increases decay for fast-changing outputs and decreases it for stable outputs, with slow outputs receiving an intermediate rate. 5Preprint. We examine sensitivity to the initial decay rate λ0 and meta-step-size θλ in Table 3. Our results show that adaptive weight decay via FADE consistently improves performance. With fixed decay ( θλ = 0 ), performance varies substan-tially across the decay rate, with the best initialization (γ0 = −6.9) achieving 0.0099 and the worst (γ0 = −2.3) 
+
+achieving 0.0360 . With FADE (θλ > 0) , the sensitivity-gap narrows considerably. Even from the worst initialization 
+
+(γ0 = −2.3) , FADE recovers to 0.0125 . The FADE+Adam sensitivity (Table 4) shows a similar pattern, confirming that the benefits are not specific to SGD. Additionally, we note that (fixed) weight decay on the head, but not on the hidden layer, can perform reasonably well with a well-tuned decay (see γ0 = −6.9 with θλ = 0 in Table 3). However, adaptive weight decay via FADE provides benefits in terms of improved MSE and robustness to the choice of the initial decay. 3.3 STREAMING IMAGE CLASSIFICATION WITH LABEL PERMUTATION 
+
+Setup Following the setup of Elsayed et al. (2024), we evaluate on a streaming label-permuted classification problem using the Extended MNIST dataset (EMNIST; Cohen et al., 2017), consisting of 47 classes. At each step, the learner receives a single image, makes a prediction, observes the label, and then performs one gradient update. The prediction is evaluated before the update to measure online performance. Every 2500 steps, a fresh random permutation is applied to all class labels, changing the target function. Since the images remain unchanged across tasks, useful features can, in principle, be retained, but the mapping from features to labels must be relearned after each permutation. The network is a two-hidden-layer MLP (300, 150) with LeakyReLU activations. 
+
+Evaluation We train for 5M steps (2000 label permutation tasks), which is 5 times the interaction length considered by Elsayed & Mahmood (2024). We report average online accuracy across the full run. All methods use their best hyperparameters selected by grid search (see Appendix B.3). We compare SGD (with weight decay), Adam, AdamW, and FADE. Additionally, we compare against SGD with weight clipping (SGD + WClip). Weight clipping (with SGD) was the best-performing approach on this problem in the experiment conducted by Elsayed et al. (2024), outperforming other strategies such as L2 init (Kumar et al., 2025b), Shrink&Perturb (Ash & Adams, 2020), etc. For FADE, we again apply it to the final layer that produces the classification logits. See Appendix A.3 for FADE with the cross-entropy loss. 
+
+Results Results are presented in Table 5 and online accuracy across tasks is shown in Figure 4. Without weight decay, SGD and Adam perform poorly on this problem (with average accuracy of 0.258 and 0.119 , respectively). Adding weight decay to these approaches improves performance. Weight clipping substantially improves performance, with SGD + WClip achieving an average online accuracy of 0.612 . FADE outperforms the considered baselines, with FADE+SGD achieving an average accuracy of 0.807 and FADE+Adam achieving 0.750 .We examine sensitivity to the initial decay rate λ0 and meta-step-size θλ in Tables 6 and 7. Notably, SGD (or Adam) with fixed weight decay applied only to the head can itself be a strong approach with the right decay coefficient (e.g., 
+
+0.801 at γ0 = −6.9). To our knowledge, such a baseline has not been explored in prior continual learning benchmarks. In label permutation, learned features remain useful across tasks, but the mapping from features to classes must be relearned after each permutation. Decay on the head could facilitate this relearning by clearing stale class mappings. This result highlights the importance of applying different decay rates to different parts of the network. However, this baseline is fragile. With fixed decay on the head (θλ = 0) , performance depends heavily on the choice of initial decay rate λ0, ranging from 0.531 to 0.801 with SGD. FADE reduces this sensitivity and provides substantial benefits when initialization is sub-optimal. Figure 5 illustrates the benefit of adaptivity from a poor initialization with FADE + Adam. With γ0 = −11 .5( λ0 ≈ 10 −5), the initial decay is small and fixed decay performs poorly. FADE discovers appropriate decay rates during interaction, recovering to a high accuracy of over 0.7.Table 3: FADE + SGD sensitivity to initial decay rate γ0 and meta-step-size θλ on the non-linear tracking problem. 
+
+θλ = 0 corresponds to fixed weight decay on the head. Results are average MSE ± standard deviation over the final 500K steps across 5 seeds. 
+
+θλ = 0 θλ = 0 .5 θλ = 1 .0 θλ = 2 .0
+
+γ0 = −2.3 ( λ0 ≈ 0.1) 0.0360 ± 0.0011 0.0148 ± 0.0001 0.0137 ± 0.0001 0.0125 ± 0.0001 
+
+γ0 = −4.6 ( λ0 ≈ 0.01) 0.0182 ± 0.0003 0.0098 ± 0.0001 0.0093 ± 0.0001 0.0089 ± 0.0001 
+
+γ0 = −6.9 ( λ0 ≈ 0.001) 0.0099 ± 0.0001 0.0084 ± 0.0001 0.0082 ± 0.0001 0.0080 ± 0.0001 
+
+γ0 = −9.2 ( λ0 ≈ 0.0001) 0.0104 ± 0.0002 0.0083 ± 0.0001 0.0075 ± 0.0001 0.0073 ± 0.0001 
+
+6Preprint. Table 4: FADE + Adam sensitivity to initial decay rate γ0 and meta-step-size θλ on the non-linear tracking problem. 
+
+θλ = 0 corresponds to fixed weight decay on the head. Results are average MSE ± standard deviation over the final 500K steps across 5 seeds. 
+
+θλ = 0 θλ = 0 .5 θλ = 1 .0 θλ = 2 .0
+
+γ0 = −2.3 ( λ0 ≈ 0.1) 0.0315 ± 0.0008 0.0126 ± 0.0001 0.0121 ± 0.0001 0.0118 ± 0.0001 
+
+γ0 = −4.6 ( λ0 ≈ 0.01) 0.0179 ± 0.0002 0.0107 ± 0.0001 0.0103 ± 0.0001 0.0102 ± 0.0001 
+
+γ0 = −6.9 ( λ0 ≈ 0.001) 0.0109 ± 0.0001 0.0097 ± 0.0001 0.0097 ± 0.0001 0.0097 ± 0.0001 
+
+γ0 = −9.2 ( λ0 ≈ 0.0001) 0.0128 ± 0.0002 0.0094 ± 0.0001 0.0087 ± 0.0001 0.0088 ± 0.0001 0 250 500 750 1000 1250 1500 1750 2000 
+
+> Tasks
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> Online Accuracy  SGD
+> SGD + WD
+> Adam
+> AdamW
+> SGD + WClip
+> FADE + Adam
+> FADE + SGD
+
+Figure 4: Online accuracy on label-permuted EMNIST. FADE+SGD and FADE+Adam apply FADE to the final layer. 0 250 500 750 1000 1250 1500 1750 2000     
+
+> Tasks
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> Online Accuracy
+> FADE ( = 0)
+> FADE ( = 0.1)
+> FADE ( = 0.5)
+> FADE ( = 1.0)
+
+Figure 5: Online accuracy on label-permuted EMNIST with FADE + Adam, starting from γ0 = −11 .5 (λ0 ≈
+
+10 −5). Despite an initial drop, FADE with θλ > 0 re-covers strongly, with a final accuracy of over 0.7.
+
+FADE on all layers. We evaluated a naive extension of FADE + SGD to all layers on the EMNIST benchmark, applying the same meta-gradient updates derived for the linear setting to hidden layers. The best configuration achieves 
+
+0.535 average online accuracy, outperforming SGD with fixed weight decay ( 0.335 ; Table 5) but well below head-only FADE ( 0.807 ; Table 5). Furthermore, unlike head-only FADE, this variant is sensitive to initialization, indicating that the linear meta-gradient approximation is insufficient for hidden layers. 
+
+Analysis with partial label permutations. We also evaluate a variant in which 24 of the 47 classes retain their labels across permutations, resulting in a mix of stable and changing outputs. This setting may better reflect realistic continual learning problems where some structure persists across tasks. The main results are presented in Table 8. FADE+SGD achieves an average online accuracy of 0.841 with the same hyperparameters as the variant where all classes were permuted, considerably better than the other baselines. Further details and the sensitivity tables for FADE are provided in Appendix C. FADE’s benefits over its fixed counterpart are more pronounced in this setting. The best fixed FADE+SGD (with θλ = 0 ) achieves 0.830 vs 0.846 for the best adaptive variant (see Table 9). Similarly, with FADE+Adam, the best θλ = 0 setting achieves 0.763 vs 0.810 for the best adaptive (see Table 10). Table 5: Average online accuracy across 5M interactions (2000 tasks) in the streaming classification problem with label permutation using EMNIST. Method Avg Online Accuracy SGD 0.258 ± 0.006 
+
+SGD + WD 0.335 ± 0.002 
+
+Adam 0.119 ± 0.003 
+
+AdamW 0.372 ± 0.001 
+
+SGD + WClip 0.612 ± 0.003 
+
+FADE + SGD 0.807 ± 0.001 
+
+FADE + Adam 0.750 ± 0.001 
+
+7Preprint. Table 6: Impact of FADE’s adaptive decay on label-permuted EMNIST with SGD. Results are average online accuracy 
+
+± standard deviation across 5 seeds, with step size α = 0 .005 . θλ = 0 corresponds to fixed weight decay on the head. 
+
+θλ = 0 θλ = 0 .1 θλ = 0 .5 θλ = 1 .0
+
+γ0 = −4.6 ( λ0 ≈ 0.01) 0.694 ± 0.001 0.780 ± 0.003 0.798 ± 0.001 0.800 ± 0.001 
+
+γ0 = −6.9 ( λ0 ≈ 0.001) 0.801 ± 0.001 0.807 ± 0.001 0.806 ± 0.001 0.804 ± 0.001 
+
+γ0 = −9.2 ( λ0 ≈ 0.0001) 0.779 ± 0.001 0.801 ± 0.001 0.801 ± 0.000 0.798 ± 0.001 
+
+γ0 = −11 .5 ( λ0 ≈ 0.00001) 0.531 ± 0.005 0.682 ± 0.003 0.743 ± 0.002 0.750 ± 0.002 
+
+Table 7: Impact of FADE’s adaptive decay on label-permuted EMNIST with Adam. Results are average online accuracy ± standard deviation across 5 seeds, with step size α = 0 .0001 . θλ = 0 corresponds to fixed weight decay on the head. 
+
+θλ = 0 θλ = 0 .1 θλ = 0 .5 θλ = 1 .0
+
+γ0 = −4.6 ( λ0 ≈ 0.01) 0.556 ± 0.001 0.737 ± 0.000 0.737 ± 0.000 0.719 ± 0.001 
+
+γ0 = −6.9 ( λ0 ≈ 0.001) 0.746 ± 0.001 0.750 ± 0.001 0.741 ± 0.001 0.721 ± 0.001 
+
+γ0 = −9.2 ( λ0 ≈ 0.0001) 0.588 ± 0.001 0.741 ± 0.001 0.716 ± 0.002 0.649 ± 0.007 
+
+γ0 = −11 .5 ( λ0 ≈ 0.00001) 0.269 ± 0.004 0.412 ± 0.004 0.472 ± 0.005 0.521 ± 0.004 
+
+## 4 RELATED WORK 
+
+Our approach is motivated by the perspective of learned forget gates applied to short-term memory in sequence-processing models (Gers et al., 2000; Beck et al., 2024; Yang et al., 2024). The forget gate was introduced to prevent unbounded growth of memory cell states, enabling recurrent neural networks to discard outdated information stored in activations (Gers et al., 2000; Van der Westhuizen & Lasenby, 2018). Earlier, Mozer (1989) proposed an architecture that learns per-unit decay rates on the short-term memory via gradient descent with an online trace. FADE can be seen as applying these principles to long-term memories stored in weights, adapting per-parameter decay rates rather than per-activation gates. Unlike activation-level forget gates, which are typically input-dependent, FADE’s decay rates adapt slowly via meta-gradients, matching the timescale of the environment’s non-stationarity rather than input-level variation. In summary, FADE involves adapting weight decay via meta-learning for continual learning. 
+
+Adaptive weight decay. Hanson & Pratt (1988) study weight decay as a bias toward simpler networks, noting that uniform decay rates are suboptimal because all weights decay equally regardless of their importance. They compare two types of non-uniform weight decay at the hidden-unit level, with the general idea of applying stronger decay on small weights while leaving large weights intact. In a Bayesian framework, MacKay (1992a) proposes selecting weight decay coefficients via evidence maximization. Several works have since explored adaptive weight decay for better regularization in problems with fixed, stationary datasets. To balance the scale of loss gradients and the decay penalty, prior works have proposed adapting weight decay coefficients across layers (Ishii & Sato, 2017) or across training iterations to improve adversarial robustness (Ghiasi et al., 2023). Taking adaptation to a more granular level, Nakamura & Hong (2019) propose per-parameter weight decay that scales with layer-wise normalized gradient magnitudes, effectively assigning stronger regularization to parameters with relatively larger gradients. Xie et al. (2023) propose a weight decay scheduler based on the gradient norm to mitigate the large gradient norms that hinder convergence and generalization when training deep neural networks. Most recently, scaling adaptive weight decay to modern heterogeneous architectures, He et al. (2025) assign distinct weight decay strengths to different modules within large language models. These methods are designed to improve generalization in mini-batch training with stationary targets. FADE instead targets online continual learning, where non-stationarity rather than overfitting is the core challenge, and derives its adaptation from meta-gradient descent rather than gradient-norm heuristics. 
+
+Continual learning. Agents with bounded capacity that are designed to learn forever must trade-off capacity for sta-bility, or for plasticity, by either retaining what was learned against learning new things (Grossberg, 1987; Elsayed & Mahmood, 2024). With neural networks, continual learning can struggle on either component of this trade-off, leading to two distinct phenomena in the literature. The first of these is catastrophic forgetting, where neural networks fail to retain what was previously learned when data changes over time (McCloskey & Cohen, 1989; Ratcliff, 1990; French, 1999). Mitigation strategies for catastrophic forgetting involve regularizing parameters towards past solutions (Kirk-patrick et al., 2017). It has also been recognized that storing historical examples and retraining provides an effective, but computationally demanding, baseline (Prabhu et al., 2020). More recently, loss of plasticity has been identified as 8Preprint. Table 8: Average online accuracy across 5M interactions (2000 tasks) in the streaming classification problem with 
+
+partial label permutation using EMNIST. Method Avg Online Accuracy SGD 0.735 ± 0.012 
+
+SGD + WD 0.694 ± 0.007 
+
+Adam 0.448 ± 0.016 
+
+AdamW 0.541 ± 0.004 
+
+SGD + WClip 0.719 ± 0.006 
+
+FADE + Adam 0.808 ± 0.002 
+
+FADE + SGD 0.841 ± 0.001 
+
+another potential failure mode, where neural networks fail to adapt and learn new things (Ash & Adams, 2020; Dohare et al., 2024). This latter phenomenon is often mitigated by either regularization approaches (Lewandowski et al., 2025; Kumar et al., 2025b), or by re-initializing weights (Nikishin et al., 2022; Hernandez-Garcia et al., 2025). 
+
+Meta-learning for continual learning. The difficulties inherent to continual learning can broadly be addressed by meta-learning the learning algorithm itself, either through gradient-based meta-learning or program search (Schmid-huber, 1987; 1992; 1993; Schmidhuber et al., 1997; Hochreiter et al., 2001; Andrychowicz et al., 2016; Irie et al., 2025). Unlike these more general approaches, FADE does not replace the entire learning algorithm. It only adapts per-parameter decay rates, leaving the base optimizer (like SGD or Adam) intact. Closely related are meta-gradient methods that adjust meta-parameters online via differentiation through the update rule (Xu et al., 2018; Zahavy et al., 2020; Luketina et al., 2022). IDBD (Sutton, 1992) uses meta-gradients to adapt per-parameter step sizes for online lin-ear regression, and Schraudolph (1999) extends it to nonlinear networks. Sharifnassab et al. (2025) generalize IDBD within a framework that optimizes meta-parameters against a discounted lifetime objective. FADE uses the same forward-mode meta-gradient derivation as IDBD, but focuses specifically on adapting weight decay rates, targeting how much to forget rather than how fast to learn. 
+
+## 5 CONCLUSION 
+
+We introduced FADE to adapt per-parameter weight decay rates online via forward-mode meta-gradients. Our work was motivated by viewing weight decay as a mechanism for forgetting, rather than purely as a regularizer that controls weight magnitudes. To enable judicious forgetting in continual learning, FADE automatically discovers distinct decay rates during interaction, adding minimal computational overhead. Empirically, FADE consistently improves over fixed weight decay across three settings of increasing complexity. In a linear tracking problem, FADE complements step-size adaptation via IDBD, yielding the lowest error when combined. On a nonlinear teacher-student problem, applying FADE to the final layer achieves roughly half the error of AdamW. On the streaming label-permuted EMNIST problem, FADE outperforms weight clipping, the previous best method. Across all settings, FADE is robust to the initial decay rate, narrowing the performance gap across initializations considerably compared to fixed decay. Our results reveal that applying a suitable fixed non-zero decay rate only to the final layer proves to be a strong baseline that has not received prior attention. By default, weight decay applies a fixed decay rate uniformly across all parameters, making such a baseline easy to overlook. This finding supports the importance of different decay rates across different parts of the network, a principle that FADE automates at the per-parameter level on the final layer. We derived FADE for the online linear regression setting and applied it to the final layer when using it with neural networks. Scaling FADE to larger architectures requires addressing some open challenges. We evaluated a naive extension of FADE to all layers on the EMNIST benchmark, applying the same meta-gradient updates derived for the linear setting to hidden layers as well. This variant outperforms SGD with fixed weight decay but plateaus below head-only FADE, suggesting that the linear approximation is insufficient for hidden layers. Therefore, an important direction for future work is to formalize the interaction between the decay rates of the network head and those of the hidden layers, while accounting for nonlinearities between layers. Another possibility is to design meta-gradient approximations that are invariant to the underlying architecture, making them easier to apply across different depths, nonlinearities, and layer types. This would allow FADE to be extended to each layer in a network and combined with common architectural modifications, such as layer normalization, enabling its use in settings where non-stationarity arises naturally, such as reinforcement learning. 9Preprint. 
+
+## ACKNOWLEDGMENTS 
+
+We thank Kazuki Irie, Vincent Herrmann, Arsalan Sharifnassab, and Nicolau Oliver for valuable discussions and helpful comments on earlier drafts. 
+
+## REFERENCES 
+
+Marcin Andrychowicz, Misha Denil, Sergio Gomez, Matthew W Hoffman, David Pfau, Tom Schaul, Brendan Shilling-ford, and Nando De Freitas. Learning to learn by gradient descent by gradient descent. Advances in neural infor-mation processing systems , 29, 2016. Jordan Ash and Ryan P Adams. On warm-starting neural network training. Advances in neural information processing systems , 33:3884–3894, 2020. Maximilian Beck, Korbinian P¨ oppel, Markus Spanring, Andreas Auer, Oleksandra Prudnikova, Michael Kopp, G¨ unter Klambauer, Johannes Brandstetter, and Sepp Hochreiter. xlstm: Extended long short-term memory. Advances in Neural Information Processing Systems , 37:107547–107603, 2024. Gregory Cohen, Saeed Afshar, Jonathan Tapson, and Andre Van Schaik. Emnist: Extending mnist to handwritten letters. In 2017 international joint conference on neural networks (IJCNN) , pp. 2921–2926. IEEE, 2017. Thomas Degris, Khurram Javed, Arsalan Sharifnassab, Yuxin Liu, and Richard Sutton. Step-size optimization for continual learning. arXiv preprint arXiv:2401.17401 , 2024. Shibhansh Dohare, J Fernando Hernandez-Garcia, Qingfeng Lan, Parash Rahman, A Rupam Mahmood, and Richard S Sutton. Loss of plasticity in deep continual learning. Nature , 632(8026):768–774, 2024. Mohamed Elsayed and A. Rupam Mahmood. Addressing loss of plasticity and catastrophic forgetting in continual learning. In The Twelfth International Conference on Learning Representations, ICLR , 2024. Mohamed Elsayed, Qingfeng Lan, Clare Lyle, and A Rupam Mahmood. Weight clipping for deep continual and reinforcement learning. arXiv preprint arXiv:2407.01704 , 2024. Robert M French. Catastrophic forgetting in connectionist networks. Trends in cognitive sciences , 3(4):128–135, 1999. Felix A Gers, J¨ urgen Schmidhuber, and Fred Cummins. Learning to forget: Continual prediction with LSTM. Neural computation , 12(10):2451–2471, 2000. Mohammad Amin Ghiasi, Ali Shafahi, and Reza Ardekani. Improving robustness with adaptive weight decay. Ad-vances in Neural Information Processing Systems , 36:79067–79080, 2023. Stephen Grossberg. Competitive learning: From interactive activation to adaptive resonance. Cognitive science , 11 (1):23–63, 1987. Stephen Hanson and Lorien Pratt. Comparing biases for minimal network construction with back-propagation. Ad-vances in neural information processing systems , 1, 1988. Di He, Songjun Tu, Ajay Jaiswal, Li Shen, Ganzhao Yuan, Shiwei Liu, and Lu Yin. Alphadecay: Module-wise weight decay for heavy-tailed balancing in LLMs. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. J Fernando Hernandez-Garcia, Shibhansh Dohare, Jun Luo, and Rich S Sutton. Reinitializing weights vs units for maintaining plasticity in neural networks. arXiv preprint arXiv:2508.00212 , 2025. S. Hochreiter and J. Schmidhuber. Long Short-Term Memory. Neural Computation , 9(8):1735–1780, 1997. Sepp Hochreiter, A Steven Younger, and Peter R Conwell. Learning to learn using gradient descent. In International conference on artificial neural networks , pp. 87–94. Springer, 2001. Kazuki Irie, R´ obert Csord´ as, and J¨ urgen Schmidhuber. Metalearning continual learning algorithms. Transactions on Machine Learning Research , 2025. 10 Preprint. Masato Ishii and Atsushi Sato. Layer-wise weight decay for deep neural networks. In Pacific-Rim Symposium on Image and Video Technology , pp. 276–289. Springer, 2017. Khurram Javed, Arsalan Sharifnassab, and Richard S Sutton. Swifttd: A fast and robust algorithm for temporal difference learning. In Reinforcement Learning Conference , 2024. Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 ,2014. James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the National Academy of Sciences , 114:3521–3526, 2017. Anders Krogh and John Hertz. A simple weight decay can improve generalization. Advances in neural information processing systems , 4, 1991. Saurabh Kumar, Henrik Marklund, Ashish Rao, Yifan Zhu, Hong Jun Jeon, Liu Yueyang, and Benjamin Van Roy. Continual learning as computationally constrained reinforcement learning. Foundations and Trends in Machine Learning , 18(5):913–1053, 2025a. Saurabh Kumar, Henrik Marklund, and Benjamin Van Roy. Maintaining plasticity in continual learning via regenera-tive regularization. In Conference on Lifelong Learning Agents , pp. 410–430. PMLR, 2025b. Alex Lewandowski, Michal Bortkiewicz, Saurabh Kumar, Andr´ as Gy¨ orgy, Dale Schuurmans, Mateusz Ostaszewski, and Marlos C. Machado. Learning continually by spectral regularization. In The Thirteenth International Confer-ence on Learning Representations, ICLR , 2025. Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. In International Conference on Learning Representations , 2019. Jelena Luketina, Sebastian Flennerhag, Yannick Schroecker, David Abel, Tom Zahavy, and Satinder Singh. Meta-gradients in non-stationary environments. In Conference on Lifelong Learning Agents , pp. 886–901. PMLR, 2022. David J.C. MacKay. Bayesian interpolation. Neural computation , 4(3):415–447, 1992a. David J.C. MacKay. A practical bayesian framework for backpropagation networks. Neural computation , 4(3):448– 472, 1992b. Michael McCloskey and Neal J Cohen. Catastrophic interference in connectionist networks: The sequential learning problem. In Psychology of learning and motivation , volume 24, pp. 109–165. Elsevier, 1989. M.C. Mozer. A focused backpropagation algorithm for temporal pattern recognition. Complex Systems , 3:349–381, 1989. Kensuke Nakamura and Byung-Woo Hong. Adaptive weight decay for deep neural networks. IEEE Access , 7:118857– 118865, 2019. Evgenii Nikishin, Max Schwarzer, Pierluca D’Oro, Pierre-Luc Bacon, and Aaron Courville. The primacy bias in deep reinforcement learning. In International conference on machine learning , pp. 16828–16847. PMLR, 2022. Ameya Prabhu, Philip H.S. Torr, and Puneet K. Dokania. GDumb: A simple approach that questions our progress in continual learning. In European Conference on Computer Vision , 2020. Roger Ratcliff. Connectionist models of recognition memory: constraints imposed by learning and forgetting func-tions. Psychological review , 97(2):285, 1990. A. J. Robinson and F. Fallside. The utility driven dynamic error propagation network. Technical Report CUED/F-INFENG/TR.1, Cambridge University Engineering Department, 1987. J. Schmidhuber. Evolutionary principles in self-referential learning, or on learning how to learn: the meta-meta-... hook. Institut f¨ ur Informatik, Technische Universit¨ at M¨ unchen, 1987. J. Schmidhuber. Steps towards “self-referential” learning. Technical Report CU-CS-627-92, Dept. of Comp. Sci., University of Colorado at Boulder, November 1992. 11 Preprint. J. Schmidhuber. An introspective network that can learn to run its own weight change algorithm. In Proc. of the Intl. Conf. on Artificial Neural Networks, Brighton , pp. 191–195. IEE, 1993. J¨ urgen Schmidhuber, Jieyu Zhao, and Marco Wiering. Shifting inductive bias with success-story algorithm, adaptive levin search, and incremental self-improvement. Machine Learning , 28(1):105–130, 1997. Nicol N Schraudolph. Local gain adaptation in stochastic gradient descent. In 1999 Ninth international conference on artificial neural networks ICANN 99.(Conf. Publ. No. 470) , volume 2, pp. 569–574. IET, 1999. Arsalan Sharifnassab, Saber Salehkaleybar, and Richard S Sutton. Metaoptimize: A framework for optimizing step sizes and other meta-parameters. In Forty-second International Conference on Machine Learning , 2025. Richard S Sutton. Adapting bias by gradient descent: An incremental version of delta-bar-delta. In AAAI , volume 92, pp. 171–176. San Jose, CA, 1992. Jos Van der Westhuizen and Joan Lasenby. The unreasonable effectiveness of the forget gate. arXiv preprint arXiv:1804.04849 , 2018. Bernard Widrow and Marcian E. Hoff. Adaptive switching circuits. IRE WESCON Convention Record, New York: IRE, pp. 96-104 , 1960. Ronald J Williams and David Zipser. A learning algorithm for continually running fully recurrent neural networks. 
+
+Neural computation , 1(2):270–280, 1989. Zeke Xie, Zhiqiang Xu, Jingzhao Zhang, Issei Sato, and Masashi Sugiyama. On the overlooked pitfalls of weight decay and how to mitigate them: A gradient-norm perspective. Advances in Neural Information Processing Systems , 36: 1208–1228, 2023. Zhongwen Xu, Hado van Hasselt, and David Silver. Meta-gradient reinforcement learning. Advances in neural information processing systems , 31, 2018. Songlin Yang, Jan Kautz, and Ali Hatamizadeh. Gated delta networks: Improving mamba2 with delta rule. arXiv preprint arXiv:2412.06464 , 2024. Tom Zahavy, Zhongwen Xu, Vivek Veeriah, Matteo Hessel, Junhyuk Oh, Hado van Hasselt, David Silver, and Satinder Singh. A self-tuning actor-critic algorithm. Advances in neural information processing systems , 33:20913–20924, 2020. 12 Preprint. 
+
+## A DERIVATIONS 
+
+A.1 FADE The weight update for wi is 
+
+wit+1 = (1 − λit+1 ) wit + α δ t xit, (5) where δt = y∗ 
+
+> t
+
+− P 
+
+> j
+
+wjt xjt .
+
+Deriving the γi update Per-parameter weight decay λi = exp( γi).Stochastic gradient descent on loss Jt = ( δt)2/2 with respect to γi:
+
+γit+1 = γit − 12 θλ
+
+∂(δt)2
+
+∂γ i
+
+.
+
+Expanding via the chain rule and applying the approximation from IDBD derivation - that the primary effect of changing a meta-parameter associated with weight i is on weight i itself, i.e., ∂w jt /∂γ i ≈ 0 for j̸ = i,
+
+∂(δt)2
+
+∂γ i = X
+
+> j
+
+∂(δt)2
+
+∂w jt
+
+∂w jt
+
+∂γ i ≈ ∂(δt)2
+
+∂w it
+
+∂w it
+
+∂γ i .
+
+We have ∂(δt)2
+
+> ∂w it
+
+= −2δt xit. Defining git ≜ ∂w it 
+
+> ∂γ i
+
+:
+
+γit+1 = γit + θλ δt xit git. (6) 
+
+Deriving the gi trace We differentiate (5) with respect to γi. Note that ∂λ i 
+
+> ∂γ i
+
+= λi since λi = exp γi.
+
+git+1 = ∂∂γ i
+
+h
+
+(1 − λi)wit + αδ txit
+
+i
+
+= −λi wit + (1 − λi) git + α ∂δ t
+
+∂γ i xit.
+
+Next, ∂δ t 
+
+> ∂γ i
+
+= ∂∂γ i
+
+h
+
+− P 
+
+> j
+
+wjt xjt
+
+i
+
+≈ − gitxit using the same IDBD approximation as earlier. This gives us 
+
+git+1 = git
+
+ 1 − λi − α(xit)2 − λi wit.
+
+Adding the positive-bounding operation for stability: 
+
+git+1 = git
+
+1 − λit+1 − α(xit)2+ − λit+1 wit. (7) A.2 FADE + IDBD Here, the per-parameter step size αi = exp βi.The weight update for wi is 
+
+wit+1 = (1 − λit+1 ) wit + αit+1 δt xit, (8) where δt = y∗ 
+
+> t
+
+− P 
+
+> j
+
+wjt xjt .The update for γ and g follows from the previous section. We derive updates for β and its associated trace h. The original IDBD trace hit ≜ ∂w it 
+
+> ∂β i
+
+must be re-derived because of the introduction of weight decay. 13 Preprint. Using the same approach as earlier, 
+
+βit+1 = βit + θα δt xit hit. (9) Differentiating Equation 8 with respect to βi, noting ∂α i 
+
+> ∂β i
+
+= αi and λi does not depend on βi,
+
+hit+1 = ∂∂β i
+
+h
+
+(1 − λi)wit + αiδtxit
+
+i
+
+= (1 − λi) hit + αi δt xit + αi ∂δ t
+
+∂β i xit.
+
+Using ∂δ t 
+
+> ∂β i
+
+≈ − xithit and collecting terms: 
+
+hit+1 = hit
+
+1 − λit+1 − αit+1 (xit)2+ + αit+1 δt xit. (10) This is identical to IDBD’s original hi update except that λi appears in the decay factor. A.3 FADE WITH CROSS -ENTROPY LOSS 
+
+Let there be C classes. The learner produces logits zkt = P 
+
+> j
+
+W kj t xjt for k = 1 , . . . , C , where xt ∈ Rd is the input, and weights Wt ∈ RC×d. The target yt ∈ { 1 . . . C } is the class label. The softmax probabilities are pkt =exp( zkt )/ P 
+
+> m
+
+exp( zmt ), and the cross-entropy loss for true class yt is 
+
+Jt = − log pyt 
+
+> t
+
+.
+
+Gradient The gradient of J with respect to the weights is 
+
+∂J t
+
+∂W kj =  pkt − I[k = yt] xjt , (11) where I[·] is the indicator function. 
+
+Weight update As in the regression case, the weight update with per-parameter decay is 
+
+W kj t+1 = (1 − λkj t+1 ) W kj t − α ∂J t
+
+∂W kj , (12) where λkj = exp( γkj ).
+
+Meta-gradient update for γkj Following the same derivation as in Appendix A.1, 
+
+γkj t+1 = γkj t − θλ
+
+∂J t
+
+∂γ kj .
+
+Expanding via the chain rule and applying the same approximation as in the regression case — that the primary effect of changing γkj is on W kj itself, i.e., ∂W k′j′ 
+
+> t
+
+/∂γ kj ≈ 0 for (k′, j ′)̸ = ( k, j ),
+
+∂J t
+
+∂γ kj = X
+
+> k′,j ′
+
+∂J t
+
+∂W k′j′
+
+> t
+
+∂W k′j′
+
+> t
+
+∂γ kj ≈ ∂J t
+
+∂W kj t
+
+∂W kj t
+
+∂γ kj .
+
+Defining gkj t ≜ ∂W kj t /∂γ kj and δkt ≜  I[k = yt] − pkt
+
+:
+
+γkj t+1 = γkj t + θλ δkt xjt gkj t (13) So far the derivation is analogous to the regression case, the meta-gradient uses the loss gradient −∂J/∂W kj multi-plied by the trace gkj .14 Preprint. 
+
+Trace update We differentiate Equation 12 with respect to γkj 
+
+gkj t+1 = ∂∂γ kj 
+
+h
+
+(1 − λkj )W kj t − α(pkt − I[k = yt]) xjt
+
+i
+
+= −λkj W kj t + (1 − λkj ) gkj t − α ∂p kt
+
+∂γ kj xjt .
+
+For the remaining term, we expand using the chain rule through the logits: 
+
+∂p kt
+
+∂γ kj = X
+
+> k′
+
+∂p k
+
+∂z k′ · ∂z k′
+
+∂γ kj .
+
+Applying the approximation, ∂W k′j′
+
+/∂γ kj ≈ 0 for (k′, j ′)̸ = ( k, j ), only the k′ = k term survives: 
+
+∂z k′
+
+∂γ kj = X
+
+> j′
+
+xj′ ∂W k′j′
+
+∂γ kj ≈
+
+(
+
+xj gkj t if k′ = k
+
+0 otherwise Using the standard softmax derivative ∂p k/∂z k = pk(1 − pk):
+
+∂p kt
+
+∂γ kj ≈ pkt (1 − pkt ) · xjt · gkj t .
+
+Substituting: 
+
+gkj t+1 = gkj t
+
+h
+
+1 − λkj − α p kt (1 − pkt ) ( xjt )2i
+
+− λkj W kj t .
+
+Adding the positive-bounding operation for stability: 
+
+gkj t+1 = gkj t
+
+h
+
+1 − λkj t+1 − α p kt (1 − pkt ) ( xjt )2i+
+
+− λkj t+1 W kj t . (14) Compared to the regression trace (Equation 7), the only difference is the factor pkt (1 − pkt ) ∈ [0 , 0.25] multiplying 
+
+(xjt )2.A.4 FADE WITH ADAM 
+
+When combining FADE with Adam, the base optimizer provides an effective per-parameter step size. At step t, Adam’s effective step size for parameter i is 
+
+αi 
+
+> eff ,t
+
+= α
+
+pˆvit + ϵ , (15) where ˆvit = vit/(1 − βt
+
+> 2
+
+) is the bias-corrected second moment estimate (Kingma & Ba, 2014). The FADE trace update (Equation 7) becomes 
+
+git+1 ← git
+
+1 − λit+1 − αi
+
+> eff ,t
+
+(xit)2 
+
+> +
+
+− λit+1 wit. (16) The γ update and weight decay application remain unchanged. Adam handles the gradient step, and FADE applies adaptive weight decay independently, analogous to the relationship between Adam and AdamW. Note that this approximation does not account for the effect of Adam’s first moment (momentum) on the trace, which would require tracking additional dependencies. A.5 COUPLED DECAY AND STEP SIZE ADAPTATION FOR ONLINE LINEAR REGRESSION 
+
+Here we explore an alternative to FADE+IDBD where the weight update comes from SGD on the L2 regularized loss, i.e. 
+
+wit+1 = (1 − αit+1 λit+1 ) wit + αit+1 δt xit. (17) Note that in this update, the decay term involves a product with the per-parameter step size. We proceed with the same derivation technique. 15 Preprint. 
+
+Updates to γi and βi The meta-parameter updates follow the same form as in the decoupled case: 
+
+βit+1 = βit + θα δt xit hit, αit+1 = exp( βit+1 ), (18) 
+
+γit+1 = γit + θλ δt xit git, λit+1 = exp( γit+1 ). (19) The traces git ≜ ∂w it/∂γ i and hit ≜ ∂w it/∂β i must be re-derived to account for the coupling between αi and λi in the decay term. 
+
+Deriving the gi trace We differentiate the weight update (17) with respect to γi. Note that ∂λ i/∂γ i = λi and αi
+
+does not depend on γi:
+
+git+1 = ∂∂γ i
+
+h
+
+(1 − αiλi)wit + αiδtxit
+
+i
+
+= −αiλi wit + (1 − αiλi) git + αi ∂δ t
+
+∂γ i xit.
+
+Using ∂δ t/∂γ i ≈ − gitxit and adding the positive-bounding operation: 
+
+git+1 = git
+
+1 − αit+1 λit+1 − αit+1 (xit)2+ − αit+1 λit+1 wit. (20) This has a similar structure to the decoupled case (Equation 7), but with λi replaced by αiλi throughout. 
+
+Deriving the hi trace We differentiate the weight update (17) with respect to βi. Note that ∂α i/∂β i = αi. Crucially, because the decay term is αiλi, it now depends on βi:
+
+hit+1 = ∂∂β i
+
+h
+
+(1 − αiλi)wit + αiδtxit
+
+i
+
+= −αiλi wit + (1 − αiλi) hit + αiδt xit + αi ∂δ t
+
+∂β i xit.
+
+Using ∂δ t/∂β i ≈ − hitxit and adding the positive-bounding operation: 
+
+hit+1 = hit
+
+1 − αit+1 λit+1 − αit+1 (xit)2+ + αit+1 δt xit − αit+1 λit+1 wit. (21) Compared to the decoupled hi trace (Equation 10), which has the form 
+
+hit+1 = hit
+
+1 − λit+1 − αit+1 (xit)2+ + αit+1 δt xit,
+
+the coupled trace acquires an additional −αit+1 λit+1 wit term. 
+
+## B IMPLEMENTATION DETAILS 
+
+B.1 LINEAR TRACKING 
+
+Hyperparameter search For each algorithm, we perform a grid search over step size and meta-parameters, evalu-ating MSE averaged over all 200K steps across 10 seeds. Selected (best) hyperparameters are indicated in bold .B.1.1 NOISE σn = 0 
+
+SGD Step size α ∈ { 0.5, 0.1, 0.05 , 0.01 , 0.005 , 0.001 }. No weight decay, i.e., λ = 0 .
+
+SGD + WD Step size α ∈ {0.5, 0.1, 0.05 , 0.01 , 0.005 , 0.001 }, weight decay λ ∈{0.001 , 0.005 , 0.01 , 0.05 , 0.1, 0.5}.
+
+IDBD Meta step size θα ∈ {0.5, 0.1, 0.05 , 0.01 , 0.005 , 0.001 }, initial step size β0 ∈{− 0.7, −2.3, −3, −4.6, −5.3}.
+
+IDBD + WD Meta step size θα ∈ { 0.1, 0.05 , 0.01 , 0.005 }, initial step size β0 ∈ {− 0.7, −2.3, −3, −4.6, −5.3},weight decay λ ∈ { 0.001 , 0.005 , 0.01 , 0.05 , 0.1, 0.5}.16 Preprint. 
+
+FADE Step size α ∈ { 0.1, 0.05 , 0.01 , 0.005 }, meta step size θλ ∈ { 0.1, 0.05 , 0.01 , 0.005 }, initial decay γ0 ∈{0, −0.7, −1.2, −2.3, −4.6, −6.9, −9.2}.
+
+FADE + IDBD Tied meta step size θα = θλ ∈ {0.1, 0.05 , 0.01 , 0.005 }, initial step size β0 ∈{− 0.7, −2.3, −3, −4.6, −5.3}, initial decay γ0 ∈ {− 0.7, −1.2, −2.3, −4.6}.
+
+Coupled WD + SS Adaptation Tied meta step size θα = θλ ∈ { 0.1, 0.05 , 0.01 , 0.005 }, initial step size β0 ∈{− 0.7, −2.3, −3, −4.6, −5.3}, initial decay γ0 ∈ {− 0.7, −1.2, −2.3, −4.6}.B.1.2 NOISE σn = 1 .0
+
+SGD Step size α ∈ { 0.5, 0.1, 0.05 , 0.01 , 0.005 , 0.001 }. No weight decay, i.e., λ = 0 .
+
+SGD + WD Step size α ∈ {0.5, 0.1, 0.05 , 0.01 , 0.005 , 0.001 }, weight decay λ ∈{0.001 , 0.005 , 0.01 , 0.05 , 0.1, 0.5}.
+
+IDBD Meta step size θα ∈ {0.5, 0.1, 0.05 , 0.01 , 0.005 , 0.001 }, initial step size β0 ∈{− 0.7, −2.3, −3, −4.6, −5.3, −6.9}. No weight decay, i.e., λ = 0 .
+
+IDBD + WD Meta step size θα ∈ { 0.1, 0.05 , 0.01 , 0.005 }, initial step size β0 ∈ {− 0.7, −2.3, −3, −4.6, −5.3},weight decay λ ∈ { 0.001 , 0.005 , 0.01 , 0.05 , 0.1, 0.5}.
+
+FADE Step size α ∈ { 0.1, 0.05 , 0.01 , 0.005 }, meta step size θλ ∈ { 0.1, 0.05 , 0.01 , 0.005 }, initial decay γ0 ∈{0, −0.7, −1.2, −2.3, −4.6, −6.9, −9.2}.
+
+FADE + IDBD Tied meta step size θα = θλ ∈ {0.1, 0.05 , 0.01 , 0.005 }, initial step size β0 ∈{− 0.7, −2.3, −3, −4.6, −5.3}, initial decay γ0 ∈ {− 0.7, −1.2, −2.3, −4.6}.
+
+Coupled WD + SS Adaptation Tied meta step size θα = θλ ∈ { 0.1, 0.05 , 0.01 , 0.005 }, initial step size β0 ∈{− 0.7, −2.3, −3, −4.6, −5.3}, initial decay γ0 ∈ {− 0.7, −1.2, −2.3, −4.6}.B.2 NON -LINEAR TRACKING 
+
+Hyperparameter search For each algorithm, we perform a grid search over step size and regularization parameters, evaluating MSE averaged over the final 500K of 2M training steps across 5 seeds. All other unspecified hyperpa-rameters (e.g., β1, β 2, ϵ for Adam (Kingma & Ba, 2014)) are PyTorch defaults. Selected (best) hyperparameters are indicated in bold .
+
+SGD Step size α ∈ { 0.1, 0.01 , 0.001 , 0.0001 }. No weight decay, i.e., λ = 0 .
+
+Adam Step size α ∈ { 0.1, 0.01 , 0.001 , 0.0001 }. No weight decay, i.e., λ = 0 .
+
+SGD + WD Step size α ∈ { 0.1, 0.01 , 0.001 , 0.0001 } and weight decay λ ∈ { 1e−5, 1e−4, 1e − 3, 1e−2, 1e−1}.
+
+AdamW Step size α ∈ { 0.1, 0.01 , 0.001 , 0.0001 }. Weight decay λ ∈ { 10 , 1, 0.1, 0.01 , 0.001 , 0.0001 }.
+
+FADE + SGD Step size α ∈ { 0.1, 0.01 , 0.001 }, meta step size θλ ∈ { 0, 0.5, 1, 2}. We also consider (and report results for) different values for γ0 ∈ {− 2.3, −4.6, −6.9, −9.2}.
+
+FADE + Adam Step size α ∈ { 0.01 , 0.001 , 0.0001 , 0.00001 }, meta step size θλ ∈ { 0, 0.5, 1, 2}. We also consider different values for γ0 ∈ {− 2.3, −4.6, −6.9, −9.2}.B.3 STREAMING IMAGE CLASSIFICATION WITH LABEL PERMUTATION 
+
+For each algorithm, we perform a grid search over step size and regularization parameters, evaluating online accu-racy averaged over all 5M training steps across 5 seeds. All other unspecified hyperparameters (e.g., β1, β 2, ϵ for Adam (Kingma & Ba, 2014)) are PyTorch defaults. Selected (best) hyperparameters are indicated in bold .17 Preprint. 0 250 500 750 1000 1250 1500 1750 2000 
+
+> Tasks
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Online Accuracy  SGD
+> SGD + WD
+> Adam
+> AdamW
+> SGD + WClip
+> FADE + Adam
+> FADE + SGD
+
+Figure 6: Online accuracy with partial label permutations. 
+
+SGD. Step size α ∈ { 0.05 , 0.01 , 0.005 , 0.001 , 0.0005 }.
+
+SGD + WD. Step size α ∈ { 0.05 , 0.01 , 0.005 , 0.001 }, and weight decay λ ∈ { 1e−2, 1e−3, 1e − 4, 1e−5, 1e−6}.
+
+Adam. Step size α ∈ { 0.005 , 0.001 , 0.0005 , 0.0001 , 0.00005 }.
+
+AdamW. Step size α ∈ {0.005 , 0.001 , 0.0005 , 0.0001 , 0.00005 }, and weight decay λ ∈{1, 0.1, 0.01 , 0.001 , 0.0001 }.
+
+SGD + Weight Clipping. Step size α ∈ { 0.1, 0.05 , 0.01 , 0.005 , 0.001 }, clipping parameter κ ∈ { 1, 2, 3, 4, 5}.
+
+FADE + SGD. Step size α ∈ {0.05 , 0.01 , 0.005 , 0.001 }, meta-step size θλ ∈ {0, 0.1, 0.5, 1}, and γ0 ∈{− 2.3, −4.6, −6.9, −9.2}
+
+FADE + Adam. Step size α ∈ { 0.001 , 0.0005 , 0.0001 , 0.00005 }, meta-step size θλ ∈ { 0, 0.1, 0.5, 1}, and γ0 ∈{− 2.3, −4.6, −6.9, −9.2}
+
+## C STREAMING CLASSIFICATION WITH PARTIAL LABEL PERMUTED EMNIST 
+
+We use the same selected hyperparameters as the setting with label permutations applied to all classes, these results are provided in Table 8 and Figure 6. In this setting, SGD without weight decay outperforms SGD with weight decay (Table 8). This further motivates weight-decay adaptation based on the problem. Sensitivity analysis for FADE + SGD and FADE + Adam are provided in Table 9 and Table 10. Some alternative hyperparameter settings for FADE are slightly better than the default settings used from the setup where all labels were permuted (e.g. 0.841 vs 0.846 in Table 9). 
+
+## D ALGORITHMS 
+
+We present pseudocode for IDBD (Algorithm 2), IDBD with fixed weight decay (Algorithm 3), and FADE + IDBD (Algorithm 4). These algorithms are used in the linear tracking experiment (Section 3.1). IDBD + WD is a special case of FADE + IDBD in which the decay rate λ is fixed rather than adapted. Removing the γ update and g trace from Algorithm 4 and replacing the adaptive λit+1 with a fixed scalar λ recovers Algorithm 3. We tie meta-step sizes 
+
+θα = θλ = θ in our experiment with FADE+IDBD. 18 Preprint. Table 9: Impact of FADE’s adaptive decay on partial label-permuted EMNIST (24 stable classes which never change labels) with SGD. Results are average online accuracy ± standard deviation across 5 seeds, with step size α = 0 .005 .
+
+θλ = 0 corresponds to fixed weight decay on the head. 
+
+θλ = 0 θλ = 0 .1 θλ = 0 .5 θλ = 1 .0
+
+γ0 = −4.6 ( λ0 ≈ 0.01) 0.699 ± 0.000 0.811 ± 0.005 0.816 ± 0.006 0.822 ± 0.006 
+
+γ0 = −6.9 ( λ0 ≈ 0.001) 0.810 ± 0.001 0.841 ± 0.001 0.845 ± 0.002 0.846 ± 0.003 
+
+γ0 = −9.2 ( λ0 ≈ 0.0001) 0.830 ± 0.002 0.845 ± 0.002 0.846 ± 0.002 0.845 ± 0.002 
+
+γ0 = −11 .5 ( λ0 ≈ 0.00001) 0.783 ± 0.006 0.818 ± 0.003 0.833 ± 0.003 0.835 ± 0.002 
+
+Table 10: Impact of FADE’s adaptive decay on partial label-permuted EMNIST (24 stable classes which never change labels) with Adam. Results are average online accuracy ± standard deviation across 5 seeds, with step size α =0.0001 . θλ = 0 corresponds to fixed weight decay on the head. 
+
+θλ = 0 θλ = 0 .1 θλ = 0 .5 θλ = 1 .0
+
+γ0 = −4.6 ( λ0 ≈ 0.01) 0.560 ± 0.001 0.799 ± 0.001 0.807 ± 0.002 0.800 ± 0.002 
+
+γ0 = −6.9 ( λ0 ≈ 0.001) 0.763 ± 0.000 0.808 ± 0.002 0.808 ± 0.002 0.803 ± 0.003 
+
+γ0 = −9.2 ( λ0 ≈ 0.0001) 0.753 ± 0.002 0.810 ± 0.001 0.810 ± 0.002 0.797 ± 0.002 
+
+γ0 = −11 .5 ( λ0 ≈ 0.00001) 0.549 ± 0.011 0.728 ± 0.005 0.732 ± 0.003 0.734 ± 0.005 
+
+Algorithm 2 IDBD: Incremental Delta-Bar-Delta (Sutton, 1992) 
+
+Require: meta-step size θα, initial step-size parameter β0 ∈ Rd 
+
+> 1:
+
+Initialize weights w0 ∈ Rd, traces h0 ← 0 ∈ Rd 
+
+> 2:
+
+Initialize αi 
+
+> 0
+
+← exp( βi
+
+> 0
+
+) for all i 
+
+> 3:
+
+for t = 0 , 1, 2, . . . do  
+
+> 4:
+
+Receive input xt ∈ Rd and target y∗ 
+
+> t
+
+∈ R 
+
+> 5:
+
+Predict yt ← ⟨ wt, x t⟩ 
+
+> 6:
+
+Compute error δt ← y∗ 
+
+> t
+
+− yt 
+
+> 7:
+
+for each parameter i = 1 , . . . , d do  
+
+> 8:
+
+# Adapt step size  
+
+> 9:
+
+βit+1 ← βit + θα δt xit hit 
+
+> 10:
+
+αit+1 ← exp( βit+1 ) 
+
+> 11:
+
+# Update weight  
+
+> 12:
+
+wit+1 ← wit + αit+1 δt xit 
+
+> 13:
+
+# Update sensitivity trace  
+
+> 14:
+
+hit+1 ← hit
+
+1 − αit+1 (xit)2+ + αit+1 δt xit 
+
+> 15:
+
+end for  
+
+> 16:
+
+end for 
+
+19 Preprint. 
+
+Algorithm 3 IDBD + WD: Adaptive Step Size with Fixed Weight Decay (online linear regression) 
+
+Require: meta-step size θα, initial step-size parameter β0 ∈ Rd, weight decay λ ∈ R
+
+1: Initialize weights w0 ∈ Rd, traces h0 ← 0 ∈ Rd
+
+2: Initialize αi 
+
+> 0
+
+← exp( βi
+
+> 0
+
+) for all i
+
+3: for t = 0 , 1, 2, . . . do 
+
+4: Receive input xt ∈ Rd and target y∗ 
+
+> t
+
+∈ R
+
+5: Predict yt ← ⟨ wt, x t⟩
+
+6: Compute error δt ← y∗ 
+
+> t
+
+− yt
+
+7: for each parameter i = 1 , . . . , d do 
+
+8: # Adapt step size 
+
+9: βit+1 ← βit + θα δt xit hit
+
+10: αit+1 ← exp( βit+1 )
+
+11: # Update weight with fixed decay 
+
+12: wit+1 ← (1 − λ) wit + αit+1 δt xit
+
+13: # Update sensitivity trace 
+
+14: hit+1 ← hit
+
+1 − λ − αit+1 (xit)2+ + αit+1 δt xit
+
+15: end for 
+
+16: end for Algorithm 4 FADE + IDBD: Adaptive Decay and Step Size (online linear regression) 
+
+Require: meta-step sizes θα, θ λ (can be tied: θα = θλ = θ), initial β0, γ 0 ∈ Rd
+
+1: Initialize weights w0 ∈ Rd, traces h0 ← 0, g0 ← 0 ∈ Rd
+
+2: Initialize αi 
+
+> 0
+
+← exp( βi
+
+> 0
+
+), λi 
+
+> 0
+
+← exp( γi
+
+> 0
+
+) for all i
+
+3: for t = 0 , 1, 2, . . . do 
+
+4: Receive input xt ∈ Rd and target y∗ 
+
+> t
+
+∈ R
+
+5: Predict yt ← ⟨ wt, x t⟩, compute error δt ← y∗ 
+
+> t
+
+− yt
+
+6: for each parameter i = 1 , . . . , d do 
+
+7: # Adapt step size and decay rate 
+
+8: βit+1 ← βit + θα δt xit hit, αit+1 ← exp( βit+1 )
+
+9: γit+1 ← γit + θλ δt xit git, λit+1 ← exp( γit+1 )
+
+10: # Update traces 
+
+11: hit+1 ← hit
+
+1 − λit+1 − αit+1 (xit)2+ + αit+1 δt xit
+
+12: git+1 ← git
+
+1 − λit+1 − αit+1 (xit)2+ − λit+1 wit
+
+13: # Update weight 
+
+14: wit+1 ← (1 − λit+1 ) wit + αit+1 δt xit
+
+15: end for 
+
+16: end for 
+
+20

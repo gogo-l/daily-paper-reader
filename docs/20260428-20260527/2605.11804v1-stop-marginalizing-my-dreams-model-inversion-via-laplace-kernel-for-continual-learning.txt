@@ -1,0 +1,1151 @@
+Title: Stop Marginalizing My Dreams: Model Inversion via Laplace Kernel for Continual Learning
+
+URL Source: https://arxiv.org/pdf/2605.11804v1
+
+Published Time: Wed, 13 May 2026 01:10:03 GMT
+
+Number of Pages: 25
+
+Markdown Content:
+# Stop Marginalizing My Dreams: Model Inversion via Laplace Kernel for Continual Learning 
+
+Patryk Krukowski 
+
+Jagiellonian University 
+
+patryk.krukowski@doctoral.uj.edu.pl 
+
+Jacek Tabor 
+
+Jagiellonian University 
+
+Przemysław Spurek 
+
+Jagiellonian University IDEAS Research Institute 
+
+Marek ´ Smieja 
+
+Jagiellonian University 
+
+Łukasz Struski 
+
+Jagiellonian University 
+
+## Abstract 
+
+Data-free continual learning (DFCIL) relies on model inversion to synthesize pseudo-samples and mitigate catastrophic forgetting. However, existing inversion methods are fundamentally limited by a simplifying assumption: they model feature distributions using diagonal covariance, effectively ignoring correlations that define the geometry of learned representations. As a result, synthesized samples often lack fidelity, limiting knowledge retention. In this work, we show that modeling feature dependencies is a key ingredient for effective DFCIL. We introduce REMIX, a structured covariance modeling framework that enables scalable full-covariance modeling without the prohibitive cost of dense matrix inversion and log-determinant computation. By leveraging a Laplace kernel parameterization, REMIX captures structured feature dependencies using memory that scales linearly with the feature dimensionality, while requiring only an additional logarithmic factor in computa-tion. Modeling these correlations produces more coherent synthetic samples and consistently improves performance across standard DFCIL benchmarks. Our results demonstrate that moving beyond diagonal assumptions is essential for effective and scalable data-free continual learning. Our code is available at https://github. com/pkrukowski1/REMIX-Model-Inversion-via-Laplace-Kernel .
+
+## 1 Introduction 
+
+Continual learning [ 1 , 2 ] represents a fundamental challenge in artificial intelligence because deep neural networks typically suffer from catastrophic forgetting when learning tasks sequentially. In many practical scenarios, such as medical or financial applications, the original training data cannot be stored due to strict privacy regulations or memory limits [ 3 , 4, 5]. This has led to the emergence of data-free class-incremental learning, in which model inversion techniques are employed to generate synthetic samples that serve as proxies for forgotten knowledge. The foundation of this field was established by DeepInversion [ 6 ], which demonstrated that seman-tically meaningful images can be recovered by optimizing the statistics stored within the batch normalization layers of a frozen model. This mechanism was successfully adapted for continual learning in ABD [ 7 ], where the process of constantly dreaming about previous classes serves as a substitute for a physical memory buffer. Further improvements were introduced by R-DFCIL [ 8], which focused on preserving topological relations and geometric structures in the feature space for more stable knowledge transfer. The current state of the art in this trajectory is PMI [ 9 ], which utilizes precise layer-specific modeling of feature map statistics. 
+
+> Preprint.
+> arXiv:2605.11804v1 [cs.LG] 12 May 2026
+
+Figure 1: Overview of the shared feature extraction pipeline in DFCIL used by the proposed 
+
+Laplace Covariance Model (LCM) and the Per-layer Model Inversion (PMI) . While PMI relies on a simplified diagonal approximation of covariance that assumes independence and ignores cross-feature correlations, our LCM captures full covariance structure, modeling spatial dependencies. Despite these significant advancements, all existing methods are constrained by a critical limitation stemming from the assumption of strictly diagonal covariance matrices. This severe oversimplification completely marginalizes the spatial and inter-channel correlations that are naturally present in deep representations. As a result, the data synthesis process is inherently biased, and the recovered samples fail to capture the full complexity of the original distributions. In this work, we introduce REMIX ( RE constructing Multivariate Interactions via e Xponential kernel) as a transformative solution to this problem by proposing a novel covariance estimator, which represents our primary contribution. Our method redefines the model inversion process by leveraging the mathematical properties of the Laplace kernel to model local dependencies explicitly. By employing a structured parameterization, we obtain a tridiagonal precision matrix that captures essential correlations without the overhead of dense covariance matrices. The resulting representation requires memory that scales linearly with the feature dimensionality and enables efficient computation of likelihoods, log-determinants, and inverse operations with only an additional logarithmic factor in runtime. Empirical results show that structured covariance modeling produces more coherent synthesized samples and improves knowledge retention in continual learning. An overview of our method is shown in Figure 1. The main contributions of this paper are summarized as follows: • We identify the lack of structured correlation modeling as a key limitation of existing DFCIL methods, leading to less effective model inversion and weaker knowledge retention. • We introduce a structured covariance estimator based on the exponential Laplace kernel, which captures feature dependencies through a tridiagonal precision matrix while requiring only 3N parameters, where N denotes the feature dimensionality. • We propose the REMIX framework, which integrates structured covariance modeling into the inversion process and achieves state-of-the-art performance on standard DFCIL benchmarks while retaining linear memory complexity and efficient log-linear likelihood evaluation. 
+
+## 2 Related Work 
+
+In this section, we review the existing literature that forms the foundation of our research. We first explore general approaches to class-incremental learning, in which models are updated sequentially and often rely on physical rehearsal buffers or explicit modeling of feature distributions. Subsequently, we delve into data-free class-incremental learning, which is the primary focus of our work. Within this domain, we trace the evolution from early generative replay methods to modern model inversion techniques, highlighting the critical structural limitations that our proposed covariance estimator aims to resolve. 
+
+Class Incremental Learning (CIL). Class-incremental learning aims to learn new categories con-tinuously from a data stream while maintaining performance on old classes. The main challenge in this domain is catastrophic forgetting. To alleviate this issue, most traditional methods rely on 2rehearsal strategies that store a small subset of historical data in a memory buffer. For instance, iCaRL [ 10 ] combines a nearest mean classifier with knowledge distillation to retain past knowledge. Following this direction, various approaches have been proposed to improve representation learning and preserve class geometry, such as spatial distillation in PODNet [ 11 ] and other structural con-straints [ 12 , 13 , 14 ]. Memory management and data sampling strategies are also extensively studied to maximize the utility of the limited buffer [ 15 , 16 , 17 ]. Recently, another promising line of research focuses on freezing feature extractors and modeling feature distributions. Methods like FeCAM [ 18 ], FeTrIL [ 19 ], and AdaGauss [ 20 ] estimate covariance matrices or feature prototypes to stabilize the continuously evolving classifier without explicitly rehearsing past images. 
+
+Data Free Class Incremental Learning (DFCIL). In privacy-sensitive applications, storing raw data is strictly prohibited, thereby prompting the emergence of data-free class-incremental learning. Early attempts to solve this without data rehearsal relied heavily on knowledge distillation directly applied to the new data, such as LwF [ 21 ]. To compensate for missing past data, researchers explored generative replay, in which a generative model is trained alongside the classifier to synthesize past exemplars [ 22 , 23 , 24 , 25 , 26 ]. These approaches are often inspired by brain memory consolidation [27 ], and their theoretical foundations have been well established [ 28 ]. However, training complex generators sequentially is notoriously unstable and computationally expensive. To bypass this bottleneck, modern data-free methods invert the frozen classifier itself. DeepInversion [ 6 ] pioneered the synthesis of semantically meaningful images by optimizing random noise to match the batch normalization statistics of a pretrained model. This inversion technique was directly adopted for continual learning in ABD [ 7] to prevent forgetting via dreaming. R-DFCIL [ 8 ] further improved this framework by introducing relation-guided knowledge distillation, ensuring that the geometric structure of the feature space is preserved during sequential learning. More recently, PMI [ 9]introduced layer-specific modeling and alignment to more accurately capture internal distributions. Despite these incredible advances, all these inversion-based techniques fundamentally rely on diagonal covariance assumptions, setting the stage for our proposed method, which explicitly captures structural correlations. 
+
+## 3 Method 
+
+In this section, we introduce REMIX , a model inversion framework for data-free class-incremental learning (DFCIL), which RE constructs Multivariate Interactions via e Xponential kernel. The key idea is to move beyond independent feature matching and explicitly model structured correlations within feature representations during sample synthesis. We achieve this by parameterizing feature covariances with a structured, yet efficient formulation based on the Laplace kernel. We begin by revisiting the DFCIL setting and identifying a core limitation of existing approaches. We then present our Laplace Covariance Model (LCM) and show how it enables efficient and expressive correlation modeling. Finally, we describe how REMIX integrates LCM into continual learning. 
+
+Background and Problem Setup. We consider the standard data-free class-incremental learning setting with a sequence of tasks {D t}Tt=1 , where each dataset Dt = {(xi, y i)}Nt 
+
+> i=1
+
+introduces disjoint label spaces. During training on task t, only Dt is accessible, while past data must not be stored. To mitigate catastrophic forgetting, prior methods rely on model inversion to synthesize pseudo-samples from a frozen classifier. This is typically done by matching the joint distribution of inter-mediate activations of real and synthetic inputs conditioned on a target label y. By denoting the activations at the layer l as ol, with o0 = x, the objective is 
+
+min  
+
+> ps(x)
+
+DKL 
+
+ ps(oL, . . . , o0 | y) ∥ pr (oL, . . . , o0 | y), (1) where ps and pr denote the distributions of synthetic and real samples, respectively. Since the above objective is intractable in practice, existing methods approximate it by matching layer-wise Gaussian statistics [9]: 
+
+L(l)stat = DKL 
+
+ N (ˆμl, ˆΣl) ∥ N (μl, Σl), (2) 3Figure 2: Construction of the proposed REMIX covariance matrix Σ ∈ RC×C using O(C) parame-ters. (1) Distance Encoding: Each channel is assigned a learnable coordinate ai, defining pairwise distances |ai − aj | that capture channel relationships. (2) Kernel Mapping: Distances are converted into correlations via the Laplace kernel Kij = exp( −| ai − aj |), inducing exponential decay and a tridiagonal precision structure. (3) Scaling: The kernel is rescaled as Σ′ = diag( w)Kdiag( w),allowing channel-wise variance modulation. (4) Diagonal Adjustment: A diagonal term d is added to obtain Σ = Σ ′ + diag( d), ensuring stability and modeling independent noise. where (μl, Σl) and (ˆμl, ˆΣl) denote the statistics of real and synthetic features, respectively 1. These components primarily act as regularizers, whereas the fundamental representational bottleneck lies in Lstat , which governs how accurately the synthesized distribution matches the structure of the real feature distribution. Accordingly, our theoretical analysis focuses exclusively on this statistical matching term, while the complete optimization objective is provided in Appendix D. Modeling full covariance matrices requires storing all pairwise feature interactions and performing expensive matrix inversion and log-determinant operations during likelihood evaluation. In high-dimensional feature spaces, these costs become prohibitive, leading existing methods to adopt diagonal approximations of Σl that capture only marginal BatchNorm statistics. Concretely, synthetic inputs ˆx are optimized such that their activations ˆhl ∈ RC match stored means μl and variances σ2
+
+> l
+
+at layer l. This implicitly assumes independence between feature dimensions, ignoring correlations that are essential for modeling the structure of deep representations. 
+
+Laplace Covariance Model. To overcome the trade-off between expressiveness and efficiency, we employ the Laplace Covariance Model (LCM) – a structured parameterization that captures non-trivial feature dependencies while requiring only near-linear computational complexity and linear memory complexity with respect to the feature dimensionality. For a feature vector of dimension C, we associate each dimension i with a scalar latent coordinate 
+
+ai ∈ R. Pairwise correlations are induced via a Laplace kernel, 
+
+Kij (a) = exp( −| ai − aj |), (3) which encodes the intuition that channels closer in the latent space exhibit stronger interactions. To increase expressivity, we introduce a learnable scaling vector w ∈ RC , as well as an independent diagonal component controlling per-dimension variance. The resulting covariance parameterization takes the form: 
+
+Σ = diag( d) + diag( w) K(a) diag( w), (4) with d = softplus( u) + ε, where u ∈ RC controls the diagonal variance, diag( ·) constructs a diagonal matrix, and ε > 0 ensures numerical stability (see Fig. 2). This formulation captures structured feature correlations using only a linear number of parameters, unlike dense covariance matrices that scale quadratically with the feature dimension. Likelihood-based objectives, see Eq. (2) , are a natural choice for Gaussian modeling, but directly optimizing them under structured covariance parameterizations requires computing log-determinants and matrix inverses, which leads to non-trivial computational and numerical overhead. We instead optimize a Frobenius-norm objective, which avoids explicit covariance inversion while matching second-order statistics and reduces computation to element-wise operations and quadratic forms. Let ˆΣ = 1
+
+> N
+
+PNi=1 viv⊤ 
+
+> i
+
+denote the empirical covariance of centered features. Instead of optimizing Eq. (2) , we resort to minimize ∥Σ − ˆΣ∥2F, where Σ denotes the LCM parameterization, see Eq. (4) .
+
+> 1In practice, inversion objectives additionally incorporate standard auxiliary terms, including Cross-Entropy (CE) supervi-sion for class conditioning and layer-wise MSE losses for feature distillation.
+
+4Expanding the objective yields: 
+
+∥Σ − ˆΣ∥2F = ∥Σ∥2F
+
+| {z } 
+
+> model term
+
+− 2
+
+N
+
+> N
+
+X
+
+> i=1
+
+v⊤ 
+
+> i
+
+Σv i
+
+| {z }
+
+> data term
+
++ const , (5) which decomposes into a model-dependent regularization term and a data-alignment term (see Appendix A for a detailed evaluation). Under the LCM structure, the model term simplifies to: 
+
+∥d∥22 + 2 d⊤w2 + ( w2)⊤K(2 a)( w2), (6) while the data term becomes: 
+
+2
+
+N
+
+> N
+
+X
+
+> i=1
+
+ d⊤v2 
+
+> i
+
++ ( w ⊙ vi)⊤K(a)( w ⊙ vi) . (7) Crucially, all computations reduce to element-wise operations and quadratic forms of the type 
+
+x⊤K(a)x. These quadratic forms can be computed in O(C log C) time using cumulative (prefix and suffix) sums, avoiding explicit matrix construction (see Appendix B). This is enabled by the one-dimensional latent structure of a, which induces an ordering over channels and allows kernel interactions to be computed via directional accumulations rather than dense matrix multiplication. Although Σ is dense, its inverse Σ−1 corresponds to a tridiagonal precision matrix due to the Markovian structure induced by the Laplace kernel (see Appendix C). As a result: • quadratic forms x⊤Σ−1x can be computed in O(C log C) time, • log-determinants and likelihood terms can be evaluated efficiently without dense matrix operations. Consequently, model inversion can be performed by directly optimizing the log-likelihood objective while remaining scalable in high-dimensional feature spaces, requiring only linear memory and near-linear computation. Detailed efficiency analyses are provided in Appendix H. 
+
+REMIX: Integration of LCM into DFCIL. We now present REMIX, which integrates LCM into the DFCIL pipeline. Specifically, we describe: (i) feature distribution modeling across different architectures, (ii) continual aggregation of feature statistics, and (iii) generator-based model inversion. We decompose the network into a feature extractor ffeat (·; θ) and a classifier head fhead (·; ϕ), and employ a generator g(·; ψ) to synthesize pseudo-samples. Instead of storing raw data, we maintain compact feature statistics aggregated over previously observed tasks. Prior approaches retain only marginal statistics and therefore assume diagonal covariance structures. In contrast, REMIX additionally stores the LCM parameters (d, w, a), enabling structured modeling of feature correlations. For convolutional networks, BatchNorm layers naturally provide estimates of feature means and variances. We therefore use BatchNorm statistics to preserve marginal feature distributions, while LCM models the correlation structure between feature dimensions. After aggregation across tasks, the resulting covariance representation is re-scaled to remain consistent with the variances stored in BatchNorm statistics. For architectures without BatchNorm (e.g., ViTs [ 29 ]), we explicitly record layer-wise activations and employ a sequential layer-wise inversion strategy [9, 30]. During training on task t, we estimate LCM parameters (dt, wt, at) for each layer using the Frobenius objective. To aggregate knowledge across tasks, we maintain a running covariance estimate: 
+
+Σ1: t+1 = Σ1: t · |Y 1: t||Y 1: t+1 | + Σt+1 · |Y t+1 ||Y 1: t+1 | , (8) where |Y 1: t| denotes the number of classes observed up to task t, and |Y t+1 | is the number of new classes introduced at task t + 1 . This is followed by re-fitting the LCM parameters to the aggregated covariance, allowing structured feature relationships to be preserved across tasks without retaining raw samples. 5In model inversion stage, pseudo-samples are generated using the generator g(z; ψ) by enforcing both semantic and statistical constraints. Unlike prior methods that match only marginal statistics, we impose a full-covariance objective: log p(h) ∝ − (h − μ)⊤Σ−1(h − μ), where (μ, Σ) are defined by the aggregated LCM parameters. Due to the tridiagonal structure of the precision matrix Σ−1, these likelihood terms can be evaluated in O(C log C) time, enabling efficient model inversion despite modeling full covariance (see Appendix C). The likelihood objective is combined with standard inversion losses (e.g., classification alignment and image priors) to guide the generator toward realistic and diverse samples. The full generator optimization objective and detailed description of the CFS procedure are provided in Appendix D. We follow a standard two-stage DFCIL procedure to train REMIX. First, the feature extractor and classifier are trained using real data from the current task and generated samples from previous tasks, with distillation to mitigate forgetting. Then, the classifier is fine-tuned on a balanced mixture of real and synthetic data. Formal definitions of all loss terms and implementation details, including loss scaling, are provided in Appendix E. 
+
+## 4 Experiments 
+
+In this section, we describe the experimental setup used to evaluate REMIX, including the considered benchmarks and datasets. We then present quantitative results demonstrating improvements over SOTA methods, followed by ablation studies. 
+
+Experimental Setup. We evaluate REMIX using two standard continual learning metrics: average incremental accuracy and last task accuracy (see Appendix F for formal definitions). Experiments are conducted on CIFAR-100 [ 31 ], Tiny-ImageNet [ 32 ], and CUB-200 [ 33 ], following the PMI [ 9] and R-DFCIL [ 8] protocols with identical task splits and evaluation settings. CIFAR-100 and Tiny-ImageNet are evaluated with a ResNet-32 backbone, while CIFAR-100 and CUB-200 are additionally considered in a CLIP-based setting with a frozen image encoder [ 34 ]. All experiments are performed in the data-free regime, where no past data are retained and pseudo-samples are generated via model inversion. We compare REMIX against prior DFCIL methods as well as selected approaches that rely on real data buffers. Additional details on task configurations and training setups are provided in Appendix G. To ensure a fair comparison, we adopt all hyperparameters from PMI, except for the Frobenius regularization weight λF, which is selected via grid search. The full search space and implementation details are given in Appendix G. 
+
+Results on ResNet-32 Backbone. Table 1 reports the average incremental accuracy on CIFAR-100 and Tiny-ImageNet using a ResNet-32 backbone under different task splits. Overall, REMIX consistently outperforms prior data-free approaches across all settings. Compared to the strongest baseline, PMI, our method achieves systematic improvements on both datasets, with gains becoming more pronounced as the number of tasks increases. On CIFAR-100, REMIX improves performance across all splits, with the largest gain of +1.48 
+
+percentage points (p.p.) observed in the 10-task setting. Similarly, on Tiny-ImageNet, REMIX achieves consistent improvements, reaching up to +1.44 p.p. in the most challenging 20-task scenario. These results suggest that explicitly modeling feature correlations during inversion produces more coherent pseudo-samples, thereby reducing error accumulation and mitigating catastrophic forgetting over long task sequences. Importantly, the improvements are obtained without modifying the underlying training protocol or hyperparameters of PMI, demonstrating that the gains stem directly from the proposed covariance modeling rather than additional tuning. 
+
+Results on ViT Backbone. Table 2 presents continual learning performance using a ViT-based CLIP backbone on CIFAR-100 and CUB-200. We report both average and last task accuracy to capture overall performance and final retention. Overall, REMIX combined with MoE-Adapter achieves the best results among data-free approaches and remains competitive with methods that rely on real image buffers. Compared to the strongest 6Table 1: Average incremental accuracy (%) on CIFAR-100 and Tiny-ImageNet using a ResNet-32 backbone. Results are averaged over five runs. Baseline results are taken from [ 9]. Values in parentheses indicate the improvement of REMIX over the best baseline.                                                               
+
+> Method Model Inversion CIFAR-100 Tiny-ImageNet 5 task 10 task 20 task 5 task 10 task 20 task Upper bound ✗70.59 70.59 70.59 55.25 55.25 55.25 DeepInversion ✓20.48 11.26 5.63 ---ABD ✓48.84 36.75 24.40 30.83 23.17 14.61 R-DFCIL ✓49.87 41.80 31.54 35.33 29.05 24.85 PMI w/o CFS ✓52.05 43.23 32.23 37.65 32.09 25.51 PMI ✓52.38 43.90 32.60 37.90 32.43 25.67
+> REMIX ✓52.94 (+0.56) 45.38 (+1.48) 33.11 (+0.51) 38.64 (+0.74) 33.39 (+0.96) 27.11 (+1.44)
+
+Table 2: Average incremental accuracy (%) on CIFAR-100 and CUB-200 using a ViT backbone. Baseline results are taken from [ 9]. Values in parentheses indicate the improvement of REMIX over the best baseline.                                                                           
+
+> Method No Real Image Buffer CIFAR-100 CUB-200 Avg. Last Avg. Last iCaRL ✗82.20 64.15 82.39 75.11 MEMO ✗85.31 75.24 77.72 65.95 PROOF ✗86.95 79.32 85.13 79.69 CLAP4CLIP ✗86.13 78.21 86.93 81.64 ZS-CLIP ✓76.71 66.25 66.81 53.52 AttriCLIP ✓79.31 68.45 65.26 52.12 VPT ✓83.98 74.34 68.22 55.51 CODA-P ✓83.64 75.80 73.05 61.83 MoE-Adapter ✓87.29 79.40 73.34 61.07 PMI + VPT ✓85.45 76.91 70.14 57.04 PMI + CODA-P ✓84.78 76.23 74.37 64.63 PMI + MoE-Adapter ✓88.35 81.06 78.98 67.26
+> REMIX + MoE-Adapter ✓88.47 (+0.12) 81.37 (+0.31) 78.96 (-0.02) 67.69 (+0.43)
+
+baseline (PMI + MoE-Adapter), our method consistently improves performance across both datasets and metrics. On CIFAR-100, REMIX achieves gains of +0.12 p.p. in average accuracy and +0.31 
+
+p.p. in last-task accuracy. On the more challenging fine-grained CUB-200 benchmark, REMIX remains competitive in average accuracy (-0.02) while achieving a clear improvement of +0.43 in final accuracy, indicating stronger retention of previously learned classes. These results demonstrate that modeling structured feature dependencies during inversion also benefits the CLIP setting. The consistent gains across both datasets indicate improved alignment between synthetic and real feature distributions, resulting in better knowledge retention. Importantly, these improvements are achieved without modifying the underlying CLIP adaptation framework, suggesting that they stem directly from the proposed covariance modeling. 
+
+Qualitative Analysis of Generated Samples. Figure 3 illustrates the impact of modeling structured feature dependencies during model inversion across both convolutional (ResNet-34) and transformer-based (ViT-B/16) architectures. Methods relying on diagonal covariance assumptions treat feature dimensions independently, often producing samples with artifacts, blurred structures, and inconsistent semantics. In contrast, REMIX captures correlations within feature representations while remaining computationally efficient, even for high-dimensional feature spaces. As a result, the generated samples exhibit clearer object structure, more coherent textures, and stronger semantic consistency across architectures. To further quantify this effect, we next analyze the log-likelihood of features under the learned distributions (see Figure 4), showing that modeling full feature-map correlations yields a more faithful 7Diagonal Covariance Full-Feature Covariance 
+
+> Car
+> ResNet-34
+> Dog Car
+> ViT-B/16
+> Dog
+
+Figure 3: Qualitative comparison of synthetic samples generated using diagonal covariance modeling and the proposed full-feature covariance modeling. Results are shown for both ResNet-34 and ViT-B/16 backbones. Modeling structured feature dependencies produces samples with improved semantic coherence and more consistent object structure across architectures. representation of the underlying feature space. Additional qualitative results for ViT backbones, along with implementation details and a detailed memory analysis, are provided in Appendix H, where we show that REMIX reduces the covariance parameterization cost by over 35 ,000 × compared to dense representations. 
+
+Effect of Covariance Modeling. We assess the impact of covariance modeling by comparing log-likelihoods under two Gaussian assumptions: diagonal covariance and the proposed LCM. For ResNet-34, we extract intermediate feature representations from layer1 –layer4 for four ImageNet classes (dog, car, koala, greenhouse), flattening each feature map into a high-dimensional vector (D = C ×H ×W , up to ∼ 2 · 10 5). As shown in Figure 4, LCM consistently achieves higher log-likelihood than the diagonal baseline across all layers. This improvement persists even in extremely high-dimensional regimes, demonstrat-ing that capturing dependencies across the full feature map leads to a more accurate representation of the underlying feature distribution. Additional results for ViT architectures are provided in Appendix H, where we further examine when full-covariance modeling is beneficial and when diagonal assumptions remain sufficient across transformer layers.                     
+
+> 0.0001 0.0005 0.001 0.002 0.005 0.01 0.05
+> Regularization weight λF
+> 60
+> 70
+> 80
+> Accuracy (%)
+> 67.4 67.4 66.8 67.2 67.0 67.7 67.4
+> 78.7 78.9 78.8 79.1 78.9 79.0 78.9
+> Final Task Accuracy Avg Incremental Accuracy
+
+Figure 5: Sensitivity to λF on CUB-200 (ViT + MoE-Adapter). 
+
+Sensitivity to λF. We analyze the sensitiv-ity of REMIX to the Frobenius regularization weight λF by sweeping values in the range 
+
+[10 −4, 5 · 10 −2]. The study is conducted on the CUB-200 dataset using a ViT backbone with the MoE-Adapter framework. The average incremental accuracy (Figure 5, left) remains highly stable across all configu-rations, varying by less than 0.5% , indicating that the overall learning dynamics are robust to the choice of λF. In contrast, the final accuracy 
+
+Alast (right) exhibits a clear optimum at λF = 0 .01 , where the model achieves the best retention performance ( 67 .69% ). 8−1.6                         
+
+> −1.4
+> −1.2
+> Log-Likelihood
+> ×10 5Layer1 ( D= 200 ,704 )
+> LCM: -115,280 −6
+> −4
+> ×10 4Layer2 ( D= 100 ,352 )
+> LCM: -26,961
+> 020 40 60 80 100
+> Epoch
+> −2
+> 0
+> Log-Likelihood
+> ×10 4Layer3 ( D= 50 ,176 )
+> LCM: 5,964
+> 020 40 60 80 100
+> Epoch
+> −5.0
+> −4.5
+> ×10 4Layer4 ( D= 25 ,088 )
+> LCM: -40,901
+> Baseline (Diag. Cov.) LCM (Full Cov.)
+
+Figure 4: Log-likelihood comparison between diagonal and full-feature covariance models across ResNet-34 layers ( layer1 –layer4 ) on ImageNet classes (dog, car, koala, greenhouse). The proposed LCM (solid line) consistently outperforms the diagonal baseline (dashed line) across all layers.                   
+
+> 12345678910
+> Task
+> 40
+> 60
+> 80
+> Accuracy (%)
+> Learning Capacity (New Task Accuracy)
+> 2345678910
+> Task
+> Retention (Average Old Task Accuracy)
+> REMIX PMI
+
+Figure 6: Task-wise performance comparison on CIFAR-100 (ResNet-32). Solid lines denote mean accuracy over three runs, with shaded regions indicating standard deviation. REMIX consistently outperforms PMI in retaining previously learned knowledge while maintaining similar performance trends across tasks. This behavior reflects a trade-off between structural regularization and plasticity: small values (e.g., 
+
+10 −4) provide insufficient constraint, leading to drift in feature structure, while large values (e.g., 
+
+0.05 ) overly restrict adaptation to new tasks. 
+
+Learning Capacity and Retention. We analyze the trade-off between plasticity and stability by comparing REMIX and PMI on CIFAR-100 using a ResNet-32 backbone. Figure 6 reports task-wise performance, where the left plot shows accuracy on the current task (learning capacity), while the right plot shows the average accuracy on previously learned tasks (retention), both averaged over three runs. We observe that REMIX maintains performance comparable to PMI on new tasks, indicating that modeling feature dependencies does not impair learning capacity. At the same time, REMIX consistently achieves higher accuracy on previously learned tasks, demonstrating improved retention. These results indicate that incorporating structured covariance effectively mitigates forgetting while preserving the plasticity required for continual learning. Analogous results on Tiny-ImageNet are provided in Appendix H. 
+
+## 5 Conclusions 
+
+We introduce REMIX, a scalable covariance modeling framework for DFCIL that captures feature correlations using only a linear number of parameters. Integrated into the PMI-based inversion pipeline, REMIX enables efficient full-covariance modeling in high-dimensional feature spaces and improves the reconstruction of intermediate representations beyond diagonal approximations. As a result, the generated pseudo-samples better preserve previously learned knowledge, leading to improved retention in the DFCIL setting. 
+
+Limitations. The proposed formulation relies on a structured covariance parameterization, which may be less expressive than more flexible generative models. Moreover, since REMIX builds upon 9the PMI inversion framework, it inherits limitations related to imperfect feature distribution alignment during inversion. Exploring richer distribution modeling and more advanced inversion objectives remains an important direction for future work. 
+
+## References 
+
+[1] Michael McCloskey and Neal J Cohen. Catastrophic interference in connectionist networks: The sequential learning problem. In Psychology of learning and motivation , volume 24, pages 109–165. Elsevier, 1989. [2] Yen-Chang Hsu, Yen-Cheng Liu, Anita Ramasamy, and Zsolt Kira. Re-evaluating con-tinual learning scenarios: A categorization and case for strong baselines. arXiv preprint arXiv:1810.12488 , 2018. [3] Georgios A Kaissis, Marcus R Makowski, Daniel Rückert, and Rickmer F Braren. Secure, privacy-preserving and federated machine learning in medical imaging. Nature Machine Intelligence , 2(6):305–311, 2020. [4] Matthias De Lange, Rahaf Aljundi, Marc Masana, Sarah Parisot, Xu Jia, Aleš Leonardis, Gregory Slabaugh, and Tinne Tuytelaars. A continual learning survey: Defying forgetting in classification tasks. IEEE transactions on pattern analysis and machine intelligence , 44(7):3366– 3385, 2021. [5] Gaurav Kumar Nayak, Konda Reddy Mopuri, Vaisakh Shaj, Venkatesh Babu Radhakrishnan, and Anirban Chakraborty. Zero-shot knowledge distillation in deep networks. In International conference on machine learning , pages 4743–4751. PMLR, 2019. [6] Hongxu Yin, Pavlo Molchanov, Jose M Alvarez, Zhizhong Li, Arun Mallya, Derek Hoiem, Niraj K Jha, and Jan Kautz. Dreaming to distill: Data-free knowledge transfer via deepinversion. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 8715–8724, 2020. [7] James Smith, Yen-Chang Hsu, Jonathan Balloch, Yilin Shen, Hongxia Jin, and Zsolt Kira. Always be dreaming: A new approach for data-free class-incremental learning. In Proceedings of the IEEE/CVF international conference on computer vision , pages 9374–9384, 2021. [8] Qiankun Gao, Chen Zhao, Bernard Ghanem, and Jian Zhang. R-dfcil: Relation-guided represen-tation learning for data-free class incremental learning. In European Conference on Computer Vision , pages 423–439. Springer, 2022. [9] Ruilin Tong, Haodong Lu, Yuhang Liu, and Dong Gong. Model inversion with layer-specific modeling and alignment for data-free continual learning. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. [10] Sylvestre-Alvise Rebuffi, Alexander Kolesnikov, Georg Sperl, and Christoph H Lampert. icarl: Incremental classifier and representation learning. In Proceedings of the IEEE conference on Computer Vision and Pattern Recognition , pages 2001–2010, 2017. [11] Arthur Douillard, Matthieu Cord, Charles Ollion, Thomas Robert, and Eduardo Valle. Podnet: Pooled outputs distillation for small-tasks incremental learning. In European conference on computer vision , pages 86–102. Springer, 2020. [12] Francisco M Castro, Manuel J Marín-Jiménez, Nicolás Guil, Cordelia Schmid, and Karteek Alahari. End-to-end incremental learning. In Proceedings of the European conference on computer vision (ECCV) , pages 233–248, 2018. [13] Saihui Hou, Xinyu Pan, Chen Change Loy, Zilei Wang, and Dahua Lin. Learning a unified classifier incrementally via rebalancing. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 831–839, 2019. [14] Lu Yu, Bartlomiej Twardowski, Xialei Liu, Luis Herranz, Kai Wang, Yongmei Cheng, Shangling Jui, and Joost van de Weijer. Semantic drift compensation for class-incremental learning. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 6982–6991, 2020. 10 [15] Jihwan Bang, Heesu Kim, YoungJoon Yoo, Jung-Woo Ha, and Jonghyun Choi. Rainbow memory: Continual learning with a memory of diverse samples. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 8218–8227, 2021. [16] Ameya Prabhu, Philip HS Torr, and Puneet K Dokania. Gdumb: A simple approach that questions our progress in continual learning. In European conference on computer vision , pages 524–540. Springer, 2020. [17] Yaoyao Liu, Bernt Schiele, and Qianru Sun. Adaptive aggregation networks for class-incremental learning. In Proceedings of the IEEE/CVF conference on Computer Vision and Pattern Recognition , pages 2544–2553, 2021. [18] Dipam Goswami, Yuyang Liu, Bartłomiej Twardowski, and Joost Van De Weijer. Fecam: Exploiting the heterogeneity of class distributions in exemplar-free continual learning. Advances in Neural Information Processing Systems , 36:6582–6595, 2023. [19] Grégoire Petit, Adrian Popescu, Hugo Schindler, David Picard, and Bertrand Delezoide. Fetril: Feature translation for exemplar-free class-incremental learning. In Proceedings of the IEEE/CVF winter conference on applications of computer vision , pages 3911–3920, 2023. [20] Grzegorz Rype´ s´ c, Sebastian Cygert, Tomasz Trzci´ nski, and Bartłomiej Twardowski. Task-recency bias strikes back: Adapting covariances in exemplar-free class incremental learning. 
+
+Advances in Neural Information Processing Systems , 37:63268–63289, 2024. [21] Zhizhong Li and Derek Hoiem. Learning without forgetting. IEEE transactions on pattern analysis and machine intelligence , 40(12):2935–2947, 2017. [22] Hanul Shin, Jung Kwon Lee, Jaehong Kim, and Jiwon Kim. Continual learning with deep generative replay. Advances in neural information processing systems , 30, 2017. [23] Yulai Cong, Miaoyun Zhao, Jianqiao Li, Sijia Wang, and Lawrence Carin. Gan memory with no forgetting. Advances in neural information processing systems , 33:16481–16494, 2020. [24] Ronald Kemker and Christopher Kanan. Fearnet: Brain-inspired model for incremental learning. In International Conference on Learning Representations , 2018. [25] Chenshen Wu, Luis Herranz, Xialei Liu, Joost Van De Weijer, Bogdan Raducanu, et al. Memory replay gans: Learning to generate new categories without forgetting. Advances in neural information processing systems , 31, 2018. [26] Fei Ye and Adrian G Bors. Learning latent representations across multiple data domains using lifelong vaegan. In European Conference on Computer Vision , pages 777–795. Springer, 2020. [27] Gido M Van de Ven, Hava T Siegelmann, and Andreas S Tolias. Brain-inspired replay for continual learning with artificial neural networks. Nature communications , 11(1):4069, 2020. [28] Vaishnavh Nagarajan, Colin Raffel, and Ian J Goodfellow. Theoretical insights into mem-orization in gans. In Neural Information Processing Systems Workshop , volume 1, page 3, 2018. [29] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale, 2021. [30] Hamid Kazemi, Atoosa Chegini, Jonas Geiping, Soheil Feizi, and Tom Goldstein. What do we learn from inverting clip models?, 2024. [31] Alex Krizhevsky. Learning multiple layers of features from tiny images. pages 32–33, 2009. [32] Jiayu Wu, Qixiang Zhang, and Guoxia Xu. Tiny imagenet challenge. 2017. [33] Peter Welinder, Steve Branson, Takeshi Mita, Catherine Wah, Florian Schroff, Serge Belongie, and Pietro Perona. Caltech-ucsd birds 200. 09 2010. 11 [34] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agar-wal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. Learning transferable visual models from natural language supervision. In Marina Meila and Tong Zhang, editors, Proceedings of the 38th International Conference on Machine Learning , volume 139 of Proceedings of Machine Learning Research , pages 8748–8763. PMLR, 18–24 Jul 2021. 
+
+## A Derivation of the Frobenius-Norm Covariance Objective 
+
+Given N centered feature vectors {vi}Ni=1 , the empirical covariance is ˆΣ = 1
+
+> N
+
+PNi=1 viv⊤ 
+
+> i
+
+. We parameterize the model covariance M using the Laplace kernel K(a)ij = e−| ai−aj |:
+
+M = diag( d) + diag( w)K(a)diag( w).
+
+We minimize the squared Frobenius distance LF = ∥M − ˆΣ∥2F. Expanding the norm yields: 
+
+∥M − ˆΣ∥2F = ⟨M, M⟩F − 2
+
+N
+
+> N
+
+X
+
+> i=1
+
+⟨M, viv⊤ 
+
+> i
+
+⟩F + ⟨ ˆΣ, ˆΣ⟩F.
+
+The term ⟨ ˆΣ, ˆΣ⟩F is constant with respect to the model parameters and is omitted from the optimiza-tion objective. We expand the model self-inner product ⟨M, M⟩F:
+
+⟨M, M⟩F =⟨diag( d) + diag( w)K(a)diag( w), diag( d) + diag( w)K(a)diag( w)⟩F
+
+=⟨diag( d), diag( d)⟩F + 2 ⟨diag( d), diag( w)K(a)diag( w)⟩F
+
++ ⟨diag( w)K(a)diag( w), diag( w)K(a)diag( w)⟩F.
+
+Evaluating each component individually: 
+
+⟨diag( d), diag( d)⟩F = ∥d∥22,
+
+2⟨diag( d), diag( w)K(a)diag( w)⟩F = 2 X
+
+> j
+
+dj w2 
+
+> j
+
+(K(a)) jj = 2 d⊤w2,
+
+⟨diag( w)K(a)diag( w), diag( w)K(a)diag( w)⟩F = X
+
+> i,j
+
+w2 
+
+> i
+
+w2 
+
+> j
+
+(K(a)ij )2 = ( w2)⊤K(2 a)( w2).
+
+The kernel self-inner product relies on (e−| ai−aj |)2 = e−2|ai−aj | = K(2 a)ij . Thus, the complete model term is: 
+
+⟨M, M⟩F = ∥d∥22 + 2 d⊤w2 + ( w2)⊤K(2 a)( w2).
+
+Next, we evaluate the data-alignment term using the identity ⟨M, viv⊤ 
+
+> i
+
+⟩F = v⊤ 
+
+> i
+
+Mv i:
+
+v⊤ 
+
+> i
+
+Mv i =v⊤ 
+
+> i
+
+(diag( d) + diag( w)K(a)diag( w)) vi
+
+=v⊤ 
+
+> i
+
+diag( d)vi + v⊤ 
+
+> i
+
+diag( w)K(a)diag( w)vi
+
+=d⊤v2 
+
+> i
+
++ ( w ⊙ vi)⊤K(a)( w ⊙ vi).
+
+Summing over the batch yields the final tractable objective function: 
+
+LF = ∥d∥22 + 2 d⊤w2 + ( w2)⊤K(2 a)( w2) − 2
+
+N
+
+> N
+
+X
+
+> i=1
+
+ d⊤v2 
+
+> i
+
++ ( w ⊙ vi)⊤K(a)( w ⊙ vi) .
+
+## B Quasi-Linear Time Evaluation of the Laplace Kernel via Prefix and Suffix Sums 
+
+In the main text, we claim that the quadratic form x⊤K(a)x can be evaluated in O(C log C) time and linear O(C) memory without ever constructing the dense C ×C kernel matrix K(a). This efficiency is achieved by exploiting the multiplicative separability of the 1D Laplace kernel to compute the matrix-vector product y = K(a)x using recursive prefix and suffix sums. 12 Formulating the Matrix-Vector Product. As established in Appendix C, we first apply a sorting permutation π such that the latent coordinates are monotonically increasing: aπ(1) ≤ aπ(2) ≤ · · · ≤ 
+
+aπ(C). Let ˜a and ˜x denote the permuted coordinate and input vectors, respectively. The i-th element of the matrix-vector product ˜y = K(˜ a)˜ x is given by the sum: 
+
+˜yi =
+
+> C
+
+X
+
+> j=1
+
+e−| ˜ai−˜aj | ˜xj .
+
+By explicitly splitting this sum into the elements occurring before i (the prefix), the element exactly at i, and the elements occurring after i (the suffix), we can drop the absolute value: 
+
+˜yi =
+
+> i−1
+
+X
+
+> j=1
+
+e−(˜ ai−˜aj ) ˜xj
+
+| {z } 
+
+> Prefix: Li
+
++˜ xi +
+
+> C
+
+X
+
+> j=i+1
+
+e−(˜ aj −˜ai) ˜xj
+
+| {z } 
+
+> Suffix: Ri
+
+.
+
+Recursive Prefix and Suffix Evaluation. Because the exponential function is multiplicatively separable (i.e., e−(˜ ai−˜aj ) = e−(˜ ai−˜ai−1)e−(˜ ai−1−˜aj )), we can compute the prefix sum Li and suffix sum Ri recursively, entirely avoiding nested loops. We define the spatial decay factor between adjacent sorted coordinates as ρi = e−(˜ ai+1 −˜ai). The left-to-right prefix sum L is computed via a single forward pass: 
+
+L1 = 0 , Li = ρi−1(Li−1 + ˜ xi−1) for i = 2 , . . . , C. 
+
+Similarly, the right-to-left suffix sum R is computed via a single backward pass: 
+
+RC = 0 , Ri = ρi(Ri+1 + ˜ xi+1 ) for i = C − 1, . . . , 1.
+
+Final Assembly and Complexity. Once the recursive passes are complete, the output vector ˜y is simply assembled via an element-wise addition: 
+
+˜y = L + ˜ x + R.
+
+We then apply the inverse permutation π−1 to restore the original channel ordering, yielding y =
+
+K(a)x. Finally, the quadratic form is computed via a standard dot product: 
+
+x⊤K(a)x = x⊤y.
+
+By replacing the dense matrix–vector multiplication with a forward pass, a backward pass, and an element-wise sum, the computational complexity is reduced from O(C2) to O(C log C), where the 
+
+log C term arises from sorting. Furthermore, because the memory footprint only requires storing the 1D vectors L, R, and ρ, the memory complexity is bounded to O(C).
+
+## C Gaussian Markov Random Field and the Tridiagonal Precision Matrix 
+
+In this section, we provide a complete derivation showing that the LCM induces a sparse, tridiagonal precision matrix. This result follows from the equivalence between the Laplace kernel on a 1D coordinate system and a Gaussian Markov Random Field (GMRF). 
+
+1D Ordering and Markov Structure. The kernel component of our model is defined as (K(a)) ij =
+
+e−| ai−aj |, where a denotes learned 1D coordinates. Without loss of generality, we assume the coordinates are sorted such that a1 ≤ a2 ≤ · · · ≤ aC .Define ρi = e−(ai+1 −ai) as the correlation between adjacent channels. For any i < j , the distance decomposes as 
+
+|ai − aj | =
+
+> j−1
+
+X
+
+> k=i
+
+(ak+1 − ak),
+
+which implies a multiplicative factorization of the kernel: 
+
+Kij = e− Pj−1   
+
+> k=i(ak+1 −ak)
+
+=
+
+> j−1
+
+Y
+
+> k=i
+
+ρk, for i ≤ j. 
+
+By symmetry, Kji = Kij . This decomposition reveals a Markov structure: correlations between distant channels are mediated through intermediate ones. 13 Precision Matrix via Autoregressive Representation. Let x ∼ N (0, K), where K is a correlation matrix induced by the Laplace kernel. By construction, its diagonal entries satisfy Ki,i = 1 , implying unit marginal variance for all variables, i.e., Var( xi) = 1 .Due to the Markov structure of the 1D exponential kernel, x admits an equivalent autoregressive (AR(1)) representation: 
+
+x1 = ϵ1, ϵ1 ∼ N (0 , 1) ,xi = ρi−1xi−1 + ϵi, ϵi ∼ N (0 , 1 − ρ2
+
+> i−1
+
+), i ≥ 2,
+
+where ρi−1 encodes the correlation between consecutive variables. The variance of the innovations ϵi follows directly from the unit marginal constraint. Applying the variance operator to xi = ρi−1xi−1 + ϵi and using independence yields 
+
+Var( xi) = ρ2
+
+> i−1
+
+Var( xi−1) + Var( ϵi).
+
+Substituting Var( xi) = Var( xi−1) = 1 gives Var( ϵi) = 1 − ρ2
+
+> i−1
+
+.This system can be written compactly as Lx = ϵ, where L is a lower bidiagonal matrix: 
+
+L =
+
+
+
+1 0 0 . . . 0
+
+−ρ1 1 0 . . . 00 −ρ2 1 . . . 0
+
+... . . . . . . . . . ...
+
+0 . . . 0 −ρC−1 1
+
+ ,
+
+and ϵ has diagonal covariance 
+
+D = diag(1 , 1 − ρ21, . . . , 1 − ρ2
+
+> C−1
+
+).
+
+It follows that the covariance and precision matrices admit the factorization 
+
+K = L−1DL −⊤ , Q = K−1 = L⊤D−1L.
+
+Explicit Form of the Precision Matrix. The inverse covariance Q is given by Q = L⊤D−1L,where 
+
+D−11,1 = 1 , D−1 
+
+> k,k
+
+= 11 − ρ2
+
+> k−1
+
+, 1 < k ≤ C. 
+
+For diagonal entries: • i = 1 :
+
+Q1,1 = 11 − ρ21
+
+.
+
+• 1 < i < C :
+
+Qi,i = 11 − ρ2
+
+> i−1
+
++ ρ2
+
+> i
+
+1 − ρ2
+
+> i
+
+.
+
+• i = C:
+
+QC,C = 11 − ρ2
+
+> C−1
+
+.
+
+For off-diagonal entries, by symmetry it suffices to consider i < j :
+
+Qi,j =
+
+> C
+
+X
+
+> k=1
+
+Lk,i D−1
+
+> k,k
+
+Lk,j .
+
+Due to the bidiagonal structure: • If j = i + 1 :
+
+Qi,i +1 = − ρi
+
+1 − ρ2
+
+> i
+
+.
+
+• If |i − j| > 1:
+
+Qi,j = 0 .
+
+This derivation shows that the precision matrix Q is strictly tridiagonal. Consequently, the Laplace kernel over 1D coordinates induces a GMRF with local dependencies, enabling efficient computation while preserving structured correlations. 14 D Generator Training Details 
+
+In DFCIL, the generator acts as a synthesizer that produces pseudo-samples Xold for previously learned tasks. Following the PMI framework, we do not train an auxiliary parametric generative model (e.g., a GAN), but instead instantiate the generator through a per-layer model inversion 
+
+procedure. In this formulation, intermediate feature tensors are treated as optimization variables, enabling the reconstruction of high-fidelity inputs by propagating constraints backward through the frozen network in a layer-wise manner. Building on this paradigm, we extend PMI with REMIX, enabling explicit modeling of structured correlations within feature representations during inversion and overcoming the diagonal covariance assumptions used in prior work. 
+
+Contrastive Feature Selection (CFS). A key challenge in model inversion is defining informative and diverse semantic targets. In standard classification models, mapping a high-dimensional feature vector to a scalar label discards a substantial amount of information. As a result, relying solely on class centroids as inversion targets often leads to mode collapse and synthetic samples that lack diversity. To preserve the geometry of the original feature distribution, we follow PMI and adopt CFS. For each previously learned class c, we approximate the feature distribution at the penultimate layer using a Gaussian model N (μc, σ2 
+
+> c
+
+).We then train a lightweight contrastive MLP fcont on real features using a negative contrastive objective: 
+
+Lcont (oL,i , Sneg ; fcont ) = log EoL,j ∈S neg 
+
+h
+
+ecos( fcont (oL,i ),f cont (oL,j )) i
+
+,
+
+where Sneg denotes a negative set and cos( ·, ·) is cosine similarity. Optimizing this objective encourages features to be uniformly distributed on a hypersphere, ensuring that no semantic subspace is overly compressed. During generation, we sample a large candidate pool from N (μc, σ2 
+
+> c
+
+) and apply a greedy selection procedure (see Algorithm 2 in [ 9]). At each step, we select features that minimize the contrastive loss with respect to already chosen samples. This produces a subset Sfeat that maximizes diversity and distributional coverage, providing robust semantic anchors for inversion. 
+
+Linking Generation to Per-layer Inversion. We decompose the feature extractor ffeat into a sequence of L blocks (e.g., residual blocks for CNNs or transformer blocks for ViTs). Directly optimizing pixels to match high-level semantic representations is highly non-convex. To address this, we decompose the problem into a sequence of tractable layer-wise sub-problems. Let ol denote the input to block l, and ol+1 its output. The inversion proceeds backward from the deepest layer L to the input: 1. Obtain target features Sfeat at layer L using CFS. 2. Initialize ˆol as Gaussian noise scaled by stored input statistics. 3. Optimize ˆol via gradient descent so that its forward pass through the frozen block matches the target. 4. Use the optimized ˆol as the target for the preceding layer l − 1.This sequential procedure decomposes a highly non-convex global objective into a series of well-conditioned local problems. 
+
+Layer-wise Optimization Objective. At each block l > 0, we optimize ˆol using 
+
+L(l)layer = αmatch L(l)match + αstat L(l)stat + αin L(l)in .
+
+1. Feature Matching Loss ( L(l)match ). The formulation of the deterministic matching loss depends strictly on the depth of the layer being optimized. 15 At the topmost layer ( l = L), the optimization aims to align the generated features directly with the target class label y. Therefore, the matching objective utilizes a standard CE loss: L(L)match =
+
+Lce (ˆ oL, y ).However, for all intermediate layers ( l < L ), the optimization relies on the cascading targets from the layer above. Here, the objective transitions to a Mean Squared Error (MSE) loss, which enforces consistency with the localized target features propagated backward from the previously optimized layer: 
+
+L(l)match = norm(Block l(ˆ ol)) − S (l+1) feat 
+
+> 22
+
+.
+
+Specifically, ˆol is the intermediate feature representation being optimized, which serves as the input to Block l. Block l refers to a primary structural unit of the frozen network, norm( ·) denotes the normalization applied to the block’s output, and S(l+1) feat represents the fixed target features obtained from the previously optimized layer l + 1 .
+
+2. Distribution Statistic Loss ( L(l)stat ): 
+
+We regularize intermediate activations to match the feature statistics observed on real data by modeling their distribution with the proposed LCM and minimizing the exact Gaussian Negative Log-Likelihood (NLL). Given a batch of generated features {ˆol,i }Ni=1 ∈ RC , the objective under the multivariate Gaussian distribution N (μ(l), Σ(l)) is: 
+
+L(l)stat = 12N
+
+> N
+
+X
+
+> i=1
+
+
+
+log det Σ(l) + (ˆ ol,i − μ(l))⊤(Σ(l))−1(ˆ ol,i − μ(l))
+
+
+
+. (9) Direct evaluation requires O(C3) time, which is prohibitive for high-dimensional features. To bypass this, we exploit the structure of the LCM covariance. 
+
+Generative Matrix Factorization. A random vector distributed as N (μ(l), Σ(l)) can be con-structively generated by drawing a latent vector z ∼ N (0, K) and an independent noise vector 
+
+η ∼ N (0, D), such that: 
+
+ˆol,i − μ(l) = Wz + ηi. (10) Eq. 10 yields the exact covariance E[( Wz + η)( Wz + η)⊤] = WKW ⊤ + D = Σ(l). This factorization reveals that the final generated features are simply a standard correlated latent process (z), scaled element-wise by the diagonal weights ( W), with added noise ( η). 
+
+Mapping to a 1D State-Space Model. Recall from Eq. 10 that the generated features are driven by a latent random vector z ∼ N (0, K). Conceptually, z represents an unobserved, normalized hidden signal that correlates all the feature channels together. Because the correlation matrix K relies purely on the L1 distance between the learned channel coordinates a, this underlying continuous signal strictly satisfies the Markov property—provided we evaluate the channels in the correct spatial order. Therefore, we apply a permutation π that sorts the channels such that their coordinates are strictly increasing: aπ(1) ≤ · · · ≤ aπ(C).Under this sorted ordering, we can break down the dense vector equation (Eq. 10) into a step-by-step scalar sequence. Let zk denote the k-th scalar element of the sorted hidden signal. Similarly, let xi,k = ˆ ol,i,π (k) be the actual observed feature for the k-th sorted channel, with corresponding historical parameters μk = μ(l)
+
+> π(k)
+
+, wk = w(l)
+
+> π(k)
+
+, and uk = u(l)
+
+> π(k)
+
+.The spatial distance between adjacent channels is ∆ak = aπ(k) − aπ(k−1) . This distance dictates how strongly the hidden signal decays from one channel to the next, defining the autoregressive transition ϕk = exp( −∆ak) and the injected process noise qk = 1 − ϕ2
+
+> k
+
+. The dense multivariate model is thus mathematically equivalent to a 1D linear state-space model (SSM): 
+
+zk = ϕkzk−1 + ϵk, ϵk ∼ N (0 , q k), (11) 
+
+xi,k = μk + wkzk + ηi,k , ηi,k ∼ N (0 , u k). (12) Eq. 11 describes how the unobserved hidden signal zk evolves smoothly across the sorted channels. Eq. 12 demonstrates how the actual observed feature xi,k is generated: by scaling the hidden signal by the weight wk, shifting it by the historical mean μk, and adding independent channel noise ηi,k .16 Exact Likelihood via Kalman Filtering. To compute the exact likelihood of the entire sequence, we use a Kalman filter. The filter moves step-by-step through the sorted channels, maintaining a running estimate of the true hidden signal. At the beginning of step k, our knowledge of the previous hidden state zk−1 is represented by a Gaussian distribution with mean mi,k −1 and variance Pk−1.The filtering process at each channel follows three distinct stages. Before observing the k-th channel, we use the autoregressive transition (Eq. 11) to predict the current hidden state. The expected mean and variance of this prior prediction are: 
+
+mi,k |k−1 = ϕkmi,k −1,Pk|k−1 = ϕ2
+
+> k
+
+Pk−1 + qk.
+
+Next, we predict what the actual observed feature xi,k should be, based on our hidden state prediction. The difference between the true observation and our expectation is called the innovation (or prediction error) vi,k :
+
+vi,k = ( xi,k − μk) − wk mi,k |k−1
+
+| {z }
+
+> Predicted State
+
+.
+
+Because both the hidden state and the channel observation noise are uncertain, the variance of this expected observation, denoted as Sk, is the sum of both uncertainties: 
+
+Sk = w2 
+
+> k
+
+Pk|k−1
+
+| {z } 
+
+> State Variance
+
++uk.
+
+Finally, to prepare for the next step k + 1 , the filter corrects its internal estimate of the hidden state using the newly observed prediction error vi,k . The degree of this correction is controlled by the Kalman gain Kk = Pk|k−1wk/S k, which acts as a dynamic “trust ratio.” It balances how much the filter trusts its own prior prediction ( Pk|k−1) versus the noisy new observation ( Sk). Using this gain, we compute the updated posterior mean and variance: 
+
+mi,k = mi,k |k−1 + Kkvi,k , (13) 
+
+Pk = (1 − Kkwk)Pk|k−1. (14) Eq. 13 intuitively shows that the new mean is simply the old prediction shifted by a fraction of the error. Eq. 14 demonstrates that observing new data always reduces our uncertainty: the prior variance 
+
+Pk|k−1 is strictly shrunk by the factor (1 − Kkwk).The primary advantage of this sequential formulation is how elegantly it simplifies the likelihood calculation. Direct evaluation of the full-covariance multivariate Gaussian requires calculating a massive, tangled joint probability. However, the Kalman filter mathematically untangles this vector into a sequence of purely independent “surprises”—the innovations vi,k .Because each innovation vi,k captures only the orthogonal, completely new information arriving at channel k, these errors are statistically independent from one another and follow a simple 1D Gaussian distribution: vi,k ∼ N (0 , S k).By the rules of probability, the joint likelihood of independent events is simply the product of their individual likelihoods. Consequently, the computationally heavy O(C3) dense matrix objective from Eq. 9 algebraically collapses into a sum of standard 1D NLLs. This allows us to evaluate the exact loss in O(C log C) time: 
+
+L(l)stat = 12N
+
+> N
+
+X
+
+> i=1
+> C
+
+X
+
+> k=1
+
+log(2 πS k) + v2
+
+> i,k
+
+Sk
+
+!
+
+.
+
+3. Input Statistic Prior ( L(l)in ): Due to the strong non-linearity of deep networks, directly optimizing the input tensor ˆol to match downstream targets can lead to adversarial or out-of-distribution activa-tions. Although such features may satisfy the feature-matching objective, they often lack meaningful structure and can destabilize subsequent inversion steps. To mitigate this issue, we constrain ˆol using a Gaussian prior defined over the input activations of block l. During training on tasks 1: t, we record the empirical channel-wise mean and variance of these activations, denoted as μ(l, in) 1: t and (σ(l, in) 1: t )2.17 During inversion, we enforce the empirical batch statistics of the optimized tensor ( ˆμ(l) and ( ˆ σ(l))2)to match these stored values. This is achieved by minimizing the KL divergence between the current batch distribution and the historical Gaussian prior, applied independently across channels: 
+
+L(l)in = 12C
+
+> C
+
+X
+
+> c=1
+
+log (σ(l, in) 1: t,c )2
+
+(ˆ σ(l) 
+
+> c
+
+)2 + (ˆ σ(l) 
+
+> c
+
+)2 + (ˆ μ(l) 
+
+> c
+
+− μ(l, in) 1: t,c )2
+
+(σ(l, in) 1: t,c )2 − 1
+
+!
+
+.
+
+This channel-wise prior anchors the optimization to the distribution of features naturally observed at the input of block l, preventing drift toward unrealistic activations and stabilizing the layer-wise inversion process. 
+
+Pixel-Level Optimization. The final output of the generator must be replay images ˆx ∈ R3×H×W ;therefore, the last stage of layer-wise inversion ( l = 0 ) operates directly in pixel space. However, optimizing pixels solely to match high-level semantic features often yields high-frequency, adversarial artifacts that are unsuitable for continual learning. To mitigate this, we augment the objective with an image prior Lpr regularization, which enforces spatial smoothness by penalizing local differences: 
+
+Lpr (ˆ x) = 
+
+> 3
+
+X
+
+> c=1
+> H−1
+
+X 
+
+> h=1
+> W−1
+
+X
+
+> w=1
+
+ (ˆ xc,h +1 ,w − ˆxc,h,w )2 + (ˆ xc,h,w +1 − ˆxc,h,w )2 .
+
+Full-Model Refinement and Pseudo-Sample Generation. Although layer-wise inversion decom-poses a highly non-convex optimization problem into tractable sub-problems, small approximation errors inevitably accumulate across layers. To correct these errors, the intermediate reconstructions ˆx
+
+are not treated as final outputs, but instead serve as strong initializations for a subsequent end-to-end refinement stage. During this phase, the reconstructed inputs ˆx are optimized directly through the entire frozen feature extractor ffeat . Unlike the sequential inversion stage, intermediate layer-specific targets ( S(l+1) feat ) are no longer available, and therefore the layer-wise reconstruction losses L(l)mse are discarded. The refinement objective instead combines the final-layer CE loss Lce , which preserves target class semantics, with the proposed full-covariance Distribution Statistic Loss L(l)stat evaluated across inter-mediate representations. In this setting, the statistical prior replaces explicit layer-wise supervision and constrains the generated samples to remain consistent with the learned feature distribution. This final global optimization stage compensates for accumulated approximation errors and produces pseudo-samples Xold with improved structural and semantic coherence for replay. 
+
+## E Feature Extractor and Classifier Training Details 
+
+In this section, we provide a detailed description of the feature extractor and classifier training protocol used in our method. The procedure follows the two-stage optimization strategy introduced in R-DFCIL and adopted in our REMIX framework. We emphasize both the formal definitions and the underlying intuition behind each component. 
+
+Problem Formulation and Notation. Let ffeat (·; θ) denote the feature extractor and fhead (·; ϕ)
+
+denote the linear classification head. Assume the model has already been trained on tasks 1 through 
+
+t. We retain a frozen copy of this historical model, parameterized by (θ1: t, ϕ1: t), which serves as a teacher during subsequent training. When learning a new task t + 1 , the model updates its active parameters (θ, ϕ). To accommodate the new label space Yt+1 , the classifier is expanded with additional parameters, denoted by ϕnew , while the parameters corresponding to previously learned classes are denoted by ϕold .A key challenge in this setting is catastrophic forgetting caused by the absence of past data. To mitigate this, the training process interleaves two types of data: (i) real samples from the current task, 
+
+(Xnew , Y new ) ⊂ D t+1 , and (ii) synthesized pseudo-samples from previous tasks, (Xold , Y old ).
+
+Stage 1: Relation-Guided Representation Learning (RRL). In the first stage, we jointly optimize the feature extractor and classifier parameters (θ, ϕ) using the relation-guided representation learning 18 objective: 
+
+Lrrl = λlce Llce + λhkd Lhkd + λrkd Lrkd .
+
+These three components are designed to balance the competing objectives of learning new information (plasticity) and preserving previously acquired knowledge (stability). 
+
+1. Local Classification Loss ( Llce ). The local classification loss is a standard CE objective applied exclusively to real samples from the current task. By restricting supervision to Xnew , the model learns new classes without being biased by imperfections in synthetic data: 
+
+Llce = 1
+
+|Xnew |
+
+X
+
+> (x,y )∈(Xnew ,Y new )
+
+Lce 
+
+ softmax( fhead (ffeat (x; θ); ϕnew )) , y .
+
+2. Hard Knowledge Distillation ( Lhkd ). To explicitly preserve knowledge from previous tasks, we apply hard knowledge distillation on synthetic samples. This term enforces consistency between the outputs of the current model and the frozen teacher by penalizing deviations in logits: 
+
+Lhkd = 1
+
+|Xold | |Y 1: t|
+
+X
+
+> x∈Xold
+
+∥fhead (ffeat (x; θ1: t); ϕ1: t) − fhead (ffeat (x; θ); ϕold )∥1 .
+
+3. Relational Knowledge Distillation ( Lrkd ). While Lhkd constrains absolute predictions, it can overly restrict the feature space. To counterbalance this effect, we introduce relational knowledge distillation, which preserves the geometric structure of the feature space by matching angular rela-tionships between features. Let u and v be learnable projection functions, and define tk = u(ffeat (xk; θ1: t)) and sk =
+
+v(ffeat (xk; θ)) . For a triplet (xa, xb, xc), the loss is: 
+
+Lrkd = 1
+
+|Xnew |3
+
+X
+
+> xa,xb,xc∈Xnew
+
+∥cos ∠(ta, tb, tc) − cos ∠(sa, sb, sc)∥1 .
+
+Adaptive Scaling Factors. The contributions of individual loss terms are dynamically adjusted based on the ratio of new to previously learned classes: 
+
+λlce = 1 + 1 /α β λbase  
+
+> lce
+
+, λhkd = αβλ base 
+
+> hkd
+
+, λrkd = αβλ base  
+
+> rkd
+
+,
+
+where 
+
+α = log 2
+
+ |Y t+1 |
+
+2 + 1 
+
+
+
+, β =
+
+s
+
+|Y 1: t||Y t+1 | .
+
+Stage 2: Classification Head Refinement. In the second stage, the feature extractor is frozen ( θ∗), and only the classifier ϕ is updated. The goal of this stage is to correct biases introduced during the first stage and to ensure balanced decision boundaries across all classes. We optimize a global, class-balanced CE loss over the combined dataset Xall = Xnew ∪ Xold :
+
+Lgce = 1
+
+|Xall |
+
+X
+
+> (x,y )∈(Xall ,Y all )
+
+wy
+
+P 
+
+> j
+
+wj
+
+Lce 
+
+ softmax( fhead (ffeat (x; θ∗); ϕ)) , y ,
+
+where wy denotes the inverse frequency of class y in the current training data. 
+
+## F Metrics Definition 
+
+We evaluate the performance of REMIX using two standard metrics in continual learning: average accuracy and last task accuracy . Let at,i denote the classification accuracy on the test set of task i
+
+after the model has been trained up to task t (where i ≤ t). 19 Average Accuracy. Average accuracy measures the overall performance of the model across all tasks observed up to a given incremental step t. It is defined as 
+
+At = 1
+
+t
+
+> t
+
+X
+
+> i=1
+
+at,i .
+
+This metric captures the balance between retaining previously learned knowledge and adapting to new tasks. When reporting overall performance, it is common to compute the average incremental accuracy , defined as the mean of At over all T incremental steps. 
+
+Last Task Accuracy. Last task accuracy evaluates the model after completing the full sequence of 
+
+T tasks. It reflects the final performance across all learned classes and is defined as 
+
+Alast = AT = 1
+
+T
+
+> T
+
+X
+
+> i=1
+
+aT,i .
+
+## G Implementation Details 
+
+Benchmarks and Task Splits. We strictly follow the experimental protocol of PMI, adopting identical task divisions, class orderings, and evaluation settings to ensure a fair comparison. Each dataset is partitioned into a sequence of disjoint incremental tasks, where new classes are introduced over time without access to data from previous tasks. For CIFAR-100, we use splits into 5, 10, and 20 tasks in the ResNet-32 setting, and a 10-task split (10 classes per task) in the CLIP-based setting. Tiny-ImageNet is partitioned analogously into 5, 10, and 20 tasks. For CUB-200, we adopt a 10-task split with 20 classes per task, following PMI. All experiments are conducted in the DFCIL setting, where no real samples from previous tasks are retained. Instead, pseudo-samples are generated via model inversion using stored feature statistics. We follow the exact task configurations of PMI, ensuring a fair and direct comparison. 
+
+Grid Search and Optimal Hyperparameters. For experiments with the ResNet-32 backbone, we perform a grid search over the regularization weight λF, which controls the contribution of the Frobenius term LF (Eq. (5) ), using the range {0.01 , 0.05 , 0.1, 0.25 , 0.5, 1.0}. For CLIP-based experiments, we adopt a finer grid: {0.0001 , 0.0005 , 0.001 , 0.002 , 0.005 , 0.01 , 0.05 }.The LCM parameters are optimized using Adam with a learning rate of 0.01 for 200 epochs. Despite this number of epochs, optimization remains computationally efficient, as discussed in Appendix H, where we report training time in comparison to PMI. We adopt the same task splits as defined in the PMI and R-DFCIL protocols. Table 3 reports the selected optimal values of λF for each dataset and number of tasks. Table 3: Selected λF values for all experiments. 
+
+Architecture Dataset 5 tasks 10 tasks 20 tasks 
+
+ResNet-32 CIFAR-100 0.05 0.5 0.5
+
+ResNet-32 Tiny-ImageNet 0.1 0.25 0.05 
+
+CLIP CIFAR-100 – 0.0001 –CLIP CUB-200 – 0.01 –
+
+Code and Reproducibility. To ensure a fair comparison, we adopt the same software environment as the PMI codebase. The experiments are implemented in Python using PyTorch (v1.13.1) with 
+
+torchvision (v0.14.1) and timm (v0.9.7) for model architectures. We rely on NumPy (v1.26.4), 
+
+SciPy (v1.13.1), and scikit-learn (v1.6.1) for numerical computations, and matplotlib (v3.8.2) and tensorboard (v2.12.1) for visualization and logging. For CLIP-based experiments, we use 
+
+open-clip-torch (v2.22.0). All experiments were conducted on NVIDIA A100 (40GB) and RTX 4090 (24GB) GPUs. Full training pipelines, configuration files, and scripts for reproducing all reported results will be made publicly available in our GitHub repository. 20 0 2 4 6 8 10 12 14 16 18 20           
+
+> Task
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> Accuracy (%)
+> Learning Capacity (New Task Accuracy)
+> REMIX
+> PMI
+> 0246810 12 14 16 18 20
+> Task
+> 25
+> 30
+> 35
+> 40
+> 45
+> 50
+> 55
+> 60
+> 65
+> Accuracy (%)
+> Retention (Average Old Task Accuracy)
+> REMIX
+> PMI
+
+Figure 7: Task-wise performance on Tiny-ImageNet with a ResNet-32 backbone. Left: accuracy on the current task (learning capacity). Right: average accuracy on previously learned tasks (retention). Solid lines denote mean over three runs, with shaded regions indicating standard deviation. REMIX improves retention while maintaining comparable learning capacity. 
+
+## H Additional Experimental Results 
+
+H.1 ResNet-32 Backbone Table 1 with Standard Deviations. Table 4 reports average incremental accuracy together with standard deviations (over five runs), corresponding to Table 1 in the main text. Table 4: Average incremental accuracy (%) with standard deviations on CIFAR-100 and Tiny-ImageNet using a ResNet-32 backbone. Results are averaged over five runs. Baseline results are adopted from [9]. Method Model inversion CIFAR-100 Tiny-ImageNet 5 task 10 task 20 task 5 task 10 task 20 task Upper bound ✗ 70.59 ±0.14 70.59 ±0.14 70.59 ±0.14 55.25 ±0.41 55.25 ±0.41 55.25 ±0.41 SSRE ✗ 30.39 ±0.04 17.77 ±0.14 10.97 ±0.48 26.22 ±0.32 18.58 ±0.43 10.09 ±0.34 PRAKA ✗ 37.74 ±0.48 26.72 ±0.38 16.32 ±0.66 31.69 ±0.20 22.37 ±0.14 13.62 ±0.42 DeepInversion ✓ 20.48 ±1.11 11.26 ±0.46 5.63 ±0.10 - - -ABD ✓ 48.84 ±0.33 36.75 ±0.45 24.40 ±0.60 30.83 ±0.46 23.17 ±0.45 14.61 ±0.47 DCMI ✓ 41.05 ±0.67 27.70 ±1.07 18.09 ±0.85 35.78 ±0.37 25.89 ±0.17 17.03 ±0.08 R-DFCIL ✓ 49.87 ±0.45 41.80 ±0.24 31.54 ±0.54 35.33 ±0.02 29.05 ±0.28 24.85 ±0.16 PMI w/o CFS ✓ 52.05 ±0.02 43.23 ±0.28 32.23 ±0.42 37.65 ±0.24 32.09 ±0.20 25.51 ±0.56 PMI ✓ 52.38 ±0.53 43.90 ±0.35 32.60 ±0.29 37.90 ±0.10 32.43 ±0.09 25.67 ±0.71 REMIX ✓ 52.94 ± 0.07 45.38 ± 0.13 33.11 ± 0.28 38.64 ± 0.35 33.39 ± 0.11 27.11 ± 0.31 
+
+Tiny-ImageNet. We further evaluate REMIX on Tiny-ImageNet using a ResNet-32 backbone. Fig-ure 7 presents task-wise performance, where the left plot shows accuracy on the current task (learning capacity) and the right plot shows the average accuracy on previously learned tasks (retention), both averaged over three runs. Consistent with the observations on CIFAR-100, REMIX maintains comparable performance to PMI on newly introduced tasks, indicating that the ability to acquire new knowledge is preserved. At the same time, REMIX achieves consistently higher accuracy on previously learned tasks, demonstrating improved retention. This confirms that modeling structured feature dependencies effectively reduces forgetting without compromising learning capacity. 
+
+H.2 Qualitative Analysis of Generated Samples Implementation Details and Architectural Adaptations. We generate synthetic samples via model inversion applied to pretrained backbones (ResNet-34 and ViT-B/16). Starting from random noise, input pixels are optimized using Adam with a cosine annealing schedule. We adopt a multi-resolution pyramid (e.g., 112 ×112 → 224 ×224 ) to progressively refine global structure. During the 21 early stages, strong augmentations (random flips, affine transformations, spatial jitter) are applied to suppress high-frequency artifacts. For this experiment, we adopt the DeepInversion optimization pipeline as the base inversion procedure. While PMI introduces a per-layer inversion scheme, in practice, it produces samples through a similar objective and optimization process, differing primarily in convergence speed. We therefore use DeepInversion to ensure a consistent and stable optimization setup, while isolating the effect of our contribution to feature distribution modeling. Importantly, all methods share identical optimization procedures, augmentations, and hyperparameters, and differ only in how feature statistics are modeled. We directly optimize pixels rather than training a parametric generator; full loss definitions are provided in Appendix D. 
+
+Architectural Adaptation of LCM. The LCM is adapted to match the structure of each backbone. 
+
+ResNet-34. We extract intermediate feature maps from residual stages ( layer1 –layer4 ), obtaining multi-scale representations of shape (B, C, H, W ). These are flattened into high-dimensional vectors (D = C ×H ×W , up to ∼ 10 6), and LCM is fitted directly to model dependencies across both spatial and channel dimensions. During inversion, we evaluate the exact O(D log D) NLL of generated features at each layer and use it as a density-matching prior, together with BatchNorm statistics alignment and classification loss. 
+
+ViT-B/16. Features are represented as sequences of patch tokens from transformer blocks. We discard the [CLS] token and retain only spatial tokens, which are reshaped into vectors for distribution modeling. LCM is applied to these representations to capture inter-patch dependencies during inversion. Since ViTs use Layer Normalization instead of BatchNorm, we match empirical means and variances computed over both batch and sequence dimensions at each block. This stabilizes global statistics while LCM enforces structured feature correlations. The complete generation pipeline and implementation details are provided in the accompanying codebase. 
+
+Qualitative Analysis of Generated Samples. Figures 8 and 9 present qualitative comparisons of synthetic samples generated using ViT-B/16 and ResNet-34 backbones, respectively. Across both architectures, methods based on diagonal covariance assumptions produce samples with weaker structural consistency, visible artifacts, and less coherent semantics. In contrast, REMIX generates samples with clearer object boundaries, more consistent textures, and stronger semantic alignment across all categories. These improvements are particularly noticeable for fine-grained categories such as koala , where local textures and object structure are better preserved, as well as for scene-level classes such as greenhouse , where REMIX produces more globally coherent layouts. Overall, the results suggest that modeling structured feature dependencies leads to substantially more coherent synthetic representations across both convolutional and transformer-based architectures. 
+
+H.3 Effect of Covariance Modeling 
+
+We analyze the representational capacity of the proposed LCM on the ViT-B/16 backbone by evaluating the log-likelihood of feature distributions across transformer blocks. Specifically, during LCM parameter fitting, we compare the total log-likelihood obtained under the proposed covariance parameterization with a diagonal Gaussian baseline trained via maximum likelihood estimation (MLE). To focus on spatial representations, we discard the [CLS] token and aggregate patch embeddings through average pooling, resulting in a D = 768 feature vector for each image at every transformer block. Empirically, this aggregation produces more stable and accurate density estimates than directly modeling token-level representations, unlike in the ResNet-34 setting where full spatial feature maps are modeled explicitly. The reasons for this behavior are discussed below. Figure 10 shows a clear dependence on representation depth. In early blocks (0–4), the diagonal model achieves higher likelihood than LCM. This aligns with the structure of ViTs, where initial layers process non-overlapping patches, producing features that are largely local and weakly correlated. In this regime, modeling full covariance offers limited benefit and can introduce unnecessary complexity. 22 Diagonal Covariance Full-Feature Covariance 
+
+> Car Dog Koala Greenhouse
+
+Figure 8: Qualitative comparison of generated samples using the ViT backbone. Left: prior ap-proaches (e.g., PMI, DeepInversion) relying on diagonal covariance, which neglect dependencies across feature dimensions. Right: REMIX, which efficiently models correlations over the full feature map (up to millions of elements) while remaining computationally tractable. This leads to samples with improved structural coherence, fewer artifacts, and stronger semantic consistency. 
+
+Diagonal Covariance Full-Feature Covariance 
+
+> Car Dog Koala Greenhouse
+
+Figure 9: Qualitative comparison of generated samples using the ResNet-34 backbone. Left: prior methods based on diagonal covariance estimation, which ignore dependencies across feature di-mensions. Right: REMIX, which models correlations over the full feature map (up to millions of elements) while remaining computationally tractable. From intermediate layers onward (around Block 5), LCM begins to outperform the diagonal baseline, with the gap increasing in deeper layers (8–11). At these stages, self-attention aggregates information across patches, yielding more structured and correlated representations. The improved likelihood indicates that LCM effectively captures these dependencies, providing a more accurate model of the feature distribution. 23 500                                 
+
+> 1,000
+> 1,500
+> Log-Likelihood
+> Block 0 ( D= 768 )
+> 1,457
+> Block 1 ( D= 768 )
+> 1,407
+> Block 2 ( D= 768 )
+> 1,322
+> Block 3 ( D= 768 )
+> 1,169
+> -250
+> 0
+> 250
+> 500
+> 750
+> 1,000
+> Log-Likelihood
+> Block 4 ( D= 768 )983 Block 5 ( D= 768 )
+> 769
+> Block 6 ( D= 768 )
+> 510
+> Block 7 ( D= 768 )
+> 312
+> 050 100 150 200
+> Epoch
+> -400
+> -200
+> 0
+> 200
+> 400
+> Log-Likelihood
+> Block 8 ( D= 768 )
+> 250
+> 050 100 150 200
+> Epoch
+> Block 9 ( D= 768 )
+> 267
+> 050 100 150 200
+> Epoch
+> Block 10 ( D= 768 )
+> 323
+> 050 100 150 200
+> Epoch
+> Block 11 ( D= 768 )400
+> Baseline (Diag. Cov.) LCM (Full Cov.)
+
+Figure 10: Log-likelihood comparison between diagonal and full-feature covariance models across ViT-B/16 blocks. While diagonal covariance performs better in early layers with weakly correlated patch features, LCM achieves higher likelihood in deeper layers where self-attention induces struc-tured dependencies. 
+
+H.4 Computational Efficiency 
+
+We evaluate the computational efficiency of REMIX in comparison to PMI. As shown in Tables 6 and 7, REMIX consistently improves performance while maintaining comparable training time and GPU memory usage across both ResNet-32 and ViT backbones. The efficiency of our method stems from the structured LCM parameterization, which enables explicit covariance modeling while remaining computationally tractable. Naively evaluating the Gaussian NLL with a dense covariance matrix requires O(C2) memory and O(C3) computation due to inversion and log-determinant operations, making full-covariance modeling impractical for modern deep representations. In contrast, our formulation imposes a 1D conditional structure that enables exact likelihood evaluation in O(C log C) time. 
+
+Moderate-Dimensional Regime (Channel/Token Level). When modeling correlations over channel-wise features (ResNet) or token embeddings (ViT), the dimensionality remains moder-ate. In this setting, we fit the LCM to explicitly model the covariance structure of features, i.e., the underlying density of the representation space. Although we store only the compact LCM parameters, the corresponding covariance matrix can be reconstructed when needed. As its size is manageable, it can be explicitly materialized, enabling direct optimization of covariance matching objectives. Specifically, with ˆΣ = 1
+
+> N
+
+PNi=1 viv⊤ 
+
+> i
+
+, we can form Σ and directly minimize ∥Σ − ˆΣ∥2F, instead of relying on the decomposed Frobenius formulation (Eq. (5)). Crucially, once the feature distribution is modeled, we can directly optimize the exact Gaussian NLL during model inversion. This allows synthetic samples to be generated by maximizing likelihood under the learned full-covariance model. 
+
+High-Dimensional Regime (Full Feature Maps). When extending covariance modeling to full spatial feature maps, the dimensionality grows to D = C × H × W , making naive covariance estimation completely intractable. As shown in Table 5, a dense covariance would require up to 
+
+199 .30 GB of memory for a ResNet-34 backbone. 24 In contrast, the LCM parameterization reduces this requirement to only 5.74 MB, achieving a 
+
+35 ,541 × reduction. Importantly, while dense methods cannot even represent the covariance in this regime, our structured formulation allows us to both represent and use it. In this setting, the covariance matrix is never explicitly materialized due to its size. Instead, we leverage the LCM structure to compute the exact Gaussian NLL directly in O(D log D) time (as presented in Appendix D). When covariance matching is required, we employ a Frobenius objective that is evaluated implicitly through the LCM using Eq. (5), without constructing dense matrices. 
+
+Summary. Overall, REMIX makes full-covariance modeling of deep feature distributions practical. It supports explicit optimization in moderate dimensions and remains scalable in high-dimensional regimes by avoiding dense matrix representations while preserving exact likelihood computation. This enables model inversion with full-feature dependencies, which is otherwise computationally infeasible. Table 5: Memory and computational cost comparison for full spatial feature map covariance estima-tion on ResNet-34. By avoiding O(D2) dense matrix allocations, our LCM formulation reduces the total memory footprint from 199 .30 GB to 5.74 MB, achieving a 35 ,541 × efficiency gain. Layer Dimension ( D) LCM Mem. Dense Mem. Savings Layer 1 200,704 3.06 MB 150.06 GB 50,176 ×
+
+Layer 2 100,352 1.53 MB 37.52 GB 25,088 ×
+
+Layer 3 50,176 0.77 MB 9.38 GB 12,544 ×
+
+Layer 4 25,088 0.38 MB 2.34 GB 6,272 ×
+
+Total 376,320 5.74 MB 199.30 GB 35,541 ×
+
+Table 6: Comparison with PMI on CIFAR-100 (20 tasks, 5 classes per task) using a ResNet-32 backbone. REMIX achieves higher final accuracy with comparable time and memory usage. Method Last Time Total GPU Mem. (GB) PMI 52.38 ±0.53 1h 27m 7.28 
+
+REMIX 52.94 ±0.07 1h 37m 7.28 
+
+Table 7: Comparison with PMI on CIFAR-100 (10 tasks, 10 classes per task) using a ViT backbone with MoE-Adapter. REMIX improves performance with negligible computational overhead. Method Avg. Time Total GPU Mem. (GB) PMI 88.35 3h 33m 7.39 
+
+REMIX 88.47 3h 42m 7.39 
+
+25

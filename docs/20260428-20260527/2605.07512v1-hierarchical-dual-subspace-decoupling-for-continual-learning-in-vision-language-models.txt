@@ -1,0 +1,368 @@
+Title: Hierarchical Dual-Subspace Decoupling for Continual Learning in Vision-Language Models
+
+URL Source: https://arxiv.org/pdf/2605.07512v1
+
+Published Time: Mon, 11 May 2026 01:12:47 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# Hierarchical Dual-Subspace Decoupling for Continual Learning in Vision–Language Models 
+
+Mengxin Qin ∗ Xiang Zhang ∗ Kun Wei † Xu Yang Cheng Deng 
+
+School of Electronic Engineering, Xidian University Xi’an 710071, China 
+
+## Abstract 
+
+Class Incremental Learning (CIL) aims to continuously acquire new knowledge while preserving previously learned information, thereby mitigating catastrophic forgetting. Existing methods primarily restrict parameter updates but often overlook their structural properties in high-dimensional spaces. From a subspace perspective, updates induced by different tasks tend to lie in multiple overlapping low-rank subspaces, leading to cross-task subspace interference and severe forgetting. To address this issue, we propose a Hierarchical Dual-Subspace Decoupling (HDSD) framework for Continual Learning in Vision–Language Models. Specifically, we introduce a lightweight Feature Modulation Module (FMM) that explicitly decom-poses the parameter space into general and task-specific subspaces. Building upon this, we design two complementary components. First, a General Fusion Module (GFM) evaluates relative parameter changes across tasks and utilizes an adaptive threshold to capture stable, transferable knowledge. Second, a Hierarchical Learn-ing Module (HLM) performs structured parameter decomposition via Singular Value Decomposition (SVD) and employs a scaling mechanism to constrain up-dates within distinct subspace scales. Together, these designs effectively reduce subspace interference and parameter drift. Extensive experiments on conventional benchmarks demonstrate that our method achieves state-of-the-art results. 
+
+## 1 Introduction 
+
+In real-world scenarios, deep learning models deployed in dynamic environments must continu-ously acquire new knowledge without forgetting previously learned concepts. However, stringent privacy constraints and limited storage often render historical data inaccessible. Under such strictly exemplar-free settings, sequential training inevitably biases model updates toward the current task, catastrophically disrupting prior representations [ 1]. This stability-plasticity dilemma is particu-larly acute in Class Incremental Learning (CIL) [ 2], which requires progressively expanding the recognition space without revisiting old data. 
+
+Figure 1: Subspace overlap on CIFAR-100 (B0 Inc10). Vision–language pre-trained models (VLMs) like CLIP [ 3] have emerged as a promising paradigm for CIL. Thanks to their robust cross-modal alignment, continual adaptation requires updating only a marginal set of parameters. Consequently, recent methods typically freeze the backbone and insert lightweight tunable modules, such as prompts or adapters, to capture new task information [4, 5]. Despite their success, existing methods mainly constrain which parameters are updated, paying less attention to how these updates are organized in the parameter space. From a subspace perspective, 
+
+> ∗These authors contributed equally.
+> †Corresponding author. Preprint.
+> arXiv:2605.07512v1 [cs.CV] 8 May 2026
+
+updates induced by sequential tasks frequently collapse into low-rank subspaces with substantial overlap (as illustrated in Figure 1). This structural overlap causes new-task updates to directly interfere with the optimal subspaces of previous tasks, leading to representation drift. We refer to this phenomenon as subspace interference, and regard it as an important source of catastrophic forgetting in CLIP-based CIL. …               
+
+> Task 1Task 2Task N
+> Image Embedding output Text Embedding
+> Merge
+> 512 ×NN×512
+> CLIP Image Encoder
+> FMM
+> SVD
+> GFM
+> HLM
+
+Figure 2: Overview of the proposed HDSD. FMM consists of GFM and HLM. To tackle this issue, we propose a Hierarchical Dual-Subspace Decoupling (HDSD) framework, which ex-plicitly governs cross-task parameter interactions. As shown in Figure 2, HDSD introduces a lightweight Feature Modulation Module (FMM) that factorizes the parameter space into shared and task-specific con-stituents through two complementary modules. First, the General Fusion Module (GFM) explicitly extracts and integrates generalized knowledge by measuring relative parameter variations across tasks, capturing highly stable components. Second, the Hierarchi-cal Learning Module (HLM) isolates task-specific knowledge by performing singular value decompo-sition (SVD) on the parameter space. By assigning distinct tasks to separated, rank-one subspaces and regularizing their update magnitudes via a dynamic scaling strategy, HLM effectively suppresses cross-task interference. This overall design enables HDSD to balance general knowledge preservation and task-specific adaptation. The main contributions of this paper are as follows: • We propose the HDSD framework, which offers a novel perspective on CLIP-based CIL by explicitly decoupling the parameter space to simultaneously maximize knowledge sharing and task isolation. • We design the complementary GFM and HLM. GFM captures stable generalized knowl-edge, while HLM structurally prevents subspace interference via SVD-based parameter decomposition and scaled updates. • Extensive evaluations on standard benchmarks demonstrate that HDSD establishes a new state-of-the-art in rehearsal-free class incremental learning. 
+
+## 2 Related Work 
+
+2.1 Class Incremental Learning 
+
+Class Incremental Learning (CIL) aims to enable models to learn new classes in a continuously evolving environment without forgetting previously acquired knowledge, a challenge commonly referred to as the stability-plasticity dilemma [ 6]. To address this problem, existing methods can be broadly categorized into three groups. Regularization-based methods preserve previously learned knowledge by constraining parameter updates, typically through additional loss terms or optimization constraints that prevent significant changes to parameters important for past tasks, such as fine-tuning with regularization or joint training strategies [ 7 –11 ]. Replay-based methods alleviate forgetting by revisiting data from previous tasks, either by storing representative samples in a memory buffer or generating pseudo-data that can be replayed during training on new tasks [ 12 – 16 ]. Parameter isolation methods reduce interference by allocating dedicated parameters or model components to different tasks, thereby preventing updates for new tasks from overwriting previously learned representations, albeit at the cost of increased model complexity [17–21]. 
+
+2.2 CIL with Pre-trained Models 
+
+With the success of large pre-trained models, recent CIL approaches increasingly leverage their strong generalization ability to mitigate catastrophic forgetting and improve data efficiency. These methods can be broadly divided into two categories based on their adaptation strategies. The first category performs full or partial fine-tuning of the pre-trained model, directly updating model parameters 2FMM  
+
+> CLIP Image Encoder
+> ℒ𝐶𝐶𝐶𝐶
+
+…                  
+
+> Task 1 Task 2 Task N
+> 𝑁𝑁 � 𝜇𝜇 𝑖𝑖 ,Σ𝑖𝑖
+> Feature Generation
+> Feature
+> 𝛼𝛼 1
+> 𝓕𝓕
+> 𝛼𝛼 2
+> 𝛼𝛼 3
+> GFM
+> 512 × 512
+> 512 × 𝑁𝑁 𝑁𝑁 × 512
+> HLM
+> Target
+> (a) Overall structure (b) General Fusion Module (GFM)
+> (c) Hierarchical Learning Module (HLM)
+> 𝒲𝒲 𝑜𝑜𝑜𝑜𝑜𝑜
+> 𝒲𝒲 𝑛𝑛𝑛𝑛𝑛𝑛
+> >𝜏𝜏 𝑡𝑡𝑡
+> 𝒲𝒲 𝑚𝑚 𝑛𝑛 𝑚𝑚𝑚𝑚 𝑛𝑛
+> 𝑁𝑁 × 512 512 × 𝑁𝑁
+> Singular Value Decomposition 𝜎𝜎 𝑛𝑛 ⋯0
+> ⋮⋱⋮
+> 0⋯𝜎𝜎 0
+
+� �
+
+��
+
+> Assign a value to linear layer
+> N
+> Merging parameters
+> Scale Factor
+> CLIP Text Encoder
+> a good photo of a {bird,…}
+> Extracting Text features
+> output
+> Image Feature Embedding
+> Text Feature Embedding
+
+Figure 3: Summary of the proposed approach. (a) Overall structure features a Feature Modulation Module (FMM) consisting of two modules: GFM and HLM. (b) Parameter Selection fusion method in GFM method: We calculate the relative change rate of GFM parameters to obtain the parameters related to general knowledge. (c) Schematic of HLM method. We segment the HLM parameters using the Singular Value Decomposition (SVD) method and assign segmented parameter subspaces to different incremental tasks to learn the corresponding specific knowledge. to adapt to new tasks, often with additional constraints or external data to stabilize training. For example, ZSCL [ 22 ] leverages large-scale external data to regularize the adaptation process and preserve general representations. In contrast, the second category freezes the pre-trained backbone and introduces lightweight learnable components for task-specific adaptation, thereby preserving the general knowledge encoded in the backbone while confining task-specific updates to a smaller parameter space. Representative methods such as RAPF [ 5] achieve this by introducing adapter-based parameter fusion and generating hard sample pairs to improve robustness. 
+
+2.3 CIL without Exemplar 
+
+In many real-world applications, storing samples from previous tasks is often impractical due to privacy constraints and limited memory resources. To address this limitation, exemplar-free CIL methods aim to retain prior knowledge without relying on explicit data replay. Existing approaches can be broadly categorized into three directions. Distribution modeling methods approximate the feature distribution of previously learned classes, for example by leveraging Gaussian statistics to facilitate classification [ 23 , 24 ]. Prototype-based methods maintain compact class representations, such as feature centroids, to summarize historical knowledge while significantly reducing memory consumption [ 25 ]. Generation-based methods synthesize pseudo samples or feature representations of past tasks, enabling implicit replay without storing raw data [26, 5]. 
+
+## 3 Method 
+
+In this section, we formulate the CIL problem and detail the proposed Hierarchical Dual-Subspace Decoupling (HDSD) framework. The overall architecture is illustrated in Figure 3. We build our method upon the pre-trained CLIP [ 3 ] model, keeping its backbone parameters frozen throughout training. On top of it, we introduce a lightweight Feature Modulation Module (FMM) 
+
+as the core learnable component for continual adaptation. The FMM consists of two complementary modules: the General Fusion Module (GFM) and the Hierarchical Learning Module (HLM) , as shown in Figure 3(b) and (c). Specifically, GFM explicitly captures shared, stable knowledge across tasks, while HLM isolates task-specific knowledge through orthogonal subspace decomposition. 33.1 Preliminaries 
+
+Class Incremental Learning (CIL) aims to acquire knowledge from a sequence of evolving data streams, where each stream introduces a group of new classes. At each stage, the model has access only to the current data stream and must learn new knowledge without forgetting previously acquired information. We treat each data stream as an incremental task, denoted as {T1, T 2, ..., T N }, where 
+
+N is the total number of tasks. The i-th task Ti contains data from m classes, represented as 
+
+Ti = {(xb, y b)}, where xb denotes an input image and yb ∈ { 1, ..., m } is the corresponding class label. During training, the model is updated using only the data from the current task Ti. After each task, the model is evaluated on all classes encountered so far, requiring it to maintain performance on previous tasks while adapting to new ones. 
+
+Feature Modulation Module. We first utilize the frozen CLIP image encoder to extract base features, denoted as x. These features are then fed into the FMM, which processes them through the GFM and HLM in parallel, accompanied by a residual connection. Let xG and xH represent the outputs of GFM and HLM, respectively. The final modulated feature is computed as: 
+
+xfeature = α1x + α2xG + α3xH (1) where α1, α2, and α3 are weighting coefficients, set to (1 , 0.5, 0.5) by default. 
+
+Feature Generation. To circumvent the need for storing raw historical images (exemplar-free), we leverage the robust representation space of the pre-trained model to approximate the feature distribution of each class. For class b, we compute the centroid μb and covariance matrix Σb from the CLIP-extracted features. By drawing samples from the multivariate Gaussian N (μb, Σb), we synthesize pseudo-features for implicit memory replay during subsequent tasks. 
+
+3.2 General Fusion Module 
+
+The General Fusion Module (GFM) is parameterized by a linear layer θ and is designed to identify and preserve features that generalize across tasks. 
+
+Sparse Regularization. We introduce an ℓ1-norm sparsity penalty, Lsparse , to reduce model complex-ity and encourage compact representations, thereby enhancing GFM’s ability to extract generalized features: 
+
+Lsparse = β X
+
+> pi∈θ
+
+∥pi∥1, (2) where pi denotes the i-th element of parameter tensor p, and β is a weighting hyperparameter set to 
+
+0.0005 by default. 
+
+Parameter Selection and Fusion. To enhance the retention of general knowledge, we perform parameter selection and fusion based on their changes across consecutive tasks. For the incremental task Ti, we denote θold as the GFM parameters obtained after training on the previous task Ti−1, and 
+
+θnew as the updated parameters after training on the current task Ti. We then compute the relative change rate: 
+
+Γ = |θnew − θold |
+
+max |θnew − θold | + c (3) where c ∈ [0 .5, 0.7] is a small constant for numerical stabilization. To distinguish between general and task-specific parameters, we introduce an adaptive threshold τ based on the distribution of 
+
+Γ. Specifically, let {Γj } denote all elements of Γ flattened into a vector. We define τ as the q-th percentile of {Γj }:
+
+τ = Quantile( {Γj }, q ) (4) where q = 0 .9 in our implementation. Intuitively, parameters exhibiting significant variations (Γj > τ ) are highly task-specific, whereas parameters with minimal changes ( Γj ≤ τ ) represent stable, generalized knowledge. Consequently, for each parameter index j, we perform a weighted fusion: 
+
+Mj =
+
+(1 − min(1 , Γj )) · θold ,j + min(1 , Γj ) · θnew ,j , Γj ≤ τθold ,j , Γj > τ (5) 4This element-wise strategy preserves historically stable parameter directions while affording sufficient plasticity for novel task adaptation. 
+
+3.3 Hierarchical Learning Module 
+
+The Hierarchical Learning Module (HLM) is designed to explicitly map task-specific parameters into isolated subspaces, mitigating cross-task interference via structured SVD decomposition and controlled updates. 
+
+Parameter Subspace Decomposition. HLM consists of two linear layers with an intermediate bottleneck dimension set to N (the total number of incremental tasks). Let W denote the target weight matrix. We perform Singular Value Decomposition (SVD): 
+
+W = U ΣV T (6) where Σ = diag( σ1, σ 2, ..., σ N ) contains N singular values. This decomposition allows us to express 
+
+W as a sum of N rank-1 components: 
+
+W =
+
+> N
+
+X
+
+> i=1
+
+Wσi , where Wσi = U σ iV T (7) Each Wσi corresponds to a task-specific parameter subspace .(b) Hierarchica 
+
+> Trained parameters
+> …
+> Scale Factor
+> Alin
+> …
+> Scale Factor
+> Increasing
+
+# ��
+
+> (a) Hierarchical training
+> 𝒲𝒲
+
+Figure 4: The training phase of our pro-posed hierarchical approach in HLM. 
+
+Hierarchical Training. As illustrated in Figure 4, during task Ti, optimization is strictly confined to its correspond-ing subspace Wσi . Specifically, Wσi is scaled by a factor 
+
+si and assigned to a temporary linear layer. Post-training, this updated subspace is rescaled and merged back. This enforces structural task isolation. 
+
+Stability and Scaling Mechanism. Although HLM de-composes the parameter matrix into multiple singular com-ponents, two stability issues need to be considered during sequential training. 
+
+Problem 1: Stability of Singular Component Ordering. 
+
+A significant change in a singular value may alter the order of singular components after SVD, making it difficult to retrieve the component associated with a specific task. To avoid this issue, HLM updates only the singular value corresponding to the current task while keeping the others inactive. For task i, only Wσi is optimized. Since the update magnitude is controlled by the learning rate and the scaling factor, the variation of σi remains small in practice. Therefore, the order of singular components is stable, and each task-specific component can be retrieved according to its original training order. 
+
+Problem 2: Drift in Shared Singular Bases ( U and V T ). 
+
+Despite decoupled singular values, all task components share the orthogonal bases U and V T .Unrestricted updates to task i could implicitly rotate these bases, corrupting previously learned subspaces. To decouple this interaction, we introduce an exponential task-dependent scaling factor: 
+
+si = 10 −i, (8) where i is the current task index. Prior to optimization, the component is scaled: fWσi = siWσi . The gradient update is then applied: 
+
+θt+1 = θt − η∇J(θt), (9) Because sequential tasks are separated by orders of magnitude, si severely constrains the effective update momentum exerted on the shared bases. Following optimization, the component is inverse-scaled ( Wnew  
+
+> σi
+
+= fWnew  
+
+> σi
+
+/s i) and aggregated: 
+
+Wnew =
+
+> N
+
+X
+
+> j=1
+
+Wnew  
+
+> σj
+
+. (10) 5A comprehensive theoretical discussion on how this scaling averts basis drift is provided in Ap-pendix B. 
+
+Hierarchical Loss. To maximize task-specific discriminability within these subspaces, we apply a hierarchical centroid-based loss: 
+
+LH = ξ
+
+2n
+
+> n
+
+X
+
+> i=1
+
+1
+
+Cyi
+
+∥f (xi) − cyi ∥2 (11) where ξ = 0 .2, n is the batch size, Cyi is the number of samples in class yi, and cyi is the class prototype centroid. 
+
+Overall Objective. The final training objective is: 
+
+L = λ1Lsparse + λ2LH + λ3Lce (12) where Lce is the standard cross-entropy loss, and λ1, λ 2, λ 3 are weighting coefficients, set to (0.01, 0.1, 1) by default. (b) Hierarchical testing 
+
+> 𝒲𝒲
+> Trained parameters
+> …
+> Scale Factor
+> Assign a value to linear layer and Test
+> …
+> Scale Factor
+> Increasing
+
+# ��
+
+> (a) Hierarchical training
+> 𝒲𝒲
+
+Figure 5: The test phase of our proposed hierarchical approach in HLM. 
+
+Hierarchical Testing. As illustrated in Figure 5, the in-ference stage differs fundamentally from training in that it aggregates information from all previously learned tasks rather than operating on a single task-specific component. While training updates only one subspace at a time, infer-ence reconstructs the full parameter matrix by hierarchi-cally integrating all learned subspaces. Specifically, after training up to task Ti, we collect the cor-responding singular values {σ1, σ 2, . . . , σ i} along with their associated scaling factors {s1, s 2, . . . , s i}, and con-struct a diagonal matrix: 
+
+A = diag( s1σ1, s 2σ2, ..., s iσi) (13) The parameter matrix is then reconstructed as: 
+
+Wtest = U AV T (14) Notably, the scaling factors introduced during training are preserved at inference time, resulting in a hierarchical weighting over task-specific components. 
+
+## 4 Experiment 
+
+4.1 Datasets and Metrics 
+
+We conduct experiments on three datasets: CIFAR-100 [ 27 ], ImageNet-100, and ImageNet-R [ 28 ]. The CIFAR-100 dataset consists of 100 categories, each containing 600 color images with a resolution of 32 × 32 pixels. In this dataset, 500 images are designated for the training set, while 100 images are reserved for the test set. The ImageNet-100 dataset, a subset of the larger ImageNet-1k dataset [ 29 ], comprises 100 categories. Each category contains 1,000 training images and 300 test images, resulting in a total of 100,000 training images and 30,000 test images across all categories. Meanwhile, the ImageNet-R dataset features images in various styles, including art, cartoons, graffiti,embroidery, and video games, among others, and consists of 200 classes from the ImageNet dataset. Following the methodology proposed in [5], we split this dataset into training and test sets. 
+
+Evaluation Metrics. We report two standard metrics: Last , the average accuracy over all encountered categories after the final incremental task, and Avg , the average of the seen-category accuracies computed after each incremental step. 
+
+4.2 Implementation Detail 
+
+We adopt the ViT-B/16 variant of CLIP [ 3] as our frozen backbone. The model is optimized using the Adam optimizer. For ImageNet-100 and ImageNet-R, we train the model for 15 epochs per task, 6Table 1: Experimental results for continual learning on the ImageNet-100 dataset. The B denotes the number of base classes and Inc denotes the number of incremental classes.                                                                                                                   
+
+> Method Ref. B0 Inc5 B0 Inc10 B0 Inc20 B50 Inc5 B50 Inc10 Avg Last Avg Last Avg Last Avg Last Avg Last PROOF [4] TPAMI’25 86.92 75.52 84.71 72.48 81.92 68.56 84.16 74.44 82.78 71.04 L2P++ [30] CVPR’22 75.43 62.10 80.51 67.22 84.12 73.70 62.00 22.15 74.11 49.46 DualPrompt [31] ECCV’22 75.40 61.10 80.65 67.38 84.65 74.24 62.10 22.36 74.20 49.78 CODA [32] CVPR’23 51.64 24.94 64.13 34.76 69.78 43.96 57.33 19.95 65.14 28.80 ADAM-Adapter [33] IJCV’25 85.78 75.52 85.84 76.40 85.85 77.08 84.90 78.58 84.60 78.58 ENGINE [34] ICCV’25 86.34 76.82 85.65 76.76 85.08 76.60 80.83 76.82 80.68 76.54 BOFA [35] AAAI’26 83.99 73.80 84.78 75.36 83.61 74.98 81.50 76.08 81.23 76.16 RAPF [5] ECCV’24 87.55 79.40 87.34 80.60 87.28 80.00 84.74 ∗80.44 84.96 ∗80.66 Ours –89.49 80.82 89.14 81.44 88.67 81.10 85.14 81.24 85.22 81.72
+
+Table 2: Experimental results for continual learning on the CIFAR-100 dataset. The B denotes the number of base classes and Inc denotes the number of incremental classes.                                                                                                                   
+
+> Method Ref. B0 Inc5 B0 Inc10 B0 Inc20 B50 Inc5 B50 Inc10 Avg Last Avg Last Avg Last Avg Last Avg Last PROOF [4] TPAMI’25 85.12 76.13 84.88 76.29 84.11 76.86 83.22 76.25 83.17 76.50 L2P++ [30] CVPR’22 79.18 68.67 81.90 73.08 84.39 77.37 58.57 18.04 76.51 48.52 DualPrompt [31] ECCV’22 79.74 69.91 81.45 72.51 85.19 77.47 58.55 15.26 72.00 45.05 CODA [32] CVPR’23 69.78 41.98 76.98 62.25 78.65 65.29 58.45 15.99 67.88 28.77 ADAM-Adapter [33] IJCV’25 70.18 58.12 75.76 65.50 77.28 67.89 83.38 76.94 83.21 76.94 ENGINE [34] ICCV’25 86.42 78.58 86.21 78.64 85.72 78.82 81.99 78.51 82.28 78.49 BOFA [35] AAAI’26 86.41 77.86 85.72 78.28 85.31 78.89 82.92 78.47 82.99 78.70 RAPF [5] ECCV’24 86.67 78.84 85.89 79.17 85.46 79.97 82.99 ∗79.00 83.53 ∗80.33 Ours –87.53 80.01 87.10 80.86 86.53 81.24 83.41 80.18 83.72 80.96
+
+initializing the learning rates for GFM and HLM at 0.001 and 0.01, respectively. For CIFAR-100, the initial training spans 25 epochs using the same learning rates, and we progressively increase the training duration by 2 epochs for each subsequent incremental task. A MultiStepLR scheduler is employed to decay the learning rate by a factor of 0.1 at epochs 4 and 10. To simulate memory replay without storing real images, we generate approximately 2,000 pseudo-feature samples per epoch, matching the typical buffer size of traditional replay methods. 
+
+4.3 Experimental Results 
+
+We benchmark HDSD against several state-of-the-art CIL methods: PROOF [ 4], L2P++ [ 30 ], DualPrompt [ 31 ], CODA [ 32 ], ADAM-Adapter [ 33 ], ENGINE [ 34 ], BOFA [ 35 ], and RAPF [ 5]. The comparative results across the three datasets are presented in Table 1, Table 2, and Table 3. Notably, while PROOF relies on exemplars, all other baselines are strictly exemplar-free. As shown in Table 1 and Table 2, the results we reproduced for RAPF differ slightly from those reported in the original paper. The settings with relatively large discrepancies (around 2% compared with the reported results) are marked by ∗. These differences are mainly observed in the B50 Inc5 and B50 Inc10 settings on both CIFAR-100 and ImageNet-100. 
+
+Performance on ImageNet-100. As shown in Table 1, our method achieves the best performance in all settings on the ImageNet-100 dataset. Under the B0 setting, our method improves the Avg and Last accuracy over RAPF by 1.71% and 1.12% on average, respectively. Under the B50 setting, the Avg and Last accuracy are further improved by 0.33% and 0.93% on average, respectively. These results demonstrate that our method yields consistent gains across all ImageNet-100 settings. 
+
+Performance on CIFAR-100. As shown in Table 2, our method achieves the best performance across all settings on the CIFAR-100 dataset. Under the B0 setting, our method improves the Avg and Last accuracy over RAPF by 1.05% and 1.38% on average, respectively. Under the B50 setting, the Avg 7Table 3: Experimental results for continual learning on the ImageNet-R dataset. The B denotes the number of base classes and Inc denotes the number of incremental classes.                                                                                                                   
+
+> Method Ref. B0 Inc10 B0 Inc20 B0 Inc40 B100 Inc10 B100 Inc20 Avg Last Avg Last Avg Last Avg Last Avg Last PROOF [4] TPAMI’25 82.69 77.25 82.83 77.05 82.63 77.12 81.61 77.10 81.78 77.17 L2P++ [30] CVPR’22 76.87 68.78 81.67 75.98 82.81 77.87 56.17 17.90 67.73 43.28 DualPrompt [31] ECCV’22 77.07 69.41 82.01 75.77 83.77 78.64 57.37 19.18 69.18 45.37 CODA [32] CVPR’23 75.23 64.53 78.00 67.52 78.80 71.27 56.62 17.64 65.62 35.06 ADAM-Adapter [33] IJCV’25 76.71 68.75 78.65 71.35 79.87 73.02 79.87 75.37 79.75 75.37 ENGINE [34] ICCV’25 86.04 80.12 86.10 80.72 85.88 81.13 82.95 80.35 83.60 81.00 BOFA [35] AAAI’26 86.10 79.97 85.42 79.78 84.35 79.92 81.71 79.80 81.73 79.82 RAPF [5] ECCV’24 86.21 80.23 85.25 80.58 84.52 80.91 83.43 81.37 83.77 81.45 Ours –88.15 82.11 88.24 82.46 87.57 82.92 84.77 82.57 84.55 82.13
+
+Figure 6: Accuracy curves of RAPF and our method on ImageNet-R. The left figure shows the results under the B0 setting, and the right figure shows the results under the B100 setting. and Last accuracy are improved by 0.31% and 0.91% on average, respectively. These results indicate that our method consistently enhances both performance and stability during incremental learning. 
+
+Performance on ImageNet-R. As shown in Table 3, our method achieves the best performance across all settings on the ImageNet-R dataset. Under the B0 setting, our method improves the Avg and Last accuracy over RAPF by 2.66% and 1.92% on average, respectively. Under the B100 setting, the Avg and Last accuracy are improved by 1.06% and 0.94% on average, respectively. These results demonstrate the effectiveness of our method under both standard and more challenging settings. 
+
+Learning Dynamics. To further analyze the learning dynamics, we visualize the accuracy curves of RAPF and our method on ImageNet-R in Figure 6. The corresponding results on ImageNet-100 and CIFAR-100 are provided in Appendix A. Compared with RAPF, our method maintains higher accuracy during the whole incremental process under both B0 and B100 settings. In particular, the advantage is more pronounced in the B0 setting, where no base classes are provided and the model needs to learn all classes sequentially from scratch. As the number of learned classes increases, RAPF suffers from a more noticeable performance drop, while our method shows a smoother degradation trend. This indicates that the proposed subspace modeling strategy can better preserve previously learned knowledge and reduce accumulated forgetting. In the B100 setting, although the performance gap becomes smaller due to the strong initialization provided by the base session, our method still consistently outperforms RAPF across different incremental steps. 
+
+Key Observations. From the above results, we observe two notable trends. First, the performance gains on CIFAR-100 are relatively smaller than those on ImageNet-100 and ImageNet-R. This may be because CIFAR-100 contains low-resolution images with subtle inter-class differences, making the model more sensitive to parameter variations. While constraining updates within decomposed subspaces improves stability, it may also reduce the flexibility of shared parameters such as U and 
+
+V T , leading to less pronounced improvements on CIFAR-100. Second, our method brings larger gains in the B0 setting, while the improvements become smaller when a non-zero base session is used. We attribute this to the fixed subspace allocation strategy, where the base session is assigned the same capacity as each subsequent incremental task. Although this allocation is sufficient for small increments, it can be restrictive for larger base sessions, such as 50 or 100 base classes, which 8require greater model capacity. Overall, our method achieves consistently strong performance across datasets, demonstrating a favorable balance between plasticity and stability. 
+
+4.4 Threshold Selection 
+
+Figure 7: Performance under different threshold values on ImageNet-100 (B0 Inc10). The threshold τ used in the General Fusion Module (GFM) is defined based on the distribution of the relative param-eter change Γ. To determine an appropriate value, we conduct experiments on the ImageNet-100 dataset with 0 base classes and an increment size of 10, resulting in a total of 10 tasks. We vary the percentile parameter q
+
+in the range of [0 .5, 1.0] , which controls the threshold 
+
+τ = Quantile( {Γj }, q ).As shown in Figure 7, performance consistently improves as q increases from 0.5 to 0.9, suggesting that aggressively filtering out unstable parameters helps preserve the shared representation. However, further increasing q beyond 0.9
+
+leads to a slight performance drop, indicating that overly restrictive selection may hinder the model’s ability to adapt to new tasks. The best performance is achieved at q = 0 .9, which corresponds to selecting the top 10% of parameters with the largest relative changes as task-specific components. Based on this observation, we fix q = 0 .9 for all experiments unless otherwise specified. 
+
+4.5 Ablation Experiment 
+
+Table 4: Ablation study on ImageNet-R under the B0 Inc20 setting.                             
+
+> Method GFM HLM Lsparse LHAvg Baseline 85.20 + HLM + LH✓✓86.25 + GFM + Lsparse ✓✓86.36 + GFM + HLM + LH✓✓✓86.33 + GFM + HLM + Lsparse ✓✓✓86.02 Ours ✓✓✓✓88.24
+
+We conduct ablation experiments on the ImageNet-R dataset with 0 base classes and an increment size of 20. The results are reported in Table 4. From the table, we observe that the General Fusion Module (GFM) contributes the largest performance gain, demonstrating its effectiveness in capturing stable and shared knowledge across tasks. The Hier-archical Learning Module (HLM) also provides clear improvements, while the sparse regulariza-tion term Lsparse further enhances performance by encouraging compact representations. In contrast, the contribution of LH is relatively limited when used without the complete model design. When all components are combined, our full model achieves the best performance, outperforming all partial variants by a clear margin. These results verify that the proposed modules are complementary and jointly improve both representation quality and incremental stability. 
+
+## 5 Conclusion 
+
+In this paper, we propose HDSD, a Hierarchical Dual-Subspace Decoupling framework for CLIP-based class incremental learning. HDSD addresses catastrophic forgetting by explicitly modeling inter-task parameter interactions in the subspace space. Through a lightweight Feature Modulation Module, GFM preserves general knowledge by fusing stable shared components, while HLM learns task-specific knowledge through separated subspaces with controlled updates. Experiments on CIFAR-100, ImageNet-100, and ImageNet-R show that HDSD consistently improves incremental learning performance over existing methods, demonstrating its effectiveness in reducing cross-task interference and balancing stability and plasticity. 9Impact Statement 
+
+This work proposes HDSD, a Hierarchical Dual-Subspace Decoupling framework for CLIP-based class incremental learning. All training and evaluation are conducted on publicly available benchmark datasets under standard experimental settings that are consistent with prior continual learning studies. The proposed approach focuses on algorithmic improvements and does not involve new data collection or real-world deployment, and therefore does not introduce additional privacy, security, or ethical concerns beyond those commonly considered in existing continual learning research. However, our method still has a limitation: HLM adopts a fixed subspace allocation strategy, which assigns the same capacity to the base session and each subsequent incremental task. This may restrict the representation capacity for non-zero base-session settings, leading to less significant performance gains when the number of base classes is large. 
+
+## References 
+
+[1] Zhizhong Li and Derek Hoiem. Learning without forgetting. IEEE transactions on pattern analysis and machine intelligence , 40(12):2935–2947, 2017. [2] Sylvestre-Alvise Rebuffi, Alexander Kolesnikov, Georg Sperl, and Christoph H Lampert. icarl: Incremental classifier and representation learning. In Proceedings of the IEEE conference on Computer Vision and Pattern Recognition , pages 2001–2010, 2017. [3] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervision. In International conference on machine learning ,pages 8748–8763. PmLR, 2021. [4] Da-Wei Zhou, Yuanhan Zhang, Yan Wang, Jingyi Ning, Han-Jia Ye, De-Chuan Zhan, and Ziwei Liu. Learning without forgetting for vision-language models. IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. [5] Linlan Huang, Xusheng Cao, Haori Lu, and Xialei Liu. Class-incremental learning with clip: Adaptive representation adjustment and parameter fusion. In European Conference on Computer Vision , pages 214–231. Springer, 2024. [6] Marc Masana, Xialei Liu, Bartłomiej Twardowski, Mikel Menta, Andrew D Bagdanov, and Joost Van De Weijer. Class-incremental learning: survey and performance evaluation on image classification. IEEE Transactions on Pattern Analysis and Machine Intelligence , 45(5): 5513–5533, 2022. [7] Prithviraj Dhar, Rajat Vikram Singh, Kuan-Chuan Peng, Ziyan Wu, and Rama Chellappa. Learning without memorizing. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 5138–5146, 2019. [8] Sahil Nokhwal and Nirman Kumar. Rtra: Rapid training of regularization-based approaches in continual learning. In 2023 10th International Conference on Soft Computing & Machine Intelligence (ISCMI) , pages 188–192. IEEE, 2023. [9] Zhicheng Sun, Yadong Mu, and Gang Hua. Regularizing second-order influences for contin-ual learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 20166–20175, 2023. [10] Yuanhang Zhang, Zhidi Lin, Yiyong Sun, Feng Yin, and Carsten Fritsche. Regularization-based efficient continual learning in deep state-space models. In 2024 27th International Conference on Information Fusion (FUSION) , pages 1–8. IEEE, 2024. [11] Kun Wei, Da Chen, Yuhong Li, Xu Yang, Cheng Deng, and Dacheng Tao. Incremental embedding learning with disentangled representation translation. IEEE Transactions on Neural Networks and Learning Systems , 35(3):3821–3833, 2022. [12] Ameya Prabhu, Philip HS Torr, and Puneet K Dokania. Gdumb: A simple approach that questions our progress in continual learning. In European conference on computer vision , pages 524–540. Springer, 2020. 10 [13] Liyuan Wang, Bo Lei, Qian Li, Hang Su, Jun Zhu, and Yi Zhong. Triple-memory networks: A brain-inspired method for continual learning. IEEE Transactions on Neural Networks and Learning Systems , 33(5):1925–1934, 2021. [14] Sumohana Channappayya, Bheemarjuna Reddy Tamma, et al. Augmented memory replay-based continual learning approaches for network intrusion detection. Advances in Neural Information Processing Systems , 36:17156–17169, 2023. [15] Yuxuan Li, Tianxin Xie, Chenang Liu, and Zhangyue Shi. Pseudo replay-based class con-tinual learning for online new category anomaly detection in advanced manufacturing. IISE Transactions , 57(12):1407–1421, 2025. [16] Yanan Gu, Xu Yang, Kun Wei, and Cheng Deng. Not just selection, but exploration: Online class-incremental continual learning via dual view consistency. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 7442–7451, 2022. [17] Liyuan Wang, Xingxing Zhang, Qian Li, Jun Zhu, and Yi Zhong. Coscl: Cooperation of small continual learners is stronger than a big one. In European Conference on Computer Vision ,pages 254–271. Springer, 2022. [18] Binbin Yang, Xinchi Deng, Han Shi, Changlin Li, Gengwei Zhang, Hang Xu, Shen Zhao, Liang Lin, and Xiaodan Liang. Continual object detection via prototypical task correlation guided gating mechanism. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 9255–9264, 2022. [19] Peiyan Zhang, Yuchen Yan, Chaozhuo Li, Senzhang Wang, Xing Xie, Guojie Song, and Sunghun Kim. Continual learning on dynamic graphs via parameter isolation. In Proceedings of the 46th international ACM SIGIR conference on research and development in information retrieval , pages 601–611, 2023. [20] Yabin Wang, Zhiheng Ma, Zhiwu Huang, Yaowei Wang, Zhou Su, and Xiaopeng Hong. Isola-tion and impartial aggregation: A paradigm of incremental learning without interference. In 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , volume 37, pages 10209–10217, 2023. [21] Xi Wang, Xu Yang, Kun Wei, Yanan Gu, and Cheng Deng. Class incremental learning via contrastive complementary augmentation. IEEE Transactions on Image Processing , 2025. [22] Zangwei Zheng, Mingyuan Ma, Kai Wang, Ziheng Qin, Xiangyu Yue, and Yang You. Preventing zero-shot transfer degradation in continual learning of vision-language models. In Proceedings of the IEEE/CVF international conference on computer vision , pages 19125–19136, 2023. [23] Tyler L Hayes and Christopher Kanan. Lifelong machine learning with deep streaming linear discriminant analysis. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition workshops , pages 220–221, 2020. [24] Yu-Ming Tang, Yi-Xing Peng, and Wei-Shi Zheng. When prompt-based incremental learning does not meet strong pretraining. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 1706–1716, 2023. [25] Baoquan Zhang, Xutao Li, Yunming Ye, Zhichao Huang, and Lisai Zhang. Prototype completion with primitive knowledge for few-shot learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 3754–3762, 2021. [26] Qiankun Gao, Chen Zhao, Yifan Sun, Teng Xi, Gang Zhang, Bernard Ghanem, and Jian Zhang. A unified continual learning framework with general parameter-efficient tuning. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 11483–11493, 2023. [27] Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images. 2009. [28] Dan Hendrycks, Steven Basart, Norman Mu, Saurav Kadavath, Frank Wang, Evan Dorundo, Rahul Desai, Tyler Zhu, Samyak Parajuli, Mike Guo, et al. The many faces of robustness: A critical analysis of out-of-distribution generalization. In Proceedings of the IEEE/CVF international conference on computer vision , pages 8340–8349, 2021. 11 [29] Alex Krizhevsky, Ilya Sutskever, and Geoffrey E Hinton. Imagenet classification with deep convolutional neural networks. Advances in neural information processing systems , 25, 2012. [30] Zifeng Wang, Zizhao Zhang, Chen-Yu Lee, Han Zhang, Ruoxi Sun, Xiaoqi Ren, Guolong Su, Vincent Perot, Jennifer Dy, and Tomas Pfister. Learning to prompt for continual learning. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 139–149, 2022. [31] Zifeng Wang, Zizhao Zhang, Sayna Ebrahimi, Ruoxi Sun, Han Zhang, Chen-Yu Lee, Xiaoqi Ren, Guolong Su, Vincent Perot, Jennifer Dy, et al. Dualprompt: Complementary prompting for rehearsal-free continual learning. In European conference on computer vision , pages 631–648. Springer, 2022. [32] James Seale Smith, Leonid Karlinsky, Vyshnavi Gutta, Paola Cascante-Bonilla, Donghyun Kim, Assaf Arbelle, Rameswar Panda, Rogerio Feris, and Zsolt Kira. Coda-prompt: Continual decomposed attention-based prompting for rehearsal-free continual learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 11909–11919, 2023. [33] Da-Wei Zhou, Zi-Wen Cai, Han-Jia Ye, De-Chuan Zhan, and Ziwei Liu. Revisiting class-incremental learning with pre-trained models: Generalizability and adaptivity are all you need. 
+
+International Journal of Computer Vision , 133(3):1012–1032, 2025. [34] Da-Wei Zhou, Kai-Wen Li, Jingyi Ning, Han-Jia Ye, Lijun Zhang, and De-Chuan Zhan. External knowledge injection for clip-based class-incremental learning. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 3314–3325, 2025. [35] Lan Li, Tao Hu, Da-Wei Zhou, Jia-Qi Yang, Han-Jia Ye, and De-Chuan Zhan. Bofa: Bridge-layer orthogonal low-rank fusion for clip-based class-incremental learning. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 40, pages 22967–22975, 2026. 12 A Additional Learning Curves 
+
+The learning curves on ImageNet-100 and CIFAR-100 are shown in Figure 8a, Figure 8b, Figure 8c and Figure 8d. 
+
+> (a) Comparison of the results of RAPF and our method on Imagenet-100 dataset. The result when there are 0 base classes.
+> (b) Comparison of the results of RAPF and our method on Imagenet-100 dataset. The result when there are 50 base classes.
+> (c) Comparison of the results of RAPF and our method on CIFAR-100 dataset. The result when there are 0 base classes.
+> (d) Comparison of the results of RAPF and our method on CIFAR-100 dataset. The result when there are 50 base classes.
+
+Figure 8: Additional accuracy curves on ImageNet-100 and CIFAR-100 under different base-session settings. 
+
+## B Discussion on the Scaling Mechanism 
+
+In this section, we provide an additional discussion on the scaling mechanism used in HLM. The goal of the scaling factor is to reduce the influence of current-task updates on shared parameters and previously learned subspaces. Consider the optimization of the task-specific component associated with task Ti. Let Wσi denote the corresponding subspace component, and let si be its scaling factor. Before optimization, HLM scales this component as 
+
+fWσi = siWσi . (15) The optimization is then performed on the scaled component. Given a learning rate η and gradient 
+
+∇J (fWσi ), one update step can be written as 
+
+fW t+1  
+
+> σi
+
+= fW tσi − η∇J (fW tσi ). (16) Since the component is optimized in its scaled form, the effective update magnitude is controlled by 
+
+si. A smaller scaling factor leads to a smaller effective perturbation during optimization, which helps prevent the current task from causing large shifts in the shared singular bases. This is particularly important because different task-specific components are reconstructed from shared bases U and V T . Although each task is assigned to a separated singular component, excessive updates on the current component may still affect the shared basis structure and introduce interference 13 to previously learned subspaces. By assigning different scaling factors to different task components, HLM separates their update magnitudes and reduces the chance that one task dominates the shared parameter space. From an intuitive perspective, suppose the unscaled update magnitude of a task component is bounded by ∆. After applying the scaling factor, the effective perturbation can be regarded as being controlled by si∆. When si is small, this perturbation remains limited, making the shift of shared parameters less likely to exceed an acceptable range. Therefore, the scaling mechanism acts as a simple but effective constraint on task-specific updates. Overall, the scaling mechanism helps HLM maintain the correspondence between incremental tasks and their assigned subspaces, while reducing parameter shifts caused by shared singular bases. This provides additional stability during sequential training and contributes to mitigating cross-task subspace interference. 14
