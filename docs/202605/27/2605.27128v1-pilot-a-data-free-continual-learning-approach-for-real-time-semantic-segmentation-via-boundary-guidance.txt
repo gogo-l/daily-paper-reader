@@ -1,0 +1,382 @@
+Title: PILOT: A Data-Free Continual Learning Approach for Real-Time Semantic Segmentation via Boundary Guidance
+
+URL Source: https://arxiv.org/pdf/2605.27128v1
+
+Published Time: Wed, 27 May 2026 01:38:04 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+> Received: Revised: Accepted: Published:
+> Copyright: © 2026 by the authors. Submitted to Journal Not Specified for possible open access publication under the terms and conditions of the Creative Commons Attribution (CC BY) license.
+
+Article 
+
+# PILOT: A Data-Free Continual Learning Approach for Real-Time Semantic Segmentation via Boundary Guidance 
+
+Yujing Zhou 1, *, Prashant Shekhar 1, Thomas Yang 2 and Yongxin Liu 1 
+
+> 1
+
+Department of Mathematics, College of Arts and Sciences, Embry-Riddle Aeronautical University, Daytona Beach, FL 32114, USA; zhouy9@my.erau.edu (Y.Z.); shekharp@erau.edu (P.S.); liuy11@erau.edu (Y.L.)  
+
+> 2
+
+Department of Electrical Engineering and Computer Science, College of Engineering, Embry-Riddle Aeronautical University, Daytona Beach, FL 32114, USA; yang482@erau.edu 
+
+* Correspondence: zhouy9@my.erau.edu 
+
+Abstract 
+
+Real-time semantic segmentation models offer an excellent balance between accuracy and inference speed. However, deploying these models in dynamic real world environments often requires the ability to learn novel classes incrementally without retraining on the entire dataset. This capability is known as continual learning. In this regard, the standard fine-tuning methods in deep learning often fail due to catastrophic forgetting, where the model learns new information but forgets previously trained and learned classes. Con-tributing to this crucial domain, the current paper proposes a novel continual learning framework tailored for PIDNet, which is a widely cited state-of-the-art real-time seman-tic segmentation model. Our method, PILOT(Parallel Incremental Learning Over Time), introduces a real-time and lightweight strategy by implementing a parallel Derivative-branch (D-branch) designed to capture the high frequency boundary information of novel classes while freezing the trained parameters of the original segmentation network. This novel setup allows the model to adapt to new semantic categories while preserving the knowledge of previously learned classes. By using only data associated with the new class, our model significantly reduces training overhead. Experimental results demon-strate that our approach successfully segments new classes while maintaining high mean Intersection over Union (mIoU) on the original base classes, thereby comfortably outper-forming all major continual learning approaches in this domain. Overall, PILOT is shown to effectively mitigate catastrophic forgetting with minimal impact on inference latency, thus maintaining real-time performance. 
+
+Keywords: Continual Learning; Real-Time Semantic Segmentation; Class-Incremental Learning 
+
+# 1. Introduction 
+
+Semantic segmentation is a fundamental and important task in computer vision that divides an image into regions, where each pixel is assigned a semantic label (like "road," "car," or "pedestrian") and a corresponding mask is generated to isolate each identified object or area [1]. It serves as a critical perception component for autonomous systems, including self-driving vehicles and mobile robots, which need to understand their sur-roundings in real time [2]. As these systems are deployed in diverse and evolving envi-ronments, the set of objects they must recognize unavoidably expands [3]. For example, an autonomous driving vehicle trained to recognize sidewalks and pedestrians might later 
+
+Version May 27, 2026 submitted to Journal Not Specified https://doi.org/10.3390/1010000   
+
+> arXiv:2605.27128v1 [cs.CV] 26 May 2026 Version May 27, 2026 submitted to Journal Not Specified 2 of 18
+
+need to identify a new type of electric scooter or a temporary construction barrier when it enters another part of the city. Retraining the entire segmentation model from scratch ev-ery time a new class appears is time consuming, computationally expensive, and imprac-tical for deployed systems [4]. Therefore, the ability to learn new classes incrementally is essential for the stable and long term deployment of intelligent autonomous systems. 
+
+(a) Original Image (b) Ground Truth 
+
+(c) Proposed Method (d) Catastrophic Forgetting     
+
+> Figure 1. Visual comparison of catastrophic forgetting versus the proposed continual learning frame-work. (a) The original input image. (b) The ground truth segmentation map. (c) The proposed method accurately segments the newly introduced “Bus” class (highlighted in green) without dis-rupting the scene. (d) Naive fine-tuning results in severe catastrophic forgetting, producing noisy and inaccurate predictions (highlighted in red) that confuse the new class with background elements like the billboard.
+
+However, standard deep learning models like Convolutional Neural Networks (CNNs) usually lack the inherent ability to learn continually. When a model trained on a specific set of classes is updated with data from a new category, it tends to overwrite its existing parameters to minimize the loss on the new data. This problem is known as catastrophic forgetting in semantic segmentation [5,6], and it will result in a drastic per-formance drop on previously learned tasks. To mitigate this, researchers have proposed various Continual Learning (CL) strategies, ranging from data replay methods that store subsets of old data [4] to regularization techniques that constrain weight updates [7,8]. While effective in some scenarios, these methods often introduce significant memory over-head or fail to completely prevent forgetting in dense prediction tasks like semantic seg-mentation [9]. Moreover, many existing CL approaches are designed for heavy, offline models and do not work well with lightweight, real-time models like our backbone model PIDNet [10] for this research, where model size and frames per second (FPS) are the most important considerations. To explicitly illustrate the severity of catastrophic forgetting and the efficacy of the proposed solution, a direct visual comparison is presented in Figure 1. When a stan-dard semantic segmentation model is naively fine-tuned to learn a novel categorysuch as the “Bus” classit suffers from severe parameter interference. As shown in Figure 1(d), the naive approach completely loses its contextual understanding of the scene, producing noisy predictions (highlighted in red) that erroneously classify background elements, such as the billboard on the right, as the new object. In stark contrast, Figure 1(c) demonstrates the output of the proposed continual learning framework. By structurally isolating the   
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 3 of 18
+
+learning process, the model successfully identifies the new class with sharp boundaries (highlighted in green), matching the ground truth in Figure 1(b) without corrupting the original spatial representations of the input image (Figure 1(a)). Therefore, to bridge the gap between heavy, offline continual learning methods and real-time segmentation models, a lightweight, real-time strategy for the state-of-the-art segmentation architecture is proposed. This approach utilizes the model’s parallel branch-ing structure to introduce plasticity for new classes while preserving stability for trained classes. The main contributions are summarized as follows: • A novel, replay-free continual learning framework for PIDNet is proposed that effec-tively mitigates catastrophic forgetting. • It is demonstrated that the high-frequency boundary information captured by the D-branch is sufficient for learning new semantic categories without retraining the entire model. • The proposed method (PILOT) is evaluated using a class-incremental learning sce-nario on the Cityscapes dataset, where the model first learns a set of base classes and subsequently adapts to new categories. The remainder of this paper is organized as follows. Section 2 reviews related work in real-time semantic segmentation and continual learning. Section 3 details the proposed continual learning architecture and training methodology. Section 4 presents the exper-imental setup, datasets, and quantitative results. Finally, Section 5 and 6 concludes the paper and discusses future directions. 
+
+# 2. Related Work 
+
+Real-time semantic segmentation has received considerable attention due to its im-portance in autonomous driving, robotics, and embedded perception. Early lightweight models such as ENet [11] and ICNet [12] demonstrated that aggressive model compres-sion and reduced-resolution processing can achieve high frame rates, although often with significant accuracy degradation. Subsequent approaches focused on multi-branch net-work designs to balance semantic context and spatial precision. For example, BiSeNet [13] introduced a dual-path architecture separating spatial detail and semantic reasoning. Ex-panding on this efficiency, models like Fast-SCNN [14] utilized shared shallow networks to reduce computational overhead, while STDC [15] and DDRNet [16] optimized spatial details and deep contextual features without relying on complex attention modules. More recently, PIDNet [17] proposed a three-branch structure consisting of a P-branch for se-mantic context, an I-branch for intermediate feature refinement, and a D-branch dedicated to high-frequency boundary detection. This architecture provides state-of-the-art accu-racy among real-time models, making it attractive for deployment in dynamic environ-ments. The continued relevance of this architecture was recently highlighted by Tan and Jin [10], who demonstrated that modifying PIDNet’s proportional and integral branches with complex multi-scale feature fusion can further enhance baseline road sensing capabil-ities. These efforts primarily focus on scaling the contextual branches to maximize static, offline accuracy. Consequently, the potential of the lightweight D-branch for real-time con-tinual adaptation remains largely unexplored. Indeed, similar to other standard real-time segmentation networks, the baseline PIDNet remains strictly trained offline and lacks in-herent mechanisms for continual adaptation once deployed. Beyond balancing speed and accuracy, accurately delineating object boundaries has emerged as a critical focus in modern segmentation architectures. Frameworks such as GSCNN [18] introduced a dedicated shape stream to process spatial boundaries indepen-dently from the regular texture stream, proving that decoupling edge information signif-icantly improves pixel-level classification along object borders. Similarly, PointRend [19]   
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 4 of 18
+
+treated image segmentation as a rendering problem, selectively performing point-based predictions at ambiguous object boundaries to achieve crisp contours. These findings demonstrate that boundary-level features contain highly discriminative spatial cues. This fundamental characteristic is what makes the boundary-focused D-branch of PIDNet an ideal, lightweight anchor for learning new semantic categories. Continual learning semantic segmentation aims to address the static nature of these deployed models by enabling them to learn new semantic categories over time without retraining from scratch or requiring access to previous datasets. This adaptability is espe-cially critical because deployed systems frequently encounter highly dynamic and unstruc-tured real-world environments where moving objects or novel obstacles can severely de-grade the perception system’s robustness, as observed in recent stereo vision frameworks [20]. A key challenge is catastrophic forgetting: when new-class data is introduced, old classes often appear as background, causing the model to overwrite their learned represen-tations. Early pioneering works in this domain, such as ILT [21], attempted to adapt stan-dard continual learning techniques by applying knowledge distillation to both the final output probabilities and the intermediate feature maps. Building on this, several frame-works have been proposed to specifically handle the background shift problem. MiB [9] modeled the background shift during incremental steps by modifying the cross-entropy and distillation losses to better handle missing labels for old classes. PLOP [22] extended this idea using pooled output distillation, which aligns multi-scale intermediate features between teacher and student models to better preserve old-class knowledge. Another direction incorporates pseudo-labeling and unknown-class modeling. SSUL [23] introduced an unknown label to identify unlabeled old-class regions and employed saliency-based masks to avoid collapsing old objects into background. IDEC [24] further advanced pseudo-labeling through dynamic thresholding and integrated adversarial and contrastive distillation (DADA and ARCL) to stabilize feature representations across in-cremental steps. These methods offer strong performance but generally rely on heavy backbones such as ResNet-101 [25] or DeepLab-style decoders [26], making them unsuit-able for real-time settings. Architectural approaches provide an alternative path. RCIL [27] introduced Repre-sentation Compensation Networks, where each convolutional block is decomposed into a frozen branch preserving old representations and a trainable branch responsible for learn-ing new categories. Distillation is performed through pooled-cube features of the frozen teacher network. A related method, UCD [28], incorporated uncertainty-aware contrastive distillation to emphasize reliable feature regions during knowledge transfer. While effec-tive, these frameworks also introduce computational overhead that makes them difficult to deploy in high-FPS applications. Despite the progress of these continual learning semantic segmentation methods, two limitations persist: most are designed around high-capacity models unsuitable for em-bedded deployment, and their stability plasticity mechanisms do not translate well to lightweight architectures that prioritize speed. Many incorporate multi-scale feature distil-lation, auxiliary networks, or additional classifier heads that increase computational cost. In contrast, this work focuses on continual learning for real-time segmentation by ex-ploiting the inherent structure of PIDNet. Rather than adding external modules or heavy distillation pipelines, we leverage the models dedicated boundary focused D-branch to isolate plasticity while preserving stability in the P and I-branches. This enables the net-work to learn new semantic categories with minimal overhead and without relying on replay buffers or offline retraining. The proposed approach thus provides a lightweight and deployment friendly continual learning strategy for real-time models, addressing an important gap left by prior continual learning semantic segmentation frameworks.   
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 5 of 18
+
+# 3. Materials and Methods 
+
+3.1. Problem Formulation and Architecture Overview  
+
+> Figure 2. Overview of the proposed continual learning framework. The original PIDNet backbone and segmentation head (blue panels) are frozen after the base task to prevent catastrophic forget-ting. To learn new semantic categories incrementally, an unfrozen Parallel Boundary Branch (purple panel) is introduced. This branch runs in parallel with the frozen D-Branch, sharing the same input from the RGB image, and bypasses the need to retrain the contextual P and I branches.
+
+In class-incremental semantic segmentation, a model is trained on a sequence of tasks where each new task introduces novel semantic categories. Let C0 represent the set of base classes (e.g., the original 15 classes) learned during the initial training phase using dataset D0. In subsequent incremental steps t ∈ { 1, . . . , T}, the model receives a new dataset Dt containing images annotated only for a new set of classes Ct. The objective of continual learning is to update the model to accurately segment all encountered classes 
+
+C0: t = C0 ∪ · · · ∪ C t while strictly utilizing only the current dataset Dt, without retraining on previous data. The primary challenge in this setting is preventing the catastrophic forgetting of earlier classes C0: t−1 while maintaining the plasticity to learn Ct.To address this, a lightweight, parallel-branch architecture built upon the PIDNet backbone is proposed. An overview of the PILOT framework is illustrated in Figure 2. The architecture is conceptually divided into two distinct parts: a frozen base network and an unfrozen incremental framework. The base network consists of the original PIDNet architecture, which includes the Proportional (P), Integral (I), and Derivative (D) branches, along with the original segmen-tation head. After the base training phase on C0, all parameters within this main backbone and original head are strictly frozen. This ensures that the foundational feature extrac-tion capabilities and the semantic boundaries of the original 15 classes are permanently preserved, establishing a hard defense against catastrophic forgetting. To accommodate novel classes, the Parallel Boundary Branch is introduced. As shown in Figure 2, this unfrozen branch runs in parallel with the frozen D-Branch, sharing the same input from the RGB image. By independently learning high-frequency boundary representations tailored to the novel classes, the parallel network can isolate and define the contours of new objects without interfering with the primary contextual pathways (P and I branches). The features from this parallel branch are then passed to a dedicated New Class Head, which outputs the segmentation masks for the incremental categories.   
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 6 of 18
+
+This dual-pathway design allows the model to route base class predictions through the original, undisturbed network while dynamically learning new categories through the isolated parallel structure. 
+
+3.2. The Frozen PIDNet Backbone 
+
+The foundation of the proposed framework relies on the PIDNet architecture, a real-time semantic segmentation model inspired by Proportional-Integral-Derivative (PID) controllers. To efficiently balance spatial details and global context, the network utilizes a three-branch structure: • Proportional (P) Branch: Designed to process and maintain semantic context across the image. • Integral (I) Branch: Responsible for intermediate feature refinement, aggregating contextual information to support robust region classification. • Derivative (D) Branch: Dedicated exclusively to high-frequency boundary detection, extracting the sharp edges and contours of semantic objects. In a standard deployment, the features from these three branches are fused in the final stages to produce the segmentation map. However, in the proposed continual learning framework, the entire pre-trained PIDNet backbone and its original segmentation head are strictly frozen following the initial training phase on the base classes. Freezing the base architecture serves two critical functions. First, it guarantees that the established feature representations and boundary definitions for the original classes remain entirely uncorrupted when new data is introduced. By preventing any weight up-dates in the main pathways, the model is immunized against catastrophic forgetting. Sec-ond, this constraint significantly reduces the computational overhead during incremental learning steps. Since gradients are not computed or updated for the massive base network, the training process remains lightweight. 
+
+3.3. The Parallel Boundary Branch 
+
+To introduce plasticity for novel semantic categories without disrupting the frozen base network, a lightweight Parallel Boundary Branch is proposed. As established in the ablation study (Section 4.1), structurally aligning this incremental branch with the Deriva-tive (D) branch of PIDNet yields the optimal balance between preserving base-class stabil-ity and learning new features. The fundamental premise of this design is that high-frequency boundary informa-tion is particularly effective for delineating new semantic objects. Let I ∈ R3×H×W de-note the input RGB image. In our framework, I is processed by two structurally identical D-branches that operate in parallel: the original frozen D-branch produces a boundary feature map FD ∈ RC×H×W used by the original segmentation head for base-class predic-tion, while an unfrozen parallel D-branch independently produces a novel-class boundary feature map FD′ ∈ RC×H×W from the same input. This parallel design ensures that the boundary representations learned for novel classes do not constrain or modify the frozen base-class features. The parallel branch shares the architectural design of the original D-branch but is initialized as an unfrozen module that learns class-specific boundary representations for novel categories. As depicted in the architectural diagram, its internal structure consists of sequential feature extraction blocks and a concatenation layer, which aggregate multi-scale boundary details. Mathematically, this feature transformation can be expressed as: 
+
+FD′ = Φparallel (I; θparallel )  
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 7 of 18
+
+where Φparallel represents the operations within the parallel branch and θparallel denotes its trainable parameters. The novel-class boundary feature map, FD′ , is then fed into a dedicated New Class Head. This independent segmentation head is specifically responsible for generating the final spatial logits, Ynew , for the newly introduced classes Ct:
+
+Ynew = Hnew (FD′ ; θhead )
+
+where Hnew and θhead represent the new segmentation head and its respective parameters. By isolating the learning process strictly within θparallel and θhead , the proposed method ensures that the gradient updates triggered by the novel class data never back-propagate into the base PIDNet backbone. This structural isolation effectively eliminates catastrophic forgetting while requiring only a fraction of the computational overhead com-pared to retraining the entire network or utilizing heavy distillation pipelines. 
+
+3.4. Training Strategy and Loss Function 
+
+During the incremental learning phase for a new task t, the model is optimized ex-clusively using the novel dataset Dt. Unlike traditional continual learning methods that mitigate forgetting by maintaining memory-intensive replay buffers of historical data, the proposed framework is entirely replay-free. 
+
+Algorithm 1 Incremental Training via the Parallel Boundary Branch 
+
+Require: Pre-trained PIDNet backbone B with parameters θbase 
+
+Require: Pre-trained original head Horig with parameters θorig _head 
+
+Require: Incremental dataset Dt containing images X and labels Y for novel classes Ct
+
+Require: Learning rate α, total epochs E 
+
+> 1:
+
+Phase 1: Initialization  
+
+> 2:
+
+Freeze backbone parameters: θbase ← requires_grad (False ) 
+
+> 3:
+
+Freeze original head: θorig _head ← requires_grad (False ) 
+
+> 4:
+
+Initialize Parallel Boundary Branch parameters: θparallel  
+
+> 5:
+
+Initialize New Class Head parameters: θhead  
+
+> 6:
+
+Phase 2: Incremental Optimization  
+
+> 7:
+
+for epoch = 1 to E do  
+
+> 8:
+
+for each mini-batch (X, Y) ∈ D t do  
+
+> 9:
+
+1. Forward pass through unfrozen parallel branch  
+
+> 10:
+
+Generate novel-class boundary features: FD′ ← Φparallel (X; θparallel ) 
+
+> 11:
+
+Generate novel class predictions: ˆ Ynew ← H new (FD′ ; θhead ) 
+
+> 12:
+
+2. Loss computation (only on novel classes)  
+
+> 13:
+
+Compute Cross-Entropy Loss: Linc = CE ( ˆYnew , Y ∈ C t) 
+
+> 14:
+
+3. Backpropagation and targeted parameter update  
+
+> 15:
+
+Compute gradients: ∇θparallel , ∇θhead ← ∂Linc  
+
+> ∂θ parallel
+
+, ∂Linc  
+
+> ∂θ head
+> 16:
+
+Update parallel branch: θparallel ← θparallel − α∇θparallel  
+
+> 17:
+
+Update new head: θhead ← θhead − α∇θhead  
+
+> 18:
+
+end for  
+
+> 19:
+
+end for  
+
+> 20:
+
+return Updated incremental parameters θparallel and θhead 
+
+The complete step-by-step training protocol is summarized in Algorithm 1. This pro-tocol strictly limits weight updates to the newly introduced modules. During the initial-ization phase, all parameters within the foundational PIDNet backbone ( θbase ) and the original segmentation head ( θorig _head ) are permanently frozen. Consequently, during back-propagation, gradients are computed and applied solely to the parameters of the Parallel Boundary Branch ( θparallel ) and the New Class Head ( θhead ).   
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 8 of 18
+
+To optimize these incremental components, a standard pixel-wise Cross-Entropy (CE) loss is applied. Let yi ∈ C t denote the ground-truth label for pixel i in a given image from the incremental dataset, and let ˆ yi,c represent the predicted probability that pixel i belongs to the novel class c, derived from the softmax activation of the New Class Head. The incremental loss function Linc is mathematically formulated as: 
+
+Linc = − 1
+
+N
+
+> N
+
+# ∑
+
+> i=1
+
+# ∑
+
+> c∈C t
+
+⊮(yi = c) log ( ˆyi,c)
+
+where N represents the total number of valid pixels in the spatial dimensions, and ⊮(·) is the indicator function, which equals 1 if the condition is true and 0 otherwise. While the framework supports adding multiple novel classes per incremental step, our experimental setup adds one class at a time, i.e., |C t| = 1 for all t.Because the base classes C0: t−1 are absent from the incremental dataset Dt, the loss is computed strictly over the spatial regions annotated for the novel classes Ct. By re-stricting the loss computation and weight updates exclusively to the lightweight paral-lel modules, the training process avoids the massive computational burden associated with full-network fine-tuning or complex multi-scale feature distillation pipelines. This targeted optimization ensures rapid, resource-efficient adaptation to novel semantic cate-gories, maintaining the low inference latency required for real-time deployment.   
+
+> Figure 3. The inference prediction routing mechanism. The model first evaluates the input image through the new parallel branch. Pixels exceeding the confidence threshold are classified as the new category. For low confidence regions, the model falls back to the frozen backbone to accurately predict legacy classes, effectively merging the two pathways into a single, coherent segmentation map.
+
+To generate the final segmentation map during deployment, a confidence based rout-ing mechanism is utilized to seamlessly merge the predictions from the unfrozen parallel branch and the frozen base network. The complete inference data flow is illustrated in Figure 3. When an input image is processed, the parallel boundary branch first evaluates the scene to detect any newly learned semantic categories. The dedicated new class head outputs a probability map for these novel objects. A predetermined confidence threshold (τ) is then applied to these predictions. If the confidence score for a specific pixel exceeds this threshold, the model assigns it to the novel class (e.g., Bus or Train). Conversely, if the confidence score falls below the threshold, the system defaults to the foundational knowledge of the frozen PIDNet backbone. The frozen network then processes those low confidence regions to assign legacy classes (e.g., Road or Building). This conditional routing strategy ensures that novel objects are only segmented when the model is highly certain. It strictly preserves the integrity of the base classes in all other ar-eas. By intelligently routing the predictions rather than aggressively overwriting them, the   
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 9 of 18
+
+framework maintains the high accuracy and real-time efficiency required for autonomous perception. 
+
+# 4. Results 
+
+We evaluate the PILOT framework on the Cityscapes dataset [2], a large-scale bench-mark for urban scene understanding. Cityscapes contains 5,000 finely annotated images collected from 50 cities across Germany and neighboring countries, split into 2,975 train-ing images, 500 validation images, and 1,525 test images. Each image has a resolution of 2048 × 1024 pixels and is annotated with pixel-level labels across 19 semantic classes, including road, sidewalk, building, vegetation, person, car, bus, train, motorcycle, and bi-cycle, among others. Following standard continual semantic segmentation protocols, we use the 2,975 training images for both base training and incremental learning steps, and report all mIoU scores on the 500 validation images. The following subsections represent a comprehensive evaluation of the PILOT frame-work on the Cityscapes dataset under a class-incremental semantic segmentation protocol. We begin in Section 4.1 by analyzing the long-term continual learning behavior of PILOT across all three PIDNet variants (S, M, and L), comparing against Joint Training (upper bound) and Fine-Tuning (lower bound) baselines under a matched-backbone protocol. We then position PILOT against state-of-the-art continual semantic segmentation methods on the 14-1 and 10-1 benchmarks in Section 4.2. Section 4.3 examines the stability-plasticity trade-off through per-step mIoU trajectories. Section 4.4 provides an ablation analysis of the proposed parallel branch connection point, and Section 4.5 examines the sensitiv-ity of the model’s performance to the decision threshold of the new class head. Finally, Section 4.6 presents qualitative segmentation results visualizing the model’s incremental learning behavior across model capacities. 
+
+4.1. Continual Learning 
+
+We evaluate the long-term continual learning capability of our method by extend-ing the experiment from the base 15 classes to the full 19 classes, adding one class at a time across four incremental steps. The quantitative results at each incremental stage are detailed in Table 1. To contextualize the performance of our method, we establish refer-ence baselines using Joint Training and Fine-Tuning, both implemented on the PIDNet-M backbone for fair comparison.      
+
+> Table 1. Quantitative analysis of incremental learning (Steps 15 to 19). Part I reports the Overall mIoU (all classes known at that step). Part II reports the Base Class Stability (mIoU calculated only on the original 15 classes), showing how well the model resists forgetting.
+
+Base Task Incremental Steps Method Backbone Step 0 (15 cls) Step 1 (16 cls) Step 2 (17 cls) Step 3 (18 cls) Step 4 (19 cls) 
+
+Joint Training PIDNet-M 80.92 78.90 78.50 78.10 77.80 Fine Tuning PIDNet-M 80.92 70.08 65.12 61.75 59.90 
+
+Part I: Overall Performance (mIoU on All Classes) 
+
+PILOT PIDNet-S 79.02 72.71 69.94 68.25 68.91 
+
+PILOT PIDNet-M 80.92 74.80 72.03 71.71 71.87 
+
+PILOT PIDNet-L 80.58 75.00 72.03 70.97 70.54 
+
+Part II: Base Class Stability (mIoU on Original 15 Classes Only) 
+
+PILOT PIDNet-S 79.02 77.24 75.32 75.21 75.19 
+
+PILOT PIDNet-M 80.92 79.14 77.37 77.90 77.38 
+
+PILOT PIDNet-L 80.58 79.31 77.32 77.29 76.76   
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 10 of 18
+
+Joint Training (Upper Bound). This setting represents the ideal offline scenario in which the model is retrained from scratch on the full accumulated dataset whenever a new class is introduced. While this yields strong performance (maintaining approximately 78% mIoU throughout), it requires access to all historical data at every step and incurs sub-stantial retraining cost. Joint Training is therefore impractical for real-world autonomous driving deployment and serves only as a theoretical upper bound. 
+
+Fine-Tuning (Lower Bound). This setting represents a naive incremental approach in which the model is sequentially fine-tuned on new class data without access to previ-ous samples or knowledge-preservation mechanisms. As shown in Table 1, this approach suffers from progressive performance degradation, dropping from 80.92% to 59.90% over four incremental steps. This confirms that without an explicit mechanism for preserving prior knowledge, incremental training is inadequate for long-term class addition. 
+
+Efficacy of Our Approach. PILOT demonstrates robust stability across all sequen-tial incremental steps. Utilizing the PIDNet-M backbone, which demonstrates the opti-mal balance between capacity and plasticity in our experiments, we observe a consistent performance trajectory. At the first incremental step (16 classes), the model achieves an overall mIoU of 74.80%, effectively retaining base knowledge with a base-class stability of 79.14%. This stability persists over the long term: even after four sequential additions (19 classes), the model maintains an overall mIoU of 71.87%, with base-class mIoU at 77.38%, a retention of 95.6% relative to the initial 80.92% base performance. This indicates that our D-branch connection successfully mitigates catastrophic forgetting while allowing the model to accommodate novel classes. Furthermore, the PIDNet-M variant yields supe-rior performance compared to both the S and L backbones. At the final step, PIDNet-M outperforms the Fine-Tuning baseline by 11.97 percentage points. 
+
+4.2. Comparison with State-of-the-Art Methods 
+
+We compare our method against representative continual semantic segmentation (CSS) methods on Cityscapes under two standard protocols: 14-1 (6 tasks) and 10-1 (10 tasks). Table 2 reports the mean IoU over the initial (base) classes, the novel (incremental) classes, and all classes at the final incremental step. Before discussing the results, we briefly explain the CSS evaluation protocol. The no-tation “ B-N” denotes an experimental setup in which B(Base) classes are jointly learned during the base training phase and N(New) classes are added one at a time during incre-mental learning. Under the 14-1 protocol, the model is first trained on 14 base classes, after which the remaining 5 classes (15 through 19) are introduced sequentially across 5 incre-mental steps, yielding 6 total tasks. Similarly, the 10-1 protocol trains on 10 base classes and adds the remaining 9 classes one at a time, for 10 total tasks. All mIoU values re-ported in Table 2 are measured on the final model after all incremental steps are complete, but evaluated over different class subsets. Columns labeled “1-14” and “1-10” report the mIoU computed only over the base classes, measuring how well each method resists catas-trophic forgetting. Columns labeled “15-19” and “11-19” report the mIoU computed only over the novel (incrementally added) classes, measuring how well each method learns new categories. The columns labeled “all” report the mIoU computed over all 19 classes, indicating overall segmentation performance.       
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 11 of 18
+> Table 2. Continual semantic segmentation results on Cityscapes in mIoU (%). Tasks defined as
+> C1-CT(Ttasks).
+
+14-1 (6 tasks) 10-1 (10 tasks) Method 1-14 15-19 all 1-10 11-19 all 
+
+PLOP [22] 63.54 15.38 48.33 60.75 27.97 42.96 MiB [9] 66.37 14.36 50.05 61.80 32.97 45.73 MiB + AWT [29] 65.60 19.19 50.72 60.97 35.70 46.55 DKD [30] 68.83 14.70 51.86 66.77 34.52 48.92 TOPICS [31] 73.03 42.47 61.74 71.37 52.62 59.36 PILOT (Ours) 76.52 49.20 70.21 75.84 54.20 65.68 
+
+It is important to note that prior CSS methods including PLOP [22], MiB [9], MiB+AWT [29], DKD [30], and TOPICS [31] adopt DeepLabV3 with a ResNet-101 back-bone, whereas our method uses PIDNet for its real-time efficiency in autonomous driv-ing deployment. While this backbone difference precludes strictly equivalent comparison, two observations indicate the effectiveness of our continual learning framework. First, our method achieves substantially stronger base-class retention: on the 14-1 protocol, we ob-tain 76.52% on classes 1-14 compared to TOPICS’ 73.03% and PLOP’s 63.54%. Second, our method demonstrates markedly improved plasticity on novel classes, achieving 49.20% on classes 15-19, compared to 42.47% for TOPICS, 19.19% for MiB+AWT, and 15.38% or lower for the remaining baselines. The gain is consistent across both the 14-1 and 10-1 protocols.  
+
+> Figure 4. Per-step overall mIoU on the Cityscapes 10-1 protocol across nine sequential incremental steps. Our method (red) maintains consistently higher and more stable performance than all prior CSS approaches throughout the entire incremental sequence. Baseline curves were digitized from Hindel et al. [31] (Figure 5).
+
+To further visualize the dynamics of catastrophic forgetting across methods, we plot per-step overall mIoU on the 10-1 protocol in Figure 4. The 10-1 setting is particularly infor-mative because it requires nine sequential incremental steps, providing a clearer view of long-term stability than shorter protocols. As shown in the figure, all baseline methods ex-hibit a pronounced downward trajectory as more classes are added, with PLOP, MiB, and   
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 12 of 18
+
+MiB+AWT degrading sharply after Step 6 and ending below 50% mIoU. TOPICS main-tains the strongest performance among prior approaches, but still declines substantially in later steps, falling from approximately 69% at Step 5 to 59.36% at Step 9. In contrast, our method maintains consistently higher mIoU throughout the entire incremental sequence, ending at 65.68% at Step 9, a margin of 6.32 percentage points over TOPICS. Notably, our curve also exhibits a flatter trajectory, indicating that the per-step performance loss from each incremental step is smaller than for the baselines. This stability is consistent with our base-class retention results in Table 2 and supports our claim that the proposed framework more effectively mitigates catastrophic forgetting under long incremental sequences. These results, together with the matched-backbone ablation in Table 1, suggest that our framework addresses both the stability-plasticity trade-off and the semantic back-ground shift problem more effectively than prior approaches on Cityscapes continual seg-mentation benchmarks. 
+
+4.3. Dynamic Stability Analysis 
+
+To further investigate the stability-plasticity trade-off, we analyze the mIoU evolution across sequential incremental steps in Figure 5.     
+
+> Figure 5. Continual Learning Performance (mIoU vs. Number of Classes). The plot illustrates the performance trajectory of PILOT with PIDNet-S, M, and L backbone variants across incremen-tal steps, bounded by the Joint Training upper bound and Fine-Tuning lower bound. PIDNet-M (dashed line) demonstrates the highest robustness among our variants, stabilizing above 71% at the final step.
+
+As shown in the plot, all three model variants experience a noticeable drop in perfor-mance when the first new class is introduced (from 15 to 16 classes). This initial decline is expected, as the model transitions from a closed-set training regime to incremental learn-ing. Several factors contribute to this drop. First, the parallel boundary branch and new class head are randomly initialized and require training to produce reliable predictions for the novel class. Second, the confidence-based routing mechanism may occasionally misclassify base-class pixels as the novel category before the new head is fully calibrated. Third, the mIoU computation itself changes scale as additional classes are introduced into the evaluation. Notably, our framework largely avoids the classical semantic background   
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 13 of 18
+
+shift problem that plagues unified-classifier CSS methods, since the frozen original head and the new class head operate on separate prediction pathways. Critically, performance stabilizes significantly after this first step. From 17 classes onward, the decline becomes substantially slower and the curve flattens. This indicates that our D-branch connection effectively limits catastrophic forgetting once the model has adjusted to the incremental setting. By isolating boundary features, the network accom-modates new classes without aggressively overwriting the feature representations of the original 15 categories. Regarding model capacity, PIDNet-M consistently achieves higher mIoU than both PIDNet-S and PIDNet-L across incremental steps. We hypothesize that PIDNet-M’s pa-rameter count offers a favorable balance: sufficient capacity to learn discriminative fea-tures for new classes, while remaining constrained enough to resist excessive interference with previously learned representations. In contrast, the larger PIDNet-L may be more prone to overfitting on the limited novel-class data. However, the absolute differences among the three variants are small (PIDNet-M: 71.87%, PIDNet-L: 70.54%), suggesting that our framework is relatively robust across model capacities. A more detailed investi-gation of this relationship is left to future work. 
+
+4.4. Ablation Analysis 
+
+PIDNet [17] decomposes feature learning into three parallel branches: the Propor-tional (P) branch, which preserves high-resolution detail; the Integral (I) branch, which aggregates contextual information through low-resolution processing; and the Derivative (D) branch, which extracts high-frequency boundary features to guide segmentation. To determine the optimal injection point for the parallel incremental branch, we conducted an ablation study by attaching the branch to each of these three branches of the frozen PIDNet backbone. The quantitative results are summarized in Table 3. As shown in the table, the D-branch configuration yields the best overall performance, achieving a final mIoU of 72.65% on the 16-class task. This significantly outperforms the P-branch (67.97%) and the I-branch (70.25%). In terms of stability, all three connection points preserve base-class accuracy within a narrow range (P: 76.75%, I: 77.49%, D: 77.22%), a modest decrease from the 79.02% base-line. However, the D-branch substantially outperforms the other two variants in learn-ing the new class, yielding the highest overall mIoU (72.65%) compared to the I-branch (70.25%) and P-branch (67.97%). These results confirm our hypothesis that high-frequency boundary information is particularly valuable for delineating new objects in an incremen-tal learning setting, making the D-branch the optimal connection point.  
+
+> Table 3. Ablation Analysis of connection points. The D-Branch (highlighted) achieves the best trade-off between stability (Base mIoU) and plasticity (Overall mIoU).
+
+Baseline Incremental Step (After Adding Class) Connection Original mIoU Base mIoU Overall mIoU Point (15 Classes) (Old Classes) (All 16 Classes) 
+
+P Branch 79.02% 76.75% 67.97% I Branch 79.02% 77.49% 70.25% 
+
+D Branch 79.02% 77.22% 72.65% 
+
+4.5. Hyperparameter Analysis 
+
+To maximize the segmentation performance of the newly introduced classes, the deci-sion threshold ( τ) for the Parallel Boundary Branch was systematically evaluated. Because   
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 14 of 18
+
+the new class head outputs continuous probability maps, selecting an optimal τ is critical for balancing false positives and false negatives during inference. The performance metrics for the novel class, including Intersection over Union (IoU), Precision, and Recall, were analyzed across a range of threshold values. As illustrated in Figure 6(a), increasing the threshold naturally improves Precision by filtering out low-confidence predictions, but simultaneously degrades Recall as more true positive pixels are rejected. The optimal balance is achieved at τ = 0.75, where the IoU reaches its peak at 0.5314. At this threshold, the model demonstrates a strong F1-score of 0.694, with a Precision of 0.661 and a Recall of 0.731. 
+
+(a) 
+
+(b)    
+
+> Figure 6. (a) Evaluation of IoU, Precision, and Recall across various decision thresholds ( τ) for the novel class. The peak IoU is observed at τ
+
+= 0.75. (b) The ROC curve for the new class prediction, demonstrating high discriminative accuracy with an Area Under the Curve (AUC) of 0.974. 
+
+Furthermore, a Receiver Operating Characteristic (ROC) analysis was conducted to evaluate the discriminative capability of the new class head across all possible thresholds.   
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 15 of 18
+
+As shown in Figure 6(b), the model exhibits excellent classification performance for the incremental category, achieving an Area Under the Curve (AUC) of 0.974. Based on these quantitative findings, the optimal threshold of τ = 0.75 was established and utilized for all subsequent incremental learning evaluations. 
+
+4.6. Qualitative Analysis 
+
+To provide visual insight into the model’s incremental learning capability, we present the qualitative segmentation results in Figure 7. We visualize the predictions across three model capacities (PIDNet-S, M, and L) as the model sequentially learns four new classes: Bus (Step 16), Train (Step 17), Motorcycle (Step 18), and Bicycle (Step 19).             
+
+> Figure 7. Qualitative evolution of incremental segmentation. The rows correspond to different model capacities (PIDNet-S, M, and L). The columns display the model’s predictions at each incre-mental step: Step 1 (Base 15 classes), Step 2 (+Bus), Step 3 (+Train), Step 4 (+Motorcycle), and Step 5(+Bicycle). The final column shows the original Input Image and the Ground Truth (GT). Note how the models successfully segment the new "Bicycle" class (Step 5) while preserving the boundaries of the "Person" and "Car" classes learned in Step 1.
+
+As observed in the figure, our method demonstrates high plasticity throughout the incremental process. At Step 2, the model successfully identifies the “Bus” (highlighted in dark blue), effectively distinguishing it from the surrounding traffic. As the learning progresses to Step 5, the model accurately segments the “Bicycle” (dark red). This is a particularly challenging scenario, as bicycles possess thin structural elements that often visually overlap with the “Person” class. Despite this complexity, our method generates sharp boundaries for the new objects without eroding the segmentation quality of the previously learned categories.   
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 16 of 18
+
+Equally important is the stability of the base classes. In standard fine-tuning ap-proaches, the introduction of new categories often leads to catastrophic forgetting, where the model begins to confuse previously learned textures with the new object as shown in Figure 1. However, looking at the progression from Step 1 to Step 5, the segmentation masks for base classes such as “Vegetation,” “Car,” and “Person” remain consistent and distinct. Comparing the model variants, the PIDNet-M backbone (middle row) exhibits the most stable boundaries. While PIDNet-S misses some fine details on the bicycle and PIDNet-L introduces slight noise in the background, PIDNet-M maintains a clean separa-tion between the new bicycle class and the existing person class, visually confirming our quantitative finding that the medium-capacity backbone offers the optimal balance for this task. 
+
+# 5. Discussion 
+
+The results of this study provide critical insights into the stability plasticity trade off within real-time semantic segmentation architectures. This study proposes a novel replay free continual learning framework. It directly addresses the critical challenge of catastrophic forgetting in dynamic environments. The methodology leverages the parallel architecture of the PIDNet model. It structurally isolates the learning of novel semantic categories from previously retained knowledge. The ablation analysis explicitly demon-strates the optimal design. Attaching a lightweight unfrozen parallel branch exclusively to the high frequency outputs of the frozen Derivative (D) branch provides the best bal-ance between plasticity and stability. This allows the model to acquire new spatial rep-resentations without corrupting the broader contextual understanding maintained by the Proportional (P) and Integral (I) branches. Furthermore, the capacity analysis reveals an important dynamic regarding model scaling in continual learning. It is generally assumed that larger models inherently per-form better. However, the findings indicate that the medium capacity backbone (PIDNet-M) consistently outperforms the larger variant (PIDNet-L) across sequential incremental steps. Oversized networks may suffer from overfitting to the limited data of the novel classes. This leads to unnecessary disruption of the frozen base weights. The medium backbone provides the optimal structural balance. It possesses sufficient capacity to learn complex new features while maintaining the rigidity required to resist catastrophic inter-ference. Comprehensive evaluations in a class incremental learning scenario reveal highly ef-fective results. The PIDNet-M model successfully learned new classes without overwrit-ing previously retained knowledge. It maintained a robust overall mIoU of 71.87%. Most importantly, the framework preserved a high base class stability of 77.38%. The proposed methodology achieves these metrics without relying on computationally expensive multi scale feature distillation or memory intensive data replay. Conventional approaches are fundamentally designed for offline and high capacity models like ResNet 101. This intro-duces significant computational overhead. By structurally isolating the learning process, the computational footprint remains minimal. This successfully bridges the gap between advanced continual learning strategies and the strict latency requirements of real-time seg-mentation models. Despite the strong results, there are still several directions worth exploring in future work. First, the proposed framework is currently built on top of a convolutional dual resolution backbone, where the clear separation between the Proportional, Integral, and Derivative branches makes it natural to attach a parallel boundary branch. A logical next step is to test whether the same idea works beyond this single type of architecture. Trans-former based segmentation models, and other dense prediction tasks such as object detec-  
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 17 of 18
+
+tion, also rely on a mix of contextual and high frequency features. It would be valuable to study how a frozen backbone paired with a small unfrozen branch can be applied to attention based encoders, or to detection heads that need to keep learning new object cat-egories over time. This would help confirm whether the stability and plasticity benefits seen here come from a general design principle, rather than from something specific to PIDNet. Second, the current evaluation is mainly focused on driving datasets such as Cityscapes, where the classes and scenes are closely tied to vehicles, roads, and urban environments. Early experiments on Pascal VOC show that the method can transfer in principle, but the accuracy on more diverse classes is not yet as strong as the in domain results. Future work will therefore aim to extend the method to more general and varied segmentation datasets. This includes looking at how the boundary cues from the Deriva-tive branch behave when new classes are non-rigid, deformable, or visually very different from the base classes, and finding ways to keep the parallel branch lightweight while still handling the wider range of objects needed for use beyond autonomous driving. 
+
+# 6. Conclusion 
+
+In conclusion, PILOT successfully bridges the gap between advanced continual learn-ing strategies and the strict latency constraints of lightweight segmentation models. Un-like traditional frameworks that rely on heavy offline architectures, the proposed method preserves high frame rates and low inference latency. These characteristics are absolutely essential for real-time processing. It offers a highly efficient and deployment ready solu-tion for real world autonomous driving systems. For everyday applications, this means autonomous vehicles, delivery robots, and smart city cameras can continuously learn to recognize new things on the fly, including novel vehicles and temporary road barriers. By maintaining real-time perception speeds while entirely eliminating the need for costly of-fline retraining, this framework ensures that autonomous systems can safely and instantly adapt to rapidly changing environments. 
+
+Author Contributions: Conceptualization, Y.Z. and P.S.; methodology, Y.Z. and P.S.; software, Y.Z.; validation, Y.Z.; formal analysis, Y.Z. and P.S.; investigation, Y.Z.; resources, P.S. and Y.L.; data cu-ration, Y.Z.; writing—original draft preparation, Y.Z.; writing—review and editing, Y.Z., P.S., T.Y. and Y.L.; visualization, Y.Z.; supervision, P.S., T.Y. and Y.L.; project administration, Y.L.; funding acquisition, Y.L. All authors have read and agreed to the published version of the manuscript. 
+
+Funding: This research was funded by the Cyber-CARE Center. 
+
+Institutional Review Board Statement: Not applicable. 
+
+Informed Consent Statement: Not applicable. 
+
+Data Availability Statement: The Cityscapes dataset used in this study is publicly available at https: //www.cityscapes-dataset.com/. The source code implementing our PILOT framework is available at https://github.com/U1overground/PILOT. 
+
+Conflicts of Interest: The authors declare no conflicts of interest. 
+
+# References 
+
+1. Long, J.; Shelhamer, E.; Darrell, T. Fully Convolutional Networks for Semantic Segmentation. In Proceedings of the Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2015, pp. 3431–3440. 2. Cordts, M.; Omran, M.; Ramos, S.; Rehfeld, T.; Enzweiler, M.; Benenson, R.; Franke, U.; Roth, S.; Schiele, B. The Cityscapes Dataset for Semantic Urban Scene Understanding. In Proceedings of the Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2016, pp. 3213–3223. 3. Parisi, G.I.; Kemker, R.; Part, J.L.; Kanan, C.; Wermter, S. Continual Lifelong Learning with Neural Networks: A Review. Neural Networks 2019 , 113 , 54–71.   
+
+> https://doi.org/10.3390/1010000 Version May 27, 2026 submitted to Journal Not Specified 18 of 18
+
+4. Rebuffi, S.A.; Kolesnikov, A.; Sperl, G.; Lampert, C.H. iCaRL: Incremental Classifier and Representation Learning. In Proceed-ings of the Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2017, pp. 2001–2010. 5. McCloskey, M.; Cohen, N.J. Catastrophic interference in connectionist networks: The sequential learning problem. Psychology of learning and motivation 1989 , 24 , 109–165. 6. French, R.M. Catastrophic forgetting in connectionist networks. Trends in cognitive sciences 1999 , 3, 128–135. 7. Kirkpatrick, J.; Pascanu, R.; Rabinowitz, N.; Veness, J.; Desjardins, G.; Rusu, A.A.; Milan, K.; Quan, J.; Ramalho, T.; Grabska-Barwinska, A.; et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the national academy of sciences 2017 ,
+
+114 , 3521–3526. 8. Li, Z.; Hoiem, D. Learning without forgetting. IEEE transactions on pattern analysis and machine intelligence 2017 , 40 , 2935–2947. 9. Cermelli, F.; Mancini, M.; Rota Bulò, S.; Ricci, E.; Caputo, B. Modeling the Background for Incremental Learning in Semantic Segmentation. In Proceedings of the CVPR, 2020. 10. Tan, G.; Jin, Y. A Semantic Segmentation Method for Road Sensing Images Based on an Improved PIDNet Model. Electronics 
+
+2025 , 14 . https://doi.org/10.3390/electronics14050871. 11. Paszke, A.; Chaurasia, A.; Kim, S.; Culurciello, E. ENet: A Deep Neural Network Architecture for Real-Time Semantic Segmen-tation. In Proceedings of the arXiv preprint arXiv:1606.02147, 2016. 12. Zhao, H.; Qi, X.; Shen, X.; Shi, J.; Jia, J. ICNet for Real-Time Semantic Segmentation on High-Resolution Images. In Proceedings of the ECCV, 2018. 13. Yu, C.; Wang, J.; Peng, C.; Gao, C.; Yu, G.; Sang, N. BiSeNet: Bilateral Segmentation Network for Real-Time Semantic Segmenta-tion. In Proceedings of the ECCV, 2018. 14. Poudel, R.P.; Liwicki, S.; Cipolla, R. Fast-SCNN: Fast Semantic Segmentation Network. In Proceedings of the BMVC, 2019. 15. Fan, M.; Lai, S.; Huang, J.; Wei, X.; Chai, Z.; Luo, J.; Wei, X. Rethinking BiSeNet For Real-time Semantic Segmentation. In Proceedings of the CVPR, 2021. 16. Hong, Y.; Pan, H.; Sun, W.; Jia, Y. Deep Dual-resolution Networks for Real-time and Accurate Semantic Segmentation of Road Scenes. In Proceedings of the CVPR, 2021. 17. Xu, J.; Zhang, X.; Jin, X.; Chen, Y.; Ye, X. PIDNet: A Real-time Semantic Segmentation Network Inspired from PID Control. In Proceedings of the CVPR, 2023. 18. Wang, H.; Wang, Y.; Zhang, Q.; Xiang, S.; Pan, C. Gated Convolutional Neural Network for Semantic Segmentation in High-Resolution Images. In Proceedings of the ICCV, 2019. 19. Kirillov, A.; Wu, Y.; He, K.; Girshick, R. PointRend: Image Segmentation as Rendering. In Proceedings of the CVPR, 2020. 20. Ai, Y.; Sun, Q.; Xi, Z.; Li, N.; Dong, J.; Wang, X. Stereo SLAM in Dynamic Environments Using Semantic Segmentation. Electron-ics 2023 , 12 . https://doi.org/10.3390/electronics12143112. 21. Michieli, U.; Zanuttigh, P. Incremental Learning Techniques for Semantic Segmentation. In Proceedings of the ICCV, 2019. 22. Douillard, A.; Chen, Y.; Dapogny, A.; Cord, M. PLOP: Learning without Forgetting for Continual Semantic Segmentation. In Proceedings of the CVPR, 2021. 23. Park, S.H.; Noh, J.Y.; Ham, B. SSUL: Semantic Segmentation with Unknown Labels for Exemplar-based Class-Incremental Learning. In Proceedings of the NeurIPS, 2021. 24. Yi, J.; Wen, Q.; Luo, P.; Ye, F. Inherit with Distillation and Evolve with Contrast: Exploring Class-Incremental Semantic Segmen-tation without Exemplar Memory. In Proceedings of the CVPR, 2022. 25. He, K.; Zhang, X.; Ren, S.; Sun, J. Deep Residual Learning for Image Recognition. In Proceedings of the CVPR, 2016. 26. Chen, L.C.; Zhu, Y.; Papandreou, G.; Schroff, F.; Adam, H. Encoder-Decoder with Atrous Separable Convolution for Semantic Image Segmentation. In Proceedings of the ECCV, 2018. 27. Zhang, C.; Wang, L.; Zhang, J. Representation Compensation Networks for Continual Semantic Segmentation. In Proceedings of the CVPR, 2022. 28. Zhou, H.; Kim, D.; Peng, X.; Lee, T. Uncertainty-Aware Contrastive Distillation for Incremental Semantic Segmentation. In Proceedings of the CVPR, 2023. 29. Goswami, D.; Schuster, R.; van de Weijer, J.; Stricker, D. Attribution-aware Weight Transfer: A Warm-Start Initialization for Class-Incremental Semantic Segmentation. In Proceedings of the Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV), 2023, pp. 3195–3204. 30. Baek, D.; Oh, Y.; Lee, S.; Lee, J.; Ham, B. Decomposed Knowledge Distillation for Class-Incremental Semantic Segmentation. In Proceedings of the Advances in Neural Information Processing Systems (NeurIPS), 2022. 31. Hindel, J.; Cattaneo, D.; Valada, A. Taxonomy-Aware Continual Semantic Segmentation in Hyperbolic Spaces for Open-World Perception. arXiv preprint arXiv:2407.18145 2024 .

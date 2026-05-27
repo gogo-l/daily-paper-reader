@@ -1,0 +1,648 @@
+Title: Grow-Prune-Freeze Networks: Adaptive     Continual Learning Technique for Olfactory Navigation
+
+URL Source: https://arxiv.org/pdf/2605.25170v1
+
+Published Time: Tue, 26 May 2026 02:42:48 GMT
+
+Number of Pages: 27
+
+Markdown Content:
+Cover Page 
+
+# Grow-Prune-Freeze Networks: Adaptive & Continual Learning Technique for Olfactory Navigation 
+
+# Kordel K. France, Ovidiu Daescu 
+
+Keywords: olfaction, policy gradient, temporal difference learning, robotics, world models 
+
+# Summary 
+
+Training data for olfaction is scattered through disparate, non-standardized datasets that limit the ability to build representative world models. Olfactory navigation is a highly dynamic and non-stationary task that benefits from real-time continual learning. We introduce an adap-tive framework called Grow-Prune-Freeze (GPF) networks that enable an agent to continually learn through growing, pruning, and freezing early layers of its policy in response to world complexity. Grounding GPFs in non-linear random matrix theory, we show that the work of Pennington & Worah (2017) can be extended from single hidden layers to n-layer continual-learning models, and that eigenvalue composition of network weights is preserved as succes-sive layers are added. We show that GPFs based on Expected SARSA achieve a 94% success rate on turbulent plume navigation—a partially observable, non-stationary task representative of the “big world” challenges that motivate adaptive learning in robotics—and provide sup-porting methodology for applying GPFs in other world models. Further experiments amount evidence that GPFs may generalize well to other machine learning tasks such as reinforcement learning in Atari, image classification, and autoregressive language models. We open source all code and data to encourage improvements on and more research in olfactory robotics. 
+
+# Contribution(s) 
+
+1. A framework for adaptive and continual reinforcement learning agents operating in partially observable, non-stationary environments and grounded in random matrix theory (RMT). 
+
+Context: We show that foundational pruning mechanisms from LeCun et al. (1989) can be used to improve policy gradient methods whilst simultaneously growing a multi-layer perceptron and freezing earlier layers to hedge against catastrophic forgetting. 2. RMT analysis showing spectral eigenvalue invariance for indefinitely adapting models, pro-viding a mechanism for resource-efficient learning in robotics that enables an agent to allo-cate representational capacity where environmental signals are complex or changing. 
+
+Context: Work by Pennington & Worah (2017) and Martin & Mahoney (2021) show that spectral invariance among eigenvalues of weight matrices can be preserved among neural networks with a single hidden layer. We extend their methods to show that their assump-tions support neural networks with multiple hidden layers. 3. Tuning criterion for introduced parameters to stabilize continual learning with GPFs and an Expected SARSA policy. 
+
+Context: Prior work by France et al. (2026) highlights the potential of Expected SARSA in olfactory navigation and we show that their findings extrapolate well to our GPF framework. 4. Empirical demonstration that GPFs achieve 98% source-finding success on a partially ob-servable olfactory navigation task, generalizing to 94% on held-out trials across diverse random initializations and notable performance on non-olfactory tasks. 
+
+Context: GPFs were specifically designed to solve a problem in partially observable olfac-tory tasks. However, we demonstrate our methods over multiple tasks to build support for generalization of GPFs in other environments, but do not claim state-of-the-art performance across all benchmarks. 
+
+> arXiv:2605.25170v1 [cs.LG] 24 May 2026
+
+# Grow-Prune-Freeze Networks: Adaptive & Continual Learning Technique for Olfactory Navigation 
+
+# Kordel K. France 1, Ovidiu Daescu 1
+
+kordel.france@utdallas.edu, ovidiu.daescu@utdallas.edu 
+
+> 1
+
+Department of Computer Science, University of Texas at Dallas, USA 
+
+# Abstract 
+
+Training data for olfaction is scattered through disparate, non-standardized datasets that limit the ability to build representative world models. Olfactory navigation is a highly dynamic and non-stationary task that benefits from real-time continual learning. We in-troduce an adaptive framework called Grow-Prune-Freeze (GPF) networks that enable an agent to continually learn through growing, pruning, and freezing early layers of its policy in response to world complexity. Grounding GPFs in non-linear random ma-trix theory, we show that the work of Pennington & Worah (2017) can be extended from single hidden layers to n-layer continual-learning models, and that eigenvalue composi-tion of network weights is preserved as successive layers are added. We show that GPFs based on Expected SARSA achieve a 94% success rate on turbulent plume navigation— a partially observable, non-stationary task representative of the “big world” challenges that motivate adaptive learning in robotics—and provide supporting methodology for applying GPFs in other world models. Further experiments amount evidence that GPFs may generalize well to other machine learning tasks such as reinforcement learning in Atari, image classification, and autoregressive language models. We open source all code and data to encourage improvements on and more research in olfactory robotics. 
+
+# 1 Introduction 
+
+Modern deep learning architectures are typically static, limiting their applicability in dynamic and non-stationary tasks. In addition, many of these modern models are based on transformers trained on 
+
+Figure 1: Conceptualization of a Grow-Prune-Freeze (GPF) neural network. 1petabytes of internet data. The luxury of big data does not exist among the unstandardized and data-starved world of olfaction which discourages work in representative world models. Furthermore, molecular dynamics cause an environment to constantly evolve, and some environments are more dynamic than others which correspondingly warrant more compute in order to correlate molecular patterns within the air. Tasks like olfactory navigation significantly benefit from runtime learning. As a result, we became drawn toward machine learning methods that could continuously update their own priors based on batches of observed data, and adjust their own architectures according to the observed data complexity. These desires led us to develop Grow-Prune-Freeze (GPF) networks ,grounded in known work from random matrix theory and scaled from first-principles mathematics. Our motivation is to develop a useful method for robotic runtime learning in partially observable world models, with a specific emphasis on olfactory navigation: a robot must locate a chemical source by following a turbulent odor plume in sparse-signal conditions using an edge-deployable policy-gradient model. Growing layer-by-layer enables a network to adapt capacity to plume com-plexity, pruning keeps the model compact for onboard inference, and freezing preserves temporal dynamics learned from early plume encounters to hedge against catastrophic forgetting. We selected foundational temporal difference learning and pruning methods to emphasize that the performance observed in our experiments is credited to GPFs rather than an exotic learning architecture. In fur-ther support of GPFs as a generalized method, we elaborate on their intuitive extension to other learning tasks in the Supplementary Material. 
+
+# 2 Grow-Prune-Freeze Networks 
+
+Continual learning requires adapting indefinitely to non-stationary streams while maintaining stabil-ity (retention of prior knowledge) and plasticity (ability to learn new tasks). Standard deep learning suffers catastrophic plasticity loss in continual settings as shown by Dohare et al. (2024), and while adaptive pruning methods such as those in Lasby et al. (2024); Frankle & Carbin (2019) show promise, they lack theoretical grounding for long-term spectral stability. 
+
+Grow-Prune-Freeze neural networks offer a framework that automatically (1) grows hidden layers when validation loss plateaus; (2) prunes “soft” neurons according to temporal belief values; and (3) freezes stable layers to prevent forgetting while preserving plasticity. We root GPFs in random matrix theory (RMT) and analogize the mathematics to theories of deep learning architectures. Specifically, we show that the work of Pennington & Worah (2017) can be extended from single-layer neural networks to n-layer continuous-learning deep neural networks that incrementally add layers as they learn while preserving eigenvalue spectrality. Through this, we also explore how a GPF’s low-rank perturbations maintain Marchenko-Pastur spectral densities with the appropriate shape, ensuring dynamical isometry and gradient propagation. We then show that principles from Tao (2012); Martin & Mahoney (2021) hold as a result. The final model partially addresses the three plasticity correlates identified by Dohare et al. (2024): (1) weight magnitude growth, (2) dead units, and (3) effective rank collapse. 
+
+2.1 Relevant Background 
+
+Random matrix theory is the bedrock from which GPFs were inspired and built. Pennington & Worah (2017) derive spectral densities for non-linear activations in basic neural networks with a single hidden layer, and Cohen-Karlik et al. (2022) link low-rank bias to generalization. Martin & Mahoney (2021) cover RMT as it pertains to deep learning by showing how model width and 
+
+iid weight assumptions can be checked and controlled. We extend these works to non-equilibrium ensembles induced through the the continual adding of layers in multilayer perceptrons. 
+
+Dynamic Sparse Training (DST) by Lasby et al. (2024) alternates pruning and regrowth of neural networks, while MorphNet from Gordon et al. (2018) optimizes sparsity via regularization. Growing methods like DEN from Yoon et al. (2018) add neurons according to loss plateaus. General prin-2ciples for constructing adaptive neural networks are recently enumerated by Mirzadeh et al. (2022) and backed by empirical support on recent model architectures. 
+
+Elastic Weight Consolidation from Kirkpatrick et al. (2017) highlights weight-specific penalization during learning; Progressive Nets by Rusu et al. (2016; 2022) expand layers laterally to support additional inputs. Dohare et al. (2024) demonstrate plasticity loss across optimizers and propose continual backpropagation (CBP) via selective reinitialization. Additional work from Li & Ji (2021) and Lyle et al. (2023) denote other challenges in building adaptive architectures that continually learn. GPFs build on top of principles established in each of these works by using random matrix theory as the grounding ideology and Columnar Constructive Netwroks established by Javed et al. (2023) as the inspiration for continually growing layers. Fehring et al. (2025) show grow-and-prune methods may be empirically effective but lack theo-retical characterization of how structural adaptation affects network dynamics. Magnitude-based pruning from LeCun et al. (1989), the Lottery Ticket Hypothesis by Frankle & Carbin (2019), and parameter freezing from Foster et al. (2017) all give supporting evidence that sparse, stabilized net-works preserve critical knowledge. In GPFs , pruning and freezing are integrated with growth to form a continuous cycle of adaptive architecture. We select LeCun’s magnitude-based pruning as the specific method for our evaluation. 
+
+# 3 Theoretical Analysis 
+
+The GPF framework assumes a very simple neural network to start: an input layer, an output layer, and a single hidden layer. Consider a feedforward network with Lt = 1 layer at time t = 0 ,input dimension n0, hidden widths n1, . . . , n Lt−1, and output nLt . Weights W ℓ ∈ Rnℓ×nℓ−1 are initialized from Kaiming distribution. GPFs grow depth only as their environment demands it, preserving the eigenvalue spectrality of previously learned weights. To facilitate this, we define a threshold ωl within the validation loss. As it learns, if the network experiences no change in loss above this threshold, a new hidden layer ℓi is added, where i > 0, i ∈
+
+R. At time k, there is a “patience” variable ρk such that there must be ρk epochs with validation loss all below this threshold in order to add a new layer. The above can be denoted as follows: Add layer ℓi = Lt + 1 if validation loss Lval satisfies: 
+
+L(t−k) 
+
+> val
+
+− L (t) 
+
+> val
+
+< ω l, ∀i ∈ [t − k + 1 , t ], (1) where ωl > 0 is the stagnation threshold. Each neuron’s input weight wℓi,j has belief hℓi,j ∈ [0 , 1) . This belief value is such that if the absolute value of a neuron’s weight is consistently above a positive value ωw (or that neuron is constantly fired) for multiple successive epochs, then it is incremented, and thus becomes “hardened”. New layers initialize nLt+1 = nLt neurons with h(Lt+1)  
+
+> i,j
+
+= 0 . We perform network updates according to the following: 
+
+hℓi,j (t) = hℓi,j (t − 1) + ηh · 1 |wℓi,j (t)| > m , (2) where ηh = 1 /(kmax ) normalizes to approach but never reach 1 according to the current training epoch kmax . Hardened neurons are asymptotically closer to 1 and adverse to pruning. A belief value of 1 is associated with a neuron considered as “frozen”, which we discuss shortly. Neurons with persistently high belief are hardened and resistant to pruning. We follow the magnitude-based pruning technique established by LeCun et al. (1989) with the exception that a layer’s belief values protect useful low-magnitude weights that encode sparse but relevant patterns as shown by Frankle & Carbin (2019). Parameter ωp is a layer-wise pruning threshold. After at least ρb epochs have occurred since the addition of layer ℓi, all layers ℓ0 − ℓi−1 prior to the one just added will be pruned such that all neurons within said layers containing belief values below some threshold of |ωp| will be removed from the network, or their weights set to zero. 3Succinctly, we prune neuron j in layer ℓi < ℓ k if: 
+
+hℓi,j < ω p and |wℓi,j | < d i. (3) Newly added layers start with neurons whose belief values each have h = 0 and are exempt from pruning until ρb patience epochs have elapsed; the grow-prune cycle continues indefinitely. Another set of tunable parameters are ρf and ωf , where ρf < k max and ωf ∈ [0 , 1] . We freeze layer 
+
+ℓi if, for a patience of ρf epochs, 100 .0 ∗ ωf % weights satisfy: 
+
+|wℓi,j (kmax − q) − wℓi,j (kmax )| < ω f , ∀q ∈ [kmax − ρf + 1 , k max ]. (4) Freezing follows methods given by Dohare et al. (2024) to prevent forgetting while maintaining plasticity in newer layers. Optionally, batch size may decay as bt = b0 · exp( −ηbs L(t) 
+
+> val
+
+) to account for evolving network size and convergence rate as shown by Adachi et al. (2024). As we soon show, freezing stable layers also ensures that the spectral distribution of the Gram matrix is preserved. 
+
+3.1 Training GPFs 
+
+As the network begins training, it does not know how many layers it will eventually add. One may cap the layer count, but we argue that a properly developed GPF will cease growing layers at the appropriate time if designed correctly. A continually learning model may, in some instances, maintain the same neuron count at time t0 as at time tn, but with more layers and increased sparsity. We desire sparse models that grow in depth but necessarily and sufficiently parameterize themselves to the data they perceive. In this manner, the concepts of training and testing being two separate processes are foregone. For GPFs , feedback is directly incorporated according to its experience or training data and there is no separate test phase. We design GPFs to be employed in scenarios where there is too little data for conventional training mechanisms and/or where the data may contain temporal patterns that change over time according to new dynamics introduced into the environment, as is the case with plume tracking in olfactory robotics. 
+
+3.2 Analysis via Random Matrix Theory 
+
+Pennington & Worah (2017) showed that the distribution of eigenvalues from the data covariance matrix is idempotent after passing through a single nonlinear layer of a neural network. We aim to show that this principle extrapolates to any number of layers L ∈ [1 , ∞] as long as (1) stable depth-wise growth occurs within the network according to Javed et al. (2023), (2) pruning is done according to the Hessian approximation in LeCun et al. (1989), and (3) layers are frozen at the appropriate time to preserve pruned knowledge. We show how principles from Schoenholz et al. (2016) govern the limit for how deep a network can be given a set of hyperparameters, and how decisions on growth can occur based on their assumptions. We follow the notation of Pennington & Worah (2017), reviewed in full in Supplementary Sec-tion 10. The core object at each layer ℓ is the empirical Gram matrix M (ℓ) = 1 
+
+> m
+
+[Y (ℓ)]⊤Y (ℓ) where 
+
+Y (ℓ) = f (W (ℓ)Y (ℓ−1) ), and its Stieltjes transform s(ℓ)(z) = 1 
+
+> m
+
+Tr(( M (ℓ) − zI )−1).
+
+We extend the above to the multi-layer case. For a network with L layers and weight matrices 
+
+W (1) , . . . , W (L), define the activation recursion Z(ℓ) = W (ℓ)Y (ℓ−1) , Y (ℓ) = f (Z(ℓ)), Y (0) = X,under the assumptions established by Pennington & Worah (2017) (highlighted in Supplementary Section 10). The layer-ℓ Gram matrix and Stieltjes transform are: 
+
+M (ℓ) = 1
+
+m [Y (ℓ)]⊤Y (ℓ), (5) 
+
+s(ℓ)(z) = 1
+
+m Tr  (M (ℓ) − zI )−1. (6) 4The nonlinearity of activation functions precludes many principles from random matrix theory ap-plying to neural networks. While many of the tools for assessing moments and spectral densities from matrix theory still apply, we show how these tools can be further employed to analyze space folds with ReLU activations (and friends) as demonstrated by Lewandowski et al. (2025). Let Ψℓ be an activation function that acts as a nonlinear spectral transformer , encoding how a random layer reshapes the spectral statistics of the preceding layer. Explicit expressions for Ψℓ
+
+depend on integrals involving the activation ψ ∈ Ψ and may reduce to polynomial or rational forms for common nonlinearities. Under the moments-method derivation (counting non-linear random walks at each layer) one obtains, for each ℓ, a deterministic operator Ψℓ that enables Equation 6 to be written as 
+
+s(ℓ)(z) = Ψ ℓ
+
+ s(ℓ−1) (z), z 
+
+for every z ∈ C \ R, where Ψℓ depends on the activation ψ, layer variance σ2 
+
+> ℓ
+
+. Thus, when depth is increased by adding layers, the transform is updated by composition of these operators. We can define the depth-L composition operator 
+
+Ψ(L:1) = Ψ L ◦ ΨL−1 ◦ · · · ◦ Ψ1,
+
+so that the Stieltjes transform at depth L is succinctly written as 
+
+s(L)(z) = Ψ (L:1)  s(0) (z), z . (7) We formalize the conditions for convergence of GPFs at any layer depth limit via Theorem 1. 
+
+Theorem 1 (Depth-Limit under Composition) Suppose the layers are homogeneous such that 
+
+ψℓ = Ψ ∀ψ ∈ Ψ. Assume there exists an open set U ⊂ C \ R containing the spectral support of M (ℓ) for all ℓ, and a Banach space (S, ∥ · ∥ ) of analytic transforms on U such that: 1. Condition 1: Ψ : S × U → S is well-defined and analytic in its first argument for each fixed 
+
+z ∈ U .2. Condition 2: For each fixed z ∈ U , the Fréchet derivative DsΨ( s, z ) exists and there is a constant 
+
+ρ(z) < 1 with 
+
+sup 
+
+> s∈S
+
+∥DsΨ( s, z )∥ ≤ ρ(z) < 1.
+
+Then for every initial Stieltjes transform s(0) ∈ S, the iterates {s(L)}L≥0 defined by s(L) =Ψ◦L(s(0) , ·) converge in S to the unique fixed point s⋆(·) that satisfies s⋆(z) = Ψ( s⋆(z), z ) for all 
+
+z ∈ U . Consequently, the empirical spectral distribution of M (L) converges (as m, n 0, . . . , n L →∞, jointly with L → ∞ ) to the deterministic law given by the Stieltjes transform s⋆.
+
+Freezing layers locks spectral distributions into their ideal shape to further enable convergence. Our analysis assumes layer homogeneity, with new layers always initialized at identical width d. Formal convergence results along with further remarks on Theorem 1 and ReLU spectral analysis appear in Supplementary Sections 11 and 12. 
+
+# 4 Experiments 
+
+We evaluate the GPFs on olfactory navigation - the problem of a robot localizing an odor source by following a turbulent plume back to its origin. This task is representative of the class of sparse-reward, partially observable navigation problems that motivate runtime learning algorithms in big worlds: the signal is intermittent, the environment is non-stationary, and the appropriate behavioral strategy depends on context that must be inferred from current state and recent sensory history. 5Figure 2: Q-learning vs Expected SARSA in Olfactory Navigation 
+
+4.1 Plume Simulator 
+
+We simulate the plume using a Farrell–Murlis filament model Farrell et al. (2002) in a 20 m ×
+
+20 m two-dimensional domain at 10 Hz. The source emits filaments at a Poisson-sampled λ =5 filaments/s from a randomly chosen upwind position. Filaments advect with a coupled Ornstein– Uhlenbeck wind field with velocities of 1.0m/s, gusting durations of 2.0m/s, and spread via Gaussian diffusion rate of 0.05 m2/s Total concentration is clamped to 1.0 and corrupted by additive noise 
+
+σn = 10 −3. Full details on the simulator construction are enumerated in Supplementary Section 14. 
+
+4.2 Agent and Sensor Model 
+
+The agent carries a bilateral antenna pair ( 10 cm inter-antenna separation) and selects from six dis-crete actions: surge forward , turn ±15 ◦, turn around 180 ◦, and cast ±30 ◦, each followed by a 50 cm forward step. Olfactory inertial odometry (OIO) established by France & Daescu (2025) is used to fuse inertial and olfactory states. The antennae are modeled as fast-sampling Sensirion MICS-6814 metal oxide sensors building on those models established by recent olfactory navigation work from Dennler et al. (2024) and France et al. (2026). Episodes terminate when the agent moves within 50 cm of the source or after 1200 steps ( 100 s). Initial placement of the odor source is 3–10 m down-wind with ±30 ◦ heading noise. Sensor observations are discretized into a 22 -dimensional state: seven concentration bins (blank + six log-spaced levels above σn) per antenna and eight wind-direction octants relative to heading, giving 7×7×8 = 392 unique states. Further details on state-and action-space tokenization can be observed in Section 14 of the Supplementary Material. 
+
+4.3 Expected SARSA Policy 
+
+We build off the work established by France & Sheppard (2023) and France et al. (2026) showing the advantage Expected SARSA can provide against greedy Q-learning in partially observable en-vironments with sparse rewards. We find that a policy that seeks the maximum reward may induce 6lossy actions when rewards are sparse and not fully observable; a policy that seeks the average re-ward for a given action set supports robustness against eddy currents and blanks in a plume. Figure 2 illustrates this comparison between Q-learning and Expected SARSA agent policies. Furthering this hypothesis, we select the latter as the navigation policy for both a canonical agent and GPF agent. The canonical agent contains a single hidden layer to evaluate as a control against the GPF agent. Both agents are identical in architecture otherwise. The Q-function is represented by a simple dense MLP with ReLU activations. The initial architecture is 22 → 64 → 6 (one hidden layer of width 64 ) trained with the Expected SARSA update rule under an ε-greedy policy, with ε
+
+decayed from 1.0 to 0.05 multiplicatively by 0.9995 per episode. We select the Adam optimizer with learning rate α = 1 e−3, and a discount factor γ = 0 .99 . We keep the neural network basic for two reasons: (1) our intent is to evaluate GPF methodology, not an exotic network architecture, and (2) a simple network ensures maximum exportability to and reproducibility in various model interpreters required by edge robotics. The belief-value pruning threshold is set as ωp = 10 −6.The per-step reward rt for both agents combines a constant time penalty of rtime = −0.01 with event signals revent of +100 , +1 .0, and −0.05 for success, whiff, and prolonged blanks > 2 s, respectively. A potential-based distance-shaping term rshape (Ng et al., 1999) is delegated to provide dense gradient signal without altering the optimal policy. In culmination of the above, the final reward function is represented as rt = rtime + revent + rshape . All experiments use seed 42 for the environment and seed 43 for the agent. Training runs for 4,500 episodes with evaluation every 
+
+500 episodes over 200 held-out episodes. The highest-performing checkpoint is retained. Full hyperparameters for all experiments are available in Table 5 of the Supplementary Material. 
+
+# 5 Results 
+
+Figure 3: GPF Expected SARSA training curve on the plume navigation task. The orange dotted lines denote the success rate of the baseline agent; the solid blue line denotes that of the GPF agent. Dashed green lines mark grow events; purple annotations show the fraction of weights retained by each prune pass. The red dot marks the best checkpoint. The bottom access indicates layer count. Figure 3 shows the evaluation success rate throughout training. The agent requires roughly 1000 
+
+episodes to acquire consistent navigating behavior. Three grow events occurred at episodes 2,000 ,
+
+3,000 , and 4,000 . After the first grow-prune pass (retained 47 .9% of weights), the two-layer network temporarily dropped to 91 .5% before recovering to 98 .0% at episode 3,000 - the best checkpoint. Subsequent grows were more aggressive ( 19 .6% and 9.9% weight retention); the four-layer con-figuration peaked at 95 .5% before degrading to 68 .0% by episode 5,000 as ε-decay compounded 7ultra-sparse representation. The full episode-by-episode trajectory is in Table 4 of the Supplemen-tary Material. Extending the episode budget from 50 s to 100 s raised the peak from 94 .5% to 98 .0% 
+
+by eliminating timeout failures on hard initializations where the agent is far downwind or in a weak-signal region, allowing full surge–cast–surge cycles to complete as necessary. Evaluating this checkpoint over 100 independent episodes with distinct random seeds, the agent achieved 94% success in acquiring the source of the plume. All six failures were timeouts in which the agent correctly tracked the plume but exhausted the episode budget - consistent with timing rather than navigational strategy as the remaining failure mode. We do not increase the episode budget because the molecular dynamics of the odors of interest would equalize within the plume beyond the allotted time, leaving no signal for the agent to trace. We leave varying episode budgets according to chemical diversity and plume density as an intuitive avenue for future work. The GPF agent learned a high-performance navigation policy through structured growth of a sparse four-layer Expected SARSA policy that achieved 98% on the training distribution and 94% on held-out random initializations. These results support that the GPF grow-and-prune mechanism success-fully compresses a capable policy into a sparse architecture, and that the 100-second episode budget is sufficient for the agent to develop and execute the multi-phase olfactory search strategies - surge, cast, and loiter - that characterize successful biological plume navigation. To provide support that GPFs generalize beyond olfactory navigation, we perform a battery of exper-iments over standard image classification, Atari reinforcement learning, and autoregressive language modeling problems. These results can be found in Section 17 of the Supplementary Material. 
+
+# 6 Limitations & Ongoing Work 
+
+We built GPFs out of necessity for effective on-the-fly learning specifically for olfactory navigation tasks. While we strived to design a practical and grounded method for temporal difference learning at runtime that also generalizes well to other tasks, we acknowledge that there are still many more empirical evaluations to be done. One intuitive avenue of future work is to extend the simulator to handle more complex gas dynamics, advanced molecular interactions, additional sensor models, and longer wind events. An exhaustive simulator would require a full computational fluid dynamics 
+
+Figure 4: The federated learning mechanism for the Sigma olfaction-vision-language model. 8(CFD) engine. However, we feel that effective olfactory navigation algorithms will not require a granular onboard CFD engine, but rather benefit from a thorough understanding of first-order approximations of molecular dynamics according to the target compound being tracked. Recent work from Jolicoeur-Martineau (2025) and Baek et al. (2026) have highlighted the advantage of refining a latent vector by recursively reasoning through a single hidden layer. In a similar manner, the architectural simplicity of GPFs allows for recursive calls of the same hidden layer - since all layers are identical, a machine learning model need only define one hidden layer, and can just load the ith indexed weights for the ith recursion call. Computational complexity remains the same, but size complexity may be noticeably smaller in very deep architectures that conventionally export layers sequentially. This becomes most prudent on edge devices and robots that need to make decisions with onboard compute. Ongoing research is evaluating the potential of such a mechanism. Federated learning poses as another worthy domain for integration of GPFs . Leveraging de-centralized learning techniques such as those established by Bao et al. (2025) and McMahan et al. (2017) could allow faster and assured convergence of eigenvalue spectra among model weights by enabling multiple GPF models to learn from each other. Such methods could also automate hy-perparameter tuning for pruning and freezing neurons. Initial investigations of federated learning among GPFs in the context of olfaction-vision-language models embedded on mobile devices are currently underway with our work in Scentience (2025) and Sigma from France (2025). A diagram for the Sigma architecture can be found in Figure 4, where each “Local Model” defines a series of multimodal Grow-Prune-Freeze neural networks within a quantized mixture-of-experts model. 
+
+# 7 Conclusion 
+
+GPF networks were developed out of a need for lightweight and adaptable olfactory navigation agents that could be deployed at the edge on real robots. Olfaction does not have the luxuries of other modalities in plentiful and accessible world models. As such, plume navigation tasks signif-icantly benefit from adaptable runtime learning. GPFs and temporal difference learning provide an encouraging solution for this by growing depth according to observed environment complexity, prune low-saliency weights as learning occurs, and freezing stable layers - addressing catastrophic forgetting and plasticity loss while maintaining spectral invariance via Stieltjes composition. On the olfactory navigation task, the 94% source-finding success rate supports GPFs as a practical candidate for adaptive temporal difference learning agents operating in partially observable, non-stationary environments, while also gathering evidence as a continual learning framework for the same. A larger experimental battery across diverse benchmarks and chemical plumes remains the primary open direction to validate GPFs on a more comprehensive level. We hope our work here inspires further research into continual learning and olfactory world models for robotics. All code for the experiments associated with this paper is available at the following URL: https: //github.com/KordelFranceTech/Grow-Prune-Freeze-Neural-Networks 
+
+Broader Impact Statement 
+
+Our work here progresses advanced navigation abilities for robots. Olfaction is still a largely unex-plored modality. It lacks a unifying data standard, ImageNet-scale training datasets, and no formal benchmarks for tasks like scent-based navigation. Maturing olfaction to the degree of its vision and audition counterparts will enable many new capabilities for AI and robotics. However, these will be capabilities for which humanity has little experience in addressing due to the aforementioned obsta-cles. Additionally, enabling AI models to adapt their own architectures and continually learn as we demonstrate here with GPFs could enable unintended behaviors. A GPF model may be deployed against certain criteria and alter itself to learn action sequences adversarial to its original policy. Consequently, we feel our work here adds to the growing call-to-action to establish meaningful multimodal benchmarks for continual learning to ensure adaptive models remain grounded as they explore the world. We strongly encourage the olfactory modality to be included in this benchmark. 9References 
+
+Masaki Adachi, Satoshi Hayakawa, Martin Jørgensen, Xingchen Wan, Vu Nguyen, Harald Ober-hauser, and Michael A. Osborne. Adaptive batch sizes for active learning: A probabilistic numerics approach. In Sanjoy Dasgupta, Stephan Mandt, and Yingzhen Li (eds.), Proceed-ings of The 27th International Conference on Artificial Intelligence and Statistics , volume 238 of Proceedings of Machine Learning Research , pp. 496–504. PMLR, 02–04 May 2024. URL 
+
+https://proceedings.mlr.press/v238/adachi24b.html .Junyeob Baek, Mingyu Jo, Minsu Kim, Mengye Ren, Yoshua Bengio, and Sungjin Ahn. Generative recursive reasoning, 2026. URL https://arxiv.org/abs/2605.19376 .Wenxuan Bao, Ruxi Deng, Ruizhong Qiu, Tianxin Wei, Hanghang Tong, and Jingrui He. Latte: Col-laborative test-time adaptation of vision-language models in federated learning. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 133–143, October 2025. Edo Cohen-Karlik, Avichai Ben David, Nadav Cohen, and Amir Globerson. On the implicit bias of gradient descent for temporal extrapolation. In Gustau Camps-Valls, Francisco J. R. Ruiz, and Isabel Valera (eds.), Proceedings of The 25th International Conference on Artifi-cial Intelligence and Statistics , volume 151 of Proceedings of Machine Learning Research ,pp. 10966–10981. PMLR, 28–30 Mar 2022. URL https://proceedings.mlr.press/ v151/cohen-karlik22a.html .Nik Dennler, Damien Drix, Tom PA Warner, Shavika Rastogi, Cecilia Della Casa, Tobias Ackels, Andreas T Schaefer, André van Schaik, and Michael Schmuker. High-speed odor sensing using miniaturized electronic nose. Science Advances , 10(45):eadp1764, 2024. DOI: 10.1126/sciadv. adp1764. Shibhansh Dohare, J. Fernando Hernandez-Garcia, Qingfeng Lan, Parash Rahman, A. Rupam Mahmood, and Richard S. Sutton. Loss of plasticity in deep continual learning. Nature , 632 (8026):768–774, August 2024. ISSN 1476-4687. DOI: 10.1038/s41586-024-07711-7. URL 
+
+https://doi.org/10.1038/s41586-024-07711-7 .Jay A. Farrell, John Murlis, Xuezhu Long, Wei Li, and Ring T Cardé. Filament-based atmospheric dispersion model to achieve short time-scale structure of odor plumes. Environmental Fluid Me-chanics , 2:143–169, 2002. URL https://api.semanticscholar.org/CorpusID: 17394044 .Lukas Fehring, Marius Lindauer, and Theresa Eimer. Growing with experience: Growing neural networks in deep reinforcement learning, 2025. URL https://arxiv.org/abs/2506. 11706 .D. J. Foster, S. Kale, M. Mohri, and K. Sridharan. Parameter-free online learning via model selec-tion. In Advances in Neural Information Processing Systems , pp. 6022–6032, 2017. Kordel K. France. Scentience sigma. https://apps.apple.com/us/app/ scentience-sigma/id6756134989 , 2025. URL https://apps.apple.com/ us/app/scentience/id6741092923 . Accessed: 2026-03-18. Kordel K. France and Ovidiu Daescu. Olfactory inertial odometry: Methodology for effective robot navigation by scent. In 2025 22nd International Conference on Ubiquitous Robots (UR) , pp. 51–58, 2025. DOI: 10.1109/UR65550.2025.11078037. Kordel K. France and John W. Sheppard. Factored particle swarm optimization for policy co-training in reinforcement learning. In Proceedings of the Genetic and Evolutionary Computa-tion Conference , GECCO ’23, pp. 30–38, New York, NY, USA, 2023. Association for Com-puting Machinery. ISBN 9798400701191. DOI: 10.1145/3583131.3590376. URL https: //doi.org/10.1145/3583131.3590376 .10 Kordel K. France, Ovidiu Daescu, Latifur Khan, and Rohith Peddi. Chasing ghosts: A simulation-to-real olfactory navigation stack with optional vision augmentation. Sensors , 26(9), 2026. ISSN 1424-8220. DOI: 10.3390/s26092849. URL https://www.mdpi.com/1424-8220/26/ 9/2849 .Jonathan Frankle and Michael Carbin. The lottery ticket hypothesis: Finding sparse, trainable neural networks, 2019. URL https://arxiv.org/abs/1803.03635 .Ariel Gordon, Elad Eban, Ofir Nachum, Bo Chen, Hao Wu, Tien-Ju Yang, and Edward Choi. Mor-phnet: Fast & simple resource-constrained structure learning of deep networks. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , June 2018. Khurram Javed, Haseeb Shah, Richard S. Sutton, and Martha White. Scalable real-time recurrent learning using columnar-constructive networks. Journal of Machine Learning Research , 24(256): 1–34, 2023. URL http://jmlr.org/papers/v24/23-0367.html .Alexia Jolicoeur-Martineau. Less is more: Recursive reasoning with tiny networks, 2025. URL 
+
+https://arxiv.org/abs/2510.04871 .Andrej Karpathy. char-rnn. https://github.com/karpathy/char-rnn , 2015. James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, Demis Hass-abis, Claudia Clopath, Dharshan Kumaran, and Raia Hadsell. Overcoming catastrophic forgetting in neural networks. Proceedings of the National Academy of Sciences , 114(13):3521–3526, 2017. DOI: 10.1073/pnas.1611835114. URL https://www.pnas.org/doi/abs/10.1073/ pnas.1611835114 .Mike Lasby, Anna Golubeva, Utku Evci, Mihai Nica, and Yani Ioannou. Dynamic sparse training with structured sparsity. In The Twelfth International Conference on Learning Representations ,2024. URL https://openreview.net/forum?id=kOBkxFRKTA .Yann LeCun, John Denker, and Sara Solla. Optimal brain damage. In D. Touretzky (ed.), Advances in Neural Information Processing Systems , volume 2. Morgan-Kaufmann, 1989. URL https://proceedings.neurips.cc/paper_files/paper/1989/ file/6c9882bbac1c7093bd25041881277658-Paper.pdf .Michal Lewandowski, Hamid Eghbalzadeh, Bernhard Heinzl, Raphael Pisoni, and Bernhard A. Moser. On space folds of reLU neural networks. Transactions on Machine Learning Research ,2025. ISSN 2835-8856. URL https://openreview.net/forum?id=RfFqBXLDQk .Yang Li and Shihao Ji. Neural plasticity networks, 2021. URL https://arxiv.org/abs/ 1908.08118 .Clare Lyle, Zeyu Zheng, Evgenii Nikishin, Bernardo Avila Pires, Razvan Pascanu, and Will Dabney. Understanding plasticity in neural networks. In Proceedings of the 40th International Conference on Machine Learning , ICML’23. JMLR.org, 2023. Charles H. Martin and Michael W. Mahoney. Implicit self-regularization in deep neural networks: Evidence from random matrix theory and implications for learning. Journal of Machine Learning Research , 22(165):1–73, 2021. URL http://jmlr.org/papers/v22/20-410.html .Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Ar-cas. Communication-Efficient Learning of Deep Networks from Decentralized Data. In Aarti Singh and Jerry Zhu (eds.), Proceedings of the 20th International Conference on Artifi-cial Intelligence and Statistics , volume 54 of Proceedings of Machine Learning Research , pp. 1273–1282. PMLR, 20–22 Apr 2017. URL https://proceedings.mlr.press/v54/ mcmahan17a.html .11 Seyed Iman Mirzadeh, Arslan Chaudhry, Dong Yin, Timothy Nguyen, Razvan Pascanu, Dilan Gorur, and Mehrdad Farajtabar. Architecture matters in continual learning, 2022. URL https:// arxiv.org/abs/2202.00275 .Andrew Y. Ng, Daishi Harada, and Stuart J. Russell. Policy invariance under reward transformations: Theory and application to reward shaping. In Proceedings of the Sixteenth International Confer-ence on Machine Learning , ICML ’99, pp. 278–287, San Francisco, CA, USA, 1999. Morgan Kaufmann Publishers Inc. ISBN 1558606122. Team Olmo, :, Allyson Ettinger, Amanda Bertsch, Bailey Kuehl, David Graham, David Heine-man, Dirk Groeneveld, Faeze Brahman, Finbarr Timbers, Hamish Ivison, Jacob Morrison, Jake Poznanski, Kyle Lo, Luca Soldaini, Matt Jordan, Mayee Chen, Michael Noukhovitch, Nathan Lambert, Pete Walsh, Pradeep Dasigi, Robert Berry, Saumya Malik, Saurabh Shah, Scott Geng, Shane Arora, Shashank Gupta, Taira Anderson, Teng Xiao, Tyler Murray, Tyler Romero, Vic-toria Graf, Akari Asai, Akshita Bhagia, Alexander Wettig, Alisa Liu, Aman Rangapur, Chloe Anastasiades, Costa Huang, Dustin Schwenk, Harsh Trivedi, Ian Magnusson, Jaron Lochner, Ji-acheng Liu, Lester James V. Miranda, Maarten Sap, Malia Morgan, Michael Schmitz, Michal Guerquin, Michael Wilson, Regan Huff, Ronan Le Bras, Rui Xin, Rulin Shao, Sam Skjons-berg, Shannon Zejiang Shen, Shuyue Stella Li, Tucker Wilde, Valentina Pyatkin, Will Mer-rill, Yapei Chang, Yuling Gu, Zhiyuan Zeng, Ashish Sabharwal, Luke Zettlemoyer, Pang Wei Koh, Ali Farhadi, Noah A. Smith, and Hannaneh Hajishirzi. Olmo 3, 2025. URL https: //arxiv.org/abs/2512.13961 .OpenAI, :, Sandhini Agarwal, Lama Ahmad, Jason Ai, Sam Altman, Andy Applebaum, Edwin Arbus, Rahul K. Arora, Yu Bai, Bowen Baker, Haiming Bao, Boaz Barak, Ally Bennett, Tyler Bertao, Nivedita Brett, Eugene Brevdo, Greg Brockman, Sebastien Bubeck, Che Chang, Kai Chen, Mark Chen, Enoch Cheung, Aidan Clark, Dan Cook, Marat Dukhan, Casey Dvorak, Kevin Fives, Vlad Fomenko, Timur Garipov, Kristian Georgiev, Mia Glaese, Tarun Gogineni, Adam Goucher, Lukas Gross, Katia Gil Guzman, John Hallman, Jackie Hehir, Johannes Heidecke, Alec Helyar, Haitang Hu, Romain Huet, Jacob Huh, Saachi Jain, Zach Johnson, Chris Koch, Irina Kofman, Dominik Kundel, Jason Kwon, Volodymyr Kyrylov, Elaine Ya Le, Guillaume Leclerc, James Park Lennon, Scott Lessans, Mario Lezcano-Casado, Yuanzhi Li, Zhuohan Li, Ji Lin, Jordan Liss, Lily, Liu, Jiancheng Liu, Kevin Lu, Chris Lu, Zoran Martinovic, Lindsay McCal-lum, Josh McGrath, Scott McKinney, Aidan McLaughlin, Song Mei, Steve Mostovoy, Tong Mu, Gideon Myles, Alexander Neitz, Alex Nichol, Jakub Pachocki, Alex Paino, Dana Palmie, Ash-ley Pantuliano, Giambattista Parascandolo, Jongsoo Park, Leher Pathak, Carolina Paz, Ludovic Peran, Dmitry Pimenov, Michelle Pokrass, Elizabeth Proehl, Huida Qiu, Gaby Raila, Filippo Raso, Hongyu Ren, Kimmy Richardson, David Robinson, Bob Rotsted, Hadi Salman, Suvansh Sanjeev, Max Schwarzer, D. Sculley, Harshit Sikchi, Kendal Simon, Karan Singhal, Yang Song, Dane Stuckey, Zhiqing Sun, Philippe Tillet, Sam Toizer, Foivos Tsimpourlas, Nikhil Vyas, Eric Wallace, Xin Wang, Miles Wang, Olivia Watkins, Kevin Weil, Amy Wendling, Kevin Whinnery, Cedric Whitney, Hannah Wong, Lin Yang, Yu Yang, Michihiro Yasunaga, Kristen Ying, Wojciech Zaremba, Wenting Zhan, Cyril Zhang, Brian Zhang, Eddie Zhang, and Shengjia Zhao. gpt-oss-120b & gpt-oss-20b model card, 2025. URL https://arxiv.org/abs/2508.10925 .Jeffrey Pennington and Pratik Worah. Nonlinear random matrix theory for deep learning. In I. Guyon, U. Von Luxburg, S. Bengio, H. Wallach, R. Fergus, S. Vishwanathan, and R. Garnett (eds.), Advances in Neural Information Processing Systems , volume 30. Curran Associates, Inc., 2017. URL https://proceedings.neurips.cc/paper_files/ paper/2017/file/0f3d014eead934bbdbacb62a01dc4831-Paper.pdf .Andrei A. Rusu, Neil C. Rabinowitz, Guillaume Desjardins, Hubert Soyer, James Kirkpatrick, Koray Kavukcuoglu, Razvan Pascanu, and Raia Hadsell. Progressive neural networks. CoRR ,abs/1606.04671, 2016. arXiv preprint. 12 Andrei A. Rusu, Neil C. Rabinowitz, Guillaume Desjardins, Hubert Soyer, James Kirkpatrick, Koray Kavukcuoglu, Razvan Pascanu, and Raia Hadsell. Progressive neural networks, 2022. URL 
+
+https://arxiv.org/abs/1606.04671 .Scentience. Scentience app: World’s first olfaction-vision lan-guage model. 2025. URL https://scentience.ai/news/f/ scentience-app-worlds-first-olfaction-vision-language-model .Accessed: 2025-03-02. S. S. Schoenholz, J. Gilmer, S. Ganguli, and J Sohl-Dickstein. Deep information propagation, November 2016. PhD Sebastian Raschka. From GPT-2 to gpt-oss: Analyzing the Architectural Advances — magazine.sebastianraschka.com. https://magazine.sebastianraschka.com/p/ from-gpt-2-to-gpt-oss-analyzing-the?utm_source=tldrai . [Accessed 08-02-2026]. Terence Tao. Topics in random matrix theory, 2012. Jaehong Yoon, Eunho Yang, Jeongtae Lee, and Sung Ju Hwang. Lifelong learning with dynamically expandable networks. In International Conference on Learning Representations , 2018. URL 
+
+https://openreview.net/forum?id=Sk7KsfW0-.13 Supplementary Materials 
+
+The following content was not necessarily subject to peer review. 
+
+# 8 GPF Hyperparameter Reference 
+
+Table 1: GPF Network Hyperparameters 
+
+Symbol Description 
+
+kmax Maximum training epochs 
+
+di ith layer dimension 
+
+ρe Epoch patience required before GPF is enabled 
+
+ρk Epoch patience required before growing a layer 
+
+ρp Epoch patience required before pruning neurons 
+
+ρf Epoch patience required before a neuron can be frozen 
+
+ωv Loss stagnation threshold for layer growth 
+
+ωp Belief threshold for pruning 
+
+ωf Weight-change threshold for layer freezing 
+
+α Learning rate 
+
+γ Discount factor 
+
+ϵ Exploration greediness 
+
+ηg Greediness decay 
+
+ηbs Batch size decay 
+
+ηh Belief value increment 
+
+# 9 GPF Pseudocode 
+
+In consolidation of the formal logic introduced above, one can succinctly define how the GPF net-work evolves according to the following rules: 1. Layer Growth: Add a new hidden layer if validation loss stagnates over ρv epochs: 
+
+∆L(t−k:t) 
+
+> val
+
+< ω v
+
+2. Neuron Belief Hardening: Each neuron i has belief hi ∈ [0 , 1) , incremented if 
+
+|wi| > ω v over kmax epochs .
+
+3. Pruning and Layer Freezing: Neurons with |wi| < ω v and hi < ω p are pruned. Layers with 
+
+> 100 .0 × ωf % stable weights over ρf epochs are frozen. Below is the pseudocode quantifying the above rules into a manner that can be executed for the experiments in the following sections. 14 Algorithm 1 Grow-Pruen-Freeze Network  
+
+> 1:
+
+Ω ← initialize network with single hidden layer  
+
+> 2:
+
+randomize weights of Ω via Glorot init  
+
+> 3:
+
+initialize all h-values of Ω to zero  
+
+> 4:
+
+for each epoch t or until termination criteria do  
+
+> 5:
+
+train Ω on batch b 
+
+> 6:
+
+update Ω weights and h-values  
+
+> 7:
+
+if t > patience then  
+
+> 8:
+
+if validation loss stagnates for k epochs then  
+
+> 9:
+
+add new hidden layer  
+
+> 10:
+
+end if  
+
+> 11:
+
+end if  
+
+> 12:
+
+prune neurons with low h and small weights  
+
+> 13:
+
+freeze stable layers satisfying criteria v 
+
+> 14:
+
+update h-values  
+
+> 15:
+
+end for 
+
+# 10 Single-Layer RMT Background 
+
+We review the single-layer random matrix theory setup of Pennington & Worah (2017) upon which our multi-layer extension is built. Let X ∈ Rn0×m be a data matrix with m data samples, and let W ∈ Rn1×n0 be a random weight matrix with i.i.d. entries: 
+
+Wij ∼ N 
+
+
+
+0, σ2
+
+> w
+
+n0
+
+
+
+.
+
+Define the pre-activation matrix Z = W X and apply a pointwise nonlinearity f to obtain the post-activation matrix Y = f (Z).The empirical Gram matrix is: 
+
+M = 1
+
+m Y ⊤Y ∈ Rm×m.
+
+The main object of interest is the limiting spectral distribution (LSD) of M as n0, n 1, m → ∞ 
+
+at comparable rates. By the moments method from random matrix theory, one characterizes the asymptotic eigenvalue density via the resolvent 
+
+R(z) = ( M − zI )−1,
+
+and the Stieltjes transform s(z) = 1 
+
+> m
+
+Tr( R(z)) . In the single-layer case, this Stieltjes transform satisfies a self-consistent equation determined by the nonlinearity f and the ratio n1/m . Pennington & Worah (2017) showed that for common activations (including ReLU), the resulting LSD follows a Marchenko-Pastur-type law, and that weight matrices satisfying σ2 
+
+> w
+
+= 1 yield a shape parameter 
+
+ψ ≈ 1, ensuring dynamical isometry and stable gradient propagation. Our multi-layer extension in Section 3.2 generalizes this single-layer picture to networks that grow adaptively during training. 
+
+# 11 Notes on Convergence of Homogeneous GPFs 
+
+Proceeding under this assumption, suppose each layer is identically distributed with the same aspect ratios and variances, so ψℓ ≡ Ψ for all ℓ ∈ Z. Then by taking Equation 7 above, we have: 
+
+s(L)(z) = ψ ◦ ψ ◦ · · · ◦ ψ
+
+| {z } 
+
+> Ltimes
+
+ s(0) (z), z  = Ψ ◦L s(0) (z), z .
+
+Two immediate consequences follow: 15 1. Monotone / contractive iteration. If ψ(·, z ) is a contraction on a suitable subset S of ana-lytic transforms (for example, relative to the supremum norm on compact z-domains), then the sequence s(L)(z) converges geometrically in L towards the unique fixed point s⋆(z) solving 
+
+s⋆ = Ψ( s⋆, z ).2. Operator accumulation. Even when Ψ is not strictly a contraction globally, one may obtain convergence for initial conditions s(0) (z) in a basin of attraction; numerically this corresponds to the spectral measure “forgetting” low-rank or sample-specific components as depth increases. We note, however, that this “forgetting” is partially countered by the layer-specific freezing process defined above. 
+
+11.1 Remarks on Fixed-Point Depth-Limit Theorem 
+
+We provide a few remarks on Theorem 1 that address its applicability to heterogeneous models (deep neural networks whose layers do not all have the same initial input dimension). 
+
+Remarks. 
+
+• Condition 2 is a sufficient contraction-style condition; weaker conditions (e.g., spectral radius < 1
+
+only on a subset or average contractivity) can also be used in applications and are often verifiable by bounding the nonlinear moments that define DsΨ.• For inhomogeneous layers one obtains s(L) = Ψ L ◦ · · · ◦ Ψ1(s(0) ) and conclusions about conver-gence require joint control of the products of derivatives QLℓ=1 DsΨℓ. A sufficient criterion is that there exist ρℓ with sup ℓ ρℓ < 1 and ∥DsΨℓ∥ ≤ ρℓ, which yields geometric decay of perturbations. However, we leave the formal analysis of nonhomogeneous layers for future work. • From a combinatorial (moments) perspective, adding depth extends the class of contributing walks by allowing arbitrarily many layer-to-layer transitions; the operator Ψ summarizes the net effect of summing those additional contributions at each depth increment. 
+
+# 12 ReLU Activations and Spectral Density 
+
+Many modern deep learning architectures make use of the rectified linear unit (ReLU) activation function, or some derivative thereof. The performance garnered through the implementation of ReLU is well known and we intentionally constrain the use of activation functions within hidden layers strictly to ReLU and ReLU variants (e.g. GeLU, SiLU). The reasoning for this is two-fold: constraining the hidden layers to one activation function allows me implement a form of control while ablating other architectural parameters; secondly, the transforms over the data that occur due to the non-linearities imposed by ReLU offer several points of interesting analysis with respect to 
+
+GPFs .When the layers are ReLU or bounded activations, these integrals are often explicit or numerically tractable, enabling concrete verification of the above stability conditions. The work of Lewandowsi, et al. Lewandowski et al. (2025) note how ReLU networks transform input space in a piecewise-linear manner, producing folded, non-convex geometries across layers. Each fold corresponds to a region where the activation pattern changes, and consecutive layers compound these folds, increas-ing expressivity while also affecting the distribution of activations and gradients. In the context of GPFs, adding a new hidden layer introduces additional ReLU folds, effectively increasing the number of non-linear regions in the network. This operation changes the activation covariance matrix and the Jacobian, which are central objects in RMT. Consequently, the Gram matrix (G(l) ∗ t = 1 
+
+> n∗l−1
+
+(Y (l) 
+
+> t
+
+)⊤Y (l) 
+
+> t
+
+) experiences shifts in its spectrum, potentially increasing the spectral width and introducing new spikes corresponding to strongly activated neurons. GPF neurons that become hardened due to high belief values (hi) tend to preserve specific folds over successive epochs. In spectral terms, this generates persistent low-rank structures in the activation 16 covariance, aligning with the “spiked” eigenvalues studied in RMT. These spikes can be interpreted as geometrically meaningful folds that represent robust features in the input space. Pruning neurons with low activity or low belief selectively removes folds that contribute little to the effective expressivity of the network. Spectrally, this reduces bulk eigenvalues associated with inactive directions, sharpening the separation between critical spikes and the background, thus en-hancing signal-to-noise ratios in the network’s representation. Finally, freezing layers preserves existing folds while allowing newly added layers to introduce additional complexity. From an RMT perspective, freezing stabilizes the spectral distribution of weights of previously learned features, preventing catastrophic drift of critical eigenvalues while maintaining plasticity in subsequent layers. Adaptive architectures like GPFs can dynamically allocate representational capacity to active plume regions while pruning inactive neurons. Hardened neurons preserve critical correlations, and frozen layers prevent catastrophic forgetting. We hypothesize that this mechanism improves efficiency, plasticity, and robustness in sensory-limited, dynamic environments such as olfactory robotics, which we mentioned was our primary motivation for the GPF design. Growing the network ac-counts for plume complexity, pruning it adaptively filters out spurious time-correlated events, and freezing layers captures time-dependent patterns at different parts of the plume. 
+
+# 13 Width vs Depth 
+
+Research from Mirzadeh, et al. Mirzadeh et al. (2022) define a key set of architectural boosters for continual learning that we found worked well in practice. Namely, limiting the use of global average pooling and replacing it with max pooling and batch normalization seemed to limit plasticity loss as they claim. Where we digress, however, is the argument that wider and shallower networks promote more stable continual learning, as we did not see this in our experiments. Nearly every experiment we ran showed that deeper networks (albeit sparse after pruning) outperformed the shorter, wider networks. The work from Mirzadeh, et al. is evidently correct, and we think the difference in experimental ob-servations can be drawn from our training data size. In most of our experiments, we were modeling with a small amount of training data which seems to benefit from the added depth. If our applica-tions had more plentiful training data, we expect that our results would converge toward theirs and we would reach the same conclusions regarding the benefits of width. We note this as a point for future research. 
+
+# 14 Plume Simulator Details 
+
+The plume environment uses a Farrell–Murlis filament model Farrell et al. (2002) in a 20 m × 20 mtwo-dimensional domain at 10 Hz ( ∆t = 0 .1 s). 
+
+Source and filament emission. At the start of each episode the source is placed on the upwind half of the domain at a randomly sampled position biased toward the upwind edge ( ±25% of domain width from center, with an additional ±15% jitter). The source emits discrete filaments at mean rate λ = 5 filaments/s, drawn from a Poisson process so that nnew ∼ Poisson (λ ∆t) filaments are released each step. Each filament is initialized at the source with positional jitter N (0 , σ 20 ),
+
+σ0 = 0 .01 m. 
+
+Filament dynamics. Filaments advect with the local wind velocity (vx, v y ) and grow by molecu-lar diffusion. The Gaussian radius of filament i at age τi is 
+
+σi(τi) = 
+
+q
+
+σ20 + 2 D τ i, (8) 17 with diffusion rate D = 0 .05 m2/s. Filaments are removed after a decay time of 30 s or upon leaving the domain boundary. 
+
+Concentration measurement. The concentration contributed by filament i at sensor position p is 
+
+ci(p) = m
+
+2πσ 2
+
+> i
+
+exp 
+
+
+
+− ∥p − xi∥2
+
+2σ2
+
+> i
+
+
+
+, (9) where m = 0 .1 is the filament mass and xi is the filament center. Filaments beyond 3σi are excluded for efficiency. Total concentration is clamped to 1.0 and corrupted by additive noise N (0 , σ 2
+
+> n
+
+) with 
+
+σn = 10 −3.
+
+Wind model. Wind speed v and direction θ follow coupled discrete-time Ornstein–Uhlenbeck processes with mean-reversion coefficient α = ∆ t/τ c:
+
+vt+1 = vt − α(vt − ¯v) + σv
+
+√2α ϵ v , (10) 
+
+θt+1 = θt − α(θt − ¯θ) + σθ
+
+√2α ϵ θ , (11) where ϵv , ϵ θ ∼ N (0 , 1) are independent, ¯v = 1 .0 m/s, ¯θ = 0 rad, σv = 0 .2 m/s, σθ = 15 ◦, and correlation time τc = 2 s. Wind speed is clamped to a minimum of 0.1 m/s. 
+
+14.1 Observation Tokenizer 
+
+Each 10 Hz sensor observation is mapped to a compact discrete representation by a fixed tokenizer before it is consumed by either the RL agent or the generative world model. The tokenizer defines a domain-specific vocabulary over three independent streams - left antenna concentration, right an-tenna concentration, and relative wind direction - and encodes each stream as a single integer index. 
+
+Concentration quantization. Raw concentration readings are quantized into seven discrete levels. Level 0 ( BLANK ) captures all readings at or below the sensor noise floor; levels 1–6 cover the detectable range in six log-spaced bands. The bin edges are set as fixed multiples of the noise-floor standard deviation σn = 10 −3:
+
+ek = mk · σn, m = [3 , 6, 15 , 45 , 150 , 600] , (12) giving absolute edges [0 .003 , 0.006 , 0.015 , 0.045 , 0.15 , 0.6] . The multipliers span roughly two orders of magnitude above the noise floor and are calibrated so that each bin is occupied during typical plume encounters - avoiding degenerate representations in which most observations collapse to a single level. A reading c is assigned to bin bk such that ek−1 < c ≤ ek (bin 0 if c ≤ e0, bin 6 if 
+
+c > e 5). Both antennae are quantized independently, yielding two indices bL, b R ∈ { 0, . . . , 6}.
+
+Wind-direction quantization. The wind direction is expressed relative to the agent’s current heading and quantized into eight equal octants of 45 ◦ each. Octant 0 corresponds to a headwind (wind arriving from directly ahead, the most informative direction for upwind surge); octants in-crease clockwise. When wind speed falls below the calm threshold ( 0.05 m/s), the direction is treated as octant 0 (headwind default), which is the least informative assignment and penalizes nei-ther upwind nor downwind strategies. 
+
+Vocabulary summary. The full token vocabulary for one time step comprises: 18 Stream Tokens Size 
+
+Left concentration BLANK , C0–C5 7Right concentration BLANK , C0–C5 7Wind direction octants W0–W7 8Action fwd, ±15 ◦, 180 ◦, cast ± 6Special PAD , BOS , EOS , RESET 4The observation state at each step is the tuple (bL, b R, w ) ∈ { 0, . . . , 6}2 × { 0, . . . , 7}, giving 
+
+7 × 7 × 8 = 392 unique states. For the RL Q-network, this tuple is one-hot encoded into a 22 -dimensional binary vector ( 7 + 7 + 8 ) and fed directly as input. For the generative world model, each stream is a separate embedding lookup whose outputs are summed element-wise before enter-ing the transformer, following the multi-stream factored embedding design described below. 
+
+14.2 Token-Based Generative World Model Interface 
+
+The tokenizer is designed to serve a dual role: it provides the state representation for the model-free RL agent used in the present work, and it defines the token alphabet for a generative world model intended for future deployment. This section describes how the simulator trajectory format maps to the sequence structure expected by the world model. 
+
+Action-conditioned sequence layout. At each control step the agent emits an action token and the environment returns an observation token tuple. A complete episode is serialized as an interleaved observation–action sequence: 
+
+> BOS
+
+, o0, a 0, o1, a 1, . . . , oT −1, a T −1, oT , EOS , (13) where ot = ( bL,t , b R,t , w t) is the tokenized observation at step t and at ∈ { 0, . . . , 5} is the action index. Each position in the sequence therefore carries a fixed grammatical role—observation or action—that the model can learn to exploit. The BOS and EOS markers delimit episodes, and a  
+
+> RESET
+
+token can signal mid-sequence environment resets without breaking the input stream. 
+
+Multi-stream factored embeddings. A key property of the vocabulary is that each time step’s observation decomposes into three independent streams, each with its own embedding matrix. The embedding for step t is formed by summing the three per-stream lookup vectors: 
+
+et = EL[bL,t ] + ER[bR,t ] + EW [wt], (14) where EL, E R ∈ R7×d and EW ∈ R8×d are learned embedding matrices. Action embeddings are added analogously at action positions. This factored design allows the model to share structure across antenna readings that differ only in wind direction, and vice versa, without enumerating all 392 joint observation types as separate tokens—keeping the vocabulary size small enough for efficient embedding lookup on resource-constrained hardware. 
+
+Training objective. The generative world model is trained by next-token prediction on simulator-generated trajectories: given the sequence up to position t, the model predicts the distribution over the next token. At observation positions this means predicting P (ot+1 | o≤t, a ≤t); at action posi-tions, the model is conditioned but does not predict (actions are supplied by the policy). Because observations are factored into three streams, the prediction at each observation position is decom-posed into three independent softmax outputs over 7, 7, and 8 classes respectively, giving a total cross-entropy loss of 
+
+L = − X
+
+> t
+
+h
+
+log P (bL,t +1 ) + log P (bR,t +1 ) + log P (wt+1 )
+
+i
+
+. (15) This supervision signal is dense - every step of every simulator trajectory contributes three classifi-cation targets - while remaining entirely derived from the physics simulator, with no human labeling or LLM generation involved. 19 Role in planning. At inference time the trained world model replaces the physics simulator as an imagination engine. Given the agent’s recent token history, the world model samples short rollouts of length H for each candidate action, producing approximate future observation sequences with-out running the full filament simulation. A scoring function evaluates each rollout (e.g., expected whiff count, estimated distance reduction) and the action with the highest score is executed. The tokenizer’s compact vocabulary - only 22 observation dimensions, 392 unique states - means the world model can be implemented as a small decoder-only transformer with a few hundred thousand parameters, meeting the real-time inference budget of most resource-constrained hardware. 20 15 Plume Navigation Hyperparameters 
+
+Table 2: Hyperparameters for the plume navigation GPF agent. 
+
+Parameter Symbol Value 
+
+Environment 
+
+Domain size — 20 × 20 mTime step ∆t 0.1 sEpisode budget Tmax 1200 steps ( 100 s) Source emission rate λ 5 filaments/s Success radius rs 0.5 mMean wind speed ¯v 1.0 m/s Wind correlation time τc 2.0 s
+
+Agent / network 
+
+Hidden width dh 64 
+
+Max hidden layers Lmax 4
+
+Learning rate η 10 −3
+
+Discount factor γ 0.99 
+
+Initial exploration ε0 1.0
+
+Final exploration ε∞ 0.05 
+
+Exploration decay — 0.9995 per episode Table 3: GPF Network Hyperparameters for Plume Task 
+
+Value Symbol Description 
+
+4500 kmax Maximum training epochs 64 di ith layer dimension 0 ρe Epoch patience required before GPF is enabled 1000 ρk Epoch patience required before growing a layer 500 ρp Epoch patience required before pruning neurons 3000 ρf Epoch patience required before a neuron can be frozen 
+
+1e − 3 ωv Loss stagnation threshold for layer growth 
+
+1e − 6 ωp Belief threshold for pruning 0.01 ωf Weight-change threshold for layer freezing 
+
+1e − 3 α Learning rate 0.99 γ Discount factor 0.05 ϵ Exploration greediness 0.9995 ηg Greediness decay 0 ηbs Batch size decay 1 ηh Belief value increment 21 16 Episode-by-Episode Training Results 
+
+Table 4: Evaluation success rate and network state throughout training. 4500 episodes were estab-lished as the limit in order to timebox experiments. (G = grow event; P = prune event) 
+
+Episode Success (%) Layers Event 
+
+500 24.5 1 —1000 95.5 1 —1500 40.5 1 —2000 97.5 2 G: layer 1 → 2
+
+2000 — 2 P: kept 47 .9% 
+
+2500 91.5 2 —3000 98.0 3 G: layer 2 → 3 (best checkpoint) 3000 — 3 P: kept 19 .6% (2 layers) 3500 95.5 3 —4000 96.5 4 G: layer 3 → 4
+
+4000 — 4 P: kept 9.9% (3 layers) 4500 95.5 4 —22 17 GPF Generalization 
+
+To demonstrate the grow-prune-freeze methodology, we selected three different tasks with many known benchmarks in literature: image classification over CIFAR10, reinforcement learning over the Atari environment, and text generation via GPT-2. For each task, we trained a baseline model and a GPF variant of the same model. All models were trained under identical parameters with only one exception: the baseline model begins training at n
+
+hidden layers while the GPF model begins training with one hidden layer and grows to a maximum depth of n layers. All hyperparameters, data, training procedures, and seeds are identical other-wise. The hyperparameters for each model can be observed in the following sections. GPF-specific hyperparameters can be found below in Table 5. Table 5: GPF Classifier Hyperparameters 
+
+Method Description 
+
+ρe Epoch patience required before GPF is enabled 7
+
+ρk Epoch patience required before growing a layer 5
+
+ρp Epoch patience required before pruning neurons 2
+
+ρf Epoch patience required before a neuron can be frozen 7
+
+ωv Weight threshold for belief counter 1e-2 
+
+ωp Activation threshold for pruning 0.5 
+
+ωf Loss threshold for neuron freezing 1e-1 
+
+γ Discount factor (RL) 0.99 
+
+ϵ Greediness (RL) 1.0 
+
+ηg Greediness decay (RL) 0.995 
+
+ηbs Batch size decay 0.5 
+
+ηh Belief value decay 0.1 
+
+βw Weight threshold for belief increment 0.1 
+
+βact Post-activations above this increase belief counter 0.1 
+
+17.1 GPF Task: CIFAR Image Classification 
+
+Table 6: GPF Classifier 
+
+Parameter Value 
+
+layers 4layer types Fully connected only input dimension 3072 output dimension 10 hidden dimension 512 batch size 128 learning rate 1e-4 activation functions ReLU epochs 30 loss function Cross Entropy optimizer Adam pruning technique LeCun We selected image classification over CIFAR10 because it provides a foundational entry point and because it allows us to build off the assumptions and experiments from the similar work by Dohare, et al. Dohare et al. (2024). In reference to Figure 5, one will notice that the validation loss begins 23 to diverge for the baseline model, but steadily decreases for the dynamic GPF model. This may indicate that GPFs can provide more stable learning even while simultaneously adding layers and pruning neurons. 
+
+Figure 5: (a) Validation losses of a GPF policy and a baseline static policy trained under identical parameters for the Atari task. Both policies are neural networks based on Expected SARSA. (b) Validation losses of a GPF network and a baseline static neural network trained under identical parameters for the CIFAR image classification task. (c) The eigenvalue spectra for the weights of the GPF network from the CIFAR image recognition task follow the Marchenko-Pastur distribution, maintaining the hypothesis of Pennington & Worah (2017). Figure 5 shows the weight eigenvalues after each layer is added. In observation of the eigenvalue spectra over several different CIFAR batches, the empirical spectral density (ESD) of the eigenvalues indeed follow the Marchenko-Pastur distribution - a characteristic that Pennington, et al. and Martin, et al. indicate provides evidence of stable weight eigenvalues during learning Pennington & Worah (2017) Martin & Mahoney (2021). 
+
+17.2 GPF Task: Atari Reinforcement Learning 
+
+Table 7: GPF Agent 
+
+Parameter Value 
+
+layers 4layer types Fully connected only input dimension 3072 output dimension 10 hidden size 128 batch size 16 learning rate 1e-3 activation functions ReLU epochs 30 max steps 150 loss function MSE optimizer Adam pruning technique LeCun policy Expected SARSA Reinforcement learning contains many tasks and benchmarks from which one could select, but we evaluated over the Atari environment in order to assess GPF’s decision making capabilities. Specifi-cally, we select the Ms Pacman environment as it is seemed an appropriate navigation analog to our olfactory tasks. Conclusions are difficult to draw from the accompanying figure in 5, but one can immediately observe that the volatility in validation rewards for the baseline policy is much higher than that of the dynamic GPF policy. 24 A more comprehensive evaluation over the entire Atari suite is an intuitive segue for future work. 
+
+17.3 GPF Task: GPT-2 Language Modeling 
+
+Finally, given today’s attraction toward and the many recent advances in large language models, we select GPT-2 as a means to show how GPFs can be extended to generative tasks and much larger architectures. We acknowledge that GPT-2 is no longer considered “state-of-the-art”, but the thorough evaluation of GPFs over the much larger state-of-the-art architectures is outside of the financial and computational budget for a single PhD student. The architectures of many of the notable large language models today were derived from GPT-2 Sebastian Raschka; Olmo et al. (2025); OpenAI et al. (2025), so we intuit that using it as a vehicle for analysis is a representative architecture of what might occur in large model. We use the TinyShakespeare dataset from Karpathy Karpathy (2015) to train a baseline model and GPF variant of GPT-2. Figure 6 shows the final loss plot for the baseline GPT-2 model. Interestingly, one can see that convergence is not achieved and the loss is very volatile. Conversely, the training loss for the GPF variant of GPT-2 in Figure ?? shows good convergence, with a steady decay after epoch 2000. GPF GPT-2 achieved the maximum layer count at around epoch 2500 and ceased growing for the rest of training. Consistent with the work of LeCun LeCun et al. (1989) and Frankle, et al. Frankle & Carbin (2019), the percentage of neurons pruned decays as training progresses. For GPFs specifically, this may indicate that neurons from earlier weights have hardened their belief states around values that reflect true patterns in the data. Our intent with the tasks above was to show initial evidence that the principles of the GPF frame-work can generalize to different models and tasks. There is much more to investigate in relation to the Pareto frontiers of the conventional “train-and-freeze” paradigm - just as humans continuously learn and update priors as they gather more experiences, so can we enable AI models to do the same. However, we acknowledge that our work here is only evidence supporting the GPF frame-work for continual learning, and that a thorough evaluation over a large battery of tasks and different architecture types is prudent future work. 25 Table 8: GPF Autoregressive Model 
+
+Parameter Value 
+
+layers 12 layer types GPT Block vocab size 50257 sequence length 64 block size 32 attn heads/block 8attn mechanism Causal Self-Attention embedding dimension 64 batch size 8learning rate 1e-4 activation functions ReLU, GeLU epochs 10000 loss function Cross Entropy optimizer Adam pruning technique LeCun 
+
+Figure 6: (a) Training loss of the GPT-2 baseline; training parameters were identical to the GPF variant below. (b) The validation loss shows steady convergence over training, even while growing and pruning its own parameters. (c) The GPF reached the maximum number of layers at around 2500 epochs and kept training. (d) The pruning ratio over each adaptation event shows that the number of weights pruned is much higher at the beginning of training, but tapers as eigenvalues stabilize. 26
