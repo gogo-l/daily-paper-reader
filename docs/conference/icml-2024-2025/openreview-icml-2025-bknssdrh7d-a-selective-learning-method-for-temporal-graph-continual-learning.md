@@ -5,17 +5,17 @@ authors: "Hanmo Liu, Shimin Di, Haoyang LI, Xun Jian, Yue Wang, Lei Chen"
 date: 2025-05-01
 pdf: "https://openreview.net/pdf?id=BKnssDRh7d"
 tags: ["query:continual"]
-score: 8.0
-evidence: 提出选择性学习框架以防止时序图持续学习中的遗忘
-tldr: 针对时序图中新类别不断出现、现有方法在更新模型时遗忘旧类别的问题，定义时序图持续学习，并提出选择性学习框架LTF，动态选择旧类数据子集，面向未来维持知识。在多个时序图节点分类任务上显著减轻灾难性遗忘，高效适应图演化。
+score: 9.0
+evidence: 时序图持续学习的选择性学习方法
+tldr: 针对时序图学习中节点类不断新增导致遗忘旧类的问题，该研究定义时序图持续学习新问题，并提出选择性学习框架LTF。方法通过用旧类子集替换全部旧数据并进行面向未来的学习，有效平衡新旧知识。实验证明LTF能高效维护旧类知识并适应新类，为动态图数据上的持续学习提供了新思路。
 source: ICML-2025-Accepted
 selection_source: conference_retrieval
 figures_json: "[{\"url\": \"assets/figures/openreview/openreview-icml-2025-bknssdrh7d/fig-001.webp\", \"caption\": \"\", \"page\": 0, \"index\": 1, \"width\": 828, \"height\": 653, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-bknssdrh7d/fig-002.webp\", \"caption\": \"\", \"page\": 0, \"index\": 2, \"width\": 1781, \"height\": 469, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-bknssdrh7d/fig-003.webp\", \"caption\": \"\", \"page\": 0, \"index\": 3, \"width\": 1753, \"height\": 351, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-bknssdrh7d/fig-004.webp\", \"caption\": \"\", \"page\": 0, \"index\": 4, \"width\": 823, \"height\": 248, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-bknssdrh7d/fig-005.webp\", \"caption\": \"\", \"page\": 0, \"index\": 5, \"width\": 862, \"height\": 371, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-bknssdrh7d/fig-006.webp\", \"caption\": \"\", \"page\": 0, \"index\": 6, \"width\": 862, \"height\": 369, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-bknssdrh7d/fig-007.webp\", \"caption\": \"\", \"page\": 0, \"index\": 7, \"width\": 1752, \"height\": 354, \"label\": \"Figure\"}]"
 tables_json: "[{\"url\": \"assets/tables/openreview/openreview-icml-2025-bknssdrh7d/table-001.webp\", \"caption\": \"\", \"page\": 0, \"index\": 1, \"width\": 868, \"height\": 400, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-bknssdrh7d/table-002.webp\", \"caption\": \"\", \"page\": 0, \"index\": 2, \"width\": 1765, \"height\": 894, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-bknssdrh7d/table-003.webp\", \"caption\": \"\", \"page\": 0, \"index\": 3, \"width\": 1765, \"height\": 301, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-bknssdrh7d/table-004.webp\", \"caption\": \"\", \"page\": 0, \"index\": 4, \"width\": 853, \"height\": 266, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-bknssdrh7d/table-005.webp\", \"caption\": \"\", \"page\": 0, \"index\": 5, \"width\": 669, \"height\": 557, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-bknssdrh7d/table-006.webp\", \"caption\": \"\", \"page\": 0, \"index\": 6, \"width\": 703, \"height\": 236, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-bknssdrh7d/table-007.webp\", \"caption\": \"\", \"page\": 0, \"index\": 7, \"width\": 832, \"height\": 295, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-bknssdrh7d/table-008.webp\", \"caption\": \"\", \"page\": 0, \"index\": 8, \"width\": 853, \"height\": 512, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-bknssdrh7d/table-009.webp\", \"caption\": \"\", \"page\": 0, \"index\": 9, \"width\": 1764, \"height\": 441, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-bknssdrh7d/table-010.webp\", \"caption\": \"\", \"page\": 0, \"index\": 10, \"width\": 1760, \"height\": 451, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-bknssdrh7d/table-011.webp\", \"caption\": \"\", \"page\": 0, \"index\": 11, \"width\": 680, \"height\": 239, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-bknssdrh7d/table-012.webp\", \"caption\": \"\", \"page\": 0, \"index\": 12, \"width\": 1767, \"height\": 255, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-bknssdrh7d/table-013.webp\", \"caption\": \"\", \"page\": 0, \"index\": 13, \"width\": 1766, \"height\": 253, \"label\": \"Table\"}]"
-motivation: 时序图新增节点类别导致模型遗忘旧类别，且全面重训代价高。
-method: 设计面向未来的选择性学习框架LTF，动态选择旧类数据子集。
-result: 在多个时序图上实现了高效、低遗忘的持续节点分类。
-conclusion: 为图持续学习中的时序演化提供了一种有效解决方案。
+motivation: 时序图中新节点类不断涌现，需要高效维护旧类知识。
+method: 提出LTF框架，通过选择旧类子集学习以维持面向未来的知识。
+result: 实现了对新旧类知识的平衡更新，避免遗忘。
+conclusion: 为时序图持续学习提供了有效方案。
 ---
 
 ## Abstract
@@ -26,96 +26,84 @@ Node classification is a key task in temporal graph learning (TGL). Real-life te
 ## 论文详细总结（自动生成）
 
 ## 1. 论文的核心问题与整体含义
-- 时序图（temporal graph）在真实场景中随着时间推移会不断出现新的节点类别，现有方法存在两个极端：
-  - **时序图学习（TGL）方法**假设类别集合固定，无法处理开放类别。
-  - **图持续学习（GCL）方法**虽用旧类样本回放抑制遗忘，但假设旧类数据不再演化，不适用于动态变化的旧类分布。
-- 论文将这一新问题定义为 **时序图持续学习（TGCL）**：在新时期既要学习新类别，又要高效地保持旧类别的最新知识，避免因完全微调新数据而遗忘旧类，或因用全部数据重训而效率低下。
-- 整体目标：在效率和有效性之间取得平衡，使模型能够“面向未来”地选择性保留和更新旧类知识。
+- **问题定义**：真实世界的时序图（Temporal Graph）不断引入新的节点类别，且旧类数据随时间演化。现有时序图学习方法（TGL）假设类别固定，无法适应这种开放类动态；而图持续学习方法（GCL）虽能缓解灾难性遗忘，却假定旧类数据是静态的，导致模型在未来的时序图上过时。
+- **研究动机**：需要一种既能高效学习新类，又能持续更新旧知识以跟上数据演化的方法。
+- **核心贡献**：首次定义 **时序图持续学习（TGCL）** 问题，提出 **面向未来的学习框架（Learning Towards the Future, LTF）**，通过选择代表性旧类子集进行学习，并给出理论误差上界，将子集选择转化为可优化的目标。
 
-## 2. 方法论：Learning Towards the Future（LTF）框架
-### 2.1 核心思想
-- 用旧类的代表性子集近似完整旧类数据，基于**领域适配理论**推导出用子集替代全量数据所带来的分类误差上界，并将上界转化为可优化的子集选择和模型学习目标。
+## 2. 论文提出的方法论
+### 核心思想
+- 在每一个新时间周期 \(T_N\)，从旧类数据 \(G^{old}_N\) 中选取一个小子集 \(G^{sub}_N\) 来近似整个旧类分布，从而高效地更新模型，使其同时具备对新类的分类能力和对演化后的旧类的判别力。
 
-### 2.2 误差上界与选择目标
-- **定理3.1**给出在旧类分布 \(G^{old}_N\) 上的分类误差上界：
+### 误差上界与选择准则
+- 利用域适应理论，推导出用子集学习时在完整旧类数据上的分类误差上界（定理3.1）：
   \[
-  \min_h \epsilon(h|G^{old}_N) \le \min_{h, G^{sub}_N} \big[
-  \underbrace{\epsilon(\tilde{h}^{sub}_N|G^{old}_N)}_{\text{子集模型的泛化误差}} + \tfrac12 d_{\mathcal{H}\Delta\mathcal{H}}(G^{old}_N, G^{sub}_N) + \underbrace{\epsilon(h,\tilde{h}^{sub}_N|G^{sub}_N)}_{\text{知识迁移误差}}
-  \big].
+  \min_{h} \epsilon(h|G^{old}_N) \le \min_{h, G^{sub}_N} \left[ \epsilon(\tilde{h}^{sub}_N|G^{old}_N) + \frac12 d_{\mathcal{H}\Delta\mathcal{H}}(G^{old}_N, G^{sub}_N) + \epsilon(h, \tilde{h}^{sub}_N|G^{sub}_N) \right]
   \]
-- 选择子集时，忽略未知 \(h\) 的项，将目标近似为：
+- 基于该上界，选择目标转化为同时最小化子集的分类误差和分布差异：
   \[
-  \tilde{G}^{sub}_N = \arg\min_{G^{sub}_N} \left[ \alpha \hat{\epsilon}(\tilde{h}_{N-1}|G^{sub}_N) + \hat{d}^2_{MMD}(G^{old}_N, G^{sub}_N|\tilde{h}_{N-1}) \right],
+  \tilde{G}^{sub}_N = \arg\min_{G^{sub}_N} \left[ \alpha \hat{\epsilon}(\tilde{h}_{N-1}|G^{sub}_N) + \hat{d}^2_{MMD}(G^{old}_N, G^{sub}_N|\tilde{h}_{N-1}) \right]
   \]
-  其中第一项用历史模型 \(\tilde{h}_{N-1}\) 近似子集损失，第二项用最大均值差异（MMD）衡量分布差异。
 
-### 2.3 子集选择与学习
-- **贪婪选择**：证明该目标为单调次模函数，可通过贪婪算法以 \(1-1/e\) 近似最优。为每个候选点定义 **witness function** \(j(v) = \alpha j_{cls}(v) + j_{MMD}(v)\)，选择函数值最小的点。
-- **计算加速**：将 \(G^{old}_N\) 随机划分为 \(W\) 组，每组独立选取子集，将复杂度从 \(O((r+m)^2)\) 降至 \(O((r+m)^2/W^2)\)。
-- **分布对齐学习**：训练时额外引入一个模拟分布的子集 \(G^{sim}_N\)（仅最小化 MMD 选出），在模型 \(h\) 上对齐该子集与 \(G^{sub}_N\) 的嵌入分布，损失项为：
+### 子集选择算法
+- 使用上一周期模型 \(\tilde{h}_{N-1}\) 来近似当前周期的子集误差和提取嵌入。
+- 分类误差项天然是单调次模的，MMD平方项在适当核函数下也被证明是单调次模函数（参见Kim et al., 2016）。因此整体选择目标为单调次模，可用贪心算法近似，保证 \((1-1/e)\) 的近似比。
+- 定义节点级别的 **witness function** \(j(v_t) = \alpha j_{cls}(v_t) + j_{MMD}(v_t)\)，每次选择使该值最小的节点加入子集。
+- 为降低计算复杂度，将 \(G^{old}_N\) 随机划分为多个分区，在每个分区内贪心选取子集再合并。
+
+### 模型优化
+- 学习阶段，除了用 \(G^{sub}_N\) 的分类损失，还额外引入一个 **分布对齐损失**：选取另一个仅最小化 MMD 的子集 \(G^{sim}_N\)，令 \(G^{sub}_N\) 的嵌入分布向 \(G^{sim}_N\) 对齐（使用带停止梯度的简化 MMD）。
+- 最终训练目标：
   \[
-  l_{dst}(G^{sub}_N, G^{sim}_N|h) = -\frac{2}{|G^{sub}_N||G^{sim}_N|} \sum_{v\in G^{sub}_N, u\in G^{sim}_N} k(v, \text{sg}(u)|h).
+  l_{tot} = \hat{\epsilon}(h|G^{new}_N) + \hat{\epsilon}(h|G^{sub}_N) + \beta l_{dst}(G^{sim}_N, G^{sub}_N|h)
   \]
-  通过停止梯度回传简化计算。
-
-### 2.4 总体流程
-1. 将旧类数据随机分组，每组贪婪选出 \(m/W\) 个样本构成 \(G^{sub}_N\) 和 \(G^{sim}_N\)。
-2. 合并子集，联合新类数据 \(G^{new}_N\) 训练模型：
-   \[
-   l_{tot} = \hat{\epsilon}(h|G^{new}_N) + \hat{\epsilon}(h|G^{sub}_N) + \beta\, l_{dst}(G^{sim}_N, G^{sub}_N|h).
-   \]
 
 ## 3. 实验设计
-### 3.1 数据集
-- **Yelp**：2014–2019年，5个时期，每期新增3个类别，约2万节点、232万事件。
-- **Reddit**：20天为一期，共3期，每期新增5个类别，约1.3万节点、31万事件。
-- **Amazon**：类似Yelp构造，24天一期，共3期，每期新增3个类别，约8.5万节点、87万事件。
+### 数据集
+- **Yelp**：2014–2019年，5个周期，每周期引入3个新类别，共15类。
+- **Reddit**：20天为一周期，共3个周期，每周期引入5个新类别，共15类。
+- **Amazon**：24天为一周期，共3个周期，每周期引入3个新类别，共9类。
+- 数据集统计信息见表1，构建方式类似OTGNet但适配TGCL定义。
 
-### 3.2 对比方法
-- **朴素基线**：Joint（全量重训，性能上界但效率低）、Finetune（仅新数据微调）。
-- **经典持续学习方法**：EWC、LwF（正则化）；iCaRL（基于嵌入均值的回放）。
-- **图持续学习方法**：ER（随机回放）、SSM（结构依赖回放）、OTGNet（重要与多样性三元组回放）、URCL（统一回放框架）。
-- 骨干网络：**TGAT** 与 **DyGFormer**。
-
-### 3.3 评价指标
-- **AP（平均精度）**：当前时期所有已见类别精度的均值。
-- **AF（平均遗忘）**：相对于 Joint 的精度下降，越小越好。
-- **Time**：最新时期每轮训练平均时间。
+### 基准模型与对比方法
+- **主干模型**：经典 TGAT 和最新 DyGFormer。
+- **对比方法**：
+  - 联合训练（Joint，上限）与仅微调（Finetune，下限）。
+  - 经典持续学习：EWC、LwF、iCaRL。
+  - 图持续学习：ER、SSM、OTGNet、URCL。
+- **评价指标**：平均精度（AP）、平均遗忘（AF）、每周期平均训练时间（Time）。
 
 ## 4. 资源与算力
-- 实验使用 **Nvidia A30 GPU**（24GB显存），未提及多卡并行。
-- 训练配置：每个时期训练 **100** epochs，batch size = 600，早停 patience = 20。
-- 为适应显存限制，选择子集时对旧类数据进行了随机分区（每个分区约1万样本）。
-- 未明确报告总训练时长，仅对比了各类方法的每轮耗时。
+- **硬件**：Nvidia A30 GPU（24 GB显存）。
+- 训练配置：每周期训练 100 epoch，批大小 600，学习率 \(1\times10^{-5}\)，dropout 0.4，早停机制。
+- 文中报告的 Time 为最后一个周期（数据量最大）的平均每轮训练时间（秒），未明确给出整体训练时长或GPU数量。
 
 ## 5. 实验数量与充分性
-- **主实验**：3个数据集 × 2种骨干 × 约10种方法，全面对比 AP、AF、Time。
-- **消融实验**：分析选择目标中的误差项和分布项、训练中加入分布对齐损失的影响；对比随机/聚类分区方式。
-- **超参数敏感性**：调节 \(\alpha\)、\(\beta\)、子集大小 \(m\)、模拟集大小 \(m'\)，考察对 AP 的影响。
-- **效率‑性能权衡**：改变 \(m\) 和 \(m'\) 观察 Time 与 AP 变化。
-- **额外验证**：MLP 替代图神经网络说明拓扑必要性；构建更大规模的 Reddit‑Large/Long 数据集测试可扩展性。
-- **综合评估**：实验设计丰富、对比公平，消融和敏感性分析较完整，整体论证充分。
+实验设计丰富，涵盖：
+- **主实验**（表2）：3个数据集 × 2种骨干网络，对比10种方法（含Joint/Finetune），展示AP、AF、Time及标准差。
+- **消融实验**（表3）：考察选择中的误差项、分布项以及学习中的分布对齐损失分别的作用。
+- **分区方法对比**（表4）：随机、K-means、层次聚类分区的影响。
+- **超参数敏感性分析**（图5）：α、β、子集大小 m 和 m' 对 AP 的影响。
+- **效率-性能权衡**（表5）：改变m与m'观察AP和时间变化。
+- **案例研究**：
+  - 使用MLP替代TGNN（表6），证明图结构的必要性。
+  - 构建更大规模数据 Reddit-Large（32类，16周期）和 Reddit-Long（24类，4周期）测试 scalability（表7）。
+- 所有实验均报告多次随机种子的均值和标准差，与基线的超参搜索也保持公平，实验充分且客观。
 
-## 6. 主要结论与发现
-- LTF 在所有数据集和骨干下均取得**最高的 AP 和最低的 AF**，效率优于多数 GCL 方法，明显优于 OTGNet 且耗时更低。
-- 子集选择时**同时考虑分类误差和分布相似性**至关重要，单一因素效果显著下降。
-- 训练中引入分布对齐损失（\(l_{dst}\)）能进一步提升性能。
-- **随机分区**简单且有效，k‑means 或层次聚类分区反而可能破坏原始分布，降低效果。
-- LTF 对子集大小鲁棒性良好，适当增大 \(m\) 可稳定提升精度。
+## 6. 论文的主要结论与发现
+- LTF 在所有数据集和骨干模型上均取得了最优平均精度和最低遗忘，同时维持了合理的训练效率。
+- 选择子集时同时考虑分类误差和分布相似性缺一不可，加入分布对齐损失可进一步提升。
+- 随机分区即可较好地保留原始数据分布，聚类方法反而破坏分布导致性能下降。
+- LTF 对超参具备一定鲁棒性，且在更大规模场景下仍优于基线方法。
 
 ## 7. 优点
-- **第一篇**系统定义并解决时序图持续学习问题，融合开放类别和旧类演化两个现实挑战。
-- 提供**理论支撑**：从领域适配角度导出误差上界，指导子集选择和学习。
-- 方法**与模型无关**，可灵活适配 TGAT、DyGFormer 等不同时序图神经网络。
-- 计算上利用**贪婪次模优化**和**随机分区**大幅降低子集选择复杂度，兼具效率和有效性。
-- 实验**全面扎实**，涵盖多种基线、消融、超参数分析及更大规模场景。
+- **理论驱动**：首次给出 TGCL 问题中子集选择的误差上界，并将子集选择问题转化为单调次模优化，具有理论保证。
+- **模块化与通用性**：框架与具体骨干TGL模型解耦，可适配TGAT、DyGFormer等。
+- **实用效率**：通过分区和简化MMD计算大幅降低复杂度，在效果和效率间取得良好平衡。
+- **实验全面**：覆盖多种数据集、骨干、基线，并设计了充分的消融和 scalability 测试。
 
 ## 8. 不足与局限
-- 仅探索**节点分类**任务，未在链接预测等更复杂的时序图任务上验证。
-- 子集选择依赖**历史模型** \(\tilde{h}_{N-1}\) 作为近似，若历史模型质量差可能影响选择效果。
-- 分布对齐使用简单**随机分区**，虽实验证明有效，但在极端分布差异下可能不足。
-- 训练中仍需存储和回放部分旧数据（子集），隐私敏感场景可能受限。
-- 在极端长序列或类增量剧烈的场景下，子集选择与正则化的长期稳定性未作深入讨论。
-- 未对比某些最新的持续学习方法（如基于生成重放的 GCL 方法）。
-
+- **内存与计算开销**：仍然需要存储 \(G^{sub}\) 和 \(G^{sim}\) 两个子集，且分布对齐损失的计算复杂度为 \(O(m m')\)，当子集增大时成本上升较快。
+- **依赖于历史模型**：选择阶段利用上一周期的模型 \(\tilde{h}_{N-1}\) 来近似评估，若历史模型与当前数据分布差异较大，可能影响选择质量。
+- **任务限制**：本文仅聚焦于节点分类任务，未涉及链路预测等其他重要时序图任务。
+- **真实大规模应用**：虽然测试了 Reddit-Large 和 Long，但节点规模仍有限，在超大规模图（如数十亿边）上的适用性有待验证。
 （完）

@@ -1,21 +1,21 @@
 ---
 title: "BECAME: Bayesian Continual Learning with Adaptive Model Merging"
-title_zh: "BECAME: 贝叶斯持续学习与自适应模型合并"
+title_zh: BECAME：贝叶斯持续学习与自适应模型合并
 authors: "Mei Li, Yuxiang Lu, Qinyan Dai, Suizhi Huang, Yue Ding, Hongtao Lu"
 date: 2025-05-01
 pdf: "https://openreview.net/pdf?id=gU0MwTihsn"
 tags: ["query:continual"]
 score: 9.0
-evidence: 贝叶斯持续学习与模型合并，平衡稳定性与可塑性
-tldr: 本文从贝叶斯持续学习原则出发，探索模型合并在持续学习中的应用。将合并机制重新表述为贝叶斯持续学习，并推导出闭式解，从而无需人工选择超参数即可平衡稳定性和可塑性。在多个标准基准上的实验表明，该方法优于现有的梯度投影和模型合并方法。该工作为持续学习中的稳定性-可塑性权衡提供了理论和实践上的双重新视角。
+evidence: 贝叶斯持续学习与自适应模型合并方法，用于稳定性-可塑性权衡
+tldr: 针对持续学习中稳定性与可塑性权衡的挑战，提出BECAME方法，基于贝叶斯持续学习原理推导出闭式解，通过自适应模型合并提升新旧任务间的平衡，实验表明其在多个基准上有效缓解灾难性遗忘。
 source: ICML-2025-Accepted
 selection_source: conference_retrieval
 figures_json: "[{\"url\": \"assets/figures/openreview/openreview-icml-2025-gu0mwtihsn/fig-001.webp\", \"caption\": \"\", \"page\": 0, \"index\": 1, \"width\": 850, \"height\": 349, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-gu0mwtihsn/fig-002.webp\", \"caption\": \"\", \"page\": 0, \"index\": 2, \"width\": 1365, \"height\": 823, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-gu0mwtihsn/fig-003.webp\", \"caption\": \"\", \"page\": 0, \"index\": 3, \"width\": 852, \"height\": 336, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-gu0mwtihsn/fig-004.webp\", \"caption\": \"\", \"page\": 0, \"index\": 4, \"width\": 850, \"height\": 293, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-gu0mwtihsn/fig-005.webp\", \"caption\": \"\", \"page\": 0, \"index\": 5, \"width\": 849, \"height\": 291, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-gu0mwtihsn/fig-006.webp\", \"caption\": \"\", \"page\": 0, \"index\": 6, \"width\": 1752, \"height\": 519, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-gu0mwtihsn/fig-007.webp\", \"caption\": \"\", \"page\": 0, \"index\": 7, \"width\": 1752, \"height\": 228, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-gu0mwtihsn/fig-008.webp\", \"caption\": \"\", \"page\": 0, \"index\": 8, \"width\": 1769, \"height\": 1692, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-gu0mwtihsn/fig-009.webp\", \"caption\": \"\", \"page\": 0, \"index\": 9, \"width\": 1760, \"height\": 400, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-gu0mwtihsn/fig-010.webp\", \"caption\": \"\", \"page\": 0, \"index\": 10, \"width\": 1765, \"height\": 1682, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-gu0mwtihsn/fig-011.webp\", \"caption\": \"\", \"page\": 0, \"index\": 11, \"width\": 1760, \"height\": 400, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-gu0mwtihsn/fig-012.webp\", \"caption\": \"\", \"page\": 0, \"index\": 12, \"width\": 1768, \"height\": 368, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-gu0mwtihsn/fig-013.webp\", \"caption\": \"\", \"page\": 0, \"index\": 13, \"width\": 1766, \"height\": 368, \"label\": \"Figure\"}]"
 tables_json: "[{\"url\": \"assets/tables/openreview/openreview-icml-2025-gu0mwtihsn/table-001.webp\", \"caption\": \"\", \"page\": 0, \"index\": 1, \"width\": 1770, \"height\": 628, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-gu0mwtihsn/table-002.webp\", \"caption\": \"\", \"page\": 0, \"index\": 2, \"width\": 1777, \"height\": 492, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-gu0mwtihsn/table-003.webp\", \"caption\": \"\", \"page\": 0, \"index\": 3, \"width\": 856, \"height\": 432, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-gu0mwtihsn/table-004.webp\", \"caption\": \"\", \"page\": 0, \"index\": 4, \"width\": 867, \"height\": 264, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-gu0mwtihsn/table-005.webp\", \"caption\": \"\", \"page\": 0, \"index\": 5, \"width\": 1568, \"height\": 363, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-gu0mwtihsn/table-006.webp\", \"caption\": \"\", \"page\": 0, \"index\": 6, \"width\": 1566, \"height\": 361, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-gu0mwtihsn/table-007.webp\", \"caption\": \"\", \"page\": 0, \"index\": 7, \"width\": 1765, \"height\": 510, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-gu0mwtihsn/table-008.webp\", \"caption\": \"\", \"page\": 0, \"index\": 8, \"width\": 1438, \"height\": 488, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-gu0mwtihsn/table-009.webp\", \"caption\": \"\", \"page\": 0, \"index\": 9, \"width\": 1674, \"height\": 509, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-gu0mwtihsn/table-010.webp\", \"caption\": \"\", \"page\": 0, \"index\": 10, \"width\": 1768, \"height\": 248, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-gu0mwtihsn/table-011.webp\", \"caption\": \"\", \"page\": 0, \"index\": 11, \"width\": 1300, \"height\": 381, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-gu0mwtihsn/table-012.webp\", \"caption\": \"\", \"page\": 0, \"index\": 12, \"width\": 1728, \"height\": 422, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-gu0mwtihsn/table-013.webp\", \"caption\": \"\", \"page\": 0, \"index\": 13, \"width\": 1470, \"height\": 213, \"label\": \"Table\"}]"
-motivation: 持续学习需要在保留旧知识和学习新任务之间取得平衡。
-method: 提出BECAME，利用贝叶斯持续学习原理推导模型合并的闭式解。
-result: 在标准持续学习基准上超越现有方法，无需人工调参。
-conclusion: 为持续学习的稳定性-可塑性权衡提供了理论基础和有效算法。
+motivation: 现有持续学习方法在平衡知识保留与新任务适应方面仍存在困难，模型合并方法多依赖经验假设。
+method: 提出BECAME，将模型合并机制重新表述为贝叶斯持续学习，推导出闭式合并方案。
+result: 实验表明，BECAME在多个持续学习基准上取得了稳定的性能提升，优于现有方法。
+conclusion: BECAME提供了一种理论驱动的自适应模型合并策略，有效提升了持续学习的稳定性-可塑性平衡。
 ---
 
 ## Abstract
@@ -25,77 +25,69 @@ Continual Learning (CL) strives to learn incrementally across tasks while mitiga
 
 ## 论文详细总结（自动生成）
 
-好的，我将根据论文内容，生成一份结构化的中文总结。
+好的，我将按照要求，基于提供的论文内容，生成一份详细的中文总结，并以Markdown格式组织。
 
 ### 1. 论文的核心问题与整体含义
-
-- **核心问题**：持续学习面临的核心挑战是 **稳定性（保留旧知识）与可塑性（学习新任务）的权衡**。现有的梯度投影方法虽能保证稳定性，但往往会限制模型学习新任务的可塑性。模型合并技术是解决此权衡的潜力方案，但**如何从理论上证明模型合并的有效性，以及如何在不同任务特性下自适应地确定最优合并系数**，仍是未解决的关键问题。
-- **整体含义**：本文旨在从理论上证明模型合并能找到一个优于单独新旧模型的“最优点”，并将合并过程纳入贝叶斯持续学习框架，推导出**无需手动调节、能自适应计算的最优合并系数闭式解**，从而在实践上提出一个**简单、通用且能显著提升多种梯度投影方法性能**的两阶段框架 BECAME。
+本论文聚焦于**持续学习**中的核心挑战：如何平衡**稳定性**（保留旧任务知识）与**可塑性**（学习新任务能力），从而缓解灾难性遗忘。
+*   **研究动机**：现有的梯度投影方法能很好地保证稳定性，但往往严重限制了模型学习新任务的可塑性。另一方面，模型合并技术虽展现出平衡稳定-可塑权衡的潜力，但以往方法多依赖经验假设（如假设新旧任务相互独立、采用固定合并系数等）和精心调参，缺乏理论指导且难以适应任务间的差异性。
+*   **核心问题**：论文旨在探索模型合并如何能更有效地改善持续学习中的稳定-可塑权衡，并试图解决两个根本性问题：
+    1.  模型合并为何能有效？
+    2.  能否推导出一个自适应、闭式的最优合并系数？
 
 ### 2. 论文提出的方法论
+论文提出了一个名为 **BECAME** 的两阶段框架，其核心思想是将模型合并机制与贝叶斯持续学习原理相结合，并基于拉普拉斯近似推导出闭式的最优合并系数。
 
-- **核心思想**：将模型合并与梯度投影的优势相结合。首先通过梯度投影保证稳定性，再以此为基础进行无约束训练增强可塑性，最后通过**贝叶斯推断和拉普拉斯近似**，在这两个模型之间找到一个自适应平衡点进行参数合并。
-- **关键技术细节与公式**：
-  - **理论证明（引理 3.1）**：论文证明了在从旧任务最优参数 $\theta^*_{t-1}$ 到新任务最优参数 $\hat{\theta}_t$ 的线性路径上，总是**存在一个合并点**，其累积损失低于路径两端点的损失，即 $L_{1:t}((1-\lambda)\theta^*_{t-1} + \lambda\hat{\theta}_t) \le \min\{L_{1:t}(\theta^*_{t-1}), L_{1:t}(\hat{\theta}_t)\}$。
-  - **贝叶斯重述与自适应合并系数（3.3节）**：将 MAP 估计下的持续学习目标函数进行拉普拉斯近似，并证明沿合并路径的优化目标是**凸函数**。通过令导数为零，推导出**最优合并系数 $\lambda^*_t$ 的闭式解**，其值由新旧参数差 $\Delta\theta$、新任务的**费舍尔信息矩阵（FIM）** $F_t(\hat{\theta}_t)$ 和历史任务的**累积精度矩阵** $\sum_{i=1}^{t-1} F_i(\theta^*_i)$ 共同决定：
-    $$\lambda^*_t = \frac{\Delta\theta^\top F_t(\hat{\theta}_t) \Delta\theta}{\Delta\theta^\top (F_t(\hat{\theta}_t) + \sum_{i=1}^{t-1} F_i(\theta^*_i)) \Delta\theta}$$
-- **算法流程（BECAME）**：
-  1.  **第一阶段（保证稳定性）**：使用梯度投影方法在旧模型 $\theta^*_{t-1}$ 的基础上学习任务 $t$，得到模型 $\theta^{GP}_t$。
-  2.  **第二阶段（增强可塑性）**：从 $\theta^{GP}_t$ 出发，不施加约束地继续训练，得到模型 $\hat{\theta}_t$。
-  3.  **自适应合并**：利用上述公式计算最优系数 $\lambda^*_t$，并合并模型 $\theta^*_t = (1-\lambda^*_t)\theta^{GP}_t + \lambda^*_t\hat{\theta}_t$。
-  4.  **更新精度矩阵**：计算 $\theta^*_t$ 的 FIM，并累加到先前任务的累计精度矩阵上，为后续任务做准备。
+*   **理论核心**：
+    *   **更好的最优解（引理3.1）** ：作者证明，从旧任务的最优参数到新任务的无约束最优参数的线性路径上，总存在一个合并点，其累积损失低于两个端点。这为模型合并的有效性提供了理论保证。
+    *   **闭式最优合并系数（公式17 & 20）** ：
+        1.  **贝叶斯视角**：将持续学习过程重新表述为后验概率的最大后验估计(MAP)，即 `p(θ|D1:t) ∝ p(Dt|θ)p(θ|D1:t-1)`。
+        2.  **拉普拉斯近似**：将难以处理的后验 `p(θ|D1:t-1)` 近似为一个多元高斯分布，其精度矩阵用费雪信息矩阵(FIM)的累加和来递归计算。
+        3.  **凸优化求解**：将合并后的参数 `θ(λ) = (1-λ)θ_t−1 + λθ̂_t` 代入MAP目标函数，并对其进行二阶泰勒展开。作者证明该目标函数关于合并系数`λ`是**凸函数**，且导数在`λ=0`和`λ=1`处符号相反，因此存在唯一的全局最优解`λ*`。令导数为零，即可推导出`λ*`的闭式解。
+
+*   **两阶段训练框架 (BECAME)**：
+    *   **第一阶段（保证稳定性）**：模型在旧任务参数`θ*_{t-1}`基础上，使用**梯度投影**方法训练新任务，得到参数`θ^{GP}_t`。此时遗忘极少，但塑性受限。
+    *   **第二阶段（增强可塑性）**：从`θ^{GP}_t`开始，不加任何约束地继续训练，得到参数`θ̂_t`。此时新任务性能最优，但遗忘严重。
+    *   **自适应合并**：应用推导出的闭式解公式，在`θ^{GP}_t`和`θ̂_t`连线上计算出最优合并系数`λ*_t`，得到最终模型`θ*_t`。该系数基于新旧任务的费雪信息矩阵和参数变化量`Δθ`自适应决定，无需手动调参。
+    *   **理论验证**：作者证明将起点从`θ*_{t-1}`替换为`θ^{GP}_t`是等价的，并且由于`θ^{GP}_t`的新任务损失更低，从而为合并后模型的损失提供了一个更紧的上界。
 
 ### 3. 实验设计
-
-- **数据集/场景**：在四种广泛使用的持续学习基准上进行任务增量学习评估。
-  - **20-Split CIFAR-100** 和 **10-Split CIFAR-100**。
-  - **25-Split TinyImageNet**。
-  - **20-Split MiniImageNet**。
-- **对比方法**：
-  - **基础梯度投影方法**：GPM、Adam-NSCL。
-  - **梯度投影改进方法**：TRGP、SGP、GPCNS、Connector。
-  - **其他代表方法**：EWC（正则化）、A-GEM、ER-Res（回放）、OWM（梯度投影）等。
-  - **不同合并策略**：固定系数合并 (1/t)、CoMA、CoFiMA。
-- **评估指标**：
-  - **平均准确率 (ACC)**：衡量整体性能。
-  - **后向迁移 (BWT)**：衡量稳定性。
-  - **非适应性度量 (IM)**：衡量可塑性。
-  - 新增了 **单轮次后准确率 (AOA)** 指标来评估泛化能力和前向迁移。
+论文通过详尽的实验验证了BECAME的有效性。
+*   **数据集/场景**：实验覆盖了4个主流的持续学习基准数据集：**20-Split CIFAR-100**, **10-Split CIFAR-100**, **25-Split TinyImageNet**, 和 **20-Split MiniImageNet**。此外，还在**5-Datasets**和**CIFAR-100 Superclass**上进行了补充实验。
+*   **Baseline方法**：对比分为两大类，覆盖了持续学习的主流范式。
+    *   **基于梯度投影的方法 (GPM-based)**：包括GPM及其变体TRGP、SGP、GPCNS，作为直接优化目标。
+    *   **其他对比方法**：包括Adam-NSCL (NSCL)、Connector (结合NSCL与模型合并)、OWM、EWC、SI、LwF、A-GEM、FS-DGPM、ER-Res等代表性的正则化、重放和优化方法。
+*   **合并策略对比**：直接比较了不同的模型合并策略，如等权重平均(`1/t`) 、固定系数(CoMA)和费雪加权平均(CoFiMA)，以证明其自适应系数`λ`的优越性。
 
 ### 4. 资源与算力
-
-- 论文提到，所有实验均在**单块 NVIDIA GeForce RTX 4080 GPU** 上运行。
-- 在效率分析中对比了训练时间和GPU内存占用，例如在 MiniImageNet 数据集上，GPM + Ours 的训练时间为 584.14 秒，GPU 内存占用为 375.72 MB，展示了其相对于其他改进方法（如TRGP）的效率和性能优势。
+论文明确提到了实验所用算力：
+*   **GPU型号**：所有实验均在一张 **NVIDIA GeForce RTX 4080** 显卡上完成。
+*   **训练时长/效率**：论文在MiniImageNet数据集上对比了训练时长和显存占用。例如，GPM+Ours的训练时间为584秒，而TRGP为776秒；显存占用约为375 MB，远低于TRGP (1854 MB) 和 GPCNS (998 MB)。更新费雪信息矩阵的效率很高，每次任务仅需0.69秒。
 
 ### 5. 实验数量与充分性
-
-- **实验数量充足**：
-  - 在 **4个不同规模的基准数据集**上进行了测试。
-  - 以 **4种梯度投影方法（GPM, TRGP, SGP, GPCNS）和1种方法（NSCL）** 为基线，分别应用BECAME并对比，合计超过10组主实验。
-  - 进行了**多种合并策略（5种）的消融/对比实验**。
-  - 深入分析了**稳定性-可塑性权衡、任务间平衡性、泛化能力和效率**。
-- **公平性与客观性**：
-  - 所有实验均使用与基线方法相同的网络架构、数据划分和超参数设置。
-  - 严格复现了基线方法，并采用**5个随机种子**报告均值和标准差，确保了结果的可信度。
+实验设计非常充分、客观且公平，具有很强的说服力。
+*   **实验组数**：大约在**4个主要基准数据集 × 8种以上的方法组合**上进行，加上不同合并策略的消融、效率和泛化性分析等，构成了一个庞大且系统的实验矩阵。
+*   **公平性**：
+    *   **网络架构一致**：GPM-based和NSCL-based实验分别使用与各自baseline完全相同的网络（5层AlexNet和ResNet-18）。
+    *   **超参数一致**：大部分超参数沿用原方法的设定，仅做了适配性微调，确保了比较的公平性。
+    *   **多次重复**：所有实验均使用**5个不同的随机种子**重复进行，并报告了均值和标准差，结果稳健可靠。
+*   **评估指标全面**：采用了ACC、BWT、IM等多个指标，从整体性能、稳定性、可塑性多角度评估。还提出了AOA、STD等指标来评估泛化能力、前向迁移和任务间平衡性。
 
 ### 6. 论文的主要结论与发现
-
-- **理论发现**：从理论上证明，在保持稳定性和增强可塑性的两个模型参数的连线上，总存在一个累积损失更低的**最优合并点**。
-- **方法有效性**：所提出的 BECAME 框架能**一致且显著地提升多种梯度投影方法的性能**（例如在10-Split CIFAR-100上将GPM的ACC从71.81%提升至75.05%，Adam-NSCL的ACC从72.91%提升至81.66%），尤其在**可塑性指标（IM）**上有巨大改善，同时保持了良好的稳定性（BWT）。
-- **自适应合并优势**：推导出的**闭式解合并系数**能够根据任务特性自适应调整，在提升整体性能的同时，实现了更好的任务间平衡，并展现出比固定系数或人工调参更强的泛化能力和前向迁移能力。
+*   BECAME通过自适应模型合并，显著提升了梯度投影方法（GPM, NSCL等）的性能天花板，尤其是在**大幅提升可塑性(降低IM)** 的同时，**保持了良好的稳定性(BWT)**。
+*   在多个基准数据集上，BECAME不仅在原始baseline基础上取得了一致的巨大提升（例如在NSCL上的10-Split CIFAR-100精度提升超8%），而且**超越了所有对比的State-of-the-Art方法**。
+*   与其他需要繁琐超参调节的模型合并策略(CoMA, CoFiMA)相比，本文提出的闭式解不仅性能更优或相当，且完全自适应，无需任何手动调参，具有更强的泛化适用性。
+*   该方法在提升精度的同时，还能使模型在不同任务上的表现更加**平衡**，并展现出更强的**泛化能力**。
 
 ### 7. 优点
-
-- **坚实的理论基础**：基于贝叶斯持续学习原则，为模型合并提供了理论支撑和闭式解法，而非依赖经验技巧。
-- **方法简单且通用**：作为一个即插即用的框架，BECAME能与多种现有的梯度投影方法结合，无需复杂的超参数调节即可稳定提升性能。
-- **性能提升显著**：在多个基准上超越了当前最优方法，尤其在改善模型可塑性方面效果突出，很好地解决了梯度投影方法的核心痛点。
-- **分析全面深入**：不仅关注最终性能，还对稳定性-可塑性权衡、任务平衡性、泛化能力、效率等多个维度进行了细致的剖析。
+*   **坚实的理论支撑**：从贝叶斯持续学习角度为启发式的模型合并提供了理论解释，并严格推导出闭式最优解，这是本文最大的亮点。
+*   **方法简洁有效**：BECAME框架实现简单，可作为一个即插即用的模块无缝集成到任何梯度投影方法中，带来显著的性能提升。
+*   **自适应性**：摒弃了经验性的调参，合并系数完全由数据和模型状态自适应决定，解决了不同任务、不同模型需不同合并系数的问题。
+*   **实验全面扎实**：在多个基准、多种baseline上进行了详尽的对比，评估指标丰富，并对效率、任务平衡性等进行了深入分析，结果极具说服力。
 
 ### 8. 不足与局限
-
-- **计算开销**：虽然优于部分基线，但BECAME需要额外一个无约束训练阶段，总计两个训练阶段，相比单阶段方法会增加训练时间。
-- **依赖梯度投影**：框架当前建立在梯度投影方法之上，其有效性依赖于第一阶段梯度投影对旧知识的良好保持（即假设公式21成立），该方法对于非梯度投影类方法的泛化性未在文中探讨。
-- **费舍尔信息矩阵近似**：对FIM采用对角近似以降低计算负担，这虽然是常规做法，但可能带来精度损失，其影响未被深入分析。
-- **应用场景限制**：所有实验均在任务增量学习的视觉分类基准上进行，其在领域增量学习或更复杂场景（如强化学习、自然语言处理）中的表现有待验证。
+*   **对梯度投影方法的依赖**：该方法目前仅针对基于梯度投影的持续学习方法进行了验证和集成，将其扩展到其他类型的CL方法（如基于重放的方法）的有效性是未知的。
+*   **拉普拉斯近似的精度**：方法的理论推导依赖于拉普拉斯近似和费雪信息矩阵的对角近似，当真实后验分布严重偏离高斯分布时，推导出的闭式解可能不是全局最优。
+*   **两阶段训练的额外开销**：尽管额外开销在可接受范围内，但两阶段训练的本质意味着训练步骤和时间会比单阶段的baseline要长，存在效率上的折衷。
+*   **应用场景局限**：实验集中于图像分类的Task-Incremental Learning设定，在更复杂的Class-Incremental Learning或Online CL等场景下的表现有待验证。
 
 （完）

@@ -1,0 +1,11908 @@
+Title: Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks
+
+URL Source: https://openreview.net/pdf?id=WkqZ6Qmmq2
+
+Number of Pages: 39
+
+Markdown Content:
+## Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+Boqi Li 1 Youjun Wang 1 Weiwei Liu 1
+
+Abstract 
+
+Continual learning (CL) focuses on the ability of models to learn sequentially from a stream of tasks. A major challenge in CL is catastrophic forgetting (CF). CF is a phenomenon where the model experiences significant performance degra-dation on previously learned tasks after training on new tasks. Although CF is commonly ob-served in convolutional neural networks (CNNs), the theoretical understanding about CF within CNNs remains limited. To fill the gap, we present a theoretical analysis of CF in a two-layer CNN. By employing a multi-view data model, we ana-lyze the learning dynamics of different features throughout CL and derive theoretical insights. The findings are supported by empirical results from both simulated and real-world datasets. 
+
+1. Introduction 
+
+In recent years, large volumes of data are generated. De-signing a general machine learning model to adapt quickly to changing environments becomes a significant concern (Ebrahimi et al., 2021; Goldfarb et al., 2024). One of the popular approaches is to train the model on a sequence of multiple tasks, which is called continual learning (CL) (Parisi et al., 2019; Chen & Liu, 2018; Wang et al., 2024; Gao & Liu, 2025a). A major challenge in CL is that after training on a few new tasks, the model “forgets” knowledge learned from previous tasks with a significant performance degradation, which is also known as catastrophic forgetting (CF) (McCloskey & Cohen, 1989; Goodfellow et al., 2015; Shi et al., 2021; Korbak et al., 2022). CF is widely observed in various models, such as linear models (Evron et al., 2022),     
+
+> 1School of Computer Science, Wuhan University National Engineering Research Center for Multimedia Software, Wuhan University Institute of Artificial Intelligence, Wuhan University Hubei Key Laboratory of Multimedia and Network Communica-tion Engineering, Wuhan University. Correspondence to: Weiwei Liu <liuweiwei863@gmail.com >.
+> Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s).
+
+convolutional neural networks (CNNs) (Goodfellow et al., 2015), transformers (Kotha et al., 2024), and others, across different CL scenarios, such as task-incremental CL (Sun et al., 2023), class-incremental CL (Babakniya et al., 2023), domain-incremental CL (Jeeveswaran et al., 2024) and so on. Alleviating CF is a core challenge in CL, and many methods (Kirkpatrick et al., 2017; Serr `a et al., 2018; Gao & Liu, 2023; Wu et al., 2024; Gao & Liu, 2025b) have been proposed to address CF in recent years. Despite tangible improvements in the field of CL, the theoretical understanding of CF re-mains underexplored. Recent theoretical works investigate CF from the perspectives of optimization (Doan et al., 2021; Lin et al., 2023; Evron et al., 2022) and statistics (Goldfarb & Hand, 2023; Zhao et al., 2024). However, few of these studies analyze the learning dynamics in non-linear models, particularly CNNs. To bridge the gap, we investigate CF in a two-layer CNN model. Following Allen-Zhu & Li (2023); Shen et al. (2022), we employ a multi-view data model and focus on task-incremental binary-classification CL. In a multi-view data model, the data consists of features and noises. By an-alyzing the learning dynamics of the features and noise, we identify which components the model ultimately learns after several time steps. Our data model includes four com-ponents: task-specific features, general features, random features, and background noise. Using gradient descent (GD) to update the model, we analyze the learning process of the model. Under mild assumptions, our theoretical re-sults offer insights into the underlying causes of CF. Our findings suggest that when task-specific features are learned more rapidly than others, the learning of general features with low signals is hindered. Additionally, when training on new tasks, we observe that if the random feature has a large signal, CF occurs, causing the model to forget knowledge from previous tasks. We also offer a theoretical insight into the effectiveness of replay-based methods (Rolnick et al., 2019; Jeeveswaran et al., 2023), which are commonly used to mitigate CF. We perform numerical analysis and conduct experiments on real-world datasets to further validate our theoretical find-ings. In numerical analysis, we validate the key components 1Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+derived from our theoretical results. The experiments in real-world datasets further support our theoretical analysis. The contributions of our work can be summarized as fol-lows: • We provide a novel theoretical framework to analyze CF in a two-layer CNN, focusing on the learning dy-namics of different features and noises. • Theoretical findings reveal the existence of CF for two reasons: the task-specific feature has a larger signal than the general feature, and the task-specific feature appears as a random feature with a strong signal in other tasks. • We validate our theoretical results using experiments on both simulated and real-world datasets, demonstrat-ing the practical relevance of our findings. 
+
+2. Related Works 
+
+Theoretical Analysis on Catastrophic Forgetting. A few works study CF in linear regression problems. Evron et al. (2022) show connections between CL in the linear setting and alternating projections and the Kaczmarz methods. The authors also study the effect of task orderings and similar-ity on CF. Li et al. (2023) investigate regularized CL with two linear regression tasks. Goldfarb & Hand (2023) ex-hibit the effect of over-parameterization on performance degradation due to CF. Lin et al. (2023) provide an explicit characterization of CF and generalization error to analyze how over-parameterization, task similarity, and task order-ing are relevant to CF and generalization error. Zhao et al. (2024) provide a statistical analysis of regularization-based CL on a sequence of tasks, and study the effect of regu-larization terms on model performance. Li et al. (2025) provide a theoretical study of mixture-of-experts models in CL. (Ding et al., 2024) analyze factors contributing to forgetting under linear models in CL. Zheng et al. (2025) examine memory-based CL under overparameterized linear models. There are also some works that investigate CF in neural networks. Doan et al. (2021) analyze CF under the Neural Tangent Kernel (NTK) regime, and they propose measuring task similarity using an NTK overlap matrix. Andle & Sekeh (2022) show a theoretical analysis of information flow through layers in linear networks for task sequences, and the effect of information flow on learning performance. Cao et al. (2022a) propose a provable CL algorithm that maintains and refines the internal feature representation. Benjamin et al. (2024) introduce the concept of NTE in CL, reformulating a single neural network as an ensemble of fixed classifiers. Their analysis focuses on the linear networks with non-linear activation fucntion. Different from the above works, we study CF in a two-layer CNN using a multi-view data model. 
+
+Theoretical Analysis in Two-Layer CNN Model. Re-cently, a lot of works study the learning dynamics in a two-layer CNN using a multi-view data model under an over-parameterization regime. The multi-view data model is firstly proposed by Allen-Zhu & Li (2023), with a frame-work to study the learning dynamics in ensemble learning, knowledge distillation, and self-distillation. Within a similar framework, Jelassi & Li (2022) investigate the effect of mo-mentum in (S)GD for improving generalization of CNNs, Shen et al. (2022) study the effect of data augmentation, Huang et al. (2024) investigate the federated learning, Li & Liu (2024) investigate the backdoor poisoning attacks and Kou et al. (2023); Meng et al. (2024) study benign overfitting in CNN models. However, previous works mainly focus on learning a sin-gle task, while we analyze the learning dynamics across a sequence of tasks. A major difficulty in our setting is that, at the beginning of learning a new task, the weights of the model are not randomly initialized, which is not discussed in the above works. Therefore, it is imperative to study the dynamics of CL in a two-layer CNN model. 
+
+3. Preliminaries 
+
+Consider a standard task-incremental CL problem, where a sequence of tasks indexed by τ = 1 , . . . , T . Each task 
+
+τ is a binary classification problem over a dataset S(τ ) =n 
+
+x(τ ) 
+
+> i
+
+, y (τ )
+
+> i
+
+o nτ
+
+> i=1
+
+. Let D(τ ) 
+
+> z
+
+be the distribution of Z(τ ) =(X(τ ), Y (τ )) over Z = X ×Y . In this work, we consider the task-incremental scenario with T = 2, meaning the model sequentially trains on a pair of tasks. 
+
+Data. In each task τ , we assume the data points are drawn from a multi-view data model (Allen-Zhu & Li, 2023). In our multi-view data model, each data point x consists of 
+
+P + 3 non-overlapping patches x = ( x1, . . . , xP +3 ) ∈
+
+Rd×(P +3) , and each patch is a vector of dimension d.We suppose that there exists a general feature space 
+
+O ∈ Rd×3 spanned by three basis vectors F eatures =
+
+{e1, e2, erob }. In each task, the task-specific, general, and random features are defined as u(τ ) = αueτ , v(τ ) =
+
+αv erob , ζ(τ ) = αζ e3−τ . Additionally, P background noise vectors {ξ(τ )p}Pp=1 exist in x, and the distribution of ξ(τ )
+
+is denoted by Dξ . We define the feature-noise multi-view data model as follows: 
+
+Definition 3.1. In task τ , given vectors u(τ ), v(τ ), ζ(τ ), and the noise distribution Dξ , let U be the uniform distribution and [n] is used to denote the set {1, . . . , n }. A data point 
+
+z = ( x, y ) is drawn from the distribution D(τ ) 
+
+> z
+
+which is defined as follows: 2Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+1. Draw two Rademacher variables (y, ϵ ) ∼
+
+U {+1 , −1}2.2. Given y, ϵ , arbitrarily choose three distinct patches 
+
+pu, pv and pζ . The feature patches are set as xpu , xpv , xpζ = {yu, y v, ϵ ζ}.3. Each remaining background patch pξ ∈ [P + 3] \pu, p v , p ζ of x is set as xpξ = ξ, where ξ ∼ D ξ .
+
+Remark 3.2 . In our data model, each task has both task-specific and general features. In a pair of tasks, v(1) =
+
+v(2) = v is an aligned and robust feature that allows the model to achieve high accuracy on both tasks. Using task-specific features u(τ ), the model can only correctly classify the data points in task τ . Since ζ(3 −τ ) = α−1 
+
+> u
+
+αζ u(τ ), if the model has not learned u(3 −τ ), and αζ is large, the sign of the model’s output in the second task matches the sign of ϵ, which is independent of y. The presence of a random feature ensures that the task-specific feature can only be used for classification within its corresponding task. To ilustrate the data model, we consider an example in two-task incremental learning based on Definition 3.1: • Task 1: Data x with label y contains features 
+
+{yα ue1, yα v erob , ϵα ζ e2} and noises. • Task 2, Data x with label y contains features 
+
+{yα ue2, yα v erob , ϵα ζ e1} and noises. 
+
+Remark 3.3 . In such an example, all of {e1, erob , e2} appear in each task, but only yα ueτ and yα v erob are correlated with the true label in task τ , which means the two features can be used for classification in task τ . ϵα ζ e3−τ is called a random feature, which is uncorrelated with the true label. In such a model, the task-specific feature is only used in its respective task. αu, α v , α ζ controls the strength of the features. In this paper, we assume Dξ is a zero-mean Gaussian distri-bution N (0 , σ 2 
+
+> ξ
+
+d−1(Id − e1eT 
+
+> 1
+
+− e2eT 
+
+> 2
+
+− erob eT
+
+> rob
+
+)) . We use I to denote the index set of S. The training set S(τ ) 
+
+> tr
+
+con-sists of n(τ ) independent and identically distributed (i.i.d.) data points drawn from Dn 
+
+> z
+
+. In this work, we suppose that 
+
+∀τ, n (τ ) = n.
+
+Model. We use a patch-wise CNN architecture F (x) with 
+
+C channels, which is defined as 
+
+F (x) = 
+
+> C
+
+X
+
+> c=1
+
+λcP +3 X
+
+> p=1
+
+ϕ (⟨wc, xp⟩) , (1) where {w1, . . . , wC } are the parameters in the first layer, 
+
+{λ1, . . . , λ C } are the parameters in the last layer, and 
+
+ϕ(z) = zq is the activation function. In this work, we use q = 3 while our results can be extended to any q ≥ 3.The CNN predicts label as ˆy = sign (F (x)) , where sign (·)
+
+denotes the sign function. 
+
+Training Process. The entire training process can be split into two stages: In the first stage, the model begins with initialization. We use Gaussian initialization to initialize the weights of the first layer, i.e. ∀c ∈ [C], w(1)  
+
+> c
+
+(0) ∼ N (0 , σ 20 Id), while the last layer is fixed and set as the all-one vector, i.e., 
+
+∀c ∈ [C], λ c = 1 . We then use the training data from the first task S(1)  
+
+> tr
+
+to train the model. After T1 epochs, we stop training the model, and the model at the end of the first stage is denoted by F (1) = F (1)  
+
+> T1
+
+with parameters w(1)  
+
+> c
+
+(T1).In the second stage, the model is initialized as w(2)  
+
+> c
+
+(0) = 
+
+w(1)  
+
+> c
+
+(T1), and we use the training data of the second task 
+
+S(2)  
+
+> tr
+
+to train the model for an additional T2 epoch. The model at the end of the second stage is denoted by F (2) =
+
+F (2)  
+
+> T2
+
+with parameters w(2)  
+
+> c
+
+(T2).We utilize the logistic loss ℓ(F (x), y ) = log  1 + e−yF (x)
+
+as the loss function and apply gradient descent (GD) to optimize the parameters. Throughout the learning process, the last layer remains fixed. Given a learning rate η, at round t of stage τ ∈ { 1, 2}, the parameters of the network are updated as follows: 
+
+w(τ ) 
+
+> c
+
+(t + 1) − w(τ ) 
+
+> c
+
+(t)= − ηn
+
+> n
+
+X
+
+> i=1
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)∇w(τ )
+
+> c
+
+ℓ(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)=− ηn
+
+> n
+
+X 
+
+> i=1
+> P+3
+
+X
+
+> p=1
+
+y(τ ) 
+
+> i
+
+λcℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′D
+
+w(τ ) 
+
+> c
+
+(t), x(τ )
+
+> i,p
+
+E
+
+x(τ ) 
+
+> i,p
+
+.
+
+The CF is formally defined as follows: 
+
+Definition 3.4 (Catastrophic Forgetting) . We say that CF occurs in the training process when the following conditions are satisfied: 1. At the end of the first stage, with a high probability 
+
+1 − δ1, the model correctly classifies the test data from the first task: 
+
+P(x,y )∼D (1) 
+
+> z
+
+[yF (1) (x) > 0] > 1 − δ1.
+
+2. At the end of the second stage, with a high probability 
+
+1 − δ2, the accuracy on the first task degrades signifi-cantly: 
+
+P(x,y )∼D (1) 
+
+> z
+
+[yF (2) (x) > 0] < 1/2 + δ2.
+
+Remark 3.5 . For a binary classification task, an algorithm that outputs randomly would achieve approximately 50% 3Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+accuracy. The above definition implies that when CF occurs, the model’s performance on the first task is close to random guessing. By fixing the last layer, we can focus on the learning dynamics of features to find the hidden reason behind CF. It is crucial for identifying whether and how certain features contribute to CF. We use the standard asymptotic notations O, Θ, Ω in this pa-per, and eO, eΘ, eΩ are used to hide the log factors in O, Θ, Ω,respectively. We use f ≤ o(g) to denote that for every 
+
+α > 0, there exists x0 such that for all x > x 0 we have 
+
+f (x) ≤ αg (x). We use f ≥ ω(g) to denote that for every 
+
+α > 0, there exists x0 such that for all x > x 0 we have 
+
+f (x) ≥ αg (x). We suppose the following conditions hold in our analysis. 
+
+Condition 3.6. In the training process, for any τ ∈ { 1, 2},we have 1. The feature vectors u(τ ), v(τ ), ζ(τ ) are mutually or-thogonal, and the norms of u(τ ), v(τ ), ζ(τ ) satisfy 
+
+0 ≤ αv , α ζ < α u ≤ O (1) .2. The network is over-parameterized, and nP ≤
+
+o
+
+√d
+
+
+
+. The number of channels C is of the order of logarithm of d, i.e., C = Θ(log d).3. The network is initialized with a small variance, i.e., 
+
+P σ 0 ≤ o(1) and the variance of background noise is large, i.e., ω(1) ≤ σξ ≤ o (1 / (P σ 0)) .4. The learning rate is not large, i.e., η ≤ O  1/  σ0α3
+
+> u
+
+ .5. Signal-to-Noise Ratio (SNR) is sufficiently large to ensure that the model does not fit the noise during the training process, i.e., nα 3
+
+> u
+
+/σ 3 
+
+> ξ
+
+≥ ω (1) .
+
+Remark 3.7 . In Condition 3.6, the condition on σξ is to ensure that at the beginning of the training process, the network cannot easily classify the data with the task-specific feature. We use a small σ0 to ensure that the output of the network after initialization is the order of o(1) . The last condition is a lower bound for SNR 3 := α3
+
+> u
+
+/σ 3 
+
+> ξ
+
+, and a similar condition of SNR is also shown in Cao et al. (2022b) 
+
+4. Theoretical Insights in Learning Process 
+
+We first simplify our CNN model as C = 1 and consider four ideal models. Let κ > 0 be a large constant. First, we consider task-specific models. Using w1 = κu(1) , the model achieves low training and test error in the first task but has low accuracy for data drawn from the second task. Similarly, using w1 = κu(2) , the model only achieves high training and test accuracy in the second task and misclassi-fies half of the data points drawn from the first task. Both of these models fail to generalize robustly to unseen tasks. In contrast, we consider two task-robust models. Firstly, employing the robust vector v(1) = v(2) allows for accu-rate data classification, expressed as w1 = wrob = κv(1) ,successfully categorizing both training and test datasets in both tasks. Secondly, the model can be built using u(1) and 
+
+u(2) , represented as w1 = wgen = κu(1) + κu(2) . When 
+
+αζ < α u, both vectors u(1) and u(2) can effectively classify the data across both tasks. Among the four models outlined previously, the goal of the user is to develop a model with the ability of generalization, akin to the last two models wrob and wgen . We then ana-lyze the gradient descent dynamics involved in sequential task learning and investigate the conditions under which generalized models can be acquired. For the remainder of this section, we assume C > 1 and set σξ = 0 . The condi-tions involving σξ in Condition 3.6 can be ignored in this section. 
+
+4.1. Features Learned by the Model in the First Stage 
+
+At the beginning of the first stage, the weights of F are closer to the initialization. The following lemma shows that the inner products of weight vectors and patch vectors are all small, meaning that none of the channels capture the features at initialization. 
+
+Lemma 4.1. Given the weights w(1)  
+
+> c
+
+initialized as 
+
+w(1)  
+
+> c
+
+(0) ∼ N (0 , σ 0Id), at the beginning of the first stage, with a probability of 1 − O
+
+ n2P 2C
+
+> poly(d)
+
+
+
+, we have 
+
+∀e ∈
+
+n
+
+u(1) , v(1) , ζ(1) o
+
+,max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(0) , e
+
+E
+
+≤ eO (∥e∥2 σ0) ,
+
+∀e ∈
+
+n
+
+u(1) , v(1) , ζ(1) o
+
+,max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(0) , e
+
+E
+
+≥ Ω ( ∥e∥2 σ0) ,
+
+∀i ∈ [n], p ∈ P ξi , max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(0) , ξ(1) 
+
+> i,p
+
+E
+
+≤ eO (σ0σξ ) ,
+
+∀i ∈ [n], p ∈ P ξi , max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(0) , ξ(1) 
+
+> i,p
+
+E
+
+≥ Ω ( σ0σξ ) .
+
+The proof of Lemma 4.1 can be found in Appendix C. We then analyze the dynamics of 
+
+D
+
+w(1)  
+
+> c
+
+, u(1) 
+
+E
+
+:
+
+d
+
+D
+
+w(1)  
+
+> c
+
+, u(1) 
+
+E
+
+dt 
+
+= − 1
+
+n
+
+> n
+
+X
+
+> i=1
+> P
+
+X
+
+> p=1
+
+y(1)  
+
+> i
+
+ℓ′
+
+> i
+
+ϕ′ D 
+
+w(1)  
+
+> c
+
+, x(1) 
+
+> i,p
+
+E D 
+
+x(1)  
+
+> i,p
+
+, u(1) E
+
+= − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+ℓ′
+
+> i
+
+ϕ′ D 
+
+w(1)  
+
+> c
+
+, u(1) E 
+
+u(1) 22
+
+.
+
+At initialization, ∀i ∈ [n], F (xi) = o(1) , and ℓ′ 
+
+> i
+
+=
+
+ℓ′(y(1)  
+
+> i
+
+F (x(1) )) ≈ −1/2. The dynamic reduces to 4Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+an ODE. Let g(t) =
+
+D
+
+w(1)  
+
+> c
+
+, u(1) 
+
+E
+
+, we have g′(t) ≈
+
+u(1) 22 ϕ′(g(t)) . When g(t) ≤ 1, we have (g(t)−1)′ = α2
+
+> u
+
+due to the definition of ϕ. Then at T (1)  
+
+> u
+
+= Θ 
+
+ 1
+
+> α2
+> ug(0)
+
+
+
+=Θ
+
+ 1
+
+> σ0α3
+> u
+
+
+
+, we yield max c
+
+D
+
+w(1)  
+
+> c
+
+, u(1) 
+
+E
+
+≥ Ω(1) , which implies that u(1) has been captured by the NN. By replacing v(1) to u(1) , we yield that 
+
+d
+
+D
+
+w(1)  
+
+> c
+
+, v(1) 
+
+E
+
+dt 
+
+= − 1
+
+n
+
+> n
+
+X
+
+> i=1
+> P
+
+X
+
+> p=1
+
+y(1)  
+
+> i
+
+ℓ′
+
+> i
+
+ϕ′ D 
+
+w(1)  
+
+> c
+
+, x(1) 
+
+> i,p
+
+E D 
+
+x(1)  
+
+> i,p
+
+, v(1) E
+
+= − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+ℓ′
+
+> i
+
+ϕ′ D 
+
+w(1)  
+
+> c
+
+, v(1) E 
+
+v(1) 22
+
+.
+
+At T (1)  
+
+> v
+
+= Θ
+
+ 1
+
+> σ0α3
+> v
+
+
+
+, we yield max c
+
+D
+
+w(1)  
+
+> c
+
+, v(1) 
+
+E
+
+≥
+
+Ω(1) . When T (1)  
+
+> v
+
+≪ T (1)  
+
+> u
+
+, which means αv ≪ αu, the feature v(1) cannot be captured by the CNN model. The above analysis shows that u(1) is easier to learn than v(1) 
+
+when u(1) has a stronger signal than v(1) .As for ζ(1) , let I(τ )= and I(τ )̸ 
+
+> =
+
+denote the sets 
+
+i : i ∈ I (τ ), y i = ϵi and i : i ∈ I (τ ), y i̸ = ϵi , respec-tively. n(τ )= and nτ̸ 
+
+> =
+
+are used to denote the sizes of I(τ )= and 
+
+I(τ )̸ 
+
+> =
+
+, respectively. We have 
+
+d
+
+D
+
+w(1)  
+
+> c
+
+, ζ(1) E
+
+dt 
+
+= − 1
+
+n
+
+> n
+
+X
+
+> i=1
+> P
+
+X
+
+> p=1
+
+y(1)  
+
+> i
+
+ℓ′
+
+> i
+
+ϕ′ D 
+
+w(1)  
+
+> c
+
+, x(1) 
+
+> i,p
+
+E D 
+
+x(1)  
+
+> i,p
+
+, ζ(1) E
+
+= − 1
+
+n
+
+ X
+
+> i∈I =
+
+ℓ′ 
+
+> i
+
+− X 
+
+> i∈I ̸=
+
+ℓ′
+
+> i
+
+ ϕ′ D 
+
+w(1)  
+
+> c
+
+, ζ(1) E 
+
+ζ(1) 22
+
+=Θ 
+
+
+
+n(1) = − n(1) ̸
+
+> =
+
+
+
+ϕ′ D 
+
+w(1)  
+
+> c
+
+, ζ(1) E 
+
+ζ(1) 22
+
+.
+
+Since ϵ is a sub-Gaussian random variable, with a high probability, we yield n(1) = − n(1) ̸ 
+
+> =
+
+≤ eO (√n). Even if αζ = αu, the update speed of max c
+
+D
+
+w(1)  
+
+> c
+
+, ζ(1) E
+
+is still slower than max c
+
+D
+
+w(1)  
+
+> c
+
+, u(1) 
+
+E
+
+. The time step that max c
+
+D
+
+w(1)  
+
+> c
+
+, ζ(1) E
+
+reaches Ω (1) is at least T (1)  
+
+> ζ
+
+=Θ
+
+ 
+
+> n
+> n(1) =−n(1) ̸
+> =
+> 
+> σ0
+
+∥ζ(1) ∥32
+
+
+
+≥ Ω
+
+ √nσ0α3
+
+> ζ
+
+
+
+.Note that u(2) = α−1 
+
+> ζ
+
+αuζ(1) , we have 
+
+d
+
+D
+
+w(1)  
+
+> c
+
+, u(2) 
+
+E
+
+dt 
+
+=Θ 
+
+ 
+
+n(1) = − n(1) ̸
+
+> =
+
+
+
+α−3 
+
+> u
+
+α3
+
+> ζ
+
+
+
+ϕ′ D 
+
+w(1)  
+
+> c
+
+, u(2) E 
+
+u(2) 22
+
+.
+
+The time step that max c
+
+D
+
+w(1)  
+
+> c
+
+, u(2) 
+
+E
+
+≥ Ω(1) is also at least T (1)  
+
+> u′
+
+= Θ 
+
+ 
+
+> n
+> n(1) =−n(1) ̸
+> =
+> 
+> σ0α3
+> ζ
+
+
+
+≥ Ω
+
+ √nσ0α3
+
+> ζ
+
+
+
+. Finally, after the task-specific feature u(1) or general feature v(1) is captured by the model, the condition that ∀i ∈ [n], F (xi) = 
+
+o(1) and ℓ′ 
+
+> i
+
+= ℓ′(yiF (x)) ≈ − 1/2 no longer hold, and the update speed of each component decreases. To summarize, in the first stage, if the general feature 
+
+v(1) has a minimal signal, the model only learns the task-specific feature u(1) , and the updates of 
+
+D
+
+w(1)  
+
+> c
+
+, v(1) 
+
+E
+
+and 
+
+D
+
+w(1)  
+
+> c
+
+, ζ(1) E
+
+are both slight. From a practical perspective, the existence of the general feature is difficult to meet in two randomly sampled tasks. Our experiments demonstrate that the general feature does not exist in the majority of cases. When 
+
+D
+
+w(1)  
+
+> c
+
+, u(1) 
+
+E
+
+≥ Ω (1) , we stop training the model in the first stage. 
+
+4.2. Model Forgets Task-Specific Feature in the Second Stage 
+
+In the second stage, we show that the model tends to forget 
+
+u(1) when the norm of random feature ζ(2) becomes large. Let ∆c
+
+
+
+ζ(τ )
+
+=
+
+D
+
+w(τ ) 
+
+> c
+
+(t + 1) , ζ(τ )E
+
+−
+
+D
+
+w(τ ) 
+
+> c
+
+(t), ζ(τ )E
+
+,since ϕ′(·) is an even function, we have 
+
+∆c
+
+
+
+ζ(τ )
+
+=
+
+ηλ c ∥ζ∥22 ϕ′
+
+D 
+
+w(1)  
+
+> c
+
+(t), ζ
+
+E 
+
+n (G(τ )= − G (τ )̸ 
+
+> =
+
+),
+
+where G(τ )= = P  
+
+> i∈I (τ)=
+
+−ℓ′(F (xi), y i) and G(τ )̸ 
+
+> =
+
+=
+
+P 
+
+> i∈I (τ)̸
+> =
+
+−ℓ′(F (xi), y i). The update direction of ⟨wc, ζ⟩
+
+depends on the sign of G(2) = ( G(2) = − G (2) ̸ 
+
+> =
+
+), which is different from the task-specific and general features. Let 
+
+h (e) = P 
+
+> c∈[C]
+
+ϕ
+
+D 
+
+w(2)  
+
+> c
+
+, e
+
+E 
+
+, we rewrite ℓ′ as 
+
+− ℓ′ (F (xi), y i) = (1 + exp ( yiF (xi))) −1
+
+=
+
+
+
+1+exp 
+
+
+
+yih
+
+
+
+yiu(2) 
+
++yih
+
+
+
+yiv(2) 
+
++yih
+
+
+
+ϵiζ(2)  −1
+
+=
+
+
+
+1+exp 
+
+
+
+h
+
+
+
+u(2) 
+
++h
+
+
+
+v(2) 
+
++yiϵih
+
+
+
+ζ(2)  −1
+
+=
+
+
+
+1+exp 
+
+
+
+h  u(2) +h  v(2) +h
+
+
+
+ζ(2)  −1
+
+, i ∈ I (2) = ;
+
+
+
+1+exp 
+
+
+
+h  u(2) +h  v(2) −h
+
+
+
+ζ(2)  −1
+
+, i ∈ I (2) ̸ 
+
+> =
+
+.
+
+5Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+Since ℓ′(z1)/ℓ ′(z2) = Θ (exp ( z2 − z1)) , we have 
+
+G(2) = /G(2) ̸ 
+
+> =
+
+=Θ 
+
+
+
+n(2) = n(2) ̸
+
+> =
+> −1
+
+exp 
+
+
+
+−2h
+
+
+
+ζ(2)  
+
+=Θ 
+
+
+
+n(2) = n(2) ̸
+
+> =
+> −1
+
+exp 
+
+
+
+−2α3 
+
+> ζ
+
+α−3 
+
+> u
+
+h
+
+
+
+u(1)  
+
+.
+
+On the one hand, when αζ ≤ o (αu), we yield that 
+
+max c
+
+D
+
+w(2)  
+
+> c
+
+, ζ(2) E
+
+≤ o (1) , and ℓ′ 
+
+> i
+
+= ℓ′(yiF (x)) =
+
+−1/2 ± o (1) . In such a case, 
+
+G(2) = Θ ( |n= − n̸ =|) ≤ O  √n ,
+
+and the update of 
+
+D
+
+w(2)  
+
+> c
+
+, ζ(2) E
+
+has a relatively slow speed. On the other hand, for some αζ ≥ Ω ( αu), we have 
+
+max c
+
+D
+
+w(2)  
+
+> c
+
+, ζ(2) E
+
+≥ Ω (1) and G(2) = /G(2) ̸ 
+
+> =
+
+can achieve the order of Ω (1) . At the beginning of the second stage, 
+
+h  u(2)  = α3
+
+> u
+
+α−3 
+
+> ζ
+
+h
+
+
+
+ζ(1) 
+
+≤ o (1) , h  v(2)  ≤ o (1) ,we yield that −ℓ′ (F (xi), y i) ≤ O (1) for i ∈ I (2) = while 
+
+−ℓ′ (F (xi), y i) ≥ Ω (1) for i ∈ I (2) ̸ 
+
+> =
+
+. We then have that 
+
+G(2) = −Θ ( n̸ =) = −Θ ( n) ,
+
+and the model forgets u(1) .The speed of forgetting depends on αζ . As αζ increases, 
+
+max c wc, u(1) decreases to a low value. Additionally, as the task-specific feature u(2) is gradually learned by the model, the speed of forgetting also decreases. As a result, after sequentially training on two tasks, the CNN model gains the ability of generalization in two ways: 1. When αv ≥ Ω ( αu), the model learns the general fea-ture v(1) = v(2) , and behaves like F with wrob .2. When αζ ≤ o (αu), the model learns both u(1) and 
+
+u(2) , and behaves like F with wgen .CF does not occur in the above two cases. Instead, CF occurs when αv < o (αu) and αζ ≥ Ω ( αu). In such a case, the model ends up classifying the data using only feature 
+
+u(2) , resulting in a high error on the first task. We then show the formal results in Section 5. 
+
+4.3. Replay-Based Methods Can Suppress CF 
+
+When αv ≤ o (αu) and αζ ≥ Ω ( αu), our analysis im-plies that CF occurs with a high probability. The remaining question is how to suppress CF. In the second stage, replay-based methods add data points from previous tasks into the training set to suppress CF. We then analyze the effect of replay-based methods. Given en data points from the first task, the update rule for 
+
+∆c(u(1) ) and ∆c(u(2) ) can be rewritten as 
+
+∆c(u(1) ) = m(u(1) )( eG(1) = + eG(1) ̸ 
+
+> =
+
++ αζ G(2) = − αζ G(2) ̸ 
+
+> =
+
+)∆c(u(2) ) = m(u(2) )( αζ eG(1) = − αζ eG(1) ̸ 
+
+> =
+
++ G(2) = + G(2) ̸ 
+
+> =
+
+),
+
+where m(e) = −η(n + en)−1λc ∥e∥22 ϕ′ (⟨wc(t), e⟩).Note that eG(1) = = Θ
+
+ eG(1) ̸
+
+> =
+
+
+
+= Θ ( en) while G(2) = =Θ
+
+
+
+G(2) ̸
+
+> =
+
+
+
+= Θ ( n), and αζ = Θ ( αu). We can replay at least en ≥ Ω ( n) data points from past tasks to ensure that 
+
+eG(1) = + eG(1) ̸ 
+
+> =
+
++ αζ G(2) = − αζ G(2) ̸ 
+
+> =
+
+> 0,
+
+which suppresses CF in the second stage. Moreover, we should add en ≤ O (n) to ensure that u(2) can also be suc-cessfully captured by the model. Adding data points from the first task enables the model to correctly classify data points from both tasks. 
+
+5. Main Results 
+
+In this section, we show the theoretical results in this work. The proofs of Lemma 5.1 and Theorem 5.2 are deferred in Appendix D and the proofs of Corollaries 5.3 and 5.5 and Theorem 5.4 can be found in Appendix E. The following lemma shows that the background noises are not fitted by the network during the learning process. 
+
+Lemma 5.1. In the first stage, under Condition 3.6, and given T ≥ eΩ
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+, for any 0 < t ≤ T, i ∈ I (1)  
+
+> tr
+
+, p ∈Pξi , we have following: 
+
+max 
+
+> c∈C
+
+D
+
+w(1)  
+
+> c
+
+(t + 1) , ξ(1) 
+
+> i,p
+
+E
+
+−max 
+
+> c∈C
+
+D
+
+w(1)  
+
+> c
+
+(t), ξ(1) 
+
+> i,p
+
+E
+
+≤ o (σ0σξ ) .
+
+Moreover, we have 
+
+max 
+
+> c∈C
+
+D
+
+w(1)  
+
+> c
+
+(t), ξ(1) 
+
+> i,p
+
+E
+
+≤ eO (σ0σξ ) .
+
+In the first stage, we show that when the task-specific feature has a larger norm than the general feature, the model only learns u(1) at the end of the first stage. 
+
+Theorem 5.2. In the first stage, given a training set S(1) 
+
+> tr
+
+with size n, if αv ≤ o (αu), there exists eT (1) ≤ eO
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+such that for any T (1) ≥ eT (1) , the network FT (1) fits all training data points with a high probability: 
+
+P
+
+h
+
+∀i ∈ S (1)  
+
+> tr
+
+, y iF (1)   
+
+> T(1)
+
+(xi) ≥ eΩ(1) 
+
+i
+
+≥ 1−O
+
+n2P 2C
+
+poly (d)
+
+
+
+.
+
+Moreover, F (1)   
+
+> T(1)
+
+achieves a high accuracy on test data points at T (1) :
+
+P(x,y )∼D (1) 
+
+> z
+
+h
+
+yF (1)  
+
+> T(1)
+
+(x) > 0
+
+i
+
+≥ 1 − O
+
+ nP 2C
+
+poly (d)
+
+
+
+.
+
+6Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+We stop training the model at eT (1) in the first stage. At the beginning of the second stage, we initialize F (2) 0 = F (1)  
+
+> T(1)
+> u
+
+.The parameters are set as ∀c ∈ [C], w(2)  
+
+> c
+
+(0) = w(1)  
+
+> c
+
+(T (1)  
+
+> u
+
+).We have the following corollary. 
+
+Corollary 5.3. At the beginning of the second task, if αu ≥
+
+ω (αv ), we have 
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(0) , u(2) E
+
+= eΘ ( σ0αu) ,
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(0) , v(2) E
+
+= eΘ ( σ0αv ) ,
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(0) , u(1) E
+
+≥ eΩ (1) .
+
+In the second stage, the following theorem shows that if the 
+
+ζ has a significant norm, CF occurs, and the model cannot achieve a high accuracy in the first task again. 
+
+Theorem 5.4. In the second stage, given a training set S(2) 
+
+> tr
+
+with size n, there exists eT (2) = eΘ
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+such that for 
+
+T (2) ≥ eT (2) , the network FT (2) fits all training data points with a high probability: 
+
+P
+
+h
+
+∀i ∈ S (2)  
+
+> tr
+
+,y iF (2)  
+
+> T(2)
+
+(xi) ≥ eΩ(1) 
+
+i
+
+≥ 1−O
+
+n2P 2C
+
+poly (d) + 1
+
+poly (n)
+
+
+
+.
+
+Moreover, FT (2) achieves a high accuracy on test data sam-pled from the second task: 
+
+P(x,y )∼D (2) 
+
+> z
+
+h
+
+yF (2)  
+
+> T(2)
+
+(x) > 0
+
+i
+
+≥ 1−O
+
+ nP 2C
+
+poly (d) + 1
+
+poly (n)
+
+
+
+.
+
+If αv ≤ o (αu), and αζ ≥ Ω ( αu), FT (2) achieves a low accuracy on test data sampled from the first task 
+
+P(x,y )∼D (1) 
+
+> z
+
+h
+
+yF (2)  
+
+> T(2)
+
+(x) > 0
+
+i
+
+≤ 12 +O
+
+ nP 2C
+
+poly (d) + 1
+
+poly (n)
+
+
+
+.
+
+We stop to train the model at T (2) = eT (2) in the second stage. The following corollary demonstrates that the model forgets the task-specific feature of the previous task. 
+
+Corollary 5.5. At the end of the second task, for eT (2) =
+
+eΘ
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+, if αu ≥ ω (αv ) and αζ ≥ Ω ( αu), we have 
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+( eT (2) ), u(1) E
+
+≤ o (1) ,
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+( eT (2) ), v(2) E
+
+= eΘ ( σ0αv ) ,
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+( eT (2) ), u(2) E
+
+≥ eΩ (1) .
+
+Through our theoretical analysis on the entire learning pro-cess in CL, we show that CF occurs during the learning process due to the following reasons: 1. The general and robust feature v(1) has a low sig-nal, while the task-specific feature u(1) has a rela-tively large signal. As shown in Corollary 5.3, if 
+
+αv ≤ o (αu), after training in the first stage, only u(1) 
+
+is learned by the model. 2. The task-specific feature from the first task manifests as a random feature with a strong signal in the second task. If αζ ≥ Ω ( αu), Corollary 5.5 shows that the model forgets u(1) while learns u(2) in the second stage. 
+
+Remark 5.6 . Based on our analysis, CF can be mitigated by violating the two conditions identified above, which is empirically supported by simulated data in Figure 2 of Sec-tion 6. Furthermore, our findings indicate that CNNs trained with (S)GD tend to learn the features with the strongest signal rather than the most robust ones. When the robust feature has a weak signal, the CNNs fail to capture the ro-bust feature during training, which highlights the necessity of developing robust training algorithms that encourage the learning of robust features to prevent CF. In addition, by fixing αu and αζ and increasing αv , the similarity between tasks increases, and our results suggest that CF is less likely to occur when learning on such similar tasks. We hope that our findings will inspire future research to investigate CF from the perspective of feature learning. 
+
+6. Experiments 
+
+In this section, we conduct experiments on both simulated and real-world datasets to validate our findings. 
+
+6.1. Numerical Analysis on Simulated Dataset 
+
+We conduct a numerical analysis on simulated data, drawn from our data model, and use the CNN model defined in Equation (1). To analyze the feature extraction capabilities of the model, we fix the last layer of the CNN. To investigate which features the model captures during the two stages of training, we generate images containing only u, v, and ζ. We evaluate the model at the end of both the first and second stages, and the results are shown in Figure 1. We set αu = 1 , αv = 0 .1, and αζ = 0 .9. In the first stage, as shown in the first column, we find that only 
+
+u(1) is captured by the model using two channels, while the learning of v(1) and ζ(1) progresses slowly, which aligns with Corollary 5.3. In the second stage, as shown in the last two columns of the first row, we observe that u(1) is forgotten by the model, and u(2) dominates the model’s output, which aligns with Corollary 5.5. Moreover, the images in the last row of Figure 1 illustrate the model’s output with different inputs. We find that the output of the model is dominated by u(1) in the first stage, while dominated by u(2) in the second stage. 7Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 20 40 60 80 100                                                 
+
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> Feature-U
+> Channel--0
+> Channel--1
+> Channel--2
+> Channel--3
+> Channel--4
+> Channel--5
+> Channel--6
+> Channel--7
+> Channel--8
+> Channel--9
+> 20 40 60 80 100
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> 20 40 60 80 100
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> 20 40 60 80 100
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> 20 40 60 80 100
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> Feature-V
+> Channel--0
+> Channel--1
+> Channel--2
+> Channel--3
+> Channel--4
+> Channel--5
+> Channel--6
+> Channel--7
+> Channel--8
+> Channel--9
+> 20 40 60 80 100
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> 20 40 60 80 100
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> 20 40 60 80 100
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> 20 40 60 80 100
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> Feature-zeta
+> Channel--0
+> Channel--1
+> Channel--2
+> Channel--3
+> Channel--4
+> Channel--5
+> Channel--6
+> Channel--7
+> Channel--8
+> Channel--9
+> 20 40 60 80 100
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> 20 40 60 80 100
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> 20 40 60 80 100
+> 0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> 20 40 60 80 100
+
+epoch 
+
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+
+Stage 1 Task 1     
+
+> Output
+> Data-U
+> Data-V
+> Data-zeta
+> Data-xi
+> 20 40 60 80 100
+
+epoch 
+
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+
+Stage 1 Task 2     
+
+> 20 40 60 80 100
+
+epoch 
+
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+
+Stage 2 Task 1     
+
+> 20 40 60 80 100
+
+epoch 
+
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+
+Stage 2 Task 2 
+
+Figure 1. The output of each layer in the CNN model using differ-ent inputs. Top three rows : The output of each channel in the first layer. Bottom row : The output of the last layer. 
+
+We then set the norm of u to αu = 1 , and vary αv and αζ
+
+within the range of [0 , 1] to study the condition under which CF occurs. In the first row of Figure 2, the results in the first column demonstrate that at the end of the first stage, the model correctly classifies the data points drawn from the first task. At the end of the second stage, as shown in the last column, the model also correctly classifies the data points drawn from the second task. However, the results in the third column show that the value of αv and αζ affects the performance of the model on the first task in the second stage. For a small αv , as αζ increases, the model struggles to achieve high accuracy on both old and new tasks. We also observe that as the norm of the general feature v(2) 
+
+increases, CF is suppressed even when αζ is large. The findings support Corollary 5.3. Additionally, in the second column, we observe that when αv = αu = 1 , the model successfully extracts the general feature, achieving high accuracy on the second task without needing to train on the second task’s data points. We further investigate the effect of the replay-based method. We fix αu = 1 , α v = 0 .5, α ζ = 0 .8 and show the results in the second row of Figure 2. The third column in the last row shows the performance of the model on the first task at the end of the second stage. The result demonstrates that when no additional data is used, CF occurs in the second stage. However, by incorporating data points from previous tasks into the training set, CF is suppressed. These results further validate our theoretical insights, as shown in Section 4.3. 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 
+
+Alpha_zeta 
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Alpha_V
+
+Stage 1 Task 1           
+
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+
+Alpha_zeta 
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Alpha_V
+
+Stage 1 Task 2           
+
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+
+Alpha_zeta 
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Alpha_V
+
+Stage 2 Task 1           
+
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+
+Alpha_zeta 
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Alpha_V
+
+Stage 2 Task 2    
+
+> 100 400 700 1000 1300 1600 1900 2200 2500 2800 3100
+
+Data Num    
+
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> 700
+> 800
+> 900
+> 1000
+> Additional Task 1 Data Num
+> 100 400 700 1000 1300 1600 1900 2200 2500 2800 3100
+
+Data Num    
+
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> 700
+> 800
+> 900
+> 1000
+> Additional Task 1 Data Num
+> 100 400 700 1000 1300 1600 1900 2200 2500 2800 3100
+
+Data Num    
+
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> 700
+> 800
+> 900
+> 1000
+> Additional Task 1 Data Num
+> 100 400 700 1000 1300 1600 1900 2200 2500 2800 3100
+
+Data Num 
+
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> 700
+> 800
+> 900
+> 1000
+> Additional Task 1 Data Num
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+
+Figure 2. The effect of αv and αζ on the model’s performance. 
+
+First Row : Performance of the model in a standard CL setup. 
+
+Second Row : Performance of the model when additional samples from the previous task are added in the second stage to suppress CF. The X-axis represents the number of data points n, and the Y-axis represents the number of additional data points from Task-1. 
+
+6.2. Experiments on Real-World Datasets 
+
+In real-world datasets, it is challenging to decompose im-ages into distinct features. Therefore, we focus on studying the features extracted by the model in the representation space. We conduct experiments on CIFAR-10, CIFAR-100 (Krizhevsky et al., 2009), and Tiny-ImageNet (Deng et al., 2009) to evaluate the model’s performance on real-world datasets. For each dataset, we split the data into K/ 2 binary tasks, where K is the number of classes. We then sequen-tially select a pair of tasks, and train the model on the pair of tasks. Our first empirical observation is that, in practice, the model is easier to extract non-robust features that do not generalize to unseen tasks in most cases, as shown in Figure 3. This implies that for two independently sampled tasks, achiev-ing a shared general feature is difficult. In CIFAR-10, for example, when the model is trained on Task-0, the model successfully extracts the general feature which can be used in Task-4. However, in most cases, the model tends to ex-tract task-specific features for each task. Therefore, this empirical result aligns with the condition αv ≤ o (αu).0 1 2 3 4
+
+Task 2 
+
+0
+
+1
+
+2
+
+3
+
+4 Task 1 
+
+CIFAR10 
+
+0 10 20 30 40 
+
+Task 2 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+> Task 1
+
+CIFAR100 
+
+0 20 40 60 80 
+
+Task 2 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+> Task 1
+
+TINYIMAGENET 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+
+Figure 3. Overview of CF in different datasets: CIFAR-10 (Left), CIFAR-100 (Middle), and Tiny-ImageNet (Right). We record the model’s performance on the second task at the end of the first stage. A deeper color means a better performance of the model. 
+
+8Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks -60 -40 -20 0 20 40 60                                                     
+
+> -40
+> -20
+> 0
+> 20
+> 40
+> Feature Space: Initialization
+> Task 1 Class 0
+> Task 1 Class 1
+> Task 2 Class 0
+> Task 2 Class 1
+> -60 -40 -20 020 40 60
+> -40
+> -20
+> 0
+> 20
+> 40
+> Data from Task 1
+> Task 1 Class 0
+> Task 1 Class 1
+> -60 -40 -20 020 40 60
+> -40
+> -20
+> 0
+> 20
+> 40
+> Data from Task 2
+> Task 2 Class 0
+> Task 2 Class 1
+> -60 -40 -20 020 40 60
+> -40
+> -20
+> 0
+> 20
+> 40
+> Feature Space: Stage 1
+> Task 1 Class 0
+> Task 1 Class 1
+> Task 2 Class 0
+> Task 2 Class 1
+> -60 -40 -20 020 40
+> -40
+> -20
+> 0
+> 20
+> 40
+> Data from Task 1
+> Task 1 Class 0
+> Task 1 Class 1
+> -60 -40 -20 020 40 60
+> -40
+> -20
+> 0
+> 20
+> 40
+> Data from Task 2
+> Task 2 Class 0
+> Task 2 Class 1
+> -80 -60 -40 -20 020 40 60 80
+> -40
+> -20
+> 0
+> 20
+> 40
+> Feature Space: Stage 2
+> Task 1 Class 0
+> Task 1 Class 1
+> Task 2 Class 0
+> Task 2 Class 1
+> -60 -40 -20 020 40 60
+> -40
+> -30
+> -20
+> -10
+> 0
+> 10
+> 20
+> 30
+> 40 Data from Task 1
+> Task 1 Class 0
+> Task 1 Class 1
+> -80 -60 -40 -20 020 40 60 80
+> -40
+> -20
+> 0
+> 20
+> 40
+> Data from Task 2
+> Task 2 Class 0
+> Task 2 Class 1
+
+Figure 4. Using T-SNE to visualize the feature space at different stages of CL when sequentially train the model on the Task-0 and Task-3 in CIFAR-10. First row . The model is randomly initialized. 
+
+Second row . At the end of the first stage. Third row . At the end of the second stage. 
+
+We then use T-SNE (van der Maaten & Hinton, 2008) to visualize the feature in both the first and second stages of CL. As shown in the second row of Figure 4, when using the same feature extractor, the features from the first task are clustered, while the features from the second task are not. This suggests that the features extracted in the first stage are task-specific. As features from task 1 and task 2 exhibit significant overlap, which aligns the condition αζ ≥ Ω ( αu).Additionally, we calculate the maximal singular vector in the feature space. The result, shown in the last column of Figure 5, demonstrates that in the direction of the maximal singular vector, the features from the first task have a weak signal in the second stage, implying that the model forgets the learned features. T1-C1 T1-C2 T2-C1 T2-C2        
+
+> -0.10
+> -0.05
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> Initialization
+> T1-C1 T1-C2 T2-C1 T2-C2
+> -20
+> -10
+> 0
+> 10
+> 20
+> 30
+> Stage 1
+> T1-C1 T1-C2 T2-C1 T2-C2
+> -20
+> -10
+> 0
+> 10
+> 20
+> 30 Stage 2
+
+Figure 5. Inner product of the features with the maximal singular vector at different stages of CL. The label T a-C b indicates that the data drawn from class-b in ath task. We choose Task-0 and Task-3 in CIFAR-10 as the first and second task. 
+
+7. Conclusion 
+
+In this work, we theoretically analyze the condition that CF occurs in a two-layer CNN model using a multi-view data model. We consider a task-incremental CL scenario. Our theoretical results demonstrate that, in a pair of tasks, if the general feature is either absent or has a low signal, the model will learn the task-specific feature during the first stage. Moreover, if the task-specific feature has a large norm in the second task, CF manifests in the second stage. We also provide theoretical insights into the effectiveness of replay-based methods. Finally, experiments on both simulated and real-world datasets validate our findings. 
+
+Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none which we feel must be specifically highlighted here. 
+
+Acknowledgments 
+
+We would like to thank Xin Zou for helpful suggestions. This work is supported by the Key R&D Program of Hubei Province under Grant 2024BAB038, the National Key R&D Program of China under Grant 2023YFC3604702, the Fun-damental Research Funds for the Central Universities under Grant 2042025kf0045. 
+
+References 
+
+Allen-Zhu, Z. and Li, Y. Towards understanding ensem-ble, knowledge distillation and self-distillation in deep learning. In ICLR, 2023. Andle, J. and Sekeh, S. Y. Theoretical understanding of the information flow on continual learning performance. In ECCV, volume 13672, pp. 86–101, 2022. Babakniya, S., Fabian, Z., He, C., Soltanolkotabi, M., and Avestimehr, S. A data-free approach to mitigate catas-trophic forgetting in federated class incremental learning for vision tasks. In NeurIPS, 2023. Benjamin, A. S., Pehle, C., and Daruwalla, K. Continual learning with the neural tangent ensemble. In NeurIPS, 2024. Cao, X., Liu, W., and Vempala, S. S. Provable lifelong learning of representations. In AISTATS, volume 151, pp. 6334–6356, 2022a. Cao, Y., Chen, Z., Belkin, M., and Gu, Q. Benign overfitting in two-layer convolutional neural networks. In NeurIPS, 2022b. 9Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+Cao, Y., Chen, Y., and Liu, W. Prevalence of sim-plex compression in adversarial deep neural networks. Proceedings of the National Academy of Sciences , 122 (17):e2421593122, 2025. Chen, Y. and Liu, W. A theory of transfer-based black-box attacks: Explanation and implications. In NeurIPS, 2023. Chen, Z. and Liu, B. Lifelong Machine Learning, Second Edition . Synthesis Lectures on Artificial Intelligence and Machine Learning. Morgan & Claypool Publishers, 2018. Deng, J., Dong, W., Socher, R., Li, L., Li, K., and Fei-Fei, L. Imagenet: A large-scale hierarchical image database. In CVPR, pp. 248–255, 2009. Ding, M., Ji, K., Wang, D., and Xu, J. Understanding forgetting in continual learning with linear regression. In ICML, 2024. Doan, T., Bennani, M. A., Mazoure, B., Rabusseau, G., and Alquier, P. A theoretical analysis of catastrophic forgetting through the NTK overlap matrix. In AISTATS, volume 130, pp. 1072–1080, 2021. Ebrahimi, S., Petryk, S., Gokul, A., Gan, W., Gonzalez, J. E., Rohrbach, M., and Darrell, T. Remembering for the right reasons: Explanations reduce catastrophic forgetting. In ICLR, 2021. Evron, I., Moroshko, E., Ward, R. A., Srebro, N., and Soudry, D. How catastrophic can catastrophic forget-ting be in linear regression? In COLT, 2022. Frei, S., Chatterji, N. S., and Bartlett, P. L. Benign overfit-ting without linearity: Neural network classifiers trained by gradient descent for noisy linear data. In COLT, vol-ume 178, pp. 2668–2703, 2022. Gao, R. and Liu, W. DDGR: continual learning with deep diffusion-based generative replay. In ICML, volume 202, pp. 10744–10763, 2023. Gao, R. and Liu, W. Defying catastrophic forgetting via influence function. Artificial Intelligence, 339:104261, 2025a. Gao, R. and Liu, W. Red alarm: Controllable backdoor at-tack in continual learning. Neural Networks, 188:107479, 2025b. Goldfarb, D. and Hand, P. Analysis of catastrophic forget-ting for random orthogonal transformation tasks in the overparameterized regime. In AISTATS, volume 206, pp. 2975–2993, 2023. Goldfarb, D., Evron, I., Weinberger, N., Soudry, D., and Hand, P. The joint effect of task similarity and overpa-rameterization on catastrophic forgetting - an analytical model. In ICLR, 2024. Gong, X., Yuan, D., and Bao, W. Understanding partial multi-label learning via mutual information. In NeurIPS, pp. 4147–4156, 2021. Gong, X., Yuan, D., and Bao, W. Partial label learning via label influence function. In ICML, volume 162, pp. 7665–7678, 2022. Gong, X., Yuan, D., and Bao, W. Discriminative metric learning for partial label learning. IEEE Transactions on Neural Networks and Learning Systems , 34(8):4428– 4439, 2023a. Gong, X., Yuan, D., Bao, W., and Luo, F. A unifying probabilistic framework for partially labeled data learn-ing. IEEE Transactions on Pattern Analysis and Machine Intelligence, 45(7):8036–8048, 2023b. Goodfellow, I. J., Mirza, M., Xiao, D., Courville, A., and Bengio, Y. An empirical investigation of catastrophic forgetting in gradient-based neural networks. CoRR ,abs/1312.6211, 2015. Huang, W., Shi, Y., Cai, Z., and Suzuki, T. Understand-ing convergence and generalization in federated learning through feature learning theory. In ICLR, 2024. Jeeveswaran, K., Bhat, P. S., Zonooz, B., and Arani, E. Birt: Bio-inspired replay in vision transformers for continual learning. In ICML, volume 202, pp. 14817–14835, 2023. Jeeveswaran, K., Arani, E., and Zonooz, B. Gradual diver-gence for seamless adaptation: A novel domain incremen-tal learning method. In ICML, 2024. Jelassi, S. and Li, Y. Towards understanding how momen-tum improves generalization in deep learning. In ICML, volume 162, pp. 9965–10040, 2022. Kirkpatrick, J., Pascanu, R., Rabinowitz, N. C., Veness, J., Desjardins, G., Rusu, A. A., Milan, K., Quan, J., Ra-malho, T., Grabska-Barwinska, A., Hassabis, D., Clopath, C., Kumaran, D., and Hadsell, R. Overcoming catas-trophic forgetting in neural networks. Proceedings of the national academy of sciences , 114(13):3521–3526, 2017. Korbak, T., Elsahar, H., Kruszewski, G., and Dymetman, M. Controlling conditional language models without catastrophic forgetting. In ICML, volume 162, pp. 11499– 11528, 2022. Kotha, S., Springer, J. M., and Raghunathan, A. Under-standing catastrophic forgetting in language models via implicit inference. In ICLR, 2024. Kou, Y., Chen, Z., Chen, Y., and Gu, Q. Benign overfitting in two-layer relu convolutional neural networks. In ICML, volume 202, pp. 17615–17659, 2023. 10 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+Krizhevsky, A., Hinton, G., et al. Learning multiple layers of features from tiny images. 2009. Laurent, B. and Massart, P. Adaptive estimation of a quadratic functional by model selection. The Annals of Statistics, 28(5):1302 – 1338, 2000. Li, B. and Liu, W. A theoretical analysis of backdoor poison-ing attacks in convolutional neural networks. In ICML, 2024. Li, H., Wu, J., and Braverman, V. Fixed design analysis of regularization-based continual learning. In CoLLA, volume 232, pp. 513–533, 2023. Li, H., Lin, S., Duan, L., Liang, Y., and Shroff, N. B. Theory on mixture-of-experts in continual learning. In ICLR, 2025. Lin, S., Ju, P., Liang, Y., and Shroff, N. B. Theory on forgetting and generalization of continual learning. In ICML, volume 202, pp. 21078–21100, 2023. Liu, W., Shen, X., Du, B., Tsang, I. W., Zhang, W., and Lin, X. Hyperspectral imagery classification via stochastic hhsvms. IEEE Transactions on Image Processing., 28(2): 577–588, 2019. McCloskey, M. and Cohen, N. J. Catastrophic interfer-ence in connectionist networks: The sequential learning problem. Psychology of Learning and Motivation , 24: 109–165, 1989. Meng, X., Zou, D., and Cao, Y. Benign overfitting in two-layer relu convolutional neural networks for XOR data. In ICML, 2024. Parisi, G. I., Kemker, R., Part, J. L., Kanan, C., and Wermter, S. Continual lifelong learning with neural networks: A review. Neural Networks, 113:54–71, 2019. Rolnick, D., Ahuja, A., Schwarz, J., Lillicrap, T. P., and Wayne, G. Experience replay for continual learning. In NeurIPS, pp. 348–358, 2019. Serr `a, J., Suris, D., Miron, M., and Karatzoglou, A. Over-coming catastrophic forgetting with hard attention to the task. In ICML, volume 80, pp. 4555–4564, 2018. Shen, R., Bubeck, S., and Gunasekar, S. Data augmenta-tion as feature manipulation. In ICML, volume 162, pp. 19773–19808, 2022. Shi, G., Chen, J., Zhang, W., Zhan, L., and Wu, X. Over-coming catastrophic forgetting in incremental few-shot learning by finding flat minima. In NeurIPS, pp. 6747– 6761, 2021. Sun, W., Li, Q., Zhang, J., Wang, W., and Geng, Y. Decou-pling learning and remembering: a bilevel memory frame-work with knowledge projection for task-incremental learning. In CVPR, pp. 20186–20195, 2023. van der Maaten, L. and Hinton, G. Visualizing data using t-sne. Journal of Machine Learning Research, 9(86):2579– 2605, 2008. Wainwright, M. J. High-dimensional statistics: Anon-asymptotic viewpoint , volume 48. Cambridge uni-versity press, 2019. Wang, L., Zhang, X., Su, H., and Zhu, J. A comprehen-sive survey of continual learning: Theory, method and application. IEEE Transactions on Pattern Analysis and Machine Intelligence, 46(8):5362–5383, 2024. Wu, Y., Wang, H., Zhao, P., Zheng, Y., Wei, Y., and Huang, L. Mitigating catastrophic forgetting in online contin-ual learning by modeling previous task interrelations via pareto optimization. In ICML, 2024. Zhao, X., Wang, H., Huang, W., and Lin, W. A statisti-cal theory of regularization-based continual learning. In ICML, 2024. Zheng, G., Wang, P., and Shen, L. Towards understanding memory buffer based continual learning. 2025. Zou, X. and Liu, W. On the adversarial robustness of out-of-distribution generalization models. In NeurIPS, 2023a. Zou, X. and Liu, W. Generalization bounds for adversar-ial contrastive learning. Journal of Machine Learning Research, 24:114:1–114:54, 2023b. 11 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+A. Useful Lemmas 
+
+We first show the important lemmas, which are useful in our proof. 
+
+Lemma A.1 (Lemma 1 in Laurent & Massart (2000)) . Suppose Xi . . . , X n are n i.i.d. Gaussian random variables with mean 0 and variance 1. Let a1, . . . , a n be non-negative. We set 
+
+|a|∞ = sup 
+
+> i=1 ,...,n
+
+|ai| , |a|22 =
+
+> n
+
+X
+
+> i=1
+
+a2 
+
+> i
+
+.
+
+Let 
+
+Z =
+
+> n
+
+X
+
+> i=1
+
+ai(X2 − 1) .
+
+Then, the following inequalities hold for any positive t:
+
+P
+
+h
+
+Z ≥ 2 |a|2
+
+√t + 2 |a|∞ t
+
+i
+
+≤ exp( −t).
+
+P
+
+h
+
+Z ≤ − 2 |a|2
+
+√t
+
+i
+
+≤ exp( −t).
+
+Lemma A.2 (Lemma 4 in Shen et al. (2022)) . Consider independently sampled Gaussian vectors z1 ∼ N (0 , σ 21 Id) and 
+
+z2 ∼ N (0 , σ 22 Id). For any δ ∈ (0 , 1) and a large enough d, there exists constants c1, c 2 such that 
+
+P
+
+h
+
+|⟨ z1, z2⟩| ≤ c1σ1σ2
+
+pd log(2 /δ )
+
+i
+
+≥ 1 − δ, 
+
+P
+
+h
+
+⟨z1, z2⟩ ≥ c2σ1σ2
+
+√d
+
+i
+
+≥ 1/4.
+
+Lemma A.3 (Proposition 2.5 in Wainwright (2019)) . Suppose that the variables Xi, i = 1 , . . . , n , are independent, and Xi
+
+has mean μi and sub-Gaussian parameter σi. Then for all r ≥ 0, we have 
+
+P
+
+" nX
+
+> i=1
+
+(Xi − μi) ≥ t
+
+#
+
+≤ exp 
+
+
+
+− t2
+
+2 Pni=1 σ2
+
+> i
+
+
+
+Lemma A.4 (Lemma A.1 in Zou & Liu (2023a)) . If X ∼ N (μ, Σ) where X ∈ Rn, then for any A ∈ Rm×n, we have: 
+
+AX ∼ N (Aμ, A ΣAT ). (2) 
+
+Lemma A.5 (Fact A.2. in Frei et al. (2022)) . Let g(z) = ℓ′(z) = −1/(1 + exp( z)) , for any z1, z 2 ∈ R, we have 
+
+g(z1)
+
+g(z2) ≤ max 
+
+
+
+2, 2 exp( −z1)exp( −z2)
+
+
+
+.
+
+The following lemma shows a lower bound for g(z1) 
+
+> g(z2)
+
+, which is inspired by Lemma C.6 in Kou et al. (2023). 
+
+Lemma A.6. Let g(z) = ℓ′(z) = −1/(1 + exp( z)) . Let c1, c 2 ∈ R be two constants and suppose c1 ≤ z1 ≤ c2, z2 ∈ R.Then, there exists a constant c′ > 0 such that 
+
+g(z1)
+
+g(z2) ≥ c′ exp( z2 − z1).
+
+Proof. We begin by rewriting the ratio as 
+
+g(z1)
+
+g(z2) = 1 + exp( z2)1 + exp( z1) = 1 + exp( z2) − exp( z1)1 + exp( z1) = 1 + exp( z2 − z1) − 11 + exp( −z1) .
+
+We first consider the case where z2 ≥ z1. Since exp( z2 − z1) ≥ 1, we obtain 
+
+g(z1)
+
+g(z2) ≥ 1 + exp( z2 − z1) − 11 + exp( −c1) = exp( z2 − z1) + exp( −c1)1 + exp( −c1) ≥ c′ exp( z2 − z1),
+
+12 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+where c′ = 11+exp( −c1) .Next, consider the case where z2 < z 1, so that exp( z2 − z1) < 1. We have 
+
+g(z1)
+
+g(z2) ≥ 1 + exp( z2 − z1) − 11 + exp( −c2) = exp( z2 − z1) + exp( −c2)1 + exp( −c2) ≥ c′ exp( z2 − z1),
+
+where c′ = 11+exp( −c2) .Combining both cases, the desired inequality holds for all z1 ∈ [c1, c 2] and z2 ∈ R, which completes the proof. 
+
+Proposition A.7. Given a standard Gaussian variable Z ∼ N (0 , 1) , then we have P [Z ≥ 1/2] ≥ 1/4.
+
+Lemma A.8. Given a training dataset S(τ ) containing data drawn from the data model defined in Definition 3.1. Define the index sets 
+
+I(τ )= := 
+
+n
+
+i : y(τ ) 
+
+> i
+
+= ϵi
+
+o
+
+, I(τ )̸ 
+
+> =
+
+:= 
+
+n
+
+i : y(τ )
+
+> i
+
+̸ = ϵi
+
+o
+
+.
+
+Then, with probability at least 1 − O
+
+ 1poly( n)
+
+
+
+, we have 
+
+∀I ∈ 
+
+n
+
+I(τ )= , I(τ )̸
+
+> =
+
+o
+
+, |I| − n
+
+2 ≤ eO
+
+
+
+n1/2
+
+. (3) 
+
+and 
+
+max 
+
+
+
+I(τ )̸
+
+> =
+
+I(τ )=
+
+, I(τ )=
+
+I(τ )̸
+
+> =
+
+ ≤ 1 + eO
+
+
+
+n−1/2
+
+. (4) 
+
+Proof. By Lemma A.3, with probability at least 1 − δ, we have the following concentration bound for both subsets: 
+
+∀I ∈ 
+
+n
+
+I(τ )= , I(τ )̸
+
+> =
+
+o
+
+, |I| − n
+
+2 ≤ p2n log(2 /δ ).
+
+Setting δ ≤ O
+
+ 1poly( n)
+
+
+
+, we have Equation (3). Let ∆ := p2n log(2 /δ ). We analyze the size ratio through the following steps: 
+
+max 
+
+ |I ̸ =||I =| , |I =||I ̸=|
+
+
+
+≤ max   
+
+> I∈{I =,I̸=}
+> n
+> 2
+
++ ∆ 
+
+> n
+> 2
+
+· 
+
+> n
+> 2
+> n
+> 2
+
+− ∆= max  
+
+> I∈{I =,I̸=}
+
+
+
+1 + 2∆ 
+
+n
+
+
+
+·
+
+
+
+1 − 2∆ 
+
+n
+
+−1
+
+≤ 1 + 4∆ /n 
+
+1 − 2∆ /n 
+
+= 1 + 4p2 log(2 /δ )
+
+√n
+
+
+
+1 − 2p2 log(2 /δ )/√n
+
+
+
+Setting δ = n−a for constant a > 0, we have plog(2 /δ ) = √a log n + log 2 = eO(1) . Thus: 
+
+4p2 log(2 /δ )
+
+√n = eO
+
+
+
+n−1/2
+
+, 1 − 2p2 log(2 /δ )/√n = 1 − o(1) .
+
+Therefore, the ratio bound simplifies to 1 + eO(n−1/2). By a union bound over both subsets, the total failure probability is 
+
+2δ = O(n−a) = O(1 /poly( n)) 
+
+13 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+B. Update Rule for Each Components 
+
+Given a learning rate η, the parameters are optimized as 
+
+wc(t + 1) = wc(t)− ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+∇ℓ(F (xi), y i)= wc(t)− ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+> P
+
+X
+
+> p=1
+
+yiℓ′(F (xi), y i)ϕ′ (⟨wc(t), xi,p ⟩) xi,p 
+
+= wc(t)− ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+ℓ′(F (xi), y i)ϕ′ (⟨wc(t), y iu⟩) u − ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+ℓ′(F (xi), y i)ϕ′ (⟨wc(t), y iv⟩) v
+
+− ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+yiϵiℓ′(F (xi), y i)ϕ′ (⟨wc(t), ϵ iζ⟩) ζ − ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+X
+
+> p∈P ξi
+
+yiℓ′(F (xi), y i)ϕ′   wc(t), ξi,p 
+
+ ξi,p 
+
+(5) Equation (5) due to the decomposition of x. We then analyze the update of each component. 
+
+Lemma B.1. [Task-Specific and General Features]. In stage τ , Let ∆c
+
+ u(τ ) =
+
+D
+
+w(τ ) 
+
+> c
+
+(t + 1) , u(τ )
+
+E
+
+−
+
+D
+
+w(τ ) 
+
+> c
+
+(t), u(τ )
+
+E
+
+,and ∆c
+
+ v(τ ) =
+
+D
+
+w(τ ) 
+
+> c
+
+(t + 1) , v(τ )
+
+E
+
+−
+
+D
+
+w(τ ) 
+
+> c
+
+(t), v(τ )
+
+E
+
+we have 
+
+∆c
+
+
+
+u(τ )
+
+= − ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), u(τ )E 
+
+u(τ ) 22
+
+∆c
+
+
+
+v(τ )
+
+= − ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), v(τ )E 
+
+v(τ ) 22
+
+Proof. We can rewrite ∆c
+
+ u(τ ) as 
+
+∆c
+
+
+
+u(τ )
+
+=
+
+D
+
+w(τ ) 
+
+> c
+
+(t + 1) , u(τ )E
+
+−
+
+D
+
+w(τ ) 
+
+> c
+
+(t), u(τ )E
+
+= − ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+yiyiℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), y (τ ) 
+
+> i
+
+u(τ )E D 
+
+u(τ ), u(τ )E
+
+− ηn
+
+> n
+
+X
+
+> i=1
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), y (τ ) 
+
+> i
+
+v(τ )E D 
+
+v(τ ), u(τ )E
+
+− ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+y(τ ) 
+
+> i
+
+ϵiℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), ϵ iζ(τ )E D 
+
+ζ(τ ), u(τ )E
+
+− ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+X
+
+> p∈P ξi
+
+y(τ ) 
+
+> i
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), ξ(τ )
+
+> i,p
+
+E D 
+
+ξ(τ ) 
+
+> i,p
+
+, u(τ )E
+
+= − ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+ℓ′ 
+
+F (x(τ ) 
+
+> i
+
+), y (τ )
+
+> i
+
+
+
+ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), y (τ ) 
+
+> i
+
+u(τ )E 
+
+u(τ ) 22
+
+14 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+Similarly, we have 
+
+∆c
+
+
+
+v(τ )
+
+=
+
+D
+
+w(τ ) 
+
+> c
+
+(t + 1) , v(τ )E
+
+−
+
+D
+
+w(τ ) 
+
+> c
+
+(t), v(τ )E
+
+= − ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+yiyiℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), y (τ ) 
+
+> i
+
+u(τ )E D 
+
+u(τ ), v(τ )E
+
+− ηn
+
+> n
+
+X
+
+> i=1
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), y (τ ) 
+
+> i
+
+v(τ )E D 
+
+v(τ ), v(τ )E
+
+− ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+y(τ ) 
+
+> i
+
+ϵiℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), ϵ iζ(τ )E D 
+
+ζ(τ ), v(τ )E
+
+− ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+X
+
+> p∈P ξi
+
+y(τ ) 
+
+> i
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), ξ(τ )
+
+> i,p
+
+E D 
+
+ξ(τ ) 
+
+> i,p
+
+, v(τ )E
+
+= − ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), y (τ ) 
+
+> i
+
+v(τ )E 
+
+v(τ ) 22
+
+We conclude our proof. Note that ϕ′ ≥ 0, ℓ ′ < 0, ∆c (u) is increasing because λc = 1 .
+
+Lemma B.2. [Random Feature]. In any stage τ , let ∆c
+
+
+
+ζ(τ )
+
+=
+
+D
+
+w(τ ) 
+
+> c
+
+(t + 1) , ζ(τ )E
+
+−
+
+D
+
+w(τ ) 
+
+> c
+
+(t), ζ(τ )E
+
+, if ϕ′(·) is an even function, we have 
+
+∆c
+
+
+
+ζ(τ )
+
+=
+
+ηλ c ζ(τ ) 22
+
+ϕ′
+
+D 
+
+w(τ ) 
+
+> c
+
+(t), ζ(τ )E 
+
+n G(τ ),
+
+where G(τ ) = P
+
+> i:yi=ϵi
+
+
+
+−ℓ′(F
+
+
+
+x(τ ) 
+
+> i
+
+), y (τ )
+
+> i
+
+ 
+
+− P
+
+> i:yi=−ϵi
+
+
+
+−ℓ′(F
+
+
+
+x(τ ) 
+
+> i
+
+), y (τ )
+
+> i
+
+ 
+
+.Proof. We ignore τ in expression, and rewrite ∆c (ζ) as 
+
+∆c
+
+
+
+ζ(τ )
+
+=
+
+D
+
+w(τ ) 
+
+> c
+
+(t + 1) , ζ(τ )E
+
+−
+
+D
+
+w(τ ) 
+
+> c
+
+(t), ζ(τ )E
+
+= − ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+y(τ ) 
+
+> i
+
+y(τ ) 
+
+> i
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), y (τ ) 
+
+> i
+
+u(τ )E D 
+
+u(τ ), ζ(τ )E
+
+− ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+y(τ ) 
+
+> i
+
+ϵiℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), ζ(τ )E D 
+
+ζ(τ ), ζ(τ )E
+
+− ηn
+
+> n
+
+X
+
+> i=1
+
+y(τ ) 
+
+> i
+
+y(τ ) 
+
+> i
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), y (τ ) 
+
+> i
+
+v(τ )E D 
+
+v(τ ), ζ(τ )E
+
+− ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+X
+
+> p∈P ξi
+
+y(τ ) 
+
+> i
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), ξ(τ )
+
+> i,p
+
+E D 
+
+ξ(τ ) 
+
+> i,p
+
+, ζ(τ )E
+
+= − ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+y(τ ) 
+
+> i
+
+ϵ(τ ) 
+
+> i
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), ϵ iζ(τ )E D 
+
+ζ(τ ), ζ(τ )E
+
+=
+
+ηλ c ζ(τ ) 22
+
+ϕ′
+
+D 
+
+w(τ ) 
+
+> c
+
+(t), ζ(τ )E 
+
+n G(τ ),
+
+where G(τ ) = P
+
+> i:yi=ϵi
+
+
+
+−ℓ′(F
+
+
+
+x(τ ) 
+
+> i
+
+), y (τ )
+
+> i
+
+ 
+
+− P
+
+> i:yi=−ϵi
+
+
+
+−ℓ′(F
+
+
+
+x(τ ) 
+
+> i
+
+), y (τ )
+
+> i
+
+ 
+
+. We conclude our proof. 15 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+Lemma B.3 (Background Noises) . We use ∆( ξ(τ ) 
+
+> i′,p ′
+
+) to denote 
+
+D
+
+w(τ ) 
+
+> c
+
+(t + 1) , ξ(τ )
+
+> i′,p ′
+
+E
+
+−
+
+D
+
+w(τ ) 
+
+> c
+
+(t), ξ(τ )
+
+> i′,p ′
+
+E
+
+, and have 
+
+∆( ξ(τ ) 
+
+> i′,p ′
+
+) = − ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+X
+
+> p∈P ξi
+
+y(τ ) 
+
+> i
+
+ℓ′(F (τ )(x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), ξ(τ )
+
+> i,p
+
+E D 
+
+ξ(τ ) 
+
+> i,p
+
+, ξ(τ )
+
+> i′,p ′
+
+E
+
+Proof. We can rewrite ∆( ξ(τ ) 
+
+> i′,p ′
+
+) as 
+
+∆( ξ(τ ) 
+
+> i′,p ′
+
+) = − ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+X
+
+> p∈P ξi
+
+y(τ ) 
+
+> i
+
+y(τ ) 
+
+> i
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), y iu
+
+E D 
+
+u(τ ), ξ(τ )
+
+> i′,p ′
+
+E
+
+− ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+X
+
+> p∈P ξi
+
+y(τ ) 
+
+> i
+
+y(τ ) 
+
+> i
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), y (τ ) 
+
+> i
+
+v(τ )E D 
+
+v(τ ), ξ(τ )
+
+> i′,p ′
+
+E
+
+− ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+X
+
+> p∈P ξi
+
+y(τ ) 
+
+> i
+
+ϵiℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), ϵ (τ ) 
+
+> i
+
+ζ
+
+E D 
+
+ζ(τ ), ξ(τ )
+
+> i′,p ′
+
+E
+
+− ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+X
+
+> p∈P ξi
+
+y(τ ) 
+
+> i
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), ξ(τ )
+
+> i,p
+
+E D 
+
+ξ(τ ) 
+
+> i,p
+
+, ξ(τ )
+
+> i′,p ′
+
+E
+
+= − ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+X
+
+> p∈P ξi
+
+y(τ ) 
+
+> i
+
+ℓ′(F (x(τ ) 
+
+> i
+
+), y (τ ) 
+
+> i
+
+)ϕ′ D 
+
+w(τ ) 
+
+> c
+
+(t), ξ(τ )
+
+> i,p
+
+E D 
+
+ξ(τ ) 
+
+> i,p
+
+, ξ(τ )
+
+> i′,p ′
+
+E
+
+We conclude our proof. 
+
+C. Theoretical Results at the Initialization 
+
+With the lemmas shown in Appendix A, we can individually analyze the inner product of different components. In task 
+
+τ , as the vectors 
+
+n
+
+u(τ ), v(τ ), ζ(τ )o
+
+are mutually orthogonal in our assumption, we have u(τ ), v(τ ) =
+
+D
+
+u(τ ), ζ(τ )E
+
+=
+
+D
+
+v(τ ), ζ(τ )E
+
+= 0 . We then analyze the inner product of two noise vectors. 
+
+Lemma C.1. Let I(τ )tr = {(xi, y i)}ni=1 be i.i.d. samples drawn from the distribution D(τ ) 
+
+> z
+
+defined in Definition 3.1. Then, with probability at least 1 − O
+
+ n2P 2+nP d
+
+
+
+, the following holds simultaneously: 
+
+∀i, i ′ ∈ [n], p, p ′ ∈ P ξi , (i, p )̸ = ( i′, p ′),
+
+D
+
+ξ(τ ) 
+
+> i,p
+
+, ξ(τ )
+
+> i′,p ′
+
+E
+
+≤ a1σ2 
+
+> ξ
+
+d−1p(d − 3) log(2 d), (6) 
+
+∀i ∈ [n], p ∈ P ξi , σ2 
+
+> ξ
+
+d−1 
+
+d−3 − 2p(d−3) log d
+
+
+
+≤ ξ(τ )
+
+> i,p
+> 22
+
+≤ σ2 
+
+> ξ
+
+d−1 
+
+d−3 + 2 p(d−3) log d + 2 log d
+
+
+
+. (7) 
+
+Proof. We construct an orthonormal basis {e1, e2, erob , ˜e1, . . . , ˜ed−3} in Rd, and define two row-orthonormal matrices: 
+
+M = [˜ e1, . . . , ˜ed−3]⊤ ∈ R(d−3) ×d, M⊥ = [ e1, e2, erob ]⊤ ∈ R3×d.
+
+Then for any i ∈ [n], p ∈ P ξi , we decompose the Gaussian vector ξ(τ ) 
+
+> i,p
+
+as: 
+
+ξ(τ ) 
+
+> i,p
+
+= M ⊤M ξ(τ ) 
+
+> i,p
+
++ M ⊤⊥ M⊥ξ(τ ) 
+
+> i,p
+
+.
+
+Based on our definition, each ξ(τ ) 
+
+> i,p
+
+∼ N (0 , σ 2 
+
+> ξ
+
+d−1(Id − e1e⊤ 
+
+> 1
+
+− e2e⊤ 
+
+> 2
+
+− erob e⊤
+
+> rob
+
+)) . Therefore, by using Lemma A.4, the projected components satisfy: 
+
+M ξ(τ ) 
+
+> i,p
+
+∼ N (0 , σ 2 
+
+> ξ
+
+d−1Id−3), M⊥ξ(τ ) 
+
+> i,p
+
+= 03×1.
+
+16 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+Consequently, the inner product between any pair of distinct vectors ξ(τ ) 
+
+> i,p
+
+and ξ(τ ) 
+
+> i′,p ′
+
+satisfies: 
+
+D
+
+ξ(τ ) 
+
+> i,p
+
+, ξ(τ )
+
+> i′,p ′
+
+E
+
+=
+
+D
+
+M ξ(τ ) 
+
+> i,p
+
+, M ξ(τ )
+
+> i′,p ′
+
+E
+
++
+
+D
+
+M⊥ξ(τ ) 
+
+> i,p
+
+, M ⊥ξ(τ )
+
+> i′,p ′
+
+E
+
+=
+
+D
+
+M ξ(τ ) 
+
+> i,p
+
+, M ξ(τ )
+
+> i′,p ′
+
+E
+
+,
+
+since both projections onto M⊥ are zero. According to Lemma A.2, for any distinct pair (i, p )̸ = ( i′, p ′), there exists a constant a′ such that: 
+
+P
+
+ D 
+
+M ξ(τ ) 
+
+> i,p
+
+, M ξ(τ )
+
+> i′,p ′
+
+E
+
+≤ a′σ2 
+
+> ξ
+
+d−1p(d−3) log(2 /δ )
+
+
+
+≥ 1 − δ. 
+
+Applying the union bound over all nP (nP − 1) distinct index pairs, we conclude that with probability at least 1 − nP (nP −
+
+1) δ, the following inequality holds uniformly: 
+
+D
+
+ξ(τ ) 
+
+> i,p
+
+, ξ(τ )
+
+> i′,p ′
+
+E
+
+≤ a′′ σ2 
+
+> ξ
+
+d−1p(d−3) log(2 /δ ), ∀(i, p )̸ = ( i′, p ′),
+
+for some constant a′′ > 0. Substituting δ = 1 /d yields the desired bound in (6) with constant a1, with overall failure probability bounded by O  n2P 2/d .To prove (7), since the distribution of M ξ(τ ) 
+
+> i,p
+
+is N (0 , σ 2 
+
+> ξ
+
+d−1Id−3), we have 
+
+ξ(τ )
+
+> i,p
+> 22
+
+σ2 
+
+> ξ
+
+d−1 =
+
+M ξ(τ )
+
+> i,p
+> 22
+
+σ2 
+
+> ξ
+
+d−1 ∼ χ2(d − 3) ,
+
+where χ2(d − 3) denotes the chi-squared distribution with d − 3 degrees of freedom. Applying Lemma A.1 with ai = 1 , we yield: 
+
+P
+
+
+
+ξ(τ )
+
+> i,p
+> 22
+
+≥ σ2 
+
+> ξ
+
+d−1 
+
+d−3 + 2 p(d−3) log d + 2 log d
+
+
+
+≤ 1
+
+d ,
+
+P
+
+
+
+ξ(τ )
+
+> i,p
+> 22
+
+≤ σ2 
+
+> ξ
+
+d−1 
+
+d−3 − 2p(d−3) log d
+
+
+
+≤ 1
+
+d .
+
+Finally, applying a union bound over all nP such vectors shows that the inequalities in (7) hold simultaneously with probability at least 1 − O (nP/d ).Since w is initialized as w(1)  
+
+> c
+
+(0) ∼ N (0 , σ 20 Id), the analysis of the inner product of the weight vector and the patch vector is similar to the proof of Lemma C.1. 
+
+Lemma C.2. Let the network weights be initialized as w(1)  
+
+> c
+
+(0) ∼ N (0 , σ 20 Id) for each class c ∈ [C], and let S(τ ) 
+
+> tr
+
+=
+
+{(x(τ ) 
+
+> i
+
+, y (τ ) 
+
+> i
+
+)}ni=1 be i.i.d. samples from the distribution Dz defined in Definition 3.1. If C = Θ (log d), then with probability at least 1 − O   nP C d
+
+, there exists constants a1, a 2 such that following inequalities hold: 
+
+∀e ∈ { u(τ ), v(τ ), ζ(τ )}, max  
+
+> c∈[C]
+
+⟨w(1)  
+
+> c
+
+(0) , e⟩ ≤ plog d ∥e∥2 σ0, max 
+
+> c∈[C]
+
+⟨w(1)  
+
+> c
+
+(0) , e⟩ ≥ 12 ∥e∥2 σ0,
+
+∀i ∈ [n], p ∈ P ξi , max  
+
+> c∈[C]
+
+⟨w(1)  
+
+> c
+
+(0) , ξ(τ ) 
+
+> i,p
+
+⟩ ≤ a1σ0σξ
+
+pd−1(d − 3) log(2 d), max 
+
+> c∈[C]
+
+⟨w(1)  
+
+> c
+
+(0) , ξ(τ ) 
+
+> i,p
+
+⟩ ≥ a2σ0σξ .
+
+Proof. Since each w(1)  
+
+> c
+
+(0) is sampled from a spherical Gaussian, the inner products ⟨w(1)  
+
+> c
+
+(0) , e⟩ for any fixed vector 
+
+e ∈ { u, v, ζ} follow the distribution N (0 , ∥e∥22 σ20 ). By using standard sub-Gaussian tail bounds in Lemma A.3, we have: 
+
+P
+
+h
+
+∃c ∈ [C] : ⟨w(1)  
+
+> c
+
+(0) , e⟩ ≥ p2 log d ∥e∥2 σ0
+
+i
+
+≤
+
+> C
+
+X
+
+> c=1
+
+P
+
+h
+
+⟨w(1)  
+
+> c
+
+(0) , e⟩ ≥ p2 log d ∥e∥2 σ0
+
+i
+
+≤ O
+
+ Cd
+
+
+
+. (8) Moreover, applying Proposition A.7, we yield: 
+
+P
+
+
+
+max 
+
+> c∈[C]
+
+⟨w(1)  
+
+> c
+
+(0) , e⟩ ≤ 12 ∥e∥2 σ0
+
+
+
+=
+
+> C
+
+Y
+
+> c=1
+
+P
+
+h
+
+⟨w(1)  
+
+> c
+
+(0) , e⟩ ≤ 12 ∥e∥2 σ0
+
+i
+
+≤   34
+
+C ≤ e−C/ 4. (9) 17 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+Inequalities (8) and (9) jointly establish the first line of the lemma. For the second line, consider the noise vectors ξ(τ ) 
+
+> i,p
+
+∼ N
+
+
+
+0, σ 2 
+
+> ξ
+
+d−1(Id − e1e⊤ 
+
+> 1
+
+− e2e⊤ 
+
+> 2
+
+− erob e⊤
+
+> rob
+
+)
+
+
+
+. Let 
+
+{e1, e2, erob , ˜e1, . . . , ˜ed−3} be an orthonormal basis of Rd, and define two projection matrices: 
+
+M = [˜ e1, . . . , ˜ed−3]⊤ ∈ R(d−3) ×d, M⊥ = [ e1, e2, erob ]⊤ ∈ R3×d.
+
+By Lemma A.4, we have 
+
+M w(1)  
+
+> c
+
+(0) ∼ N (0 , σ 20 Id−3), M ξ(τ ) 
+
+> i,p
+
+∼ N (0 , σ 2 
+
+> ξ
+
+d−1Id−3), M⊥ξ(τ ) 
+
+> i,p
+
+= 03×1.
+
+Thus, we can write 
+
+⟨w(1)  
+
+> c
+
+(0) , ξ(τ ) 
+
+> i,p
+
+⟩ = ⟨M w(1)  
+
+> c
+
+(0) , M ξ(τ ) 
+
+> i,p
+
+⟩ + ⟨M⊥w(1)  
+
+> c
+
+(0) , M ⊥ξ(τ ) 
+
+> i,p
+
+⟩ = ⟨M w(1)  
+
+> c
+
+(0) , M ξ(τ ) 
+
+> i,p
+
+⟩.
+
+Applying Lemma A.2 and taking a union bound over nP C such vectors yields: 
+
+P
+
+
+
+max  
+
+> i,p,c
+
+⟨w(1)  
+
+> c
+
+(0) , ξ(τ ) 
+
+> i,p
+
+⟩ ≤ a1σ0σξ
+
+pd−1(d − 3) log(2 d)
+
+
+
+≥ 1 − O
+
+ nP C d
+
+
+
+, (10) where a1 is a constant. Likewise, applying the lower bound in Lemma A.2, we have: 
+
+P
+
+"
+
+min 
+
+> i∈[n],p ∈P ξi
+
+max 
+
+> c∈[C]
+
+⟨w(1)  
+
+> c
+
+(0) , ξ(τ ) 
+
+> i,p
+
+⟩ ≥ a2σ0σξ
+
+pd−1(d − 3) 
+
+#
+
+≥ 1 − O
+
+
+
+nP   34
+
+C 
+
+≥ 1 − O
+
+
+
+nP e−C/ 4
+
+. (11) where a2 is a constant. Finally, combining (8) to (11) and applying a union bound completes the proof. At the initialization, we have the following result: 
+
+Lemma 4.1. Given the weights w(1)  
+
+> c
+
+initialized as w(1)  
+
+> c
+
+(0) ∼ N (0 , σ 0Id), at the beginning of the first stage, with a probability of 1 − O
+
+ n2P 2C
+
+> poly(d)
+
+
+
+, we have 
+
+∀e ∈
+
+n
+
+u(1) , v(1) , ζ(1) o
+
+,max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(0) , e
+
+E
+
+≤ eO (∥e∥2 σ0) ,
+
+∀e ∈
+
+n
+
+u(1) , v(1) , ζ(1) o
+
+,max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(0) , e
+
+E
+
+≥ Ω ( ∥e∥2 σ0) ,
+
+∀i ∈ [n], p ∈ P ξi , max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(0) , ξ(1) 
+
+> i,p
+
+E
+
+≤ eO (σ0σξ ) ,
+
+∀i ∈ [n], p ∈ P ξi , max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(0) , ξ(1) 
+
+> i,p
+
+E
+
+≥ Ω ( σ0σξ ) .
+
+Proof. The results can be obtained by using Lemma C.2. Recall that C = Θ(log d) in Condition 3.6, using a union bound, the probability of the inequalities hold is at least 1 − O
+
+ n2P 2C
+
+> poly (d)
+
+
+
+.
+
+D. Learning Dynamics in the First Stage 
+
+In this section, we study the learning process of the first task, which can be seen as single-task learning. If the signal of the task-specific feature is larger than other components, the feature can be captured by CNN. 
+
+Lemma 5.1. In the first stage, under Condition 3.6, and given T ≥ eΩ
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+, for any 0 < t ≤ T, i ∈ I (1)  
+
+> tr
+
+, p ∈ P ξi , we have following: 
+
+max 
+
+> c∈C
+
+D
+
+w(1)  
+
+> c
+
+(t + 1) , ξ(1) 
+
+> i,p
+
+E
+
+−max 
+
+> c∈C
+
+D
+
+w(1)  
+
+> c
+
+(t), ξ(1) 
+
+> i,p
+
+E
+
+≤ o (σ0σξ ) .
+
+Moreover, we have 
+
+max 
+
+> c∈C
+
+D
+
+w(1)  
+
+> c
+
+(t), ξ(1) 
+
+> i,p
+
+E
+
+≤ eO (σ0σξ ) .
+
+18 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+Proof. We analyze the change in the projection 
+
+D
+
+w(1)  
+
+> c
+
+(t), ξ(1) 
+
+> i′,p ′
+
+E
+
+induced by the gradient update, denoted by ∆( ξ(1)  
+
+> i′,p ′
+
+) from Lemma B.3: 
+
+∆( ξ(1)  
+
+> i′,p ′
+
+) = − ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+X
+
+> p∈P ξi
+
+y(1)  
+
+> i
+
+ℓ′ 
+
+F (x(1)  
+
+> i
+
+), y (1) 
+
+> i
+
+
+
+ϕ′ D 
+
+w(1)  
+
+> c
+
+(t), ξ(1) 
+
+> i,p
+
+E D 
+
+ξ(1)  
+
+> i,p
+
+, ξ(1) 
+
+> i′,p ′
+
+E
+
+.
+
+We separate the summand with (i, p ) = ( i′, p ′):
+
+∆( ξ(1)  
+
+> i′,p ′
+
+) = − ηλ c
+
+n
+
+X
+
+> i∈[n], p ∈P ξi
+> (i,p )̸=( i′,p ′)
+
+y(1)  
+
+> i
+
+ℓ′ 
+
+F (x(1)  
+
+> i
+
+), y (1) 
+
+> i
+
+
+
+ϕ′ D 
+
+w(1)  
+
+> c
+
+(t), ξ(1) 
+
+> i,p
+
+E D 
+
+ξ(1)  
+
+> i,p
+
+, ξ(1) 
+
+> i′,p ′
+
+E
+
+− ηλ c
+
+n y(1)  
+
+> i′
+
+ℓ′ 
+
+F (x(1)  
+
+> i′
+
+), y (1) 
+
+> i′
+
+
+
+ϕ′ D 
+
+w(1)  
+
+> c
+
+(t), ξ(1) 
+
+> i′,p ′
+
+E 
+
+ξ(1) 
+
+> i′,p ′
+> 2
+
+.
+
+We now upper bound both terms. Note that |ℓ′| ≤ 1. Lemma C.1 implies that 
+
+∆( ξ(1)  
+
+> i′,p ′
+
+) ≤ ηλ c
+
+n
+
+X
+
+> i∈[n], p ∈P ξi
+> (i,p )̸=( i′,p ′)
+
+ϕ′ D 
+
+w(1)  
+
+> c
+
+(t), ξ(1) 
+
+> i,p
+
+E D 
+
+ξ(1)  
+
+> i,p
+
+, ξ(1) 
+
+> i′,p ′
+
+E
+
++ ηλ c
+
+n ϕ′ D 
+
+w(1)  
+
+> c
+
+(t), ξ(1) 
+
+> i′,p ′
+
+E 
+
+ξ(1) 
+
+> i′,p ′
+> 2
+
+≤ ηλ c eO
+
+
+
+max  
+
+> c,i,p
+
+ϕ′ D 
+
+w(1)  
+
+> c
+
+(t), ξ(1) 
+
+> i,p
+
+E 
+
+· σ2 
+
+> ξ
+
+·
+
+ P
+
+√d + 1
+
+n
+
+ 
+
+.
+
+Given that d is sufficiently large under Condition 3.6, we have P/ √d = o(1 /n ). Thus, the bound simplifies to 
+
+∆( ξ(1)  
+
+> i′,p ′
+
+) ≤ λc eO η max  
+
+> c,i,p
+
+ϕ′ D 
+
+w(1)  
+
+> c
+
+(t), ξ(1) 
+
+> i,p
+
+E 
+
+· σ2
+
+> ξ
+
+n
+
+!
+
+.
+
+We proceed by induction. At t = 0 , by Lemma 4.1 and η ≤ O  1/  σ0α3
+
+> u
+
+ , for all i ∈ I (1)  
+
+> tr
+
+, p ∈ P ξi , c ∈ [C], we have 
+
+D
+
+w(1)  
+
+> c
+
+(0) , ξ(1) 
+
+> i,p
+
+E
+
+≤ eO(σ0σξ ).
+
+Suppose this upper bound holds at step t. Then, the update satisfies 
+
+∆( ξ(1)  
+
+> i,p
+
+) ≤ eO ησ 20 σ4
+
+> ξ
+
+n
+
+!
+
+= o(σ0σξ ),
+
+since η ≤ O  1/  σ0α3
+
+> u
+
+ , nα 3
+
+> u
+
+/σ 3 
+
+> ξ
+
+≥ ω (1) and λc = 1 .Thus, we obtain 
+
+D
+
+w(1)  
+
+> c
+
+(t + 1) , ξ(1) 
+
+> i,p
+
+E
+
+=
+
+D
+
+w(1)  
+
+> c
+
+(t), ξ(1) 
+
+> i,p
+
+E
+
++ ∆( ξ(1)  
+
+> i,p
+
+) ≤ eO(σ0σξ ) + o(σ0σξ ) = eO(σ0σξ ).
+
+By induction, we conclude that for all 0 ≤ t ≤ T ,
+
+max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), ξ(1) 
+
+> i,p
+
+E
+
+≤ eO(σ0σξ ), and ∆( ξ(1)  
+
+> i,p
+
+) ≤ o(σ0σξ ),
+
+as claimed. We conclude our proof. 
+
+Lemma D.1 (Learning the task-specific feature) . Under Condition 3.6, suppose that for all iterations t ∈ [0 , T ] with some 
+
+T ≥ eΩ
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+, the weights satisfy 
+
+max  
+
+> c∈[C]
+
+max 
+
+> e∈
+
+{u(1) ,v(1) ,ζ(1) }
+
+D
+
+w(1)  
+
+> c
+
+(t), e
+
+E
+
+≤ O
+
+
+
+C−1/3
+
+.
+
+19 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+Then there exists an iteration T (1)  
+
+> u
+
+≤ eO
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+such that 
+
+max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(T (1)  
+
+> u
+
+), u(1) E
+
+≥ Ω
+
+
+
+C−1/3
+
+.
+
+Proof. Suppose that for all t ∈ [0 , T ],
+
+max  
+
+> c∈[C]
+
+max 
+
+> e∈
+
+{u(1) ,v(1) ,ζ(1) }
+
+D
+
+w(1)  
+
+> c
+
+(t), e
+
+E
+
+≤ O
+
+
+
+C−1/3
+
+,
+
+where T ≥ Ω  1/(ησ 0α3
+
+> u
+
+). Then for each i ∈ [n], the margin satisfies 
+
+y(1)  
+
+> i
+
+F (1)  
+
+> t
+
+(x(1)  
+
+> i
+
+) ≤ O(1) ,
+
+which implies that 
+
+Ω(1) ≤ − ℓ′ 
+
+> i
+
+≤ 1, ∀i ∈ [n]. (12) We can both upper and lower bound the growth in alignment with the task-specific feature u(1) as 
+
+max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t + 1) , u(1) E
+
+− max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), u(1) E
+
+=Θ n−1ηα 2
+
+> un
+
+X
+
+> i=1
+
+(−ℓ′
+
+> i
+
+) · ϕ′  D 
+
+w(1)  
+
+> c
+
+(t), u(1) E  !
+
+= Θ 
+
+
+
+ηα 2
+
+> u
+
+ϕ′  D 
+
+w(1)  
+
+> c
+
+(t), u(1) E  
+
+, (13) where the last equality follows from Equation (12). Equation (13) shows that the sequence 
+
+n
+
+max c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), u(1) 
+
+Eo Tt=0 
+
+is monotonically increasing. By Lemma 4.1, we have the initialization 
+
+max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(0) , u(1) E
+
+= eΘ ( σ0αu) .
+
+Let T (1)  
+
+> u
+
+be the first time t such that max c∈C
+
+D
+
+w(1)  
+
+> c
+
+(t), u(1) 
+
+E
+
+≥ Ω  C−1/3. Starting from some max c∈C
+
+D
+
+w(1)  
+
+> c
+
+(t′), u(1) 
+
+E
+
+,the number of iterations it takes to reach max c∈C
+
+D
+
+w(1)  
+
+> c
+
+(t), u(1) 
+
+E
+
+≥ 2 max c∈C
+
+D
+
+w(1)  
+
+> c
+
+(t′), u(1) 
+
+E
+
+is at most 
+
+O max c∈C ⟨w(1)  
+
+> c(t′),u(1)
+
+⟩ 
+
+> ηα 2
+> u
+> 
+> max c∈C
+> D
+> w(1)
+> c(t′),u(1)
+> E 2
+
+!
+
+. Then, starting from eΘ ( σ0αu), it takes at most 
+
+T (1)  
+
+> u
+
+≤ eO
+
+> ∞
+
+X
+
+> i=0
+
+2iσ0αu
+
+ηα 2 
+
+> u
+
+(2 iσ0αu)2
+
+!
+
+≤ eO
+
+ 1
+
+ησ 0α3
+
+> u
+
+
+
+(14) times steps to reach max c∈C
+
+D
+
+w(1)  
+
+> c
+
+(t), u(1) 
+
+E
+
+≥ Ω  C−1/3. This completes the proof. 
+
+Theorem 5.2. In the first stage, given a training set S(1)  
+
+> tr
+
+with size n, if αv ≤ o (αu), there exists eT (1) ≤ eO
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+such that for any T (1) ≥ eT (1) , the network FT (1) fits all training data points with a high probability: 
+
+P
+
+h
+
+∀i ∈ S (1)  
+
+> tr
+
+, y iF (1)   
+
+> T(1)
+
+(xi) ≥ eΩ(1) 
+
+i
+
+≥ 1−O
+
+n2P 2C
+
+poly (d)
+
+
+
+.
+
+Moreover, F (1)   
+
+> T(1)
+
+achieves a high accuracy on test data points at T (1) :
+
+P(x,y )∼D (1) 
+
+> z
+
+h
+
+yF (1)  
+
+> T(1)
+
+(x) > 0
+
+i
+
+≥ 1 − O
+
+ nP 2C
+
+poly (d)
+
+
+
+.
+
+20 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+At t = 0 , by Lemma 4.1, we have 
+
+max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(0) , u(1) E
+
+= eΘ( σ0αu), max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(0) , v(1) E
+
+= eΘ( σ0αv ), max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(0) , ζ(1) E
+
+= eΘ( σ0αζ ).
+
+Let T ⋆ be the final time such that max c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), u(1) 
+
+E
+
+≤ O(C−1/3). Suppose that at some time t ≤ T ⋆, we have 
+
+max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), v(1) E
+
+= eΘ( σ0αv ), max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), ζ(1) E
+
+= eΘ( σ0αζ ),
+
+and additionally, 
+
+max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), u(1) E
+
+≤ O(C−1/3).
+
+Then the margin satisfies 
+
+y(1)  
+
+> i
+
+F (1)  
+
+> t
+
+(x(1)  
+
+> i
+
+) ≤ O(1) , ∀i ∈ [n].
+
+This implies that 
+
+Ω(1) ≤ − ℓ′ 
+
+> i
+
+≤ 1. (15) We now analyze the update of max c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), v(1) 
+
+E
+
+. At time t, we have 
+
+max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t + 1) , v(1) E
+
+− max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), v(1) E
+
+= Θ ηα 2
+
+> v
+
+n
+
+> n
+
+X
+
+> i=1
+
+(−ℓ′
+
+> i
+
+) · ϕ′ D 
+
+w(1)  
+
+> c
+
+(t), v(1) E !
+
+= Θ 
+
+
+
+ηα 2 
+
+> v
+
+ϕ′ D 
+
+w(1)  
+
+> c
+
+(t), v(1) E 
+
+,
+
+and 
+
+n
+
+max c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), v(1) 
+
+Eo 
+
+is an increasing sequence, hence 
+
+max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t + 1) , v(1) E
+
+≥ max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), v(1) E
+
+≥ eΩ( σ0αv ). (16) Since max c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), v(1) 
+
+E
+
+≤ eO(σ0αv ), η ≤ O  1/  σ0α3
+
+> u
+
+ , and αv ≤ o (αu), it follows that 
+
+max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t + 1) , v(1) E
+
+≤ max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), v(1) E
+
++ Θ( ηα 4 
+
+> v
+
+σ20 ) ≤ eO(σ0αv ) + o(σ0αv ) ≤ eO(σ0αv ). (17) Combining Equations (16) and (17), we yield 
+
+max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t + 1) , v(1) E
+
+= eΘ( σ0αv ).
+
+We now analyze the alignment with the random feature ζ(1) . For any t, we have 
+
+max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t + 1) , ζ(1) E
+
+− max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), ζ(1) E
+
+≤
+
+ηλ c ζ(1) 22
+
+· ϕ′
+
+
+
+max c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), ζ(1) E  
+
+n · G(1) .
+
+Define a sequence {Φ( t)}Tt=0 by 
+
+Φ(0) = max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(0) , ζ(1) E
+
+,
+
+Φ( t + 1) = Φ( t) + 
+
+ηλ c ζ(1) 22 · ϕ′
+
+
+
+max c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), ζ(1) E  
+
+n · G(1) .
+
+21 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+By the bounded margin condition in (15) and Lemma A.8, we have 
+
+G(1) = Θ( |n= − n̸ =|) ≤ eO(n−1/2),
+
+so 
+
+Φ( t + 1) ≤ Φ( t) + 
+
+ηλ c ζ(1) 22
+
+· ϕ′
+
+D 
+
+w(1)  
+
+> c
+
+(t), ζ(1) E 
+
+√n .
+
+Since Φ( t) ≤ eO(σ0αζ ), η ≤ O  1/  σ0α3
+
+> u
+
+ , it follows that 
+
+Φ( t + 1) ≤ Φ( t) + O(ηα 4 
+
+> ζ
+
+σ20 n−1/2) ≤ Φ( t) + o(σ0αζ ) ≤ eO(σ0αζ ).
+
+and 
+
+Φ( t + 1) ≥ Φ( t) − O(ηα 4 
+
+> ζ
+
+σ20 n−1/2) ≥ Φ( t) − o(σ0αζ ) ≥ eΩ( σ0αζ ).
+
+Then for all t ∈ [0 , T ⋆], we have 
+
+max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), v(1) E
+
+= eΘ( σ0αv ), max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(t), ζ(1) E
+
+= eΘ( σ0αζ ). (18) By Lemma D.1, there exists T (1)  
+
+> u
+
+≤ eO(1 /(ησ 0α3
+
+> u
+
+)) such that 
+
+max 
+
+> c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(T (1)  
+
+> u
+
+), u(1) E
+
+≥ Ω( C−1/3). (19) At T (1) ≥ eT (1) = T (1)  
+
+> u
+
+, the output for any training sample (xi, y i) ∈ S (1)  
+
+> tr
+
+can be expressed as 
+
+yiF (1)   
+
+> T(1)
+
+(xi) = 
+
+> C
+
+X
+
+> c=1
+
+λcϕ
+
+D 
+
+w(1)  
+
+> c
+
+(T (1) ), u(1) E 
+
++
+
+> C
+
+X
+
+> c=1
+
+λcϕ
+
+D 
+
+w(1)  
+
+> c
+
+(T (1) ), v(1) E 
+
++ yiϵiCX
+
+> c=1
+
+λcϕ
+
+D 
+
+w(1)  
+
+> c
+
+(T (1) ), ζ(1) E 
+
++ yiCX
+
+> c=1
+
+X
+
+> p∈P ξi
+
+ϕ
+
+D 
+
+w(1)  
+
+> c
+
+(T (1) ), ξ(1) 
+
+> i,p
+
+E 
+
+.
+
+By Lemma 5.1, we have 
+
+max  
+
+> c∈[C]
+
+max 
+
+> p∈P ξi
+
+D
+
+w(1)  
+
+> c
+
+(T (1) ), ξ(1) 
+
+> i,p
+
+E
+
+≤ o(σ0σξ ). (20) Combining Equations (18) to (20), we yield 
+
+yiF (1)   
+
+> T(1)
+
+(xi) ≥ max  
+
+> c∈[C]
+
+λcϕ
+
+D 
+
+w(1)  
+
+> c
+
+(T (1) ), u(1) E 
+
++ ( C − 1) min  
+
+> c∈[C]
+
+λcϕ
+
+D 
+
+w(1)  
+
+> c
+
+(T (1) ), u(1) E 
+
+− C max  
+
+> c∈[C]
+
+λcϕ
+
+ D 
+
+w(1)  
+
+> c
+
+(T (1) ), v(1) E  
+
+− C max  
+
+> c∈[C]
+
+λcϕ
+
+ D 
+
+w(1)  
+
+> c
+
+(T (1) ), ζ(1) E  
+
+− CP max  
+
+> c∈[C]
+
+max 
+
+> p∈P ξi
+
+ϕ
+
+ D 
+
+w(1)  
+
+> c
+
+(T (1) ), ξ(1) 
+
+> i,p
+
+E  
+
+≥ Ω(1 /C ) − CO (σ30 α3
+
+> u
+
+) − CO (σ30 α3 
+
+> v
+
+) − CO (σ30 α3 
+
+> ζ
+
+) − CP O (σ30 σ3 
+
+> ξ
+
+) ≥ eΩ(1) . (21) With probability at least 1 − O(n2P 2C/ poly( d)) , the bound in (21) holds, showing that the model correctly classifies all training samples with a significant margin. 22 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+Now consider a test sample (x, y ) from the same data model. With probability at least 1 − O(nP 2C/ poly( d)) , we have 
+
+yF (1)   
+
+> T(1)
+
+(x) = 
+
+> C
+
+X
+
+> c=1
+
+λcϕ
+
+D 
+
+w(1)  
+
+> c
+
+(T (1) ), u(1) E 
+
++
+
+> C
+
+X
+
+> c=1
+
+λcϕ
+
+D 
+
+w(1)  
+
+> c
+
+(T (1) ), v(1) E 
+
++ yϵ 
+
+> C
+
+X
+
+> c=1
+
+λcϕ
+
+D 
+
+w(1)  
+
+> c
+
+(T (1) ), ζ(1) E 
+
++ y
+
+> C
+
+X
+
+> c=1
+
+X
+
+> p∈P ξi
+
+ϕ
+
+D 
+
+w(1)  
+
+> c
+
+(T (1) ), ξ(1) 
+
+> p
+
+E 
+
+≥ eΩ(1) . (22) This completes the proof. 
+
+E. Learning Dynamics in the Second Stage 
+
+In the second task, recall that u(2) = αuα−1 
+
+> ζ
+
+ζ(1) , v(2) = v(1) , ζ(2) = αζ α−1 
+
+> u
+
+u(1) . Let w(2)  
+
+> c
+
+(0) = w(1)  
+
+> c
+
+(Tu), at Tu, the following lemma shows the status of w(2)  
+
+> c
+
+at T = 0 .
+
+Corollary 5.3. At the beginning of the second task, if αu ≥ ω (αv ), we have 
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(0) , u(2) E
+
+= eΘ ( σ0αu) ,
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(0) , v(2) E
+
+= eΘ ( σ0αv ) ,
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(0) , u(1) E
+
+≥ eΩ (1) .
+
+Proof. Lemma D.1 shows that at the end of first task, we have max c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+( eT (1) ), u(1) 
+
+E
+
+≥ Ω  C−1/3. Moreover, Equation (18) shows that at eT (1) , we have max c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+( eT (1) ), v(1) 
+
+E
+
+= eΘ
+
+
+
+max c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(0) , v(1) 
+
+E 
+
+= eΘ ( σ0αv )
+
+and max c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+( eT (1) ), ζ(1) E
+
+= eΘ
+
+
+
+max c∈[C]
+
+D
+
+w(1)  
+
+> c
+
+(0) , ζ(1) E 
+
+= eΘ ( σ0αζ ). Using the definition of ζ(1) , u(2) , we conclude our proof. 
+
+Corollary E.1. In the second stage, under Condition 3.6, given T ≥ eΩ
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+, for any 0 < t ≤ T , we have 
+
+max 
+
+> c∈C
+
+D
+
+w(2)  
+
+> c
+
+(t + 1) , ξ(2) 
+
+> i,p
+
+E
+
+−max 
+
+> c∈C
+
+D
+
+w(2)  
+
+> c
+
+(t), ξ(2) 
+
+> i,p
+
+E
+
+≤ o (σ0σξ )
+
+hold for any i, p . Moreover, we have 
+
+∀i, p max 
+
+> c∈C
+
+D
+
+w(2)  
+
+> c
+
+(t), ξ(2) 
+
+> i,p
+
+E
+
+≤ eO (σ0σξ ) .
+
+Proof. Similar to the analysis in Lemma 5.1 for the first stage, we study the change in the projection 
+
+D
+
+w(2)  
+
+> c
+
+(t), ξ(2) 
+
+> i′,p ′
+
+E
+
+due to the gradient update. Denoting this change by ∆( ξ(2)  
+
+> i′,p ′
+
+), we have 
+
+∆( ξ(2)  
+
+> i′,p ′
+
+) = − ηλ c
+
+n
+
+> n
+
+X
+
+> i=1
+
+X
+
+> p∈P ξi
+
+y(2)  
+
+> i
+
+ℓ′ 
+
+F (x(2)  
+
+> i
+
+), y (2) 
+
+> i
+
+
+
+ϕ′ D 
+
+w(2)  
+
+> c
+
+(t), ξ(2) 
+
+> i,p
+
+E D 
+
+ξ(2)  
+
+> i,p
+
+, ξ(2) 
+
+> i′,p ′
+
+E
+
+− ηλ c
+
+n y(2)  
+
+> i′
+
+ℓ′ 
+
+F (x(2)  
+
+> i′
+
+), y (2) 
+
+> i′
+
+
+
+ϕ′ D 
+
+w(2)  
+
+> c
+
+(t), ξ(2) 
+
+> i′,p ′
+
+E 
+
+ξ(2) 
+
+> i′,p ′
+> 2
+
+.
+
+We now upper bound the magnitude of the update. Using the fact that |ℓ′| ≤ 1, we obtain 
+
+∆( ξ(2)  
+
+> i′,p ′
+
+) ≤ ηλ c
+
+n
+
+X
+
+> i∈[n], p ∈P ξi
+> (i,p )̸=( i′,p ′)
+
+ϕ′ D 
+
+w(2)  
+
+> c
+
+(t), ξ(2) 
+
+> i,p
+
+E D 
+
+ξ(2)  
+
+> i,p
+
+, ξ(2) 
+
+> i′,p ′
+
+E
+
++ ηλ c
+
+n ϕ′ D 
+
+w(2)  
+
+> c
+
+(t), ξ(2) 
+
+> i′,p ′
+
+E 
+
+ξ(2) 
+
+> i′,p ′
+> 2
+
+≤ λc eO
+
+
+
+η max  
+
+> c,i,p
+
+ϕ′ D 
+
+w(2)  
+
+> c
+
+(t), ξ(2) 
+
+> i,p
+
+E 
+
+· σ2
+
+> ξ
+
+ P
+
+√d + 1
+
+n
+
+ 
+
+.
+
+23 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+Given that d is sufficiently large under Condition 3.6, we have P/ √d = o(1 /n ). Thus, we obtain 
+
+∆( ξ(2)  
+
+> i′,p ′
+
+) ≤ λc eO ησ 20 σ4
+
+> ξ
+
+n
+
+!
+
+.
+
+Under the condition that n ≥ ω
+
+
+
+σ3 
+
+> ξ
+
+α−3
+
+> u
+
+
+
+, η ≤ O  1/  σ0α3
+
+> u
+
+ and λc = 1 , this bound simplifies to 
+
+∆( ξ(2)  
+
+> i′,p ′
+
+) = o(σ0σξ ).
+
+We then proceed by induction to bound the projection 
+
+D
+
+w(2)  
+
+> c
+
+(t), ξ(2) 
+
+> i′,p ′
+
+E
+
+across all steps. At t = 0 , w(2)  
+
+> c
+
+(0) = w(1)  
+
+> c
+
+( eT (1) )
+
+by the definition, Lemma 5.1 implies that 
+
+D
+
+w(2)  
+
+> c
+
+(0) , ξ(2) 
+
+> i′,p ′
+
+E
+
+≤ eO(σ0σξ ).
+
+Assume the inductive hypothesis holds at step t, i.e., 
+
+D
+
+w(2)  
+
+> c
+
+(t), ξ(2) 
+
+> i′,p ′
+
+E
+
+≤ eO(σ0σξ ).
+
+Then, by the bound derived earlier in the proof, we have 
+
+∆( ξ(2)  
+
+> i′,p ′
+
+) = o(σ0σξ ).
+
+Therefore, the updated projection satisfies 
+
+D
+
+w(2)  
+
+> c
+
+(t + 1) , ξ(2) 
+
+> i′,p ′
+
+E
+
+=
+
+D
+
+w(2)  
+
+> c
+
+(t), ξ(2) 
+
+> i′,p ′
+
+E
+
++ ∆( ξ(2)  
+
+> i′,p ′
+
+) ≤ eO(σ0σξ ) + o(σ0σξ ) ≤ eO(σ0σξ ).
+
+By induction, we conclude that for all 0 ≤ t ≤ T ,
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t), ξ(2) 
+
+> i′,p ′
+
+E
+
+≤ eO(σ0σξ ), and ∆( ξ(2)  
+
+> i′,p ′
+
+) ≤ o(σ0σξ ),
+
+as claimed. This completes the proof. Recall that the update of 
+
+D
+
+w(τ ) 
+
+> c
+
+, ζ(τ )E
+
+is ∆c
+
+
+
+ζ(τ )
+
+= − ηλ c∥ζ(τ )∥22ϕ′(⟨w(τ )  
+
+> c(t),ζ(τ)
+
+⟩) 
+
+> n
+
+G(τ ). The direction of 
+
+D
+
+w(2)  
+
+> c
+
+, ζ(2) E
+
+depends on the sign of G(2) , which is studied in the following lemma. 
+
+Lemma E.2. In the second stage, let h(2) 
+
+
+
+ζ(2) 
+
+= P 
+
+> c∈[C]
+
+ϕ
+
+D 
+
+w(2)  
+
+> c
+
+, ζ(2) E 
+
+, given T ≥ eΩ
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+, we suppose 
+
+max  
+
+> c∈[C]
+
+max 
+
+> e∈
+
+{u(2) ,v(2) }
+
+D
+
+w(2)  
+
+> c
+
+(t), e
+
+E
+
+≤ O
+
+
+
+C−1/3
+
+holds for all t ≤ T . Then we have 
+
+
+
+G(2) < 0, if h(2) 
+
+
+
+ζ(2) 
+
+≥ eΩ
+
+
+
+n−1/2 + CP σ 30 σ3
+
+> ξ
+
+
+
+,
+
+G(2) > 0, if h(2) 
+
+
+
+ζ(2) 
+
+≤ − eΩ
+
+
+
+n−1/2 + CP σ 30 σ3
+
+> ξ
+
+
+
+.
+
+24 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+Proof. Since ∆c
+
+
+
+ζ(τ )
+
+= ηλ c∥ζ(τ )∥22ϕ′(⟨w(τ ) 
+
+> c
+
+(t),ζ(τ )⟩)
+
+n G(τ ), we show the upper bound and lower bound for G(τ ). Note that 
+
+I(2) = I(2) = ∪ I (2) ̸
+
+= , we have 
+
+X
+
+i∈I (2) =
+
+−ℓ′(F (x(2) 
+
+i ), y (2) 
+
+i ) − X
+
+i∈I (2) ̸
+
+> =
+
+
+
+−ℓ′(F (x(2) 
+
+i ), y (2) 
+
+i )
+
+
+
+= X
+
+i∈I (2) =
+
+1 + exp 
+
+h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2) 
+
++ h(2) 
+
+ζ(2) 
+
++ y(2) 
+
+i
+
+X
+
+p∈P ξi
+
+h(2) 
+
+ξ(2) 
+
+i,p 
+
+
+
+−1
+
+− X
+
+i∈I (2) ̸
+
+> =
+
+1 + exp 
+
+h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2) 
+
+− h(2) 
+
+ζ(2) 
+
++ y(2) 
+
+i
+
+X
+
+p∈P ξi
+
+h(2) 
+
+ξ(2) 
+
+i,p 
+
+
+
+−1
+
+≤ X
+
+i∈I (2) =
+
+1 + exp h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2) 
+
++ h(2) 
+
+ζ(2) 
+
+− CP max 
+
+c∈[C]i∈I (2) ,p ∈P ξi
+
+ϕ
+
+ D 
+
+w(2) 
+
+c , ξ(2) 
+
+i,p 
+
+E  !! −1
+
+− X
+
+i∈I (2) ̸
+
+> =
+
+1 + exp h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2) 
+
+− h(2) 
+
+ζ(2) 
+
++ CP max 
+
+c∈[C]i∈I (2) ,p ∈P ξi
+
+ϕ
+
+ D 
+
+w(2) 
+
+c , ξ(2) 
+
+i,p 
+
+E  !! −1
+
+=n(2) = 1 + exp h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2) 
+
++ h(2) 
+
+ζ(2) 
+
+− CP max 
+
+c∈[C]i∈I (2) ,p ∈P ξi
+
+ϕ
+
+ D 
+
+w(2) 
+
+c , ξ(2) 
+
+i,p 
+
+E  !! −1
+
+− n(2) ̸
+
+= 1 + exp h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2) 
+
+− h(2) 
+
+ζ(2) 
+
++ CP max 
+
+c∈[C]i∈I (2) ,p ∈P ξi
+
+ϕ
+
+ D 
+
+w(2) 
+
+c , ξ(2) 
+
+i,p 
+
+E  !! −1
+
+Let γ = P
+
+c∈[C] ϕ
+
+D 
+
+w(2) 
+
+c , ζ(2) E 
+
+− CP max c,i,p ϕ
+
+ D 
+
+w(2) 
+
+c , ξ(2) 
+
+i,p 
+
+E  
+
+, we yield 
+
+X
+
+i∈I (2) =
+
+−ℓ′(F (x(2) 
+
+i ), y (2) 
+
+i ) − X
+
+i∈I (2) ̸
+
+> =
+
+
+
+−ℓ′(F (x(2) 
+
+i ), y (2) 
+
+i )
+
+
+
+≤
+
+n(2) = − n(2) ̸
+
+= + exp  h(2)  u(2)  + h(2)  v(2)  
+
+n(2) = exp ( −γ) − n(2) ̸
+
+= exp ( γ)
+
+ 1 + exp  h(2)  u(2)  + h(2)  v(2)  + γ   1 + exp  h(2)  u(2)  + h(2)  v(2)  − γ 
+
+=exp ( −γ)
+
+
+
+−n(2) ̸
+
+= exp  h(2)  u(2) +h(2)  v(2)  exp (2 γ)+ n(2) = exp  h(2)  u(2) +h(2)  v(2)  +
+
+
+
+n(2) = −n(2) ̸
+
+=
+
+
+
+exp ( γ)
+
+ 1+exp  h(2)  u(2) +h(2)  v(2) +γ  1+exp  h(2)  u(2) +h(2)  v(2) −γ .
+
+We fix the values of h(2)  u(2)  and h(2)  v(2) , and consider the equation 
+
+−n(2) ̸
+
+= exp 
+
+
+
+h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2)  
+
+exp (2 γ) + n(2) = exp 
+
+
+
+h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2)  
+
++
+
+
+
+n(2) = − n(2) ̸
+
+=
+
+
+
+exp ( γ) = 0 ,
+
+where the solution is given by 
+
+γ⋆ = log 
+
+ n(2) = − n(2) ̸
+
+= +
+
+q
+
+(n(2) = − n(2) ̸
+
+= )2 + 4 n(2) = n(2) ̸
+
+= exp  2h(2)  u(2)  + 2 h(2)  v(2)  
+
+2n(2) ̸
+
+= exp  h(2)  u(2)  + h(2)  v(2)   .
+
+This implies that G(2) > 0 requires 
+
+h(2) 
+
+ζ(2) 
+
+≤ γ⋆ + CP max 
+
+c,i,p ϕ
+
+ D 
+
+w(2) 
+
+c , ξ(2) 
+
+i,p 
+
+E  
+
+25 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+as a sufficient condition. Since √a2 + b2 ≤ | a| + |b|, we further upper bound γ⋆ as 
+
+γ⋆ = log 
+
+ n(2) = − n(2) ̸ 
+
+> =
+
++
+
+q
+
+(n(2) = − n(2) ̸ 
+
+> =
+
+)2 + 4 n(2) = n(2) ̸ 
+
+> =
+
+exp  2h(2)  u(2)  + 2 h(2)  v(2)  
+
+2n(2) ̸ 
+
+> =
+
+exp  h(2)  u(2)  + h(2)  v(2)  
+
+≤ log 
+
+
+
+n(2) = − n(2) ̸ 
+
+> =
+
++
+
+q
+
+n(2) = n(2) ̸ 
+
+> =
+
+exp  2h(2)  u(2)  + 2 h(2)  v(2)  
+
+n(2) ̸ 
+
+> =
+
+exp  h(2)  u(2)  + h(2)  v(2)  
+
+≤ log 
+
+ n(2) = − n(2) ̸
+
+> =
+
+n(2) ̸ 
+
+> =
+
+exp  h(2)  u(2)  + h(2)  v(2)  +
+
+vuut n(2) =
+
+n(2) ̸
+
+> =
+
+
+
+≤
+
+n(2) = − n(2) ̸
+
+> =
+
+n(2) ̸ 
+
+> =
+
+exp  h(2)  u(2)  + h(2)  v(2)  +
+
+vuut n(2) =
+
+n(2) ̸
+
+> =
+
+− 1.
+
+Note that h(2)  u(2)  + h(2)  v(2)  ≤ O (1) , by using Equations (3) and (4) in Lemma A.8, with a probability of 
+
+1 − O
+
+ 1
+
+> poly (n)
+
+
+
+, we yield 
+
+n(2) = − n(2) ̸
+
+> =
+
+n(2) ̸ 
+
+> =
+
+exp  h(2)  u(2)  + h(2)  v(2)  ≤ O
+
+ n(2) = − n(2) ̸
+
+> =
+
+n(2) ̸
+
+> =
+
+ ≤ eO
+
+
+
+n−1/2
+
+and 
+
+vuut n(2) =
+
+n(2) ̸
+
+> =
+
+− 1 ≤
+
+q
+
+1 + eO  n−1/2 − 1 ≤ eO
+
+
+
+n−1/4
+
+.
+
+Hence, we have 
+
+γ⋆ ≤ eO
+
+
+
+n−1/2
+
+.
+
+Therefore, if 
+
+h(2) 
+
+ζ(2) 
+
+≥ eΩ
+
+
+
+n−1/2 + CP σ 30 σ3
+
+> ξ
+
+
+
+,
+
+we yield G(2) < 0.26 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+On the other hand, we upper bound −G (2) as 
+
+X
+
+> i∈I (2) ̸
+> =
+
+−ℓ′(F (x(2)  
+
+> i
+
+), y (2)  
+
+> i
+
+) − X
+
+> i∈I (2) =
+
+
+
+−ℓ′(F (x(2)  
+
+> i
+
+), y (2)  
+
+> i
+
+)
+
+
+
+= X
+
+> i∈I (2) ̸
+> =
+
+1 + exp 
+
+h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2) 
+
+− h(2) 
+
+ζ(2) 
+
++ yi
+
+X
+
+> p∈P ξi
+
+h(2) 
+
+ξ(2) 
+
+> i,p
+
+
+
+> −1
+
+− X
+
+> i∈I (2) =
+
+1 + exp 
+
+h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2) 
+
++ h(2) 
+
+ζ(2) 
+
++ yi
+
+X
+
+> p∈P ξi
+
+h(2) 
+
+ξ(2) 
+
+> i,p
+
+
+
+> −1
+
+≤ X
+
+> i∈I (2) ̸
+> =
+
+1 + exp h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2) 
+
+− h(2) 
+
+ζ(2) 
+
+− CP max 
+
+> c∈[C]i∈I (2) ,p ∈P ξi
+
+ϕ
+
+ D 
+
+w(2)  
+
+> c
+
+, ξ(2) 
+
+> i,p
+
+E  !! −1
+
+− X
+
+> i∈I (2) =
+
+1 + exp h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2) 
+
++ h(2) 
+
+ζ(2) 
+
++ CP max 
+
+> c∈[C]i∈I (2) ,p ∈P ξi
+
+ϕ
+
+ D 
+
+w(2)  
+
+> c
+
+, ξ(2) 
+
+> i,p
+
+E  !! −1
+
+=n(2) ̸ 
+
+> =
+
+1 + exp h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2) 
+
+− h(2) 
+
+ζ(2) 
+
+− CP max 
+
+> c∈[C]i∈I (2) ,p ∈P ξi
+
+ϕ
+
+ D 
+
+w(2)  
+
+> c
+
+, ξ(2) 
+
+> i,p
+
+E  !! −1
+
+− n(2) = 1 + exp h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2) 
+
++ h(2) 
+
+ζ(2) 
+
++ CP max 
+
+> c∈[C]i∈I (2) ,p ∈P ξi
+
+ϕ
+
+ D 
+
+w(2)  
+
+> c
+
+, ξ(2) 
+
+> i,p
+
+E  !! −1
+
+Let ˜γ = − P 
+
+> c∈[C]
+
+ϕ
+
+D 
+
+w(2)  
+
+> c
+
+, ζ(2) E 
+
+− CP max c,i,p ϕ
+
+ D 
+
+w(2)  
+
+> c
+
+, ξ(2) 
+
+> i,p
+
+E  
+
+, we yield 
+
+X
+
+> i∈I (2) ̸
+> =
+
+−ℓ′(F (x(2)  
+
+> i
+
+), y (2)  
+
+> i
+
+) − X
+
+> i∈I (2) =
+
+
+
+−ℓ′(F (x(2)  
+
+> i
+
+), y (2)  
+
+> i
+
+)
+
+
+
+≤
+
+n(2) ̸ 
+
+> =
+
+− n(2) = + exp  h(2)  u(2)  + h(2)  v(2)  
+
+n(2) ̸ 
+
+> =
+
+exp ( −˜γ) − n(2) = exp (˜ γ)
+
+ 1 + exp  h(2)  u(2)  + h(2)  v(2)  + ˜ γ   1 + exp  h(2)  u(2)  + h(2)  v(2)  − ˜γ 
+
+=exp ( −˜γ)
+
+
+
+−n(2) = exp  h(2)  u(2) +h(2)  v(2)  exp (2˜ γ)+ n(2) ̸ 
+
+> =
+
+exp  h(2)  u(2) +h(2)  v(2)  +
+
+
+
+n(2) ̸ 
+
+> =
+
+−n(2) =
+
+
+
+exp (˜ γ)
+
+ 1+exp  h(2)  u(2) +h(2)  v(2) +˜ γ  1+exp  h(2)  u(2) +h(2)  v(2) −˜γ .
+
+Similarly, we fix the values of h(2)  u(2)  and h(2)  v(2) , and consider the equation 
+
+−n(2) = exp 
+
+
+
+h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2)  
+
+exp (2 γ) + n(2) ̸ 
+
+> =
+
+exp 
+
+
+
+h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2)  
+
++
+
+
+
+n(2) ̸ 
+
+> =
+
+− n(2) =
+
+
+
+exp ( γ) = 0 ,
+
+where the solution is given by 
+
+˜γ⋆ = log 
+
+ n(2) ̸ 
+
+> =
+
+− n(2) = +
+
+q
+
+(n(2) ̸ 
+
+> =
+
+− n(2) = )2 + 4 n(2) ̸ 
+
+> =
+
+n(2) = exp  2h(2)  u(2)  + 2 h(2)  v(2)  
+
+2n(2) = exp  h(2)  u(2)  + h(2)  v(2)  
+
+(23) We then use a similar technique in bounding γ⋆. Since h(2)  u(2)  + h(2)  v(2)  ≤ O (1) , by using Equations (3) and (4) in Lemma A.8, with a probability of 1 − O
+
+ 1
+
+> poly (n)
+
+
+
+, we yield 
+
+˜γ⋆ ≤
+
+n(2) = − n(2) ̸
+
+> =
+
+n(2) = exp  h(2)  u(2)  + h(2)  v(2)  +
+
+vuut n(2) ̸
+
+> =
+
+n(2) =
+
+− 1 ≤ eO
+
+
+
+n−1/2
+
++
+
+q
+
+1 + eO  n−1/2 − 1 ≤ eO
+
+
+
+n−1/2
+
+.
+
+27 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+This implies that G(2) < 0 requires 
+
+h(2) 
+
+ζ(2) 
+
+≥ − ˜γ⋆ − CP max  
+
+> c,i,p
+
+ϕ
+
+ D 
+
+w(2)  
+
+> c
+
+, ξ(2) 
+
+> i,p
+
+E  
+
+≥ − eO
+
+
+
+n−1/2 + CP σ 30 σ3
+
+> ξ
+
+
+
+as a sufficient condition. Therefore, if h(2) 
+
+
+
+ζ(2) 
+
+≤ − eΩ
+
+
+
+n−1/2 + CP σ 30 σ3
+
+> ξ
+
+
+
+, then it follows that G(2) > 0.We conclude our proof. 
+
+Lemma E.3. Under Condition 3.6, given T ≥ eΩ
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+, we suppose 
+
+max  
+
+> c∈[C]
+
+max 
+
+> e∈
+
+{u(2) ,v(2) }
+
+D
+
+w(2)  
+
+> c
+
+(t), e
+
+E
+
+≤ O
+
+
+
+C−1/3
+
+holds for all t ≤ T . We let αζ = Θ ( αu). Then there exists T (2)  
+
+> ζ
+
+≤ eO
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+such that 
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(T (2)  
+
+> ζ
+
+), ζ(2) E
+
+≤ o (1) , h(2) (ζ(2) ) ≤ o(1) .
+
+Proof. At t = 0 , when αζ = Θ ( αu), By using Corollary 5.3, we yield 
+
+X
+
+> c∈[C]
+
+ϕ
+
+D 
+
+w(2)  
+
+> c
+
+, ζ(2) E 
+
+≥ Θ  α3 
+
+> ζ
+
+α−3 
+
+> u
+
+C−1 = eΘ (1) , CP max 
+
+> c∈[C],i ∈I =,p ∈P ξi
+
+ϕ
+
+ D 
+
+w(2)  
+
+> c
+
+, ξ(2) 
+
+> i,p
+
+E  
+
+≤ O  CP σ 30 σ3
+
+> ξ
+
+ ≤ o (1) .
+
+We then have 
+
+X
+
+> c∈[C]
+
+ϕ
+
+D 
+
+w(2)  
+
+> c
+
+, ζ(2) E 
+
+≥ ω
+
+
+
+n−1/2 + CP σ 30 σ3
+
+> ξ
+
+
+
+,
+
+which means ∆c
+
+
+
+ζ(2) 
+
+≤ 0 due to Lemma E.2. By rewriting G(2) , we yield 
+
+G(2) = X
+
+> i∈I (2) =
+
+−ℓ′(F (xi), y i) − X
+
+> i∈I (2) ̸
+> =
+
+(−ℓ′(F (xi), y i)) = X
+
+> i∈I (2) =
+
+1 + exp 
+
+h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2) 
+
++ h(2) 
+
+ζ(2) 
+
++ yi
+
+X
+
+> p∈P ξi
+
+h(2) 
+
+ξ(2) 
+
+> i,p
+
+
+
+> −1
+
+− X
+
+> i∈I (2) ̸
+> =
+
+1 + exp 
+
+h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2) 
+
+− h(2) 
+
+ζ(2) 
+
++ yi
+
+X
+
+> p∈P ξi
+
+h(2) 
+
+ξ(2) 
+
+> i,p
+
+
+
+> −1
+
+By the assumption, for any i, we have 
+
+h(2) 
+
+u(2) 
+
++ h(2) 
+
+v(2) 
+
++ yi
+
+X
+
+> p∈P ξi
+
+h(2) 
+
+ξ(2) 
+
+> i,p
+
+
+
+≤ O(1) .
+
+At the beginning of the second stage, we have h(2) (ζ(2) ) ≥ eΩ
+
+
+
+max c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t), ζ(2) E 3
+
+≥ eΩ (1) . Then, for some t,if h(2) (ζ(2) ) ≥ eΩ (1) , it is clear to show that there must exist α = Θ (1) such that for all αζ ≥ α, we have 
+
+−O (n) ≤ G (2) ≤ − Ω ( n) .
+
+28 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+We consider the update rule for max c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t), ζ(2) E
+
+:
+
+D
+
+w(2)  
+
+> c
+
+(t + 1) , ζ(2) E
+
+−
+
+D
+
+w(2)  
+
+> c
+
+(t), ζ(2) E
+
+= − Θ
+
+
+
+ηλ c ζ(2) 22
+
+ϕ′ D 
+
+w(2)  
+
+> c
+
+(t), ζ(2) E 
+
+. (24) This shows that 
+
+D
+
+w(2)  
+
+> c
+
+(t), ζ(2) E
+
+decreases monotonically for all c ∈ [C]. Consequently, h(2) (ζ(2) ) also decreases. Let T (2) 
+
+> ζ
+
+be the first time t such that h(2) (ζ(2) ) drops below eΩ (1) . Then, the monotonic decrease described in Equation (24) holds for any 0 ≤ T (2) < T (2)  
+
+> ζ
+
+.Given 0 ≤ t′ < t ≤ T (2)  
+
+> ζ
+
+, starting from some 
+
+D
+
+w(2)  
+
+> c
+
+(t′), ζ(2) E
+
+, the number of iterations it takes to reach 
+
+max c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t), ζ(2) E
+
+≤ 12 max c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t′), ζ(2) E
+
+is at most O max c∈[C]⟨w(2)  
+
+> c(t′),ζ(2)
+
+⟩ 
+
+> ηα 2
+> ζ
+> 
+> max c∈[C]
+> D
+> w(2)
+> c(t′),ζ(2)
+> E 2
+
+!
+
+. Then, starting from eΘ (1) , it takes at most 
+
+eO
+
+> r−1
+
+X
+
+> i=0
+
+2−i
+
+ηα 2 
+
+> ζ
+
+2−2i
+
+!
+
+≤ eO 2r
+
+ηα 2
+
+> ζ
+
+!
+
+. (25) time steps to reach max c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t), ζ(2) E
+
+≤ 2−r max c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t′), ζ(2) E
+
+. Setting r =
+
+l log(1 /σ 0αu)log(2) 
+
+m
+
+, we obtain 
+
+T (2)  
+
+> ζ
+
+≤ eO
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+such that 
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(T (2)  
+
+> ζ
+
+), ζ(2) E
+
+≤ o
+
+
+
+C−1/3
+
+= o (1) , h(2) (ζ(2) ) ≤ o (1) .
+
+Then, the update magnitude 
+
+D
+
+w(2)  
+
+> c
+
+(t + 1) , ζ(2) E
+
+−
+
+D
+
+w(2)  
+
+> c
+
+(t), ζ(2) E
+
+is small, and according to Lemma E.2, h(2) (ζ(2) )
+
+cannot decrease to −Ω (1) because we have G(2) > 0 if h(2) 
+
+
+
+ζ(2) 
+
+≤ − eΩ
+
+
+
+n−1/2 + CP σ 30 σ3
+
+> ξ
+
+
+
+. Hence, we conclude that 
+
+h(2) (ζ(2) ) ≤ o(1) ,
+
+at some T (2)  
+
+> ζ
+
+≤ eO
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+.We then analyze the change of 
+
+D
+
+w(2)  
+
+> c
+
+, u(2) 
+
+E
+
+and 
+
+D
+
+w(2)  
+
+> c
+
+, v(2) 
+
+E
+
+in the second task. 
+
+Lemma E.4 (Learning the Task-Specific and General Features) . Under Condition 3.6, starting from T (2) = 0 , there exists 
+
+T (2)  
+
+> u
+
+≤ eO
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+such that 
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(T (2)  
+
+> u
+
+), u(2) E
+
+≥ Ω
+
+
+
+C−1/3
+
+,
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(T (2)  
+
+> u
+
+), v(2) E
+
+≤ eO (σ0αv ) .
+
+Proof. At T (2) = 0 , for all c ∈ [C], we have 
+
+D
+
+w(2)  
+
+> c
+
+(0) , u(1) E
+
+≥
+
+D
+
+w(1)  
+
+> c
+
+(0) , u(1) E
+
+≥ − eO (σ0αu) ,
+
+where the first inequality follows that 
+
+nD 
+
+w(1)  
+
+> c
+
+(t), u(1) 
+
+Eo T (1) 
+
+> t=0
+
+is an increasing sequence. The second inequality holds because w(1)  
+
+> c
+
+(0) is drawn from an isotropic Gaussian distribution and Lemma 4.1. It follows that 
+
+∀c ∈ [C],
+
+D
+
+w(2)  
+
+> c
+
+(0) , ζ(2) E
+
+= αz α−1
+
+> u
+
+D
+
+w(2)  
+
+> c
+
+(0) , u(1) E
+
+≥ − eO (σ0αζ ) .
+
+29 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+and similarly, 
+
+∀c ∈ [C],
+
+D
+
+w(2)  
+
+> c
+
+(0) , v(2) E
+
+=
+
+D
+
+w(2)  
+
+> c
+
+(0) , v(1) E
+
+≥ − eO (σ0αv ) , (26) where the last inequality uses the monotonicity of 
+
+nD 
+
+w(1)  
+
+> c
+
+(t), v(1) 
+
+Eo T (1)  
+
+> t=0
+
+and Lemma 4.1. By Equation (18) and Corollary 5.3, we obtain 
+
+max  
+
+> c∈[C]
+
+max 
+
+> e∈
+
+{u(2) ,v(2) }
+
+D
+
+w(2)  
+
+> c
+
+(0) , e
+
+E
+
+≤ O
+
+
+
+C−1/3
+
+.
+
+We proceed by induction. Suppose that for some t > 0, we have 
+
+max  
+
+> c∈[C]
+
+max 
+
+> e∈
+
+{u(2) ,v(2) }
+
+D
+
+w(2)  
+
+> c
+
+(t), e
+
+E
+
+≤ O
+
+
+
+C−1/3
+
+, and h(2) 
+
+ζ(2) 
+
+≤ eO (1) .
+
+Then by Lemma E.3, h(2) 
+
+
+
+ζ(2) 
+
+is non-increasing, and at t + 1 , we still have 
+
+h(2) 
+
+ζ(2) 
+
+≤ eO (1) .
+
+This ensures that 
+
+Ω(1) ≤ − ℓ′ 
+
+> i
+
+≤ 1, ∀i ∈ [n],
+
+which further implies 
+
+max 
+
+> c∈C
+
+D
+
+w(2)  
+
+> c
+
+(t + 1) , v(2) E
+
+− max 
+
+> c∈C
+
+D
+
+w(2)  
+
+> c
+
+(t), v(2) E
+
+= Θ n−1ηα 2
+
+> v
+> n
+
+X
+
+> i=1
+
+ℓ′
+
+> i
+
+!
+
+ϕ′  D 
+
+w(2)  
+
+> c
+
+(t), v(2) E  !
+
+.
+
+It shows that 
+
+n
+
+max c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t), v(2) 
+
+Eo 
+
+is an increasing sequence, hence 
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t + 1) , v(2) E
+
+≥ max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t), v(2) E
+
+≥ eΩ( σ0αv ). (27) Since max c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t), v(2) 
+
+E
+
+≤ eO(σ0αv ), η ≤ O  1/  σ0α3
+
+> u
+
+ , and αv ≤ o (αu), it follows that 
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t + 1) , v(2) E
+
+≤ max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t), v(2) E
+
++ Θ( ηα 4 
+
+> v
+
+σ20 ) ≤ eO(σ0αv ) + o(σ0αv ) ≤ eO(σ0αv ). (28) Combining Equations (27) and (28), we yield 
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t + 1) , v(2) E
+
+= eΘ( σ0αv ). (29) Thus, combining Equations (26) and (29), we maintain 
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t + 1) , v(2) E
+
+≤ eO (σ0αv ) .
+
+Meanwhile, for u(2) we have 
+
+max 
+
+> c∈C
+
+D
+
+w(2)  
+
+> c
+
+(t + 1) , u(2) E
+
+− max 
+
+> c∈C
+
+D
+
+w(2)  
+
+> c
+
+(t), u(2) E
+
+=Θ n−1ηα 2
+
+> u
+> n
+
+X
+
+> i=1
+
+−ℓ′
+
+> i
+
+!
+
+ϕ′  D 
+
+w(2)  
+
+> c
+
+(t), u(2) E  !
+
+= Θ 
+
+
+
+ηα 2
+
+> u
+
+ϕ′  D 
+
+w(2)  
+
+> c
+
+(t), u(2) E  
+
+.
+
+30 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+It shows that 
+
+n
+
+max c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t), u(2) 
+
+Eo 
+
+is an increasing sequence. Let T (2)  
+
+> u
+
+be the first time t such that 
+
+max c∈C
+
+D
+
+w(2)  
+
+> c
+
+(t), u(2) 
+
+E
+
+≥ Ω  C−1/3. Then for all 0 ≤ T (2) < T (2)  
+
+> u
+
+, we have 
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(T (2) ), v(2) E
+
+≤ eO (σ0αv ) , and h(2) 
+
+ζ(2) 
+
+≤ eO (1) .
+
+and 
+
+max 
+
+> c∈C
+
+D
+
+w(2)  
+
+> c
+
+(T (2) + 1) , u(2) E
+
+− max 
+
+> c∈C
+
+D
+
+w(2)  
+
+> c
+
+(T (2) ), u(2) E
+
+= Θ 
+
+
+
+ηα 2
+
+> u
+
+ϕ′  D 
+
+w(2)  
+
+> c
+
+(T (2) ), u(2) E  
+
+. (30) Corollary 5.3 implies that max c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(0) , u(2) 
+
+E
+
+= eΘ ( σ0αu). Starting from some max c∈C
+
+D
+
+w(2)  
+
+> c
+
+(t′), u(2) 
+
+E
+
+,the number of iterations it takes to reach max c∈C
+
+D
+
+w(2)  
+
+> c
+
+(t), u(2) 
+
+E
+
+≥ 2 max c∈C
+
+D
+
+w(2)  
+
+> c
+
+(t′), u(2) 
+
+E
+
+is at most 
+
+O max c∈C ⟨w(2)  
+
+> c(t′),u(2)
+
+⟩ 
+
+> ηα 2
+> u
+> 
+> max c∈C
+> D
+> w(2)
+> c(t′),u(2)
+> E 2
+
+!
+
+. Then, starting from eΘ ( σ0αu), it takes at most 
+
+T (2)  
+
+> u
+
+≤ eO
+
+> ∞
+
+X
+
+> i=0
+
+2iσ0αu
+
+ηα 2 
+
+> u
+
+(2 iσ0αu)2
+
+!
+
+≤ eO
+
+ 1
+
+ησ 0α3
+
+> u
+
+
+
+(31) times steps to reach max c∈C
+
+D
+
+w(2)  
+
+> c
+
+(t), u(2) 
+
+E
+
+≥ Ω  C−1/3.This completes the proof. After training the second task, the following theorem and corollary show that at the end of the second stage, CF occurs if 
+
+αζ ≥ Ω ( αu), i.e., at eT (2) = eΘ
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+, only u(2) can be used for classification. 
+
+Theorem 5.4. In the second stage, given a training set S(2)  
+
+> tr
+
+with size n, there exists eT (2) = eΘ
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+such that for 
+
+T (2) ≥ eT (2) , the network FT (2) fits all training data points with a high probability: 
+
+P
+
+h
+
+∀i ∈ S (2)  
+
+> tr
+
+,y iF (2)  
+
+> T(2)
+
+(xi) ≥ eΩ(1) 
+
+i
+
+≥ 1−O
+
+n2P 2C
+
+poly (d) + 1
+
+poly (n)
+
+
+
+.
+
+Moreover, FT (2) achieves a high accuracy on test data sampled from the second task: 
+
+P(x,y )∼D (2) 
+
+> z
+
+h
+
+yF (2)  
+
+> T(2)
+
+(x) > 0
+
+i
+
+≥ 1−O
+
+ nP 2C
+
+poly (d) + 1
+
+poly (n)
+
+
+
+.
+
+If αv ≤ o (αu), and αζ ≥ Ω ( αu), FT (2) achieves a low accuracy on test data sampled from the first task 
+
+P(x,y )∼D (1) 
+
+> z
+
+h
+
+yF (2)  
+
+> T(2)
+
+(x) > 0
+
+i
+
+≤ 12 +O
+
+ nP 2C
+
+poly (d) + 1
+
+poly (n)
+
+
+
+.
+
+Proof. For any training sample (xi, y i) from the second task, the output can be rewritten as: 
+
+yiFT (2) (xi) = yiCX
+
+> c=1
+
+λcϕ
+
+D 
+
+w(2)  
+
+> c
+
+, y iu(2) E 
+
++ yiCX
+
+> c=1
+
+λcϕ
+
+D 
+
+w(2)  
+
+> c
+
+, y iv(2) E 
+
++ yiCX
+
+> c=1
+
+λcϕ
+
+D 
+
+w(2)  
+
+> c
+
+, ϵ iζ(2) E 
+
++ yiCX
+
+> c=1
+
+X
+
+> p∈P ξi
+
+ϕ(
+
+D
+
+w(2)  
+
+> c
+
+, ξ(2) 
+
+> i,p
+
+E
+
+)=
+
+> C
+
+X
+
+> c=1
+
+λcϕ
+
+D 
+
+w(2)  
+
+> c
+
+, u(2) E 
+
++
+
+> C
+
+X
+
+> c=1
+
+λcϕ
+
+D 
+
+w(2)  
+
+> c
+
+, v
+
+E 
+
++ yiϵiCX
+
+> c=1
+
+λcϕ
+
+D 
+
+w(2)  
+
+> c
+
+, ζ(2) E 
+
++ yiCX
+
+> c=1
+
+X
+
+> p∈P ξi
+
+ϕ
+
+D 
+
+w(2)  
+
+> c
+
+, ξ(2) 
+
+> i,p
+
+E 
+
+31 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+By using Lemmas E.3 and E.4, there exists some time eT (2) = eΘ
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+such that for T (2) ≥ eT (2) , we have 
+
+yiFT (2) (xi) ≥ max  
+
+> c∈[C]
+
+λcϕ
+
+D 
+
+w(2)  
+
+> c
+
+, u(2) E 
+
++ ( C − 1) min  
+
+> c∈[C]
+
+λcϕ
+
+D 
+
+w(2)  
+
+> c
+
+, u(2) E 
+
+−C max  
+
+> c∈[C]
+
+λcϕ
+
+ D 
+
+w(2)  
+
+> c
+
+, v(2) E  
+
+−
+
+> C
+
+X
+
+> c=1
+
+λcϕ
+
+ D 
+
+w(2)  
+
+> c
+
+, ζ(2) E  
+
+− CP max  
+
+> c∈[C]
+
+max 
+
+> p∈P ξi
+
+ϕ
+
+ D 
+
+w(2)  
+
+> c
+
+, ξ(2) 
+
+> i,p
+
+E  
+
+≥Ω (1 /C ) − CO  σ30 α3
+
+> u
+
+ − CO  σ30 α3
+
+> v
+
+ − Co (1) − CP O  σ30 σ3
+
+> ξ
+
+ ≥ eΩ (1) . (32) The probability of Equation (32) hold is 1 − O
+
+ n2P 2C 
+
+> poly (d)
+
++ 1
+
+> poly (n)
+
+
+
+. For a test sample (x, y ) drawn from the second task, with a probability of 1 − O
+
+ nP 2C 
+
+> poly (d)
+
++ 1
+
+> poly (n)
+
+
+
+, we have 
+
+yF T (2) (x) = y
+
+> C
+
+X
+
+> c=1
+
+λcϕ
+
+D 
+
+w(2)  
+
+> c
+
+, y u(2) E 
+
++ y
+
+> C
+
+X
+
+> c=1
+
+λcϕ
+
+D 
+
+w(2)  
+
+> c
+
+, y v(2) E 
+
++y
+
+> C
+
+X
+
+> c=1
+
+λcϕ
+
+D 
+
+w(2)  
+
+> c
+
+, ϵ ζ(2) E 
+
++ y
+
+> C
+
+X
+
+> c=1
+
+X
+
+> p∈P ξi
+
+ϕ
+
+D 
+
+w(2)  
+
+> c
+
+, ξ(2) 
+
+> p
+
+E 
+
+≥eΩ (1) .
+
+Additionally, for a test data (x, y ) drawn form the first task, let ϵ as the definition in Definition 3.1, we have 
+
+ϵF T (2) (x) = ϵ
+
+> C
+
+X
+
+> c=1
+
+λcϕ
+
+D 
+
+w(2)  
+
+> c
+
+, y u(1) E 
+
++ ϵ
+
+> C
+
+X
+
+> c=1
+
+λcϕ
+
+D 
+
+w(2)  
+
+> c
+
+, y v(1) E 
+
++ ϵ
+
+> C
+
+X
+
+> c=1
+
+λcϕ
+
+D 
+
+w(2)  
+
+> c
+
+, ϵ ζ(1) E 
+
++ ϵ
+
+> C
+
+X
+
+> c=1
+
+X
+
+> p∈P ξi
+
+ϕ
+
+D 
+
+w(2)  
+
+> c
+
+, ξ(1) 
+
+> i,p
+
+E 
+
+=yϵ 
+
+> C
+
+X
+
+> c=1
+
+λcα3
+
+> u
+
+α−3 
+
+> ζ
+
+ϕ
+
+D 
+
+w(2)  
+
+> c
+
+, ζ(2) E 
+
++ yϵ 
+
+> C
+
+X
+
+> c=1
+
+λcϕ
+
+D 
+
+w(2)  
+
+> c
+
+, v(2) E 
+
++
+
+> C
+
+X
+
+> c=1
+
+λcα−3 
+
+> u
+
+α3 
+
+> ζ
+
+ϕ
+
+D 
+
+w(2)  
+
+> c
+
+, u(2) E 
+
++ ϵ
+
+> C
+
+X
+
+> c=1
+
+X
+
+> p∈P ξi
+
+ϕ
+
+D 
+
+w(2)  
+
+> c
+
+, ξ(2) 
+
+> i,p
+
+E 
+
+≥ max  
+
+> c∈[C]
+
+λcα−3 
+
+> u
+
+α3 
+
+> ζ
+
+ϕ
+
+D 
+
+w(2)  
+
+> c
+
+, u(2) E 
+
++( C −1) min  
+
+> c∈[C]
+
+λcα−3 
+
+> u
+
+α3 
+
+> ζ
+
+ϕ
+
+D 
+
+w(2)  
+
+> c
+
+, u(2) E 
+
+−C max  
+
+> c∈[C]
+
+λcϕ
+
+ D 
+
+w(2)  
+
+> c
+
+, v(2) E  
+
+− α3
+
+> u
+
+α−3
+
+> ζC
+
+X
+
+> c=1
+
+λcϕ
+
+ D 
+
+w(2)  
+
+> c
+
+, ζ(2) E  
+
+− CP max 
+
+> c∈[C],p ∈P ξi
+
+ϕ
+
+ D 
+
+w(2)  
+
+> c
+
+, ξ(2) 
+
+> i,p
+
+E  
+
+≥Ω α−3 
+
+> u
+
+α3
+
+> ζ
+
+C
+
+!
+
+− α−3 
+
+> u
+
+α3 
+
+> ζ
+
+CO  σ30 α3
+
+> u
+
+ − CO  σ30 α3
+
+> v
+
+ − Cα 3
+
+> u
+
+α−3 
+
+> ζ
+
+o (1) − CP O  σ30 σ3
+
+> ξ
+
+
+
+≥eΩ (1) .
+
+Note that P (ϵ = y) = 1 /2, using the union bound, we conclude our proof. 
+
+Corollary 5.5. At the end of the second task, for eT (2) = eΘ
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+, if αu ≥ ω (αv ) and αζ ≥ Ω ( αu), we have 
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+( eT (2) ), u(1) E
+
+≤ o (1) ,
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+( eT (2) ), v(2) E
+
+= eΘ ( σ0αv ) ,
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+( eT (2) ), u(2) E
+
+≥ eΩ (1) .
+
+32 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 
+
+Proof. Lemma E.4 implies that at eT (2) = eΘ
+
+ 1
+
+> ησ 0α3
+> u
+
+
+
+, we have 
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t), u(2) E
+
+≥ Ω
+
+
+
+C−1/3
+
+,
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+(t), v(2) E
+
+= eΘ ( σ0αv ) .
+
+Moreover, Lemma E.3 implies that 
+
+max 
+
+> c∈[C]
+
+D
+
+w(2)  
+
+> c
+
+( eT (2) ), ζ(2) E
+
+≤ o (1) .
+
+Since u(1) = αuα−1 
+
+> ζ
+
+ζ(2) and αζ ≥ Ω ( αu), we conclude the proof. 
+
+F. Additional Experiments 
+
+F.1. Simulated Dataset 
+
+For simulated dataset, we use PyTorch as the deep learning framework for training. The CNN model used is defined as Equation (1) with C = 10 , and the model is optimized using GD. The learning rate is set to 0.1. In each stage, the model is trained for 100 epochs. The hyperparameters are set as follows: P = 1 , σξ = 0 .5√d, and d = 50 . The value of αu is fixed at 1, while αv and αζ are varied across discrete values. Specifically, αv takes values in the range {0, 0.1, 0.2, . . . , 1.0}, and 
+
+αζ takes values in the range {0, 0.1, 0.2, 0.3, . . . , 1.0}. For each combination of αv and αζ , In Figure 2, we perform 20 independent experiments to calculate the average accuracy of both tasks at the completion of the first and second stages. We then include additional experimental results for simulated datasets. Figure 6 shows the case that both u(1) and u(2) are captured by the model. Since the signal of ζ(2) is slight, CF does not occur in this case. Moreover, Figure 7 shows the case that v(1) = v(2) is learned by the model while none of the other components are fitted by the model since v has a large norm in this experiment. 
+
+F.2. Real-World Datasets 
+
+In real-world datasets, we use ResNet-18 as the CNN model, which is trained for 100 epochs in both the first and second stage. We show the full results for Figure 3. Figures 8 to 10 show the performance of the model on both first and second tasks in different stages in CIFAR-10, CIFAR-100, and Tiny-ImageNet, respectively. We then use T-SNE (van der Maaten & Hinton, 2008) to visualize the feature in both the first and second stages of CL in CIFAR-100 and Tiny-ImageNet. The results in CIFAR-100 and Tiny-ImageNet are shown in Figures 11 and 12, respectively. Additionally, we calculate the maximal singular vector in the feature space in CIFAR-100 and Tiny-ImageNet, and the results are shown in Figures 13 and 14. 33 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 20 40 60 80 100 
+
+epoch 
+
+0.25 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+Feature-U 
+
+Channel--0 
+
+Channel--1 
+
+Channel--2 
+
+Channel--3 
+
+Channel--4 
+
+Channel--5 
+
+Channel--6 
+
+Channel--7 
+
+Channel--8 
+
+Channel--9 
+
+20 40 60 80 100 
+
+epoch 
+
+0.25 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+20 40 60 80 100 
+
+epoch 
+
+0.25 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+20 40 60 80 100 
+
+epoch 
+
+0.25 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+20 40 60 80 100 
+
+epoch 
+
+0.25 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+Feature-V 
+
+Channel--0 
+
+Channel--1 
+
+Channel--2 
+
+Channel--3 
+
+Channel--4 
+
+Channel--5 
+
+Channel--6 
+
+Channel--7 
+
+Channel--8 
+
+Channel--9 
+
+20 40 60 80 100 
+
+epoch 
+
+0.25 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+20 40 60 80 100 
+
+epoch 
+
+0.25 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+20 40 60 80 100 
+
+epoch 
+
+0.25 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+20 40 60 80 100 
+
+epoch 
+
+0.25 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+Feature-zeta 
+
+Channel--0 
+
+Channel--1 
+
+Channel--2 
+
+Channel--3 
+
+Channel--4 
+
+Channel--5 
+
+Channel--6 
+
+Channel--7 
+
+Channel--8 
+
+Channel--9 
+
+20 40 60 80 100 
+
+epoch 
+
+0.25 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+20 40 60 80 100 
+
+epoch 
+
+0.25 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+20 40 60 80 100 
+
+epoch 
+
+0.25 
+
+0.00 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+20 40 60 80 100 
+
+epoch 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+Stage 1 Task 1 
+
+Output 
+
+Data-U 
+
+Data-V 
+
+Data-zeta 
+
+Data-xi 
+
+20 40 60 80 100 
+
+epoch 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+Stage 1 Task 2 
+
+20 40 60 80 100 
+
+epoch 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+Stage 2 Task 1 
+
+20 40 60 80 100 
+
+epoch 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+Stage 2 Task 2 
+
+Figure 6. The output of each layer in the CNN model using different inputs. Top three rows : The output of each channel in the first layer. 
+
+Bottom row : The output of the last layer. ( αu = 1 , αv = 0 .9, and αζ = 0 .1)
+
+34 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 20 40 60 80 100 
+
+epoch 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+Feature-U 
+
+Channel--0 
+
+Channel--1 
+
+Channel--2 
+
+Channel--3 
+
+Channel--4 
+
+Channel--5 
+
+Channel--6 
+
+Channel--7 
+
+Channel--8 
+
+Channel--9 
+
+20 40 60 80 100 
+
+epoch 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+20 40 60 80 100 
+
+epoch 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+20 40 60 80 100 
+
+epoch 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+20 40 60 80 100 
+
+epoch 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+Feature-V 
+
+Channel--0 
+
+Channel--1 
+
+Channel--2 
+
+Channel--3 
+
+Channel--4 
+
+Channel--5 
+
+Channel--6 
+
+Channel--7 
+
+Channel--8 
+
+Channel--9 
+
+20 40 60 80 100 
+
+epoch 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+20 40 60 80 100 
+
+epoch 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+20 40 60 80 100 
+
+epoch 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+20 40 60 80 100 
+
+epoch 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+Feature-zeta 
+
+Channel--0 
+
+Channel--1 
+
+Channel--2 
+
+Channel--3 
+
+Channel--4 
+
+Channel--5 
+
+Channel--6 
+
+Channel--7 
+
+Channel--8 
+
+Channel--9 
+
+20 40 60 80 100 
+
+epoch 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+20 40 60 80 100 
+
+epoch 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+20 40 60 80 100 
+
+epoch 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+20 40 60 80 100 
+
+epoch 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+Stage 1 Task 1 
+
+Output 
+
+Data-U 
+
+Data-V 
+
+Data-zeta 
+
+Data-xi 
+
+20 40 60 80 100 
+
+epoch 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+Stage 1 Task 2 
+
+20 40 60 80 100 
+
+epoch 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+Stage 2 Task 1 
+
+20 40 60 80 100 
+
+epoch 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+Stage 2 Task 2 
+
+Figure 7. The output of each layer in the CNN model using different inputs. Top three rows : The output of each channel in the first layer. 
+
+Bottom row : The output of the last layer. ( αu = 1 , αv = 1 , and αζ = 0 .8)0 1 2 3 4
+
+Task 2 
+
+0
+
+1
+
+2
+
+3
+
+4 Task 1 
+
+Stage 1 Task 1 
+
+0 1 2 3 4
+
+Task 2 
+
+0
+
+1
+
+2
+
+3
+
+4 Task 1 
+
+Stage 1 Task 2 
+
+0 1 2 3 4
+
+Task 2 
+
+0
+
+1
+
+2
+
+3
+
+4 Task 1 
+
+Stage 2 Task 1 
+
+0 1 2 3 4
+
+Task 2 
+
+0
+
+1
+
+2
+
+3
+
+4 Task 1 
+
+Stage 2 Task 2 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+Figure 8. Overview of CF in CIFAR-10. 
+
+35 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks 0 10 20 30 40 
+
+> Task 2
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+> Task 1
+
+Stage 1 Task 1 
+
+0 10 20 30 40 
+
+> Task 2
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+> Task 1
+
+Stage 1 Task 2 
+
+0 10 20 30 40 
+
+> Task 2
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+> Task 1
+
+Stage 2 Task 1 
+
+0 10 20 30 40 
+
+> Task 2
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+> Task 1
+
+Stage 2 Task 2 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+
+Figure 9. Overview of CF in CIFAR-100. 0 20 40 60 80 
+
+> Task 2
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+> Task 1
+
+Stage 1 Task 1 
+
+0 20 40 60 80 
+
+> Task 2
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+> Task 1
+
+Stage 1 Task 2 
+
+0 20 40 60 80 
+
+> Task 2
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+> Task 1
+
+Stage 2 Task 1 
+
+0 20 40 60 80 
+
+> Task 2
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+> Task 1
+
+Stage 2 Task 2 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+
+Figure 10. Overview of CF in Tiny-ImageNet. 
+
+36 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks -40 -30 -20 -10 0 10 20 30 
+
+> -10.0
+> -7.5
+> -5.0
+> -2.5
+> 0.0
+> 2.5
+> 5.0
+> 7.5
+> 10.0
+
+Initialization 
+
+Task 1 Class 0 
+
+Task 1 Class 1 
+
+Task 2 Class 0 
+
+Task 2 Class 1       
+
+> -30 -20 -10 010 20 30
+> -10.0
+> -7.5
+> -5.0
+> -2.5
+> 0.0
+> 2.5
+> 5.0
+> 7.5
+> 10.0
+
+Data from Task 1 
+
+Task 1 Class 0 
+
+Task 1 Class 1        
+
+> -40 -30 -20 -10 010 20 30
+> -6
+> -4
+> -2
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+
+Data from Task 2 
+
+Task 2 Class 0 
+
+Task 2 Class 1        
+
+> -30 -20 -10 010 20 30 40
+> -10
+> -5
+> 0
+> 5
+
+Stage 1 
+
+Task 1 Class 0 
+
+Task 1 Class 1 
+
+Task 2 Class 0 
+
+Task 2 Class 1        
+
+> -30 -20 -10 010 20 30 40
+> -10
+> -5
+> 0
+> 5
+
+Data from Task 1 
+
+Task 1 Class 0 
+
+Task 1 Class 1       
+
+> -30 -20 -10 010 20 30
+> -10
+> -5
+> 0
+> 5
+
+Data from Task 2 
+
+Task 2 Class 0 
+
+Task 2 Class 1         
+
+> -40 -30 -20 -10 010 20 30 40
+> -6
+> -4
+> -2
+> 0
+> 2
+> 4
+> 6
+> 8
+
+Stage 2 
+
+Task 1 Class 0 
+
+Task 1 Class 1 
+
+Task 2 Class 0 
+
+Task 2 Class 1         
+
+> -40 -30 -20 -10 010 20 30 40
+> -6
+> -4
+> -2
+> 0
+> 2
+> 4
+> 6
+> 8
+
+Data from Task 1 
+
+Task 1 Class 0 
+
+Task 1 Class 1          
+
+> -40 -30 -20 -10 010 20 30 40
+> -6
+> -4
+> -2
+> 0
+> 2
+> 4
+> 6
+> 8
+
+Data from Task 2 
+
+Task 2 Class 0 
+
+Task 2 Class 1 
+
+Figure 11. Using T-SNE to visualize the feature space at different stages of CL when sequentially train the model on the Task-0 and Task-2 in CIFAR-100. First row . The model is randomly initialized. Second row . At the end of the first stage. Third row . At the end of the second stage. 
+
+37 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks -7.5 -5.0 -2.5 0.0 2.5 5.0 7.5 
+
+> -20
+> -15
+> -10
+> -5
+> 0
+> 5
+> 10
+> 15
+
+Initialization 
+
+Task 1 Class 0 
+
+Task 1 Class 1 
+
+Task 2 Class 0 
+
+Task 2 Class 1       
+
+> -7.5 -5.0 -2.5 0.0 2.5 5.0 7.5
+> -15
+> -10
+> -5
+> 0
+> 5
+> 10
+> 15
+
+Data from Task 1 
+
+Task 1 Class 0 
+
+Task 1 Class 1       
+
+> -7.5 -5.0 -2.5 0.0 2.5 5.0 7.5
+> -20
+> -15
+> -10
+> -5
+> 0
+> 5
+> 10
+> 15
+
+Data from Task 2 
+
+Task 2 Class 0 
+
+Task 2 Class 1        
+
+> -15 -10 -5 0510 15 20
+> -3
+> -2
+> -1
+> 0
+> 1
+> 2
+> 3
+> 4
+
+Stage 1 
+
+Task 1 Class 0 
+
+Task 1 Class 1 
+
+Task 2 Class 0 
+
+Task 2 Class 1        
+
+> -15 -10 -5 0510 15 20
+> -3
+> -2
+> -1
+> 0
+> 1
+> 2
+> 3
+
+Data from Task 1 
+
+Task 1 Class 0 
+
+Task 1 Class 1        
+
+> -15 -10 -5 0510 15 20
+> -3
+> -2
+> -1
+> 0
+> 1
+> 2
+> 3
+> 4
+
+Data from Task 2 
+
+Task 2 Class 0 
+
+Task 2 Class 1        
+
+> -15 -10 -5 0510 15 20
+> -4
+> -2
+> 0
+> 2
+> 4
+> 6
+
+Stage 2 
+
+Task 1 Class 0 
+
+Task 1 Class 1 
+
+Task 2 Class 0 
+
+Task 2 Class 1        
+
+> -15 -10 -5 0510 15 20
+> -4
+> -2
+> 0
+> 2
+> 4
+> 6
+
+Data from Task 1 
+
+Task 1 Class 0 
+
+Task 1 Class 1        
+
+> -15 -10 -5 0510 15 20
+> -4
+> -2
+> 0
+> 2
+> 4
+> 6
+
+Data from Task 2 
+
+Task 2 Class 0 
+
+Task 2 Class 1 
+
+Figure 12. Using T-SNE to visualize the feature space at different stages of CL when sequentially train the model on the Task-0 and Task-3 in Tiny-ImageNet. First row . The model is randomly initialized. Second row . At the end of the first stage. Third row . At the end of the second stage. 
+
+38 Towards Understanding Catastrophic Forgetting in Two-layer Convolutional Neural Networks T1-C1 T1-C2 T2-C1 T2-C2 
+
+-0.10 
+
+-0.05 
+
+0.00 
+
+0.05 
+
+0.10 
+
+0.15 
+
+Initialization 
+
+T1-C1 T1-C2 T2-C1 T2-C2 
+
+-20 
+
+-10 
+
+0
+
+10 
+
+20 
+
+30 
+
+Stage 1 
+
+T1-C1 T1-C2 T2-C1 T2-C2 
+
+-20 
+
+-10 
+
+0
+
+10 
+
+20 
+
+30 Stage 2 
+
+Figure 13. Inner product of the features with the maximal singular vector at different stages of CL. The label T a-C b indicates that the data drawn from class-b in ath task. We choose Task-0 and Task-2 in CIFAR-100 as the first and second task. T1-C1 T1-C2 T2-C1 T2-C2 
+
+-0.10 
+
+-0.05 
+
+0.00 
+
+0.05 
+
+0.10 
+
+0.15 
+
+Initialization 
+
+T1-C1 T1-C2 T2-C1 T2-C2 
+
+-20 
+
+-10 
+
+0
+
+10 
+
+20 
+
+30 
+
+Stage 1 
+
+T1-C1 T1-C2 T2-C1 T2-C2 
+
+-20 
+
+-10 
+
+0
+
+10 
+
+20 
+
+30 Stage 2 
+
+Figure 14. Inner product of the features with the maximal singular vector at different stages of CL. The label T a-C b indicates that the data drawn from class-b in ath task. We choose Task-0 and Task-3 in Tiny-ImageNet as the first and second task. 
+
+39

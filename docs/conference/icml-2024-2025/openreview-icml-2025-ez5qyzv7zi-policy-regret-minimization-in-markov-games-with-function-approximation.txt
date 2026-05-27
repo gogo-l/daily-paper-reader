@@ -1,0 +1,2794 @@
+Title: Policy-Regret Minimization in Markov Games with Function Approximation
+
+URL Source: https://openreview.net/pdf?id=eZ5QyZV7zi
+
+Number of Pages: 23
+
+Markdown Content:
+# Policy-Regret Minimization in Markov Games with Function Approximation 
+
+Thanh Nguyen-Tang 1 Raman Arora 1
+
+## Abstract 
+
+We study policy-regret minimization problem in dynamically evolving environments, modeled as Markov games between a learner and a strategic, adaptive opponent. We propose a general algorith-mic framework that achieves the optimal O(√T )
+
+policy regret for a wide class of large-scale prob-lems characterized by an Eluder-type condition– extending beyond the tabular settings of previous work. Importantly, our framework uncovers a simpler yet powerful algorithmic approach for handling reactive adversaries, demonstrating that leveraging opponent learning in such settings is key to attaining the optimal O(√T ) policy regret. 
+
+## 1. Introduction 
+
+In recent years, reinforcement learning (RL) has achieved re-markable success across a wide range of complex decision-making problems. Notable examples include mastering games such as Go (Silver et al., 2016; 2017; 2018), real-time strategy games like StarCraft II (Vinyals et al., 2019) and Dota (Berner et al., 2019), autonomous driving (Shalev-Shwartz et al., 2016), and socially interactive games such as hide-and-seek (Baker et al., 2019), capture-the-flag (Jader-berg et al., 2019), and poker (Texas hold’em) (Morav ˇc´ık et al., 2017; Brown & Sandholm, 2018). Many of these set-tings can be naturally formulated as instances of multi-agent reinforcement learning (MARL), where multiple agents interact and learn to make decisions in a shared environ-ment (Yang & Wang, 2020; Zhang et al., 2021). Despite these empirical advances, the theoretical and algorithmic foundations of MARL remain relatively underdeveloped–particularly in scenarios where the learner faces adaptive opponents that adjust their strategies in re-sponse to the learner’s behavior. Most prior work addresses this challenge through the lens of external regret , which    
+
+> 1Department of Computer Science, Johns Hopkins Univer-sity, Baltimore, MD, USA. Correspondence to: Raman Arora
+> <arora@cs.jhu.edu >.
+> Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s).
+
+measures the gap between the learner’s performance and that of the best fixed strategy in hindsight. However, ex-ternal regret fails to capture the counterfactual nature of adaptivity: it overlooks how opponents might have reacted differently had the learner chosen a different strategy. To address this limitation, policy regret (Arora et al., 2012b) has emerged as a more suitable notion. Unlike external regret, policy regret compares the learner’s performance against the return they would have achieved by following an alternate strategy, thereby accounting for the adaptive behavior of opponents. Policy regret has been widely used to analyze learning against adaptive adversaries in online learning (Arora et al., 2012b; 2019) and repeated games (Arora et al., 2018), but only recently extended to the set-ting of multi-agent RL. In particular, Nguyen-Tang & Arora (2024a) initiated the study of policy regret in Markov games, establishing fundamental barriers and providing sufficient conditions for achieving sublinear policy regret in tabular environments. Their results hinge on two simplifying as-sumptions: small discrete state and action spaces, and con-sistent behavior –the adversary’s response in a state depends solely on the learner’s policy in that state. However, these assumptions are restrictive. In realistic envi-ronments, an opponent’s strategy in a particular state may depend on the learner’s actions in other states. Moreover, in many real-world applications such as robotics and games, the state and action spaces can be exponentially large or even continuous and high-dimensional. making tabular guaran-tees impractical. While function approximation has proven effective in handling large-scale RL problems (Foster et al., 2021; Liu et al., 2022; Jin et al., 2021; Zhan et al., 2023; Liu et al., 2023; Chen et al., 2023; Zhong et al., 2022), its role in minimizing policy regret within MARL remains unexplored. This motivates the central question of our work: 
+
+Can we design sample-efficient RL algorithms for policy regret minimization with function approximation? 
+
+In this work, we introduce BOVL –the first algorithmic framework for policy-regret minimization in Markov games for a broad class of problems characterized by ℓ2-type Eluder coefficients. Our problem class subsumes the class of tabular problems studied in (Nguyen-Tang & Arora, 2024a) introduces a novel class of linear problems, extending the 1Policy-Regret Minimization in Markov Games with Function Approximation 
+
+(Nguyen-Tang & Arora, 2024a) This work RL problems Two-player Markov games Two-player Markov games 
+
+Learner policies Deterministic Deterministic/Stochastic 
+
+Adversary behavior Consistent Lipschitz 
+
+Representation Tabular General function approximation 
+
+Expressivity Exact Realizable, complete, and Eluder 
+
+Policy regret m ¯V √HSAB (SAB (H + √S) + H2)pT /d ∗ ¯V (m + H)√dE γT                 
+
+> Table 1. A comparison between our work and (Nguyen-Tang & Arora, 2024a). Due to fundamental barriers in policy regret minimization for Markov games (Nguyen-Tang & Arora, 2024a), we only consider m-memory bounded and stationary adversaries for sample-efficient learning. Here, Tdenotes the number of episodes, mthe memory of the adversary, Hthe episode length, S,Aand B, the cardinalities of the state space, learner’s action space, and adversary’s action space, respectively, d∗the minimum positive visitation probability, and γ,
+> dEthe covering-type and Eluder-type complexity measures of the function classes.
+
+landscape of policy-regret minimization. Furthermore, our framework provides a significantly simpler algorithmic de-sign while attaining tighter bounds when specialized to the tabular case. It also resolves three of the four open problems posed in (Nguyen-Tang & Arora, 2024a). Specifically, • We identify a general class of problems character-ized by ℓ2-type Eluder conditions (Condition 1 and Condition 2), which includes both the tabular case in (Nguyen-Tang & Arora, 2024a) and a new class of linear Markov games. Our framework also in-troduces a natural Lipschitz condition that models how adversaries respond similarly to similar policy sequences—an essential relaxation that overcomes the fundamental barriers identified by Nguyen-Tang & Arora (2024a, Theorem 3). • We propose a generic algorithm, BOVL (Algorithm 1), tailored to this broader class. BOVL employs a batch-ing strategy to handle adaptive, memory-bounded ad-versaries and constructs optimistic estimates of both value functions and adversary responses based on col-lected data. Compared to the layerwise exploration in Nguyen-Tang & Arora (2024a), BOVL is conceptually simpler and more amenable to large-scale settings. • We show that BOVL attains a policy regret bound of ¯V (m + H)√dE γT , where ¯V is the scale of the value functions, m the memory of the adversary, H the episode length, dE and γ the Eluder-type and covering-type complexities of the function classes, respectively, and T the total number of episodes. When instantiated to the tabular case, this bound improves significantly over Nguyen-Tang & Arora (2024a) by a factor of q HSA Bd ∗ , where d∗ is the minimum positive visitation probability—which can be arbitrarily small in prob-lems with large state and action spaces. We summarize these key improvements in Table 1. 
+
+1.1. Technical Contribution 
+
+A core technical contribution of our work is a novel ap-proach to handling the batching component of BOVL .Batching–originally inspired by Arora et al. (2012b)–divides the total time budget into equally sized intervals during which the algorithm commits to a fixed policy. This design is crucial for coping with adaptive (but memory-bounded) adversaries, as it allows the learner to observe consistent responses over each batch. A key challenge in this setup is that the models trained at the beginning of a batch are not guaranteed to have small empirical loss on the data subsequently collected within that batch. Xiong et al. (2023) addressed this issue in the context of value function learning by showing that only a small num-ber of batches exhibit large in-batch empirical error. Their analysis relies on a variant of ℓ2-type Eluder conditions. However, their technique applies only to empirical squared loss, which suffices for value function approximation but not for adversary learning in our setting, which involves em-pirical log-likelihood loss. The reason is that their approach requires a lower tail bound that is trivial for squared loss but remains unknown for log-likelihood. To overcome this, we introduce a new approach that con-trols batches with large total variation loss rather than log-likelihood loss, thus avoiding reliance on unavailable lower-tail bounds (see Appendix F.2). Beyond our current setting, this technique naturally generalizes to obtain regret bounds with low switching costs in online density estimation prob-lems with function approximation such as those studied in Liu et al. (2023). 
+
+## 2. Problem Setup and Preliminaries 
+
+We consider two-player Markov games (MGs), specified by the tuple M = ( S , A , B, H, P, r ), where S denotes the state space, A the learner’s action space, and B the adversary’s action space. The game proceeds over H steps per episode. The reward function is given by r = {rh}h∈[H],2Policy-Regret Minimization in Markov Games with Function Approximation 
+
+where each rh : S × A × B → R. We define [H] := 
+
+{1, . . . , H }. The transition dynamics are given by P =
+
+{Ph}h∈[H], specifying the joint distribution over trajectories 
+
+s1: H conditioned on action sequences a1: H and b1: H :
+
+P(s1: H |a1: H , b 1: H ) = P1(s1)
+
+> H
+
+Y
+
+> h=2
+
+Ph(sh|sh−1, a h−1, b h−1).
+
+Without loss of generality and for simplicity, we assume all episodes begin at the same fixed initial state s1.
+
+Interaction Protocol. At each episode, the learner and adversary interact over H steps, starting from the fixed ini-tial state s1. At time step h ∈ [H], the learner observes the current state sh and selects an action ah ∈ A , while the ad-versary selects an action bh ∈ B. The learner then observes 
+
+bh, receives a reward rh(sh, a h, b h), and the environment transitions to the next state sh+1 ∼ Ph(·| sh, a h, b h). The episode terminates after H steps. 
+
+Policies and Value Functions. A (Markov) policy for the learner is denoted π = {πh}h∈[H], where each πh(·| s) ∈
+
+∆( A ) specifies a distribution over actions at step h and state s. Similarly, the adversary’s policy is μ = {μh}h∈[H],where μh(·| s) ∈ ∆( B). Here, ∆( X ) denotes the set of probability measures over a measurable space X . The value function at step h and state s, under policy pair (π, μ ),is defined as V π,μ h (s) := Eπ,μ [PHl=h rl(sl, a l, b l)|sh =
+
+s], where the expectation is taken over trajectories gen-erated by the joint policy and transition dynamics. We also define the action-value function Qπ,μ h (s, a, b ) := 
+
+Eπ,μ [PHl=h rl(sl, a l, b l)|(sh, a h, b h) = ( s, a, b )] . We as-sume that the learner and adversary select policies from restricted classes ΠA and ΠB, respectively. 
+
+Policy Norm. To compare the similarity between two policies within ΠA or ΠB, we define generic norms ∥ · ∥ ΠA
+
+and ∥ · ∥ ΠB on the corresponding policy spaces. Our results are stated in generality and do not depend on any specific choice of norm. However, to provide concrete examples: • If policies are stochastic and the action space is discrete, one can use the ℓ1/ℓ ∞ norm: 
+
+∥π − π′∥ΠA = max  
+
+> h∈[H]
+
+sup 
+
+> s∈S
+
+∥πh(·| s) − π′
+
+> h
+
+(·| s)∥1. (1) • In contrast, if ΠA contains only deterministic policies and A is continuous (e.g., in robotics), the norm above is ill-defined. In such cases, it is more appropriate to use: 
+
+∥π − π′∥ΠA = max  
+
+> h∈[H]
+
+sup 
+
+> s∈S
+
+∥πh(s) − π′
+
+> h
+
+(s)∥A ,
+
+where πh : S → A and ∥ · ∥ A is a norm on the continu-ous action space A (e.g., an ℓp norm). 
+
+Additional Notation. Let f = ( f1, . . . , f H ), where each 
+
+fh : S × A × B → R. For any policy pair (π, μ ),we define the expectation of fh under policies π and μ as 
+
+fh(s, π, μ ) := Ea∼πh(·| s),b ∼μh(·| s) [fh(s, a, b )] . We define the Bellman operator T π,μ h : RS ×A ×B → RS ×A ×B as: 
+
+[Tπ,μ h fh+1 ]( x) = rh(x) + ⟨Ph+1 (·| x), f h+1 (·, π, μ )⟩,
+
+where ⟨· , ·⟩ denotes the dot product between two vectors. We denote the p-norm by ∥ · ∥ p, the maximum and mini-mum of two values by x ∨ y := max {x, y } and x ∧ y := min {x, y }, respectively. We write f ≲ g to indicate 
+
+f = O(g), i.e., f ≤ cg for some absolute constant c. Sim-ilarly, we define the asymptotic relations ≳ and ≍ as the counterparts of ≥ and = up to constant factors. We also introduce the following shorthand notation: • xh = ( sh, a h, b h), and X = S × A × B,• zh := ( sh, a h, b h, r h, s h+1 ), Z = S × A × B × R × S ,• zth = ( sth, a th, b th, r th, s th+1 ) for episode t.Define 
+
+Eπ,μ h (fh, f h+1 )( xh)= [ Tπ,μ h fh+1 − fh]( xh),lπ,μ (fh, f h+1 )( zh)=( fh(sh, a h, b h)− rh −fh+1 (sh+1 , π, μ )) 2
+
+∆lπ,μ (fh, f h+1 )( zh)= lπ,μ (fh, f h+1 )( zh)
+
+− lπ,μ (Tπ,μ h fh+1 , f h+1 )( zh)
+
+Boundedness. Without loss of generality and for simplic-ity, we assume that all rewards are bounded: rh ∈ [0 , ¯V ] for all h ∈ [H], where ¯V is a known constant. 
+
+Adaptive Adversaries. We consider adaptive adver-saries, following the framework introduced by Arora et al. (2012b;a); Nguyen-Tang & Arora (2024a). Specifically, the adversary is allowed to adapt its behavior over time using arbitrary deterministic algorithms. Formally, at episode t,the adversary selects a policy μt using a (potentially un-bounded) deterministic mapping At : Π t 
+
+> A
+
+→ ΠB, which maps the history of the learner’s policies π1, . . . , π t to the adversary’s response μt.This reactive model generalizes the canonical Stackelberg game setup (Von Stackelberg, 2010), where a “defender” (the learner) first commits to a strategy, and an “attacker” (the adversary) responds optimally, given knowledge of the defender’s strategy. 
+
+Policy regret minimization. We measure the learner’s performance using policy regret (Merhav et al., 2002; Arora et al., 2012b), which compares the learner’s cumulative reward to that of the best fixed policy sequence in hind-sight, accounting for the adaptive nature of the adversary. Formally, the policy regret after T episodes is defined as: PR (T )= sup 
+
+> π∈ΠA
+> T
+
+X
+
+> t=1
+
+V π, At([ π]t)1 (s1)−V πt,At(π1,...,π t)1 (s1)
+
+3Policy-Regret Minimization in Markov Games with Function Approximation 
+
+where [π]t denotes the repeated sequence (π, . . . , π ) of length t, and At([ π]t) is the adversary’s policy if the learner had used π in all past episodes. 
+
+## 3. Problems with Large State-Action Spaces 
+
+We begin by recalling the fundamental barriers to policy regret minimization in Markov games identified by Nguyen-Tang & Arora (2024a). These barriers hinge on two criti-cal concepts: m-memory boundedness (Definition 1) and stationarity of the adversary (Definition 2). An adversary is said to be m-memory bounded if it only considers the learner’s most recent m policies. An adversary is stationary if its behavior does not vary over time. 
+
+Definition 1 (m-memory bounded adversaries) . An adver-sary is said to be m-memory bounded for some m ≥ 0, if for every t and any policy sequence π1, . . . , π t, we have: 
+
+At(π1, . . . , π t) = At(π1∨(t−m+1) , . . . , π t).
+
+Definition 2 (Stationary adversaries) . An m-memory bounded adversary is said to be stationary if there exists a mapping μ∗ : Π m 
+
+> A
+
+→ ΠB such that, for every t and any policy sequence π1, . . . , π t, we have: 
+
+At(π1, . . . , π t) = μ∗(π1∨(t−m+1) , . . . , π t).
+
+Nguyen-Tang & Arora (2024a) show that policy regret min-imization is not sample-efficient against adversaries that are either (i) unbounded in memory or (ii) memory-bounded but non-stationary. Motivated by this impossibility result, we restrict our fo-cus for the remainder of the paper to memory-bounded and stationary adversaries as formalized in Definition 2. Specif-ically, we assume that the adversary is governed by a fixed mapping μ∗, and is m-memory bounded and stationary, where m is known to the learner. For convenience, we assume that the adversary employs Markov policies. Thus, we can write the joint distribution over adversary actions b1: H as: 
+
+μ∗(b1: H |s1: H , π 1∨(t−m+1): t)= 
+
+> H
+
+Y
+
+> h=1
+
+μ∗
+
+> h
+
+(bh|sh, π 1∨(t−m+1): t),
+
+Whenever it is clear from the context, we also use the short-hand μ∗(π) to denote μ∗([ π]m).
+
+3.1. Value Function Approximation 
+
+We consider the setting of large state spaces, where the state space S is exponentially large. In such cases, it is undesirable for the policy regret to scale polynomially with the number of states |S |. To address this, it is common in practice–especially in deep RL (Mnih et al., 2015)–to use function approximation (e.g., neural networks) to estimate value functions. We adopt this approach in our work. Formally, the learner is given a function class F = F1 ×
+
+. . . × F H , where each Fh ⊂ {X → [0 , ¯V ]} provides a set of candidate functions to approximate Qπ,μ ∗([ π]m) 
+
+> h
+
+for any 
+
+π ∈ ΠA , with μ∗ denoting the m-memory bounded and stationary adversary. Learning in Markov games remains extremely challenging without additional expressivity assumptions on the func-tion class. We adopt the standard assumption of Bellman completeness. 
+
+Assumption 3.1 (Bellman completeness) . For all π ∈
+
+ΠA , f ∈ F , and h ∈ [H], we have Tπ,μ ∗([ π]m) 
+
+> h
+
+fh+1 ∈ F h.
+
+Bellman completeness requires the function class to be closed under the Bellman operator. It also implies real-izability, i.e., Qπ,μ ∗([ π]m) 
+
+> h
+
+∈ F h, ∀(π, h ) ∈ ΠA × [H].This assumption is widely used as a sufficient condition for sample-efficient RL with function approximation (see, e.g., Jin et al. (2021)). 
+
+Covering number. When the function class F and policy class ΠA are finite, their statistical complexity can be mea-sured via their log cardinalities, log |F| and log |ΠA |. For infinite classes, we use the standard notion of ε-covering number. 
+
+Definition 3 (ϵ-covering) . For any ϵ > 0, the ϵ-covering number of a pseudometric space (X , d ), denoted by 
+
+N (ϵ; X , d ), is the smallest integer n such that there exists a subset Xϵ ⊆ X with |X ϵ| = n and sup 
+
+> x∈X
+
+inf 
+
+> x′∈X ϵ
+
+d(x, x ′) ≤ ϵ.
+
+We apply the covering numbers to the spaces (F, ∥ · ∥ ∞)
+
+and (Π A , ∥ · ∥ ΠA ), where ∥f − g∥∞ := max h ∥fh − gh∥∞.For notational simplicity, we omit the metric dependence and write NF (ϵ) and NΠA (ϵ), instead of N (ϵ; F, ∥ · ∥ ∞)
+
+and N (ϵ; Π A , ∥ · ∥ ΠA ), respectively. 
+
+Example 3.1 (Linear function approximation ). Consider a linear Markov game with feature map ϕ:X → Rdin , i.e., 
+
+∀h ∈ [H], the transition and reward functions are given by Ph(s′|x) = ⟨ϕ(x), ν h(s′)⟩ and rh(x) = ⟨ϕ(x), θ h⟩, for some functions νh(·) and parameters θh ∈ Rdin (Jin et al., 2023). The function class F ⊂ { x 7 → ⟨ ϕ(x), w ⟩ : w ∈ Rdin }.
+
+Lemma 3.1. In Example 3.1, log NF (ϵ) =
+
+O (din H log(1 /ϵ )) .
+
+Lipschitzness assumption. Finally, we assume that func-tions in F are Lipschitz with respect to both the learner’s and adversary’s policies. 
+
+Assumption 3.2. (Lipschitzness for Value Functions )There exists a constant Lip Q such that for all π, π ′ ∈ ΠA ,
+
+4Policy-Regret Minimization in Markov Games with Function Approximation 
+
+μ, μ ′ ∈ ΠB, f ∈ F and (s, h ) ∈ (S , [H]) ,
+
+|fh(s, π, μ ) − fh(s, π ′, μ )| ≤ Lip Q · ∥ π − π′∥ΠA ,
+
+|fh(s, π, μ ) − fh(s, π, μ ′)| ≤ Lip Q · ∥ μ − μ′∥ΠB .
+
+For example, if we define ∥ · ∥ ΠA and ∥ · ∥ ΠB using the 
+
+ℓ1/ℓ ∞ as in Equation (1) norm, then Lip Q ≤ ¯V .
+
+3.2. Opponent Function Approximation 
+
+Nguyen-Tang & Arora (2024a, Theorem 3) show that achiev-ing sublinear policy regret is impossible–even against m-memory bounded and stationary adversaries–if there is no constraint on how the adversary responds to two similar sequences of learner policies. To address this issue, they propose a sufficient condition for learnability, namely con-sistency : if the learner plays two sequences of policies that agree at certain states s and steps h, then a consistent adver-sary should respond with policies that also agree at those same states and steps. 
+
+Definition 4 (Consistent adversaries (Nguyen-Tang & Arora, 2024a)) . An m-memory bounded and stationary adversary is said to be consistent if, for any two sequences of learner’s policies π1, . . . , π m and ν1, . . . , ν m, and any (s, h ) ∈ S ×
+
+[H], the following holds: if πih(·| s) = νih(·| s), ∀i ∈ [m],
+
+then μ∗
+
+> h
+
+(·| s, π 1, . . . , π m) = μ∗
+
+> h
+
+(·| s, ν 1, . . . , ν m).
+
+In essence, the adversary’s response at step h and state s
+
+depends only on how the learner’s policies behave at that state and step. While consistency enables learnability in tabular Markov games by overcoming the fundamental hard-ness barrier, it significantly limits the class of admissible adversaries and does not generalize to large state spaces. To overcome this limitation, we instead assume that the adversary’s response is Lipschitz in the learner’s policy: 
+
+Assumption 3.3 (Lipschitz Adversary ). There exists a constant Lip Adv such that for all π, π ′ ∈ ΠA , we have 
+
+∥μ∗([ π]m) − μ∗([ π′]m)∥ΠB ≤ Lip Adv · ∥ π − π′∥ΠA .
+
+This assumption ensures that similar learner policies yield similar adversary responses, under the respective policy norms. It generalizes the consistency assumption: for in-stance, even if πh = π′ 
+
+> h
+
+for some h ∈ [H], a Lip Adv -Lipschitz adversary need not satisfy μ∗
+
+> h
+
+(π) = μ∗
+
+> h
+
+(π′), as required under consistency. When ΠA contains only deter-ministic policies, a consistent adversary is 1-Lipschitz. 
+
+Behavior Model Class. We assume that the learner has access to a known model class of adversary behaviors that contains the true adversary. Specifically, the learner is given a behavior model class Ψ = Ψ 1 × · · · × ΨH , where each 
+
+μh ∈ Ψh maps ΠA × S to distributions over B. We assume realizability: 
+
+Assumption 3.4 (Adversary realizability ). The adver-sary’s response function satisfies μ∗([ ·]m) ∈ Ψ.
+
+Remark 1. We only model how μ∗ responds to a repeated sequence [π]m = ( π, . . . , π ), as this is the benchmark used in defining policy regret. No assumptions are made about how μ∗ responds to arbitrary sequences of differing policies. 
+
+Following standard practice in maximum likelihood estima-tion (MLE) analysis (Geer, 2000), we measure the complex-ity of Ψ using the bracketing number: 
+
+Definition 5 (Bracketing number) . A collection {[li, u i], i ∈
+
+[N ]} of function pairs li, u i : Π A × S × B → R+ is said to be an ϵ-bracketing cover of Ψh if 
+
+• max   
+
+> i∈[N]
+
+sup 
+
+> π∈ΠA
+
+sup 
+
+> s∈S
+
+∥ui(π, s, ·)∥1 ≤ O (1) ;
+
+• For every μh ∈ Ψh there exists i ∈ [N ] such that 
+
+li(π, s, b ) ≤ μh(b|s, π ) ≤ ui(π, s, b ) for all (π, s, b );
+
+• max   
+
+> i∈[N]
+
+sup 
+
+> π∈ΠA
+
+sup 
+
+> sh∈S
+
+∥li(π, s h, ·) − ui(π, s h, ·)∥1 ≤ ϵ.The smallest such N , denoted by N [] Ψh (ϵ), is called the ϵ-bracketing number of Ψh. The ϵ-bracketing number of Ψ, de-noted by N [] Ψ(ϵ), is defined as N [] Ψ(ϵ) = max h∈[H] N [] Ψh (ϵ).
+
+The bracketing number gives stronger control over model complexity than the covering number and is commonly used in model-based RL (Liu et al., 2022; 2023). Unlike those works, our definition does not assume a specific factoriza-tion of μh(π).
+
+Running Example. We illustrate these ideas with a linear adversary response model: 
+
+Example 3.2 (Linear Response ). For all (s, h, π ),
+
+μ∗
+
+> h
+
+(·| s, [π]m) = ⟨Φ∗, w πhs ⟩
+
+where Φ∗ : Rdadv → RB 
+
+> +
+
+maps v ∈ Rdadv to ⟨Φ∗, v ⟩, and 
+
+wπhs ∈ Rdadv that depends on π, h, s with ∥wπhs ∥1 = O(1) .
+
+In the tabular setting of Nguyen-Tang & Arora (2024a) with consistent adversary and ΠA including only deterministic policies, we recover this form with dadv = HSA and wπhs 
+
+being the one-hot vector corresponding to (h, s, π h(s)) .
+
+Lemma 3.2. Assume the linear response in Example 3.2. Let Ψ = Ψ 1 × . . . × ΨH where each Ψh is the set of μh
+
+5Policy-Regret Minimization in Markov Games with Function Approximation 
+
+such that μh(·| s, π ) = ⟨Φ, w πhs ⟩ with ∥Φ∥∞ = O(1) . Then the bracketing number of Ψ can be bounded as: 
+
+log N [] Ψ(ϵ) = O (dadv B log( B/ϵ )) .
+
+The proof is given in Appendix G. 
+
+## 4. Algorithmic Framework 
+
+In this section, we introduce a simple yet general algorithm-
+
+Batching and Optimism based on Value and Likelihood fitting ( BOVL )–for policy regret minimization with function approximation. The pseudocode is provided in Algorithm 1. BOVL combines both value-based and model-based learn-ing: the former for learning value functions, and the latter for modeling the adversary’s behavior. It takes as input the value function class F, the adversary model class Ψ, the policy class ΠA , the number of effective episodes T 1, and the number of batches K.The algorithm proceeds as follows: • Optimistic planning (Line 3): At each episode t ∈ [T ],BOVL computes an optimistic policy πt that maximizes the expected return under the most optimistic combina-tion of a value function and an adversary model. • Data collection (Line 4): The learner executes policy πt
+
+to collect a trajectory τ t, with the adversary responding based on the most recent m policies of the learner. • Periodic confidence set updates (Lines 5–8): Every 
+
+⌊T /K ⌋ episodes, the algorithm updates its confidence sets Ft(·, ·) and Ψt using all collected data. In between updates, the confidence sets remain fixed (Line 9). A core component of BOVL is the construction of confi-dence sets Ft(·, ·) and Ψt. The set Ft(π, ν ) includes all value functions f ∈ F that approximately explain the data collected so far, up to an error α, in terms of squared loss as a proxy for the Bellman error under the policy pair (π, ν ).This construction is rather standard in RL and is similar to that in the GOLF algorithm of Liu et al. (2023). The set 
+
+Ψt includes all models μ ∈ Ψ whose log-likelihood over the collected data is within β of the best possible model in 
+
+Ψ. This can be viewed as a relaxation of maximum likeli-hood estimation: when β = 0 , Ψt reduces to a singleton containing the MLE. The key design in BOVL for handling m-memory bounded adversaries is its batching strategy. The algorithm partitions the total episode budget T + ( m − 1) K into evenly spaced intervals (batches) of size m − 1 + ⌊T /K ⌋, and holds the policy fixed throughout each batch. The confidence sets– and therefore the policy–are only updated at the start of each      
+
+> 1BOVL runs for T+ ( m−1) Kepisodes due to Line 6.
+
+batch. This structure allows the learner to observe and infer the adversary’s behavior in response to repeated executions of the same policy. Notably, Line 6 implements a “warm-up” phase where the learner executes πt for m − 1 episodes (without collecting data) to ensure that the adversary’s re-sponse stabilizes to the current policy. 
+
+Remark 2. The tri-level optimization in Line 3 generally cannot be solved efficiently, and our analysis is primarily theoretical. 
+
+Comparison with the algorithm by (Nguyen-Tang & Arora, 2024a) for tabular MGs. Since our work resolves several open questions posed by Nguyen-Tang & Arora (2024a), it is useful to contrast the algorithmic design prin-ciples of both works. • Similarities : Both algorithms employ batching to ad-dress m-memory bounded adversaries. They also share the high-level idea of jointly learning the environment and the adversary through optimism over value functions and opponent models. • Differences : Our algorithm handles large state and action spaces through function approximation, whereas Nguyen-Tang & Arora (2024a) is limited to tabular Markov games. Their algorithm uses a complex layerwise exploration mechanism that requires full coverage of the state-action space at every time step h ∈ [H]. This involves mark-ing infrequent transitions and truncating reward func-tions—designs that are fragile and impractical in large or continuous domains. Furthermore, their method de-pends on knowledge of the minimum nonzero visitation probability, a strong assumption that may not hold in practice. In contrast, BOVL uses more modular and in-terpretable components—standard squared-loss fitting for value functions and log-likelihood based updates for opponent modeling—leading to a significantly simpler and more general algorithm. 
+
+## 5. Theoretical Guarantees 
+
+In this section, we establish theoretical guarantees for our algorithm BOVL . Specifically, we introduce a general suf-ficient condition, called the ℓ2-type Eluder condition, and prove that for any Markov game satisfying this condition, BOVL achieves ˜O(√T ) policy regret. 
+
+5.1. ℓ2-type Eluder Conditions 
+
+The Eluder condition is a structural complexity measure inspired by the pigeonhole principle and the elliptical poten-tial lemma, which have been widely used in tabular MDPs (Jin et al., 2018) and linear MDPs (Jin et al., 2023). Variants of Eluder conditions have become a standard tool for analyz-ing optimistic exploration algorithms in both bandit and RL 6Policy-Regret Minimization in Markov Games with Function Approximation 
+
+Algorithm 1 BOVL (F, Ψ, ΠA , T, K ) – Batching and Optimism based on Value and Likelihood fitting 
+
+1: Initialize : Ψ0 = Ψ , and F0(π, μ (π)) = F, ∀(π, μ ) ∈ ΠA × Ψ,
+
+α ≍ ¯V 2 log(2 NF (1 /T )NΠA (1 /T )T H/δ ) + ¯V Lip Q(1 + Lip Adv ),β ≍ log 
+
+
+
+N [] Ψ(1 /T )T H/δ 
+
+
+
+.
+
+2: for t = 1, . . . , T do 
+
+3: πt = arg max 
+
+> π∈ΠA
+
+max  
+
+> μ∈Ψt−1
+
+max  
+
+> f∈F t−1(π,μ (π))
+
+f1(s1, π, μ (π)) 
+
+4: Execute πt to collect a trajectory τ t = {(sth, a th, b th, r th)}h∈[H] (the adversary responds to the last m policies of the learner, including πt)
+
+5: if t = tj := j⌊T /K ⌋ + 1 for some integer j then 
+
+6: Execute πt for m − 1 consecutive episodes (and collect nothing) 
+
+7: Update the confidence sets Ft(·, ·) and Ψt as follows: 
+
+Ft(π, ν ) := 
+
+(
+
+f ∈ F :
+
+> t
+
+X
+
+> i=1
+
+lπ,ν (fh, f h+1 )( zih) − inf 
+
+> gh∈F h
+> t
+
+X
+
+> i=1
+
+lπ,ν (gh, f h+1 )( zih) ≤ α, ∀h ∈ [H]
+
+)
+
+Ψt := 
+
+(
+
+μ ∈ Ψ : sup 
+
+> μ′
+> h∈Ψh
+> t
+
+X
+
+> i=1
+
+log μ′
+
+> h
+
+(bih|sih, π i)
+
+μh(bih|sih, π i) ≤ β, ∀h ∈ [H]
+
+)
+
+where lπ,ν (fh, f h+1 )( s, a, b, r, s ′) = ( fh(s, a, b ) − r − fh+1 (s′, π, ν )) 2 and zih = ( sih, a ih, b ih, r ih, s ih+1 ).
+
+8: else 
+
+9: Ft(·, ·) ≡ F t−1(·, ·) and Ψt ≡ Ψt−1
+
+10: end if 
+
+11: end for 
+
+settings (e.g., Russo & Van Roy (2013); Liu et al. (2022); Jin et al. (2021); Zhan et al. (2023); Liu et al. (2023); Chen et al. (2023); Zhong et al. (2022)). In our case, we extend the Eluder condition to two com-ponents of learning: value function approximation and op-ponent modeling. Moreover, due to the batching nature of BOVL , we require a slightly stronger version known as the ℓ2-type Eluder condition—first introduced in the con-text of online learning with limited adaptivity by Xiong et al. (2023). This condition is critical for controlling errors within each batch where confidence sets are not updated. To highlight the distinction between the standard and ℓ2-type Eluder conditions, we begin with a simple example: 
+
+Example 5.1 (Standard vs. ℓ2-type Eluder Conditions) . Let 
+
+Φ and Y be vector spaces. Consider sequences {ϕi} in Φ
+
+and {yi} in Y, and let λ > 0.The standard Eluder condition characterizes the complexity of (Φ , Y) by the smallest d such that if Pt−1 
+
+> i=1
+
+⟨ϕt, y i⟩2 ≤ λ
+
+for all t ∈ [T ], then the cumulative sum of inner products is bounded: Pti=1 ⟨ϕi, y i⟩ ≤ √dT λ .The ℓ2-type Eluder condition strengthens this conclusion by bounding the sum of squared inner products, requiring that Pti=1 ⟨ϕi, y i⟩2 ≤ dλ log T .Clearly, the ℓ2-type condition is stronger. In fact, it implies the standard one via Cauchy–Schwarz: Pti=1 ⟨ϕi, y i⟩ ≤ q
+
+T Pti=1 ⟨ϕi, y i⟩2 ≤ √dT λ log T .
+
+We now formally define the ℓ2-type Eluder conditions for value functions and adversary models. 
+
+Condition 1 (ℓ2-type Eluder coefficient for value function class) . The ℓ2-type Eluder coefficient of (F, ΠA ), denoted by dim E (F, ΠA ), is the smallest d such that for any T ∈ N
+
+and any sequences {f t}t∈[T ] ⊂ F , {πt}t∈[T ] ⊂ ΠA and 
+
+{xth}t∈[T ] ⊂ S × A × B and for any λ > 0, the following holds: if 
+
+> t−1
+
+X
+
+> i=1
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xih)2 ≤ λ ∀t ∈ [T ],
+
+then 
+
+> t
+
+X
+
+> i=1
+
+Eπi,μ ∗(πi) 
+
+> h
+
+(f ih, f ih+1 )( xih)2 ≤ O (dλ log t).
+
+This condition states that small cumulative in-sample Bell-man errors imply small cumulative in-distribution Bellman errors, where the bound depends on dim E (F, ΠA ).
+
+Lemma 5.1. The Eluder coefficient for the linear model in Example 3.1 satisfies dim E (F, ΠA ) = O(din ) for any ΠA .
+
+7Policy-Regret Minimization in Markov Games with Function Approximation 
+
+Function Approximation Policy Regret BOVL (Ours )General ¯V (m + H)√dE γT 
+
+Linear ¯V (m + H)( din ∨ dadv )p(H + B)T
+
+Tabular ¯V (m + H)SA p(H + B)3T
+
+APE-OVE 
+
+(Nguyen-Tang & Arora, 2024a) Tabular m ¯V √HSAB (SAB (H + √S) + H2)
+
+q Td∗
+
+Table 2. A summary of our main result and its instantiation to the linear case and the tabular case. 
+
+Condition 2 (ℓ2-type Eluder coefficient for adversary class) .
+
+Let dim E (Ψ , ΠA ) denote the ℓ2-type Eluder coefficient of the adversary class Ψ. It is the smallest d such that for any 
+
+T ∈ N, any sequences {μt
+
+> 1
+
+}t∈[T ] ⊂ Ψ1 and {πt}t∈[T ] ⊂
+
+ΠA , and any λ > 0, the following holds: if 
+
+> t−1
+
+X
+
+> i=1
+
+∥μt
+
+> 1
+
+(πi) − μ∗
+
+> 1
+
+(πi)∥21 ≤ λ ∀t ∈ [T ],
+
+then 
+
+> t
+
+X
+
+> i=1
+
+∥μi
+
+> 1
+
+(πi) − μ∗
+
+> 1
+
+(πi)∥21 ≤ O (dλ log t).
+
+This condition extends Eluder-type reasoning to adversary models using total variation (TV) distance. Similar assump-tions have been employed in the optimistic MLE literature (e.g., Liu et al. (2023), Condition 3.1). 
+
+Lemma 5.2. Consider the linear response model in Exam-ple 3.2 with dimension dadv . Then dim E (Ψ , ΠA ) = O(dadv )
+
+for any ΠA .
+
+5.2. Main Result 
+
+We now present the main result, which provides a theoretical guarantee on the policy regret of BOVL. 
+
+Theorem 1. Fix any δ ∈ (0 , 1) . Under Assumptions 3.1, 3.2, 3.3 and 3.4, and Conditions 1 and 2, if we set 
+
+K ≍
+
+q T ·dE ·log 3 Tγ in BOVL , then with probability at least 1 − δ,PR (T ) = O( ¯V (H + m)
+
+q
+
+dE γT log 3 T ),
+
+where γ = α  
+
+> ¯V2
+
+∨β, dE = dim E (F, ΠA )∨dim E (Ψ , ΠA ).
+
+This result shows that the policy regret of BOVL is inde-pendent of the cardinalities of the state space S and action spaces A , B, making BOVL suitable for large-scale prob-lems, including those with continuous high-dimensional actions. We instantiate this result for two cases. For linear value functions (see Example 3.1) and lin-ear adversary models (see Example 3.2), we can bound 
+
+γ = O(( Hd in ∨ Bd adv ) log( BT )) (by Lemma 3.1 and Lemma 3.2) and dE = O(din ∨ dadv ) (by Lemma 5.1 and Lemma 5.2). The tabular case studied in Nguyen-Tang & Arora (2024a) with consistent adversaries corresponds to the linear case with din = SAB and dadv = HSA .We summarize these instantiated bounds in Table 2. Even in the tabular case, our policy regret bound improves over Nguyen-Tang & Arora (2024a) by a factor of 
+
+q HSA Bd ∗ , which can be significantly large when d∗ is small, as is often the case in finite but large-state problems. 
+
+5.3. Sketch Proof of the Main Theorem 
+
+We outline the main steps in proving the policy regret bound for BOVL. The full proof appears in Appendix A. 
+
+Step 1: Optimism and Error Decomposition. We begin by showing that, with high probability, the confidence sets 
+
+Ψt−1 contain the true adversary model μ∗ and Ft−1(π, ν )
+
+contains the value function Qπ,ν for all π, ν and t ∈ [T ] (see Lemma D.1). This follows from martingale concentration and the construction of confidence radii α and β in BOVL. Let 
+
+(f t, μ t) = arg max  
+
+> f∈F t−1(πt,μ (πt)) ,μ ∈Ψt−1
+
+f1(s1, π t, μ (πt)) .
+
+Each time the algorithm switches policies or plays a pol-icy for fewer than m consecutive episodes, it may incur up to O( ¯V ) additional regret. Since such events happen at most mK times (due to K policy switches and (m − 1) K
+
+instances of “immature” plays), the total regret can be de-composed as: PR (T + ( m − 1) K) ≲ mK ¯V + ¯V
+
+> T
+
+X
+
+> t=1
+
+∥μt
+
+> 1
+
+(πt) − μ∗
+
+> 1
+
+(πt)∥1
+
++
+
+> T
+
+X
+
+> t=1
+> H
+
+X
+
+> h=1
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xth). (2) 8Policy-Regret Minimization in Markov Games with Function Approximation 
+
+Step 2: Leveraging the Confidence Set Design By de-sign, for each batch j ∈ { 0, . . . , K − 1}, construction of the confidence sets in Line 7 forces f tj +1 and πtj +1 to have small squared loss (a proxy for Bellman error). Using stan-dard martingale concentration inequalities (Lemma E.1), we can show that, with high probability 
+
+> tj
+
+X
+
+> i=1
+
+Eπtj +1 ,μ ∗(πtj +1 ) 
+
+> h
+
+(f tj +1  
+
+> h
+
+, f tj +1  
+
+> h+1
+
+)( xih)2 ≲ α. 
+
+Because confidence sets are only updated at the start of each batch, we cannot guarantee that the total empirical squared Bellman error will be small for all episodes within the batch. However, by the ℓ2-type Eluder condition (Condition 1), the number of batches where this fails is small. In particular, the cardinality of the set Ks of all batches with large total empirical squared is bounded as (Lemma F.2): 
+
+|K s| ≲ dim E (F, ΠA ) log T log( T ¯V 2). (3) Then, for all episodes t in any batch in {0, . . . , K − 1}/Ks:
+
+> t−1
+
+X
+
+> i=1
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xih)2 ≲ α. (4) Similarly, by Condition 2, the number of batches with large total variation error is also small (Lemma F.4): 
+
+|K tv | ≲ dim E (Ψ , ΠA ) log 2 T, (5) and for all t in batches indexed by {0, . . . , K − 1}/Ktv :
+
+> t−1
+
+X
+
+> i=1
+
+∥μt
+
+> 1
+
+(πi) − μ∗
+
+> 1
+
+(πi)∥21 ≲ β. (6) 
+
+Step 3: From Conditions to Final Regret Bound. Using the ℓ2-type Eluder conditions, we can now relate the bounds above to the regret decomposition in Eq. (2) . In particular, by Cauchy–Schwarz: 
+
+X
+
+> t∈{ 0,...,K −1}/Ks
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xth)
+
+≲ pT dim E (F, ΠA )α log T . (7) A similar chain of arguments establish that 
+
+X
+
+> t∈{ 0,...,K −1}/Ktv
+
+∥μt
+
+> 1
+
+(πt)−μ∗
+
+> 1
+
+(πt)∥1
+
+≲ pT dim E (Ψ , ΠA )β log T . (8) Combining Eqs. (2) , (7) , (8) , and the bounds on |K s| and 
+
+|K tv |, we obtain the desired ˜O(√T ) policy regret. 
+
+## 6. Conclusion and Discussion 
+
+In this work, we develop the first general algorithmic frame-work for policy regret minimization in Markov games with function approximation, addressing a fundamental open problem in sequential decision-making under strategic in-teraction. Unlike prior works that are restricted to tabular settings or rely on strong assumptions such as consistency of adversaries, our framework handles large-scale and con-tinuous environments through function approximation. Our approach achieves an optimal O(√T ) policy regret bound under natural assumptions, notably ℓ2-type Eluder condi-tions that jointly characterize the complexity of the value function and opponent model classes. A key technical insight in our design is the batching mech-anism that enables the learner to commit to policies over multiple rounds, which is critical for learning in the pres-ence of reactive adversaries. To overcome the challenge that confidence sets are not updated within a batch, we introduce a novel analysis technique that quantifies the num-ber of batches with large in-sample error using Eluder-type arguments. This allows us to tightly control the regret contri-butions from both value estimation and opponent modeling. In contrast to previous work, which only handles squared loss for value estimation, our method supports total vari-ation loss and bypasses the need for lower tail bounds on log-likelihood, which are unknown. We also demonstrate that our regret bound remains indepen-dent of the cardinality of the state and action spaces, making our algorithm suitable for continuous high-dimensional do-mains. When specialized to linear or tabular models, our bounds not only recover but also strictly improve upon those of prior work, such as Nguyen-Tang & Arora (2024a), with significant gains in the tabular case. While our framework provides a principled foundation for learning in Markov games with function approximation, several important directions remain open. First, extending our guarantees to adversaries with unbounded memory or greater adaptivity would broaden the scope of our frame-work. Second, it would be valuable to explore alternative complexity measures that can relax or replace the current Lipschitz assumptions. Third, designing adaptive batching schemes could further improve empirical performance, es-pecially in non-stationary settings. Fourth, validating the framework on large-scale benchmarks would help bridge the gap between theory and practice. Finally, generalizing the algorithm to cooperative or aligned multi-agent scenarios could open new avenues for applying policy regret mini-mization to collaborative decision-making. 9Policy-Regret Minimization in Markov Games with Function Approximation 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none which we feel must be specifically highlighted here. 
+
+## Acknowledgements 
+
+This research was supported, in part, by the DARPA GARD award HR00112020004 and NSF CAREER award IIS-1943251. 
+
+## References 
+
+Abbasi-Yadkori, Y., P ´al, D., and Szepesv ´ari, C. Improved algorithms for linear stochastic bandits. Advances in neural information processing systems , 24, 2011. Arora, R., Dekel, O., and Tewari, A. Deterministic mdps with adversarial rewards and bandit feedback. In Proceed-ings of the Twenty-Eighth Conference on Uncertainty in Artificial Intelligence , pp. 93–101, 2012a. Arora, R., Dekel, O., and Tewari, A. Online bandit learning against an adaptive adversary: from regret to policy regret. In Proceedings of the 29th International Coference on International Conference on Machine Learning , pp. 1747– 1754, 2012b. Arora, R., Dinitz, M., Marinov, T. V., and Mohri, M. Policy regret in repeated games. Advances in Neural Information Processing Systems , 31, 2018. Arora, R., Marinov, T. V., and Mohri, M. Bandits with feed-back graphs and switching costs. In Advances in Neural Information Processing Systems , volume 32, 2019. Baker, B., Kanitscheider, I., Markov, T., Wu, Y., Powell, G., McGrew, B., and Mordatch, I. Emergent tool use from multi-agent autocurricula. In International conference on learning representations , 2019. Berner, C., Brockman, G., Chan, B., Cheung, V., Dkebiak, P., Dennison, C., Farhi, D., Fischer, Q., Hashme, S., Hesse, C., et al. Dota 2 with large scale deep reinforce-ment learning. arXiv preprint arXiv:1912.06680 , 2019. Brown, N. and Sandholm, T. Superhuman AI for heads-up no-limit poker: Libratus beats top professionals. Science ,359(6374):418–424, 2018. Chen, F., Bai, Y., and Mei, S. Partially observable RL with b-stability: Unified structural condition and sharp sample-efficient algorithms. In The Eleventh Interna-tional Conference on Learning Representations , 2023. Foster, D. J., Kakade, S. M., Qian, J., and Rakhlin, A. The statistical complexity of interactive decision mak-ing. arXiv preprint arXiv:2112.13487 , 2021. Freedman, D. A. On tail probabilities for martingales. the Annals of Probability , pp. 100–118, 1975. Geer, S. A. Empirical Processes in M-estimation , volume 6. Cambridge university press, 2000. Jaderberg, M., Czarnecki, W. M., Dunning, I., Marris, L., Lever, G., Castaneda, A. G., Beattie, C., Rabinowitz, N. C., Morcos, A. S., Ruderman, A., et al. Human-level performance in 3d multiplayer games with population-based reinforcement learning. Science , 364(6443):859– 865, 2019. Jiang, N., Krishnamurthy, A., Agarwal, A., Langford, J., and Schapire, R. E. Contextual decision processes with low bellman rank are pac-learnable. In International Con-ference on Machine Learning , pp. 1704–1713. PMLR, 2017. Jin, C., Allen-Zhu, Z., Bubeck, S., and Jordan, M. I. Is q-learning provably efficient? Advances in neural infor-mation processing systems , 31, 2018. Jin, C., Liu, Q., and Miryoosefi, S. Bellman eluder di-mension: New rich classes of rl problems, and sample-efficient algorithms. Advances in neural information processing systems , 34:13406–13418, 2021. Jin, C., Yang, Z., Wang, Z., and Jordan, M. I. Provably efficient reinforcement learning with linear function ap-proximation. Mathematics of Operations Research , 48 (3):1496–1521, 2023. Liu, Q., Chung, A., Szepesv ´ari, C., and Jin, C. When is partially observable reinforcement learning not scary? In 
+
+Conference on Learning Theory , pp. 5175–5220. PMLR, 2022. Liu, Q., Netrapalli, P., Szepesvari, C., and Jin, C. Optimistic mle: A generic model-based algorithm for partially ob-servable sequential decision making. In Proceedings of the 55th Annual ACM Symposium on Theory of Comput-ing , pp. 363–376, 2023. Massart, P. Some applications of concentration inequali-ties to statistics. Annales de la Facult ´e des Sciences de Toulouse , 9:245–303, 2000. Merhav, N., Ordentlich, E., Seroussi, G., and Weinberger, M. J. On sequential strategies for loss functions with memory. IEEE Transactions on Information Theory , 48 (7):1947–1958, 2002. 10 Policy-Regret Minimization in Markov Games with Function Approximation 
+
+Mnih, V., Kavukcuoglu, K., Silver, D., Rusu, A. A., Veness, J., Bellemare, M. G., Graves, A., Riedmiller, M., Fidje-land, A. K., Ostrovski, G., et al. Human-level control through deep reinforcement learning. Nature , 518(7540): 529–533, 2015. Morav ˇc´ık, M., Schmid, M., Burch, N., Lis `y, V., Morrill, D., Bard, N., Davis, T., Waugh, K., Johanson, M., and Bowl-ing, M. Deepstack: Expert-level artificial intelligence in heads-up no-limit poker. Science , 356(6337):508–513, 2017. Nguyen-Tang, T. and Arora, R. Learning in markov games with adaptive adversaries: Policy regret, fundamental barriers, and efficient algorithms. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024a. Nguyen-Tang, T. and Arora, R. On sample-efficient of-fline reinforcement learning: Data diversity, posterior sampling and beyond. Advances in neural information processing systems , 36, 2024b. Russo, D. and Van Roy, B. Eluder dimension and the sample complexity of optimistic exploration. Advances in Neural Information Processing Systems , 26, 2013. Shalev-Shwartz, S., Shammah, S., and Shashua, A. Safe, multi-agent, reinforcement learning for autonomous driv-ing. arXiv preprint arXiv:1610.03295 , 2016. Silver, D., Huang, A., Maddison, C. J., Guez, A., Sifre, L., Van Den Driessche, G., Schrittwieser, J., Antonoglou, I., Panneershelvam, V., Lanctot, M., et al. Mastering the game of Go with deep neural networks and tree search. 
+
+nature , 529(7587):484–489, 2016. Silver, D., Schrittwieser, J., Simonyan, K., Antonoglou, I., Huang, A., Guez, A., Hubert, T., Baker, L., Lai, M., Bolton, A., et al. Mastering the game of Go without human knowledge. nature , 550(7676):354–359, 2017. Silver, D., Hubert, T., Schrittwieser, J., Antonoglou, I., Lai, M., Guez, A., Lanctot, M., Sifre, L., Kumaran, D., Grae-pel, T., et al. A general reinforcement learning algorithm that masters chess, shogi, and go through self-play. Sci-ence , 362(6419):1140–1144, 2018. Vinyals, O., Babuschkin, I., Czarnecki, W. M., Mathieu, M., Dudzik, A., Chung, J., Choi, D. H., Powell, R., Ewalds, T., Georgiev, P., et al. Grandmaster level in StarCraft II using multi-agent reinforcement learning. Nature , 575 (7782):350–354, 2019. Von Stackelberg, H. Market structure and equilibrium .Springer Science & Business Media, 2010. Wainwright, M. J. High-dimensional statistics: A non-asymptotic viewpoint , volume 48. Cambridge university press, 2019. Xiong, N., Wang, Z., and Yang, Z. A general framework for sequential decision-making under adaptivity constraints. In Forty-first International Conference on Machine Learn-ing , 2023. Yang, Y. and Wang, J. An overview of multi-agent reinforce-ment learning from game theoretical perspective. arXiv preprint arXiv:2011.00583 , 2020. Zhan, W., Uehara, M., Sun, W., and Lee, J. D. PAC rein-forcement learning for predictive state representations. In The Eleventh International Conference on Learning Representations, ICLR 2023, Kigali, Rwanda, May 1-5, 2023 . OpenReview.net, 2023. Zhang, K., Yang, Z., and Ba s¸ ar, T. Multi-agent reinforce-ment learning: A selective overview of theories and algo-rithms. Handbook of reinforcement learning and control ,pp. 321–384, 2021. Zhong, H., Xiong, W., Zheng, S., Wang, L., Wang, Z., Yang, Z., and Zhang, T. GEC: A unified framework for interactive decision making in MDP, POMDP, and beyond. arXiv preprint arXiv:2211.01962 , 2022. 11 Policy-Regret Minimization in Markov Games with Function Approximation 
+
+## A. Full Proof of Main Theorem 
+
+We restate Theorem 1 with more details in the following theorem. 
+
+Theorem 2. Fix any δ ∈ (0 , 1) . Under Assumptions 3.1, 3.2, 3.3, 3.4, and Conditions 1, 2, with probability at least 1 − δ,the policy regret of BOVL can be bounded as PR (T + ( m − 1) K) ≲ mK ¯V + Hpα · T · dim E (F, ΠA ) · log T + ¯V pβ · T · dim E (Ψ , ΠA ) · log T
+
++ H ¯V TK · dim E (F, ΠA ) · log 2 T + ¯V TK · dim E (Ψ , ΠA ) · log 2 T. 
+
+Proof of Theorem 2. In this subsection, we present a brief sketch proof for the policy regret bound of BOVL . Our proof strategy consists of the following key steps. 
+
+Step 1: Optimism and error decomposition. We firstly show that with high probability, the confidence sets Ψt−1
+
+contains the true response μ∗ and Ft−1(π, ν ) contains Qπ,ν for all π, ν and t ∈ [T ] (Lemma D.1). This naturally comes from martingale concentration and the choice of confidence radii α and β in BOVL. Let 
+
+(f t, μ t) = arg max  
+
+> f∈F t−1(πt,μ (πt)) ,μ ∈Ψt−1
+
+f1(s1, π t, μ (πt)) .
+
+Notice that switching a policy or playing the same policy but for less than m consecutive episodes adds O( ¯V ) to the policy regret in the worst case. There are at most mK times BOVL perform such behavior ( K policy switches + (m − 1) K times playing a policy “immaturally”). Thus we have, PR (T + ( m − 1) K) − mK ¯V
+
+≤
+
+> T
+
+X
+
+> t=1
+
+V π∗,μ ∗(π∗)1 (s1) − V πt,μ ∗(πt)1 (s1)
+
+≤
+
+> T
+
+X
+
+> t=1
+
+max  
+
+> μ∈Ψt−1
+
+max   
+
+> f∈F t−1(π∗,μ (π∗))
+
+f1(s1, π ∗, μ (π∗)) − V πt,μ ∗(πt)1 (s1)
+
+≤
+
+> T
+
+X
+
+> t=1
+
+max 
+
+> μ∈Ψt−1
+
+max  
+
+> f∈F t−1(πt,μ (πt))
+
+f1(s1, π t, μ (πt)) − V πt,μ ∗(πt)1 (s1)=
+
+> T
+
+X
+
+> t=1
+
+f t
+
+> 1
+
+(s1, π t, μ t(πt)) − V πt,μ ∗(πt)1 (s1)
+
+| {z }
+
+> ξt
+> 1
+
+,
+
+where the second inequality is due to optimism, the third inequality is due to the optimistic planning (Line 4) of Algorithm 1. We have 
+
+ξt 
+
+> 1
+
+= f t
+
+> 1
+
+(s1, π t, μ ∗(πt)) − V πt,μ ∗(πt)1 (s1)
+
+| {z }
+
+> ζt
+> 1
+
++ f t
+
+> 1
+
+(s1, π t, μ t(πt)) − f t
+
+> 1
+
+(s1, π t, μ ∗(πt)) 
+
+| {z }
+
+> γt
+> 1
+
+By the standard error decomposition (Lemma B.1), we have 
+
+ζt 
+
+> 1
+
+=
+
+> H
+
+X
+
+> h=1
+
+Eπt,μ ∗(πt)
+
+h
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xh)
+
+i
+
+,
+
+where Eπ,μ denotes the expectation taken over the random trajectory (s1, a 1, b 1, . . . , s H , a H , b H ) induced by following π
+
+and μ, and xh = ( sh, a h, b h). We have 
+
+γt 
+
+> 1
+
+≤ ¯V · ∥ μt
+
+> 1
+
+(·| s1, π t) − μ∗
+
+> 1
+
+(·| s1, π t)∥1.
+
+12 Policy-Regret Minimization in Markov Games with Function Approximation 
+
+Therefore, PR (T + ( m − 1) K) − mK ¯V ≤
+
+> T
+
+X
+
+> t=1
+
+ζt 
+
+> 1
+
++
+
+> T
+
+X
+
+> t=1
+
+γt
+
+> 1
+
+≤
+
+> T
+
+X
+
+> t=1
+> H
+
+X
+
+> h=1
+
+Eπt,μ ∗(πt)
+
+h
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xh)
+
+i
+
++ ¯V
+
+> T
+
+X
+
+> t=1
+
+∥μt
+
+> 1
+
+(·| s1, π t) − μ∗
+
+> 1
+
+(·| s1, π t)∥1
+
+≤
+
+> T
+
+X
+
+> t=1
+> H
+
+X
+
+> h=1
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xth) + ˜O(H√T ) + ¯V
+
+> T
+
+X
+
+> t=1
+
+∥μt
+
+> 1
+
+(·| s1, π t) − μ∗
+
+> 1
+
+(·| s1, π t)∥1, (9) where the last inequality follows the standard Azuma-Hoelfding’s inequality. 
+
+Step 2: Control the number of batches with large in-batch loss. A batch j starts at episode tj + 1 and ends at episode 
+
+tj+1 , where tj := j⌊T /K ⌋ + 1 . Let us denote by Bj the set of all episodes within batch j, i.e., 
+
+Bj := [ tj + 1 , t j+1 ] := {tj + 1 , t j + 2 , . . . , t j+1 }
+
+Let us define the “normalized” in-batch losses for all batch j ∈ { 0, . . . , K − 1},
+
+∆j := 1
+
+α
+
+> tj+1
+
+X 
+
+> i=tj+1
+
+Eπi,μ i(πi) 
+
+> h
+
+(f ih, f ih+1 )( xih)2 (10) 
+
+Λj := 1
+
+β
+
+> tj+1
+
+X 
+
+> i=tj+1
+
+∥μi
+
+> 1
+
+(πi) − μ∗
+
+> 1
+
+(πi)∥21. (11) Define Ks be the set of all batches j ∈ { 0, . . . , K − 1} with large in-batch bias-centered squared loss, i.e., 
+
+Ks := {j ∈ { 0, . . . , K − 1} : ∆ j ≥ 3}.
+
+Similarly, define Ktv be the set of all batches j ∈ { 0, . . . , K − 1} with large in-batch TV distance, i.e., 
+
+Ktv := {j ∈ { 0, . . . , K − 1} : Λ j ≥ Ω(1) }
+
+By Lemma F.2 and Lemma F.4, with probability at least 1 − δ, we have 
+
+|K s| ≲ dim E (F, ΠA ) · log T log( T ¯V 2). (12) 
+
+|K tv | ≲ dim E (Ψ , ΠA ) log 2 T. (13) We also define the complement sets ¯Ks = {0, . . . , K − 1}/Ks and ¯Ktv = {0, . . . , K − 1}/Ktv .
+
+Step 3: Utilize the design of our confidence sets. Recall that, for any batch j ∈ [K], our construction of the confidence sets at Line 7 forces f tj +1 and πtj +1 to have small bias-centered squared loss which is a proxy for squared Bellman error. By standard martingale concentration inequalities (Lemma E.1), we can show that, with probability at least 1 − δ,
+
+∀j ∈ { 0, . . . , K − 1},
+
+> tj
+
+X
+
+> i=1
+
+Eπtj +1 ,μ ∗(πtj +1 ) 
+
+> h
+
+(f tj +1  
+
+> h
+
+, f tj +1  
+
+> h+1
+
+)( xih)2 ≲ α. 
+
+Combining with the construction of ¯Ks, we have 
+
+∀t ∈ [ 
+
+> j∈¯Ks
+
+Bj ,
+
+> t−1
+
+X
+
+> i=1
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xih)2 ≲ α. (14) 13 Policy-Regret Minimization in Markov Games with Function Approximation 
+
+By Lemma D.3, the construction of the confidence set Ψt in Algorithm 1, and Assumption 3.4, we have with probability at least 1 − δ,
+
+∀j ∈ { 0, . . . , K − 1},
+
+> tj
+
+X
+
+> i=1
+
+∥μtj +1 1 (·| s1, π i) − μ∗
+
+> 1
+
+(·| s1, π i)∥21 ≲ β. 
+
+Similarly, by the construction of ¯Ktv , we have 
+
+∀t ∈ [ 
+
+> j∈¯Ktv
+
+Bj ,
+
+> t−1
+
+X
+
+> i=1
+
+∥μt
+
+> 1
+
+(·| s1, π i) − μ∗
+
+> 1
+
+(·| s1, π i)∥21 ≲ β. (15) 
+
+Step 4: Establishing the relations between Equation (14), Equation (15) with Equation (9). So far, we want to bound Equation (9) while we know Equation (14) and Equation (15). Note that the terms in Equation (9) look similar to the corresponding terms in Equation (14) and Equation (15), except that the terms in Equation (14) and Equation (15) control the losses of the models at time t for all collected data up to time t − 1. It turns out the Eluder conditions will exactly help us with establishing the relations between Equation (14), Equation (15) with Equation (9). In particular, by Condition 1, Equation (14) implies that 
+
+X  
+
+> t∈S
+> j∈¯KsBj
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xth)2 ≲ dim E (F, ΠA ) · α log T. 
+
+Therefore, by Cauchy-Schwartz inequality, we have 
+
+X  
+
+> t∈S
+> j∈¯KsBj
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xth) ≲ pT · dim E (F, ΠA ) · α log T . (16) By a similar chain of arguments, using Condition 2 and Cauchy-Schwartz inequality, Equation (15) implies 
+
+X  
+
+> t∈S
+> j∈¯Ktv Bj
+
+∥μt
+
+> 1
+
+(·| s1, π t) − μ∗
+
+> 1
+
+(·| s1, π t)∥1 ≲ pT · dim E (Ψ , ΠA ) · β log T . (17) We are now ready to bound the terms in Equation (9) using Equation (16) and Equation (17). We have 
+
+> T
+
+X
+
+> t=1
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xth) = X  
+
+> t∈S
+> j∈¯KsBj
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xth) + X 
+
+> t∈S
+> j∈K sBj
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xth)
+
+≤ pT · dim E (F, ΠA ) · α log T + ¯V TK |K s|≤ pT · dim E (F, ΠA ) · α log T + ¯V TK dim E (F, ΠA ) · log T log( T ¯V 2)
+
+where the first inequality follows from Equation (16) and the second inequality is due to Equation (12). Similarly, we have 
+
+> T
+
+X
+
+> i=1
+
+∥μt
+
+> 1
+
+(·| s1, π t) − μ∗
+
+> 1
+
+(·| s1, π t)∥1 = X  
+
+> t∈S
+> j∈¯Ktv Bj
+
+∥μt
+
+> 1
+
+(·| s1, π t) − μ∗
+
+> 1
+
+(·| s1, π t)∥1 + X 
+
+> t∈S
+> j∈K tv Bj
+
+∥μt
+
+> 1
+
+(·| s1, π t) − μ∗
+
+> 1
+
+(·| s1, π t)∥1
+
+≤ pT · dim E (Ψ , ΠA ) · β log T + TK dim E (Ψ , ΠA ) log 2 T, 
+
+where the inequality follows from Equation (17) and Equation (13). Rearranging the terms and rescaling δ complete our proof. 14 Policy-Regret Minimization in Markov Games with Function Approximation 
+
+## B. Technical Lemmas 
+
+We present a standard value-policy error decomposition that straightforwardly generalizes the value-function error decompo-sition in (Jiang et al., 2017; Jin et al., 2021), from an arbitrary value function and its greedy policy to an arbitrary value function and an arbitrary policy. 
+
+Lemma B.1 (Value-policy error decomposition) . For any f ∈ F and any policy π, μ , we have 
+
+f1(s1, π 1, μ 1) − V π,μ  
+
+> 1
+
+(s1) = 
+
+> H
+
+X
+
+> h=1
+
+Eπ,μ [( fh − Tπ,μ h fh+1 )( sh, a h, b h)] .
+
+Proof of Lemma B.1. We have 
+
+f1(s1, π 1, μ 1) − V π,μ  
+
+> 1
+
+(s1) = Eπ,μ [f1 − Qπ,μ  
+
+> 1
+
+]= Eπ,μ [f1] − Eπ,μ [Tπ,μ  
+
+> 1
+
+Qπ,μ  
+
+> 2
+
+]= Eπ,μ [f1] − Eπ,μ [Tπ,μ  
+
+> 1
+
+f2] + Eπ,μ [Tπ,μ  
+
+> 1
+
+{f2 − Qπ,μ  
+
+> 2
+
+}]= Eπ,μ [f1 − Tπ,μ  
+
+> 1
+
+f2] + Eπ,μ [f2 − Qπ,μ  
+
+> 2
+
+]= . . . 
+
+=
+
+> H
+
+X
+
+> h=1
+
+Eπ,μ [fh − Tπ,μ h fh+1 ] ,
+
+where the first equation follows from the Bellman equation, and the last equation follows from induction. The following lemma controls the running sum of zero-mean random variables by their variance, typically known as the Freedman inequality (Freedman, 1975). The proof for Freedman’s inequality is elementary, which could be found in e.g. (Nguyen-Tang & Arora, 2024b). 
+
+Lemma B.2 (Freedman’s inequality) . Let X1, . . . , X T be the sequence of any random real-valued variables. Denote 
+
+Et[·] = E[·| X1, . . . , X t−1]. Assume that Xt ≤ R for some R > 0 and Et[Xt] = 0 for all t. Define the random variables 
+
+S := 
+
+> T
+
+X
+
+> t=1
+
+Xt, V := 
+
+> T
+
+X
+
+> i=1
+
+Et[X2 
+
+> t
+
+].
+
+Then for any δ > 0, with probability at least 1 − δ, for any λ ∈ [0 , 1/R ],
+
+S ≤ (e − 2) λV + ln(1 /δ )
+
+λ .
+
+We define the σ-algebra Bkh = σ  ∪t∈[k−1] ,j ∈[H]Dtj ∪ { (skj , a kj , b kj , r kj )}j∈[h−1] ∪ (skh, a kh, b kh) denote Ek,h [·] := E[·| Bkh].The following lemma establishes the variance condition on the excess TD loss, a TD analogous to the variance condition that is widely used in the empirical process theory (Massart, 2000). 
+
+Lemma B.3 ((Nguyen-Tang & Arora, 2024b, Lemma B.1)) . For any Bkh-measurable policy π, μ and any Bkh-measurable function f ∈ F , we have 
+
+Ek,h [∆ lπ,μ (fh, f h+1 (zkh)] = Eπ,μ h (fh, f h+1 )( xkh)2,
+
+Ek,h [∆ lπ,μ (fh, f h+1 )( zkh)2] ≤ 36 ¯V 2Eπ,μ h (fh, f h+1 )( xkh)2.
+
+15 Policy-Regret Minimization in Markov Games with Function Approximation 
+
+Algorithm 2 Meta-algorithm  
+
+> 1:
+
+for t = 1 , 2, . . . , T do  
+
+> 2:
+
+Choose πt as a deterministic function of {(πi, τ i)}i∈[t−1]  
+
+> 3:
+
+Execute πt and collect τ t ∼ Pπt 
+
+> θ∗
+> 4:
+
+end for 
+
+## C. Maximum Likelihood Estimation 
+
+In this section, we analyze the maximum likelihood estimation (MLE) in the following meta-algorithm in Algorithm 2. Here, a trajectory distribution is uniquely induced by a policy π ∈ Π and a parameter θ ∈ Θ, denoted by Pπθ .We generalize the MLE guarantees from the tabular case in (Liu et al., 2022) to the general model Pπθ . To do so, we need to define the bracketing numbers of Φ for our model in a way that makes sense and generalizes the results in (Liu et al., 2022), which we present as follows. 
+
+Definition 6. {[li, u i], i ∈ [N ]} where li, u i : Π × T → R+ is an ϵ-bracketing cover of Θ if, 
+
+• There exists an absolute constant c > 0 such that max i∈[N ] sup π∈Π ∥ui(π, ·)∥1 ≤ c, and 
+
+• For any θ ∈ Θ, there exists i ∈ [N ] such that li(π, τ ) ≤ Pπθ (τ ) ≤ ui(π, τ ), ∀(π, τ ) ∈ (Π , T ), and 
+
+• max i∈[N ] sup π ∥li(π, ·) − ui(π, ·)∥1 ≤ ϵ.The smallest such N , denoted by NΘ(ϵ), is called the ϵ-bracketing number of Θ (w.r.t. the model Pπθ ). 
+
+Remark 3. The upper bracket ui(π, ·) in Definition 6 does not need to be a valid probability over T , but its sum over T
+
+must be bounded from above by an absolute constant, which is crucial for our model. This small detail is missing from the proof of Proposition 14 of (Liu et al., 2022) because all upper brackets in the tabular model of (Liu et al., 2022) is a valid probability. 
+
+Remark 4. When the trajectory distribution Pπθ can be factorized as Pπθ (τ ) = fθ (τ ) × π(τ ), our bracketing number in Definition 6 reduces to the bracketing number defined in (Liu et al., 2023) (the paragraph right after their Definition 2.2). In other words, we do not need this factorization in our definition of bracketing numbers and our results. 
+
+Our first result, similar to (Liu et al., 2022, Proposition 13), states that the log-likelihood of the true model is close to the maximum log-likelihood, up to an estimation error that is driven by the complexity of the model class. 
+
+Lemma C.1. Fix any δ ∈ (0 , 1) and T . With probability at least 1 − δ, for all t ∈ [T ] and θ ∈ Θ,
+
+> t
+
+X
+
+> i=1
+
+log Pπi 
+
+> θ
+
+(τ i)
+
+Pπi 
+
+> θ∗
+
+(τ i) ≲ log ( NΘ(1 /T )T /δ ) .
+
+Our second result, similar to (Liu et al., 2022, Proposition 14), specifies how the empirical log-likelihood between a model and the true model controls the total variation distance between the two models. 
+
+Lemma C.2. Fix any δ ∈ (0 , 1) and T . With probability at least 1 − δ, for all t ∈ [T ] and all θ ∈ Θ,
+
+> t
+
+X
+
+> i=1
+
+∥Pπi 
+
+> θ
+
+− Pπi 
+
+> θ∗
+
+∥21 ≲
+
+> t
+
+X
+
+> i=1
+
+log Pπi 
+
+> θ∗
+
+(τ i)
+
+Pπi 
+
+> θ
+
+(τ i) + log ( NΘ(1 /T )T /δ ) .
+
+Proof of Lemma C.1 and Lemma C.2. By the definition of bracketing numbers in Definition 6, for any θ ∈ Θ, there exists 
+
+i ∈ [NΘ(1 /T )] such that • sup π∈Π ∥ui(π, ·)∥1 ≤ c for some absolute constant c, and • ui(π, τ ) ≥ Pπθ (τ ), ∀(π, τ ) ∈ Π × T , and 16 Policy-Regret Minimization in Markov Games with Function Approximation 
+
+• sup π∈Π ∥ui(π, ·) − Pπθ (·)∥1 ≤ 1/T .The proof of Lemma C.1 and Lemma C.2 then closely follow that of Proposition 13 and Proposition 14 of (Liu et al., 2022), respectively, by replacing their fθ × π by our Pπθ .
+
+## D. Optimism 
+
+Lemma D.1 (Optimism) . Under Assumption 3.2, Assumption 3.3, Assumption 3.1, Assumption 3.4, with probability at least 
+
+1 − δ,
+
+∀(π, t ) ∈ Π × [T ], μ ∗ ∈ Ψt and Qπ,μ ∗(π) ∈ F t(π, μ ∗(π)) .
+
+Proof of Lemma D.1. We will prove that, with probability at least 1 − δ, ∀(π, t, h ) ∈ Π × [T ] × [H], we have 
+
+
+
+> t
+
+X
+
+> i=1
+
+lπ,μ ∗(π)(Qπ,μ ∗(π) 
+
+> h
+
+, Q π,μ ∗(π) 
+
+> h+1
+
+)( zih) − inf 
+
+> fh∈F h
+> t
+
+X
+
+> i=1
+
+lπ,μ ∗(π)(fh, Q π,μ ∗(π) 
+
+> h+1
+
+)( zih) ≤ α, 
+
+−
+
+> t
+
+X
+
+> i=1
+
+log μ∗
+
+> h
+
+(bih|sih, π i) + sup 
+
+> μh∈Ψh
+> t
+
+X
+
+> i=1
+
+log μh(bih|sih, π i) ≤ β. 
+
+The first inequality follows from Lemma D.4 and the second inequality follows from Lemma D.2. 
+
+D.1. Optimistic MLE 
+
+In this section, we establish the MLE guarantees for our adversary model. 
+
+Lemma D.2. Fix any δ ∈ (0 , 1) h ∈ [H], and T ∈ N. With probability at least 1 − δ, for all t ∈ [T ] and all μh ∈ Ψh,
+
+> t
+
+X
+
+> i=1
+
+log μh(bih|sih, π i)
+
+μ∗
+
+> h
+
+(bih|sih, π i) ≲ log ( NΨh (1 /T )T /δ ) ,
+
+where NΨh (ϵ) is the ϵ-bracketing number of Ψh as defined in Definition 5. Proof of Lemma D.2. Let τ = ( s1, a 1, b 1, . . . , s h, a h, b h), and define 
+
+Pπμh (τ ) = P1(s1)π1(a1|s1)μ∗
+
+> 1
+
+(b1|s1, π )P2(s2|s1, a 1, b 1) . . . μ h(bh|sh)
+
+Lemma D.3. Fix any δ ∈ (0 , 1) h ∈ [H], and T ∈ N. With probability at least 1 − δ, for all t ∈ [T ] and all μh ∈ Ψh,
+
+> t
+
+X
+
+> i=1
+
+Esh∼Pπih
+
+∥μh(·| sh, π i) − μ∗
+
+> h
+
+(·| sh, π i)∥1 ≲
+
+> t
+
+X
+
+> i=1
+
+log μ∗
+
+> h
+
+(bih|sih, π i)
+
+μh(bih|sih, π i) + log ( NΨh (1 /T )T /δ ) ,
+
+where Pπh (sh) is the probability over sh by following π and {μ∗
+
+> h
+
+(·|· , π )}h∈[H], and NΨh (ϵ) is the ϵ-bracketing number of 
+
+Ψh as defined in Definition 5. Proof of Lemma D.2 and Lemma D.3. We apply Lemma C.1 and Lemma C.2, respectively, with 
+
+τ = ( sh, b h), θ = μh, Θ = Ψ h, Pπθ (τ ) = μh(bh|sh, π )Pπh (sh).
+
+Given the above realization, note that if {[li, u i], i ∈ [N ]} is a ϵ-bracketing cover of Ψh, in the sense defined in Definition 5, then {[˜li, ˜ui], i ∈ [N ]} is an ϵ-bracketing cover of Ψh in the sense defined in Definition 6, where ˜li(π, τ ) := li(π, s h, b h) ×
+
+Pπh (sh) and ˜ui(π, τ ) = ui(π, s h, b h) × Pπh (sh).17 Policy-Regret Minimization in Markov Games with Function Approximation 
+
+D.2. Optimistic Value Function Lemma D.4. Fix any ϵ > 0, δ ∈ (0 , 1) . Under Assumption 3.2 and Assumption 3.3, with probability at least 1 − δ, for all 
+
+(t, h, π ) ∈ [T ] × [H] × Π,
+
+> t
+
+X
+
+> i=1
+
+lπ,μ ∗(π)(Qπ,μ ∗(π) 
+
+> h
+
+, Q π,μ ∗(π) 
+
+> h+1
+
+)( zih) − inf 
+
+> fh∈F h
+> t
+
+X
+
+> i=1
+
+lπ,μ ∗(π)(fh, Q π,μ ∗(π) 
+
+> h+1
+
+)( zih)
+
+≤ 36( e − 2) ¯V 2 log( NF (ϵ)NΠA (ϵ)T H/δ ) + 10 ¯V Lip Q(1 + Lip Adv )tϵ + 2 ¯V tϵ. 
+
+Proof of Lemma D.4. Fix any (h, π, f h, f h+1 ) ∈ [H] × Π × F h × F h+1 . By Lemma B.2 and Lemma B.3, we have that with probability at least 1 − δ, for all τ ∈ [0 , 113 ¯V 2 ],
+
+> t
+
+X
+
+> i=1
+
+Eπ,μ ∗(π) 
+
+> h
+
+(fh, f h+1 )( xih)2 −
+
+> t
+
+X
+
+> i=1
+
+∆lπ,μ ∗(π)(fh, f h+1 )( zih)
+
+≤ 36( e − 2) ¯V 2τ
+
+> t
+
+X
+
+> i=1
+
+Eπ,μ ∗(π) 
+
+> h
+
+(fh, f h+1 )( xih)2 + 1
+
+τ log(1 /δ ).
+
+By setting τ = 136( e−2) ¯V 2 , we have that, with probability at least 1 − δ,
+
+−
+
+> t
+
+X
+
+> i=1
+
+∆lπ,μ ∗(π)(fh, f h+1 )( zih) ≤ 36( e − 2) ¯V 2 log(1 /δ ).
+
+By replacing fh+1 in the above inequality by Qπ,μ ∗(π) 
+
+> h+1
+
+and using Tπ,μ ∗(π) 
+
+> h
+
+Qπ,μ ∗(π) 
+
+> h+1
+
+= Qπ,μ ∗(π) 
+
+> h
+
+, we have that, with probability at least 1 − δ,
+
+> t
+
+X
+
+> i=1
+
+lπ,μ ∗(π)(Qπ,μ ∗(π) 
+
+> h
+
+, Q π,μ ∗(π) 
+
+> h+1
+
+)( zih) −
+
+> t
+
+X
+
+> i=1
+
+lπ,μ ∗(π)(fh, Q π,μ ∗(π) 
+
+> h+1
+
+)( zih) ≤ 36( e − 2) ¯V 2 log(1 /δ ).
+
+We have 
+
+Qπ,μ ∗(π) 
+
+> h
+
+(xh) − Qπ,μ ∗(π) 
+
+> h+1
+
+(sh+1 , π, μ ∗(π)) − Qπ′,μ ∗(π′) 
+
+> h
+
+(xh) + Qπ′,μ ∗(π′) 
+
+> h+1
+
+(sh+1 , π ′, μ ∗(π′)) = Qπ,μ ∗(π) 
+
+> h
+
+(xh) − Qπ′,μ ∗(π) 
+
+> h
+
+(xh)+ Qπ′,μ ∗(π) 
+
+> h
+
+(xh) − Qπ′,μ ∗(π′) 
+
+> h
+
+(xh)
+
+− Qπ,μ ∗(π) 
+
+> h+1
+
+(sh+1 , π, μ ∗(π)) + Qπ,μ ∗(π) 
+
+> h+1
+
+(sh+1 , π ′, μ ∗(π)) 
+
+− Qπ,μ ∗(π) 
+
+> h+1
+
+(sh+1 , π ′, μ ∗(π)) + Qπ,μ ∗(π) 
+
+> h+1
+
+(sh+1 , π ′, μ ∗(π′)) 
+
+− Qπ,μ ∗(π) 
+
+> h+1
+
+(sh+1 , π ′, μ ∗(π′)) + Qπ′,μ ∗(π) 
+
+> h+1
+
+(sh+1 , π ′, μ ∗(π′)) 
+
+− Qπ′,μ ∗(π) 
+
+> h+1
+
+(sh+1 , π ′, μ ∗(π′)) + Qπ′,μ ∗(π′) 
+
+> h+1
+
+(sh+1 , π ′, μ ∗(π′)) 
+
+≤ Lip Q · ∥ π − π′∥ΠA + Lip Q · ∥ μ∗(π) − μ∗(π′)∥ΠB + Lip Q · ∥ π − π′∥ΠA + Lip Q · ∥ μ∗(π) − μ∗(π′)∥ΠB
+
++ Lip Q · ∥ π − π′∥ΠA + Lip Q · ∥ μ∗(π) − μ∗(π′)∥ΠB
+
+≤ 3Lip Q(1 + Lip Adv ) · ∥ π − π′∥ΠA
+
+Therefore, 
+
+lπ,μ ∗(π)(Qπ,μ ∗(π) 
+
+> h
+
+, Q π,μ ∗(π) 
+
+> h+1
+
+)( zih) − lπ′,μ ∗(π′)(Qπ′,μ ∗(π′) 
+
+> h
+
+, Q π′,μ ∗(π′) 
+
+> h+1
+
+)( zih) ≤ 6 ¯V Lip Q(1 + Lip Adv ) · ∥ π − π′∥ΠA .
+
+Similarly, we have 
+
+lπ,μ ∗(π)(fh, Q π,μ ∗(π) 
+
+> h+1
+
+)( zih) − lπ′,μ ∗(π′)(f ′
+
+> h
+
+, Q π′,μ ∗(π′) 
+
+> h+1
+
+)( zih) ≤ 4 ¯V Lip Q(1 + Lip Adv ) · ∥ π − π′∥ΠA + 2 ¯V ∥f − f ′∥∞.
+
+18 Policy-Regret Minimization in Markov Games with Function Approximation 
+
+By applying a union bound and a standard discretization, we have, with probability at least 1 − δ, for all (t, h, π ) ∈
+
+[T ] × [H] × Π,
+
+> t
+
+X
+
+> i=1
+
+lπ,μ ∗(π)(Qπ,μ ∗(π) 
+
+> h
+
+, Q π,μ ∗(π) 
+
+> h+1
+
+)( xih) − inf 
+
+> fh∈F h
+> t
+
+X
+
+> i=1
+
+lπ,μ ∗(π)(fh, Q π,μ ∗(π) 
+
+> h+1
+
+)( zih)
+
+≤ 36( e − 2) ¯V 2 log( NF (ϵ)NΠA (ϵ)T H/δ ) + 10 ¯V Lip Q(1 + Lip Adv )tϵ + 2 ¯V tϵ. 
+
+## E. In-distribution Error Control 
+
+Lemma E.1. Fix any ϵ > 0, δ ∈ (0 , 1) . Under Assumption 3.2 and Assumption 3.3 , with probability at least 1 − δ, for all 
+
+(f, π, t, h ) ∈ F × ΠA × [T ] × [H], we have 
+
+(a)
+
+> t
+
+X
+
+> i=1
+
+Eπ,μ ∗(π) 
+
+> h
+
+(fh, f h+1 )( xih)2 ≤ 2
+
+> t
+
+X
+
+> i=1
+
+∆lπ,μ ∗(π)(fh, f h+1 )( zih)+ 144( e − 2) ¯V 2 log(2 NF (ϵ)NΠA (ϵ)T H/δ ) + 6 t(Lip Q(1 + Lip Adv ) + 2) ¯V ϵ, 
+
+and 
+
+(b)
+
+> t
+
+X
+
+> i=1
+
+Eπ,μ ∗(π) 
+
+> h
+
+(fh, f h+1 )( xih)2 ≥ 12
+
+> t
+
+X
+
+> i=1
+
+∆lπ,μ ∗(π)(fh, f h+1 )( zih)
+
+− 18( e − 2) ¯V 2 log(2 NF (ϵ)NΠA (ϵ)T H/δ ) − 3t(Lip Q(1 + Lip Adv ) + 2) ¯V ϵ. 
+
+Proof of Lemma E.1. Fix ϵ > 0. Let Fϵ, Πϵ be the ϵ-coverings of F and ΠA , respectively. Fix any (f, π, t, h ) ∈Fϵ × Πϵ × [T ] × [H]. By Lemma B.2 and Lemma B.3, we have that with probability at least 1 − δ, for all τ ∈ [0 , 113 ¯V 2 ],
+
+> t
+
+X
+
+> i=1
+
+Eπ,μ ∗(π) 
+
+> h
+
+(fh, f h+1 )( xih)2 −
+
+> t
+
+X
+
+> i=1
+
+∆lπ,μ ∗(π)(fh, f h+1 )( zih)
+
+≤ 36( e − 2) ¯V 2τ
+
+> t
+
+X
+
+> i=1
+
+Eπ,μ ∗(π) 
+
+> h
+
+(fh, f h+1 )( xih)2 + 1
+
+τ log(2 /δ )
+
+By setting τ = 172( e−2) ¯V 2 and τ = 136( e−2) ¯V 2 , respectively, the above inequality implies: 
+
+> t
+
+X
+
+> i=1
+
+Eπ,μ ∗(π) 
+
+> h
+
+(fh, f h+1 )( xih)2 ≤ 2
+
+> t
+
+X
+
+> i=1
+
+∆lπ,μ ∗(π)(fh, f h+1 )( zih) + 144( e − 2) ¯V 2 log(2 /δ ),
+
+> t
+
+X
+
+> i=1
+
+Eπ,μ ∗(π) 
+
+> h
+
+(fh, f h+1 )( xih)2 ≥ 12
+
+> t
+
+X
+
+> i=1
+
+∆lπ,μ ∗(π)(fh, f h+1 )( zih) − 18( e − 2) ¯V 2 log(2 /δ ).
+
+Applying a union bound and rescaling δ, we have that with probability at least 1 − δ, it holds for all (f, π, t, h ) ∈Fϵ × Πϵ × [T ] × [H] that 
+
+> t
+
+X
+
+> i=1
+
+Eπ,μ ∗(π) 
+
+> h
+
+(fh, f h+1 )( xih)2 ≤ 2
+
+> t
+
+X
+
+> i=1
+
+∆lπ,μ ∗(π)(fh, f h+1 )( zih) + 144( e − 2) ¯V 2 log(2 NF (ϵ)NΠA (ϵ)T H/δ ), (18) 
+
+> t
+
+X
+
+> i=1
+
+Eπ,μ ∗(π) 
+
+> h
+
+(fh, f h+1 )( xih)2 ≥ 12
+
+> t
+
+X
+
+> i=1
+
+∆lπ,μ ∗(π)(fh, f h+1 )( zih) − 18( e − 2) ¯V 2 log(2 NF (ϵ)NΠA (ϵ)T H/δ ). (19) 19 Policy-Regret Minimization in Markov Games with Function Approximation 
+
+We will now bound the discretization errors of Eπ,μ ∗(π) 
+
+> h
+
+(fh, f h+1 ) and lπ,μ ∗(π)(fh, f h+1 ) when we discretize F and ΠA .Fix any (h, z ) ∈ [H] × (S × A × B). For any π, π ′, f, f ′, we have 
+
+Eπ,μ ∗(π) 
+
+> h
+
+(fh, f h+1 ) − E π′,μ ∗(π′) 
+
+> h
+
+(f ′
+
+> h
+
+, f ′
+
+> h+1
+
+)= ( Tπ,μ ∗(π) 
+
+> h
+
+− Tπ′,μ ∗(π) 
+
+> h
+
+)f ′ 
+
+> h+1
+
++ ( Tπ′,μ ∗(π) 
+
+> h
+
+− Tπ′,μ ∗(π′) 
+
+> h
+
+)f ′ 
+
+> h+1
+
++ Tπ,μ ∗(π) 
+
+> h
+
+(fh+1 − f ′
+
+> h+1
+
+) + ( fh − f ′
+
+> h
+
+)
+
+≤ ¯V Lip Q(1 + Lip Adv )∥π − π′∥ΠA + 2 ∥f − f ′∥∞,
+
+where the last inequality follows from the Lipschitzness assumption in Assumption 3.3. By the definition of ϵ-coverings, for any (π, f ) ∈ ΠA × F , there exist (π′, f ′) ∈ Πϵ × F ϵ such that ∥f − f ′∥∞ ≤ ϵ and ∥π − π′∥1,∞ ≤ ϵ. Therefore, we have 
+
+|E π,μ ∗(π) 
+
+> h
+
+(fh, f h+1 )2 − E π′,μ ∗(π′) 
+
+> h
+
+(f ′
+
+> h
+
+, f ′
+
+> h+1
+
+)2|
+
+= |E π,μ ∗(π) 
+
+> h
+
+(fh, f h+1 ) − E π′,μ ∗(π′) 
+
+> h
+
+(f ′
+
+> h
+
+, f ′
+
+> h+1
+
+)| · |E π,μ ∗(π) 
+
+> h
+
+(fh, f h+1 ) + Eπ′,μ ∗(π′) 
+
+> h
+
+(f ′
+
+> h
+
+, f ′
+
+> h+1
+
+)|≤ 2( ¯V Lip Q(1 + Lip Adv ) + 2) ¯V ϵ. (20) Similarly, we have 
+
+|∆π,μ ∗(π)(fh, f h+1 ) − ∆π′,μ ∗(π′)(f ′
+
+> h
+
+, f ′
+
+> h+1
+
+)| ≤ 2( ¯V Lip Q(1 + Lip Adv ) + 2) ¯V ϵ. (21) Combining both Equation (20) and Equation (21) into Equation (18) and Equation (19) completes our proof. 
+
+## F. Handling Batches 
+
+Let 
+
+tj := j⌊T /K ⌋ + 1 .
+
+Let us first fix any h ∈ [H]. For any j ∈ { 0, 1, . . . , K }, we know that 
+
+∀t ∈ Bj := [ tj + 1 , t j+1 ], π t = πtj +1 , f t = f tj +1 , μ t = μtj +1 , (22) 
+
+F.1. For Value Function Approximation 
+
+We define the “normalized” in-batch cumulative Bellman errors for each batch j ∈ [K] as 
+
+∆j := 1
+
+α
+
+> tj+1
+
+X 
+
+> i=tj+1
+
+Eπi,μ i(πi) 
+
+> h
+
+(f ih, f ih+1 )( zih)2.
+
+Lemma F.1. Fix any C ≥ 3. Under Assumption 3.1 and Condition 1, with probability at least 1 − δ,
+
+|{ j ∈ [K] : C
+
+2 ≤ ∆j ≤ C}| ≲ dim E (F, ΠA ) · log T. 
+
+Proof of Lemma F.1. Let j1 ≤ . . . j M be all the batches j such that C 
+
+> 2
+
+≤ ∆j ≤ C. Thus, we have 
+
+X  
+
+> i∈S
+> m∈[M]Bjm
+
+Eπi,μ i(πi) 
+
+> h
+
+(f ih, f ih+1 )( zih)2 ≥ M Cα 
+
+2 . (23) By Lemma E.1, with probability at least 1 − δ,
+
+∀(j, h ) ∈ [K] × [H],
+
+> tj
+
+X
+
+> i=1
+
+Eπtj +1 ,μ ∗(πtj +1 ) 
+
+> h
+
+(f tj +1  
+
+> h
+
+, f tj +1  
+
+> h+1
+
+)( xih)2 ≤ 2
+
+> tj
+
+X
+
+> i=1
+
+∆lπtj +1 ,μ ∗(πtj +1 )(zih) + α ≤ 3α, 
+
+20 Policy-Regret Minimization in Markov Games with Function Approximation 
+
+where the last inequality due to Algorithm 1 that the version space Ct is updated at episode tj , and thus 
+
+Ptj 
+
+> i=1
+
+∆lπtj +1 ,μ ∗(πtj +1 )(zih) ≤ α. Under the same event as the above inequality, for all m ∈ [M ] and all t ∈ Bjm =[jm + 1 , j m+1 ], we have 
+
+X  
+
+> i∈[t−1] ∩S
+> m∈[M]Bjm
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xih)2 ≤ X
+
+> i∈[t−1]
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xih)2
+
+=
+
+> tjm
+
+X
+
+> i=1
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xih)2 +
+
+> t−1
+
+X 
+
+> i=tjm +1
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xih)2
+
+=
+
+> tjm
+
+X
+
+> i=1
+
+Eπtjm +1 ,μ ∗(πtjm +1 ) 
+
+> h
+
+(f tjm +1  
+
+> h
+
+, f tjm +1  
+
+> h+1
+
+)( xih)2 +
+
+> t−1
+
+X 
+
+> i=tjm +1
+
+Eπt,μ ∗(πt) 
+
+> h
+
+(f th, f th+1 )( xih)2
+
+≤ 3α + Cα = ( C + 3) α. 
+
+By Condition 1, the above inequalities imply that 
+
+X  
+
+> i∈S
+> m∈[M]Bjm
+
+Eπi,μ ∗(πi) 
+
+> h
+
+(f ih, f ih+1 )( xih)2 ≲ d(F, Π) · (C + 3) α log T
+
+Combining the above inequality with Equation (23) gives 
+
+M ≲ dim E (F, ΠA ) · log T, 
+
+for C ≥ 3.
+
+Lemma F.2. Under Assumption 3.1 and Condition 1, with probability at least 1 − δ log( T ¯V 2),
+
+|{ j ∈ [B] : ∆ j ≥ 3}| ≲ dim E (F, ΠA ) · log T log( T ¯V 2).
+
+Proof. Note that, ∆j ≤ (T /K ) ¯V 2 
+
+> α
+
+≲ T ¯V 2. In addition, [3 , B ¯V 2] ⊆ Slog( T ¯V 2/3)  
+
+> i=1
+
+[3 × 2i−1, 3 × 2i). Applying Lemma F.1 to each [3 × 2i−1, 3 × 2i) and using a union bound completes our proof. 
+
+F.2. For Adversary Approximation 
+
+We define the normalized in-batch cumulative TV distance for each batch j as 
+
+Λj := 1
+
+β
+
+> tj+1
+
+X 
+
+> i=tj+1
+
+∥μi
+
+> 1
+
+(πi) − μ∗
+
+> 1
+
+(πi)∥21, ∀j ∈ [K].
+
+Lemma F.3. For any C that is greater than some absolute constant C0, under Assumption 3.4 and Condition 2, with probability at least 1 − δ,
+
+|{ j ∈ [K] : C
+
+2 ≤ ∆j ≤ C}| ≲ dim E (Ψ , ΠA ) · log T. 
+
+Proof of Lemma F.3. By Lemma D.3, there is an absolute constant c such that with probability at least 1 − δ, for all j ∈ [B],we have 
+
+> tj
+
+X
+
+> i=1
+
+∥μtj +1 1 (πi) − μ∗
+
+> 1
+
+(πi)∥21 ≲
+
+> tj
+
+X
+
+> i=1
+
+log μ∗
+
+> 1
+
+(bi
+
+> 1
+
+|si
+
+> 1
+
+, π i)
+
+μtj +1 1 (bi
+
+> 1
+
+|si
+
+> 1
+
+, π i) + β ≤ sup 
+
+> μ∈Ψ
+> tj
+
+X
+
+> i=1
+
+log μ1(bi
+
+> 1
+
+|si
+
+> 1
+
+, π i)
+
+μtj +1 1 (bi
+
+> 1
+
+|si
+
+> 1
+
+, π i) + β ≤ 2β, (24) 21 Policy-Regret Minimization in Markov Games with Function Approximation 
+
+where the second inequality follows from Assumption 3.4 and the last inequality is due to the control of the log-likelihood loss at the beginning tj + 1 of batch j in Algorithm 1. Fix C > 0. Let j1 < j 2 < . . . < j M be all the batches j such that 
+
+Cβ 
+
+2 ≤ X
+
+> i∈Bj
+
+∥μi
+
+> 1
+
+(πi) − μ∗
+
+> 1
+
+(πi)∥21 ≤ Cβ. (25) Thus, we have 
+
+X  
+
+> i∈S
+> m∈[M]Bjm
+
+∥μi
+
+> 1
+
+(πi) − μ∗
+
+> 1
+
+(πi)∥21 ≥ M Cβ 
+
+2 . (26) Under the same event for Equation (24), for all t ∈ Bjm = [ jm + 1 , j m+1 ], we have 
+
+X  
+
+> i∈[t−1] ∩S
+> m∈[M]Bjm
+
+∥μt
+
+> 1
+
+(πi) − μ∗
+
+> 1
+
+(πi)∥21 ≤
+
+> t−1
+
+X
+
+> i=1
+
+∥μt
+
+> 1
+
+(πi) − μ∗
+
+> 1
+
+(πi)∥21
+
+=
+
+> jm
+
+X
+
+> i=1
+
+∥μt
+
+> 1
+
+(πi) − μ∗
+
+> 1
+
+(πi)∥21 +
+
+> t−1
+
+X
+
+> i=jm+1
+
+∥μt
+
+> 1
+
+(πi) − μ∗
+
+> 1
+
+(πi)∥21
+
+=
+
+> jm
+
+X
+
+> i=1
+
+∥μjm+1 1 (πi) − μ∗
+
+> 1
+
+(πi)∥21 +
+
+> t−1
+
+X
+
+> i=jm+1
+
+∥μt
+
+> 1
+
+(πi) − μ∗
+
+> 1
+
+(πi)∥21
+
+≤ O (1) β + Cβ. 
+
+where the second equality comes from μt = μjm+1 , ∀t ∈ Bjm , the second inequality comes from Equation (24), and Equation (25). Therefore, by Condition 2, 
+
+X  
+
+> i∈S
+> m∈[M]Bjm
+
+∥μi
+
+> 1
+
+(πi) − μ∗
+
+> 1
+
+(πi)∥21 ≤ dim E (Ψ , ΠA )( O(1) + C)β log( T ).
+
+Combining with Equation (26), we have 
+
+M ≲ dim E (Ψ , ΠA ) log T
+
+as long as C is greater than some absolute constant. 
+
+Lemma F.4. There is an absolute constant C0 such that, with probability at least 1 − δ log( T ),
+
+|{ j ∈ [K] : Λ j ≥ C0}| ≲ dim E (Ψ , ΠA ) log 2 T. 
+
+Proof of Lemma F.4. Note that ∆j ≤ Kβ ≤ K ≤ T , where β is Ω(1) . We have [C0, T ] ⊂ Slog( T /C 0) 
+
+> i=0
+
+[C02i−1, C 02i).Applying Lemma F.3 to each interval [C02i−1, C 02i) and combining them via a union bound completes the proof. 
+
+## G. Proofs of Supporting Lemmas in the Main Paper 
+
+Proof of Lemma 3.1. Bounding the log ϵ-covering of a linear model is standard, e.g., see (Wainwright, 2019). Since F is the product space of H function classes, the log ϵ-covering number of F can be bounded by the sum of the bounds on the log ϵ-covering number of all Fh.22 Policy-Regret Minimization in Markov Games with Function Approximation 
+
+Proof of Lemma 3.2. Note that by the structure of Ψ, each μh ∈ Ψh, μh(·| s, π ) depends on (π, h, s ) only via the vector 
+
+wπsh , where Φ is completely independent of (π, h, s ). Thus, the bracketing number of Ψ is bounded by the bracketing number of {Φ ∈ RB×dadv  
+
+> +
+
+, ∥Φ∥∞ = O(1) }. We can construct an ϵ-bracketing cover of that set from an ϵ-cover w.r.t. ∥ · ∥ ∞.In particular, for each Φ ∈ RB×dadv , we write Φ = (Φ 1, . . . ΦB ) where Φj ∈ Rdadv . Each coordinate Φj can be ϵ-covered by at most O  ( 1 
+
+> ϵ
+
+)dadv 
+
+ balls of radius ϵ (Wainwright, 2019). From each ϵ-cover, we can construct one ϵ-bracket. Indeed, let say ˜Φj is an ϵ-cover of Φj , i.e., ∥ ˜Φj − Φj ∥∞ ≤ ϵ. Then, [ ˜Φj − ϵ1, ˜Φj + ϵ1] is a valid ϵ-bracket of Φj , where 1 denotes the dadv -dimensional vector with all coordinates of 1. Then, perform a combinatorial count over all j ∈ [B] and a careful rescaling of ϵ complete our proof. 
+
+Proof of Lemma 5.1 and Lemma 5.2. With simple algebraic manipulations, the problems in the above lemmas reduce to the standard elliptical potential lemma (Abbasi-Yadkori et al., 2011; Jin et al., 2023). 23

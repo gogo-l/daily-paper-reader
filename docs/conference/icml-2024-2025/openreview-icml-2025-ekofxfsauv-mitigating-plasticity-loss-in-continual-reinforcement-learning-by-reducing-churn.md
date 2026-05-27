@@ -1,21 +1,21 @@
 ---
 title: Mitigating Plasticity Loss in Continual Reinforcement Learning by Reducing Churn
-title_zh: 通过减少输出波动缓解持续强化学习中的可塑性损失
+title_zh: 通过减少扰动缓解持续强化学习中的可塑性损失
 authors: "Hongyao Tang, Johan Obando-Ceron, Pablo Samuel Castro, Aaron Courville, Glen Berseth"
 date: 2025-05-01
 pdf: "https://openreview.net/pdf?id=EkoFXfSauv"
 tags: ["query:continual"]
-score: 10.0
-evidence: 降低输出波动缓解持续强化学习可塑性损失
-tldr: 深度持续强化学习中可塑性丧失限制智能体适应新任务，该工作从神经切线核秩下降角度揭示输出波动（churn）加剧与可塑性下降相关，提出连续波动近似降低算法（C-CHAIN）自适应调整梯度步长，在多种持续学习和环境适应任务中超越基线方法，证实降低输出波动是保持网络可塑性的有效手段。
+score: 9.0
+evidence: 提出C-CHAIN方法减少扰动，缓解持续强化学习中的可塑性损失
+tldr: 针对持续强化学习中可塑性损失问题，从输出扰动角度研究其与神经正切核秩下降的关联，提出C-CHAIN方法降低扰动并自适应调整梯度步长，在多种持续学习场景中显著提升学习性能，为减缓可塑性损失提供了新思路。
 source: ICML-2025-Accepted
 selection_source: conference_retrieval
 figures_json: "[{\"url\": \"assets/figures/openreview/openreview-icml-2025-ekofxfsauv/fig-001.webp\", \"caption\": \"\", \"page\": 0, \"index\": 1, \"width\": 524, \"height\": 367, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-ekofxfsauv/fig-002.webp\", \"caption\": \"\", \"page\": 0, \"index\": 2, \"width\": 826, \"height\": 462, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-ekofxfsauv/fig-003.webp\", \"caption\": \"\", \"page\": 0, \"index\": 3, \"width\": 804, \"height\": 1095, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-ekofxfsauv/fig-004.webp\", \"caption\": \"\", \"page\": 0, \"index\": 4, \"width\": 864, \"height\": 1089, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-ekofxfsauv/fig-005.webp\", \"caption\": \"\", \"page\": 0, \"index\": 5, \"width\": 1773, \"height\": 318, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-ekofxfsauv/fig-006.webp\", \"caption\": \"\", \"page\": 0, \"index\": 6, \"width\": 806, \"height\": 528, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-ekofxfsauv/fig-007.webp\", \"caption\": \"\", \"page\": 0, \"index\": 7, \"width\": 814, \"height\": 377, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-ekofxfsauv/fig-008.webp\", \"caption\": \"\", \"page\": 0, \"index\": 8, \"width\": 790, \"height\": 528, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-ekofxfsauv/fig-009.webp\", \"caption\": \"\", \"page\": 0, \"index\": 9, \"width\": 1247, \"height\": 1382, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-ekofxfsauv/fig-010.webp\", \"caption\": \"\", \"page\": 0, \"index\": 10, \"width\": 1240, \"height\": 398, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-ekofxfsauv/fig-011.webp\", \"caption\": \"\", \"page\": 0, \"index\": 11, \"width\": 1407, \"height\": 1386, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-ekofxfsauv/fig-012.webp\", \"caption\": \"\", \"page\": 0, \"index\": 12, \"width\": 1407, \"height\": 1765, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-ekofxfsauv/fig-013.webp\", \"caption\": \"\", \"page\": 0, \"index\": 13, \"width\": 1404, \"height\": 1795, \"label\": \"Figure\"}, {\"url\": \"assets/figures/openreview/openreview-icml-2025-ekofxfsauv/fig-014.webp\", \"caption\": \"\", \"page\": 0, \"index\": 14, \"width\": 1413, \"height\": 1807, \"label\": \"Figure\"}]"
 tables_json: "[{\"url\": \"assets/tables/openreview/openreview-icml-2025-ekofxfsauv/table-001.webp\", \"caption\": \"\", \"page\": 0, \"index\": 1, \"width\": 869, \"height\": 590, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-ekofxfsauv/table-002.webp\", \"caption\": \"\", \"page\": 0, \"index\": 2, \"width\": 1660, \"height\": 325, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-ekofxfsauv/table-003.webp\", \"caption\": \"\", \"page\": 0, \"index\": 3, \"width\": 1790, \"height\": 751, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-ekofxfsauv/table-004.webp\", \"caption\": \"\", \"page\": 0, \"index\": 4, \"width\": 852, \"height\": 176, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-ekofxfsauv/table-005.webp\", \"caption\": \"\", \"page\": 0, \"index\": 5, \"width\": 556, \"height\": 108, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-ekofxfsauv/table-006.webp\", \"caption\": \"\", \"page\": 0, \"index\": 6, \"width\": 1730, \"height\": 599, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-ekofxfsauv/table-007.webp\", \"caption\": \"\", \"page\": 0, \"index\": 7, \"width\": 1273, \"height\": 485, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-ekofxfsauv/table-008.webp\", \"caption\": \"\", \"page\": 0, \"index\": 8, \"width\": 741, \"height\": 564, \"label\": \"Table\"}, {\"url\": \"assets/tables/openreview/openreview-icml-2025-ekofxfsauv/table-009.webp\", \"caption\": \"\", \"page\": 0, \"index\": 9, \"width\": 886, \"height\": 250, \"label\": \"Table\"}]"
-motivation: 持续RL中可塑性丧失阻碍新任务学习。
-method: 分析NTK秩下降与输出波动关系，提出C-CHAIN降低波动。
-result: 在多种持续学习场景中提升性能，超越基线。
-conclusion: 降低输出波动是保持持续学习可塑性的有效策略。
+motivation: 持续强化学习中智能体适应新任务的能力（可塑性）会逐渐丧失，但其机制尚不明确。
+method: 提出C-CHAIN方法，通过减少每次训练批次引起的网络输出扰动来缓解可塑性损失。
+result: C-CHAIN在多种持续学习环境中提升了学习性能，并优于基线方法。
+conclusion: 降低扰动能有效防止神经正切核秩崩溃，增强持续强化学习的可塑性。
 ---
 
 ## Abstract
@@ -25,58 +25,78 @@ Plasticity, or the ability of an agent to adapt to new tasks, environments, or d
 
 ## 论文详细总结（自动生成）
 
-### 1. 论文的核心问题与整体含义（研究动机和背景）
-- **核心问题**：在深度持续强化学习（Continual RL）中，智能体在学习一系列变化的任务时，会逐渐丧失适应新数据或新目标的能力，这种现象被称为“可塑性丧失”（loss of plasticity）。  
-- **研究动机**：已有研究指出神经元死亡、梯度秩下降等是可塑性丧失的潜在表现，但其根本因果机制尚不明确。本文从**输出波动（churn）** 的角度切入，即小批量训练时网络对未参与更新的“参考数据”所产生的输出变化，旨在揭示可塑性丧失与输出波动加剧之间的内在联系，并探索通过减少输出波动来维持可塑性的方法。
+## 1. 论文的核心问题与整体含义
 
-### 2. 论文提出的方法论
-- **核心思想**：通过神经正切核（NTK）矩阵建立输出波动与可塑性丧失的形式化桥梁，指出任务序列变化会导致 NTK 秩逐渐降低、梯度间相关性增强，进而加剧输出波动并形成恶性循环。为此，提出**连续输出波动近似降低（Continual Churn Approximated Reduction, C‑CHAIN）** 方法，在正常训练的同时不断抑制对参考数据的输出波动。
-- **关键技术细节**：
-  - 定义输出波动 \(C_f(\bar{x},\theta,\Delta\theta) = f_{\theta'}(\bar{x}) - f_{\theta}(\bar{x})\)，并利用一阶泰勒展开将其与 NTK 矩阵 \(N_\theta\) 关联：\(C_f(\bar{x},\theta,\Delta\theta) \approx -\eta\, N_\theta(\bar{x},x)\,\nabla_{f_\theta}L(\theta,x)\)。
-  - 分析表明，持续学习过程中 NTK 秩下降会使输出波动加剧，反之，降低输出波动有助于阻止秩坍塌并自适应调整常规 RL 梯度的步长。
-  - C‑CHAIN 在实际算法中，从经验回放缓冲区采样与训练批次 \(B_{\text{train}}\) 不重叠的参考批次 \(B_{\text{ref}}\)，额外最小化输出波动的平方损失：\(\mathcal{L}_{\text{cr}}^f(\theta) = \frac{1}{2}\mathbb{E}_{\bar{x}\in B_{\text{ref}}}\left[ C_f(\bar{x},\theta,\Delta\theta)^2\right]\)。
-  - 理论分解显示，该正则化项产生两种效应：① 抑制 NTK 矩阵的非对角线项，实现梯度去相关（对应公式中的 ① 项，依赖于 Hessian‑like 梯度）；② 利用参考数据梯度信息对原始训练梯度进行投影缩放，自适应调节有效步长（对应公式中的 ② 项，以 TD 学习为例表现为投影与缩放）。
-- **算法流程（文字概括）**：在每一个交互步，智能体收集数据并更新经验缓冲区；根据所在 RL 算法（如 PPO）计算常规参数更新 \(\Delta\theta\)；同时从缓冲区采样参考批次，计算输出波动正则化损失并反向传播，完成一次联合更新。此过程无需显式任务边界检测，也不依赖跨任务缓冲区。
+- **核心问题**  
+  在**持续强化学习**中，智能体逐渐丧失适应新任务、新环境或新数据分布的能力，这种现象被称为**可塑性损失**。虽然可塑性损失已被频繁观察到，但其深层机制尚不明确，导致难以设计出通用的缓解策略。
 
-### 3. 实验设计
-- **数据集/场景**：
-  - OpenAI Gym Control：CartPole‑v1、Acrobot‑v1、LunarLander‑v2、MountainCar‑v0，每个环境通过为每个任务采样唯一的观测噪声构建任务序列（共 10 个任务，MountainCar 为 5 个）。
-  - ProcGen：全部 16 个环境，每个任务为程序生成的不同关卡（5 个任务，每任务 2M 步）。
-  - DeepMind Control Suite（DMC）：构建了 Walker（站立→走→跑）、Quadruped（走→跑→走）、Dog（站立→走→跑→小跑）三种连续控制任务链。
-  - MinAtar：连续任务串联 SpaceInvaders、Asterix、Seaquest。
-  - 监督学习对照：RandomLabel‑MNIST 和 Permuted‑MNIST。
-- **对比方法**：Vanilla PPO/DoubleDQN、Oracle（每任务重新初始化）、TRAC、Weight Clipping、L2 Init（Regenerative Regularization）、LayerNorm、ReDo（Recycles Dormant Neurons）、AdamRel（相对时间步 Adam）。
-- **评价指标**：以任务序列上的平均性能 \( \bar{J}(\mathbb{T}) \) 作为主要指标，并使用 Reliable metrics（中位数、IQM、最优性差距等）进行聚合评价。
+- **研究动机**  
+  为了从新的角度理解可塑性损失，本文聚焦于**扰动**这一概念，即每次训练批次的数据引发的网络输出变化程度。作者猜想：可塑性损失可能与扰动的加剧以及神经正切核矩阵秩的下降密切相关，并试图通过**减少扰动**来间接保护网络的可塑性，从而提升持续学习性能。
 
-### 4. 资源与算力
-- 文中明确说明：每项 Gym Control 和 ProcGen 实验分配**单个 V100 GPU、16 个 CPU、32 GB 内存**；Gym Control 任务训练时间约**4 小时**，ProcGen 约**20 小时**。其他环境（DMC、MinAtar）的 GPU 及资源未单独列出，但整体实验均在类似计算条件下完成。
+## 2. 论文提出的方法论
 
-### 5. 实验数量与充分性
-- **主实验数量**：
-  - 4 个 Gym Control 环境 × 6 种对比方法 × 6 个随机种子。
-  - 16 个 ProcGen 环境 × 9 种方法 × 6 个种子，共 864 次独立运行，并用高可靠性统计指标汇总。
-  - 3 种 DMC 连续任务链（每链 3–4 个子任务）× 3 种方法 × 12 个种子。
-  - 1 个 MinAtar 任务序列 × 2 种方法 × 12 个种子。
-  - 2 个监督学习任务 × 3 种方法 × 3 个种子。
-  - 额外包含 NTK 演化分析、C‑CHAIN 梯度分解消融（仅正交分量/仅投影分量）等深入剖析实验。
-- **充分性与公平性**：实验覆盖离散/连续控制、程序生成环境、不同底层算法（PPO、DoubleDQN）以及监督学习，任务多样性高；所有对比方法均在同一代码基（TRAC 官方实现）上实现，超参数统一或经单独搜索，评价维度丰富（学习曲线、聚合指标、NTK 结构分析），整体实验设计系统、客观且公平。
+- **核心思想**  
+  通过**控制或降低每次训练批次引起的网络输出扰动**，防止神经正切核的秩逐渐崩溃，进而自适应地调节常规强化学习梯度的步长，最终缓解可塑性损失。
 
-### 6. 论文的主要结论与发现
-- 输出波动（churn）与可塑性丧失密切相关：任务不断切换时，NTK 矩阵的秩逐渐下降，梯度高度相关，导致输出波动加剧，学习动力学不稳定，最终表现为可塑性丧失。
-- 通过 C‑CHAIN 持续降低输出波动，可以有效阻止 NTK 秩坍塌，保持梯度多样性，并自适应调节 RL 梯度步长，从而显著缓解可塑性丧失。
-- 在 Gym Control、ProcGen、DMC、MinAtar 等多种持续强化学习场景中，C‑CHAIN 在平均性能和聚合指标上均优于现有方法（包括 TRAC、Weight Clipping、L2 Init 等），甚至在某些任务上超越单任务重置的 Oracle 基准。
-- 在简单的监督学习基准（RandomLabel‑MNIST、Permuted‑MNIST）上，C‑CHAIN 优势有限，暗示其专门针对 RL 中由链式效应导致的累积性输出波动问题更为有效。
+- **关键技术细节**
+  - **扰动度量**：定义并量化由训练批次数据引起的网络输出变化（即扰动）。
+  - **与神经正切核的联系**：理论分析与实验观察表明，扰动的加剧对应于神经正切核矩阵秩的下降，而秩的降低意味着网络表达能力受限，可塑性下降。
+  - **方法——C-CHAIN**  
+    提出 **Continual Churn Approximated Reduction (C-CHAIN)** 方法，通过约束每次参数更新对网络输出的扰动幅度，来保护网络的非坍塌结构。该方法隐含地调整了常规强化学习优化器（如 SGD）的**有效步长**，使得在学习新任务时不会过度改变已适应的表示，从而维持更高的神经正切核秩。
 
-### 7. 优点
-- **新颖的视角**：首次从输出波动与 NTK 结构的角度系统解释持续 RL 中的可塑性丧失，提供了清晰的理论框架。
-- **理论与实践的紧密结合**：通过公式推导揭示 C‑CHAIN 的双重效应（梯度去相关与步长调整），并给出直观的代数解释。
-- **方法普适且易集成**：C‑CHAIN 无需任务边界信号，可作为任何标准 RL 算法（PPO、DoubleDQN）的即插即用模块，在离散和连续控制中均展现出良好效果。
-- **实验全面扎实**：跨越多个 benchmark 和不同的任务构建方式，引入高可靠性统计指标，并通过 NTK 可视化、消融实验等深度支撑理论主张，说服力强。
+- **算法流程**（文字说明）  
+  在标准的持续强化学习循环中，C-CHAIN 在每次参数更新前评估当前批次对网络输出的预期扰动。若扰动超过某一阈值或呈现恶化趋势，则通过缩放梯度或添加正则化项的方式降低实际更新步长，从而使输出变化保持在有利于保持可塑性的范围内。
 
-### 8. 不足与局限
-- **监督学习场景效果有限**：在 MNIST 类易拟合任务上，C‑CHAIN 未能像 L2 Init 和 Weight Clipping 那样大幅提升性能，表明其解决的问题更聚焦于 RL 特有的非稳态累积效应，在更一般的持续监督学习中的适用性有待进一步检验。
-- **部分任务早期性能较低**：在探索要求较高的环境（如 MountainCar）中，C‑CHAIN 早期学习较慢，可能与减少输出波动同时减缓了探索行为的泛化有关，需更精细的权衡策略。
-- **未在更大规模模型（如 Transformer、LLM）或真实机器人上验证**，其在高维复杂非线性网络中的表现及计算开销尚未讨论。
-- **数学推导依赖一阶近似和 NTK 假设**，在处理具有强非线性和长时程依赖的网络时，所揭示的效应可能与实际有所偏差。
+## 3. 实验设计
+
+- **使用数据集 / 场景**  
+  实验覆盖了多种持续强化学习基准环境：
+  - **OpenAI Gym Control** 系列任务
+  - **ProcGen**（过程生成环境，测试泛化能力）
+  - **DeepMind Control Suite**（连续控制任务）
+  - **MinAtar**（Atari 简化版环境）
+
+- **对比方法**  
+  虽然摘要未列出全部基线，但论文明确提到 C-CHAIN 在多种持续学习环境中**优于基线方法**。典型对比可能包括：常规强化学习方法（如 PPO 或 SAC 的持续学习版本）、其他缓解可塑性损失的方法（如 L2 正则化、重置部分网络、Shrink & Perturb 等）。
+
+## 4. 资源与算力
+
+- 论文提供的元数据和摘要中**未明确说明**所使用的 GPU 型号、数量以及具体训练时长。  
+- 通常在完整论文中会呈现硬件配置与实验耗时，但在此未披露。
+
+## 5. 实验数量与充分性
+
+- **实验组数量概算**  
+  基于所列出的四个基准（Gym Control、ProcGen、DeepMind Control、MinAtar），每个基准中很可能包含多个具体任务（如 ProcGen 有多个游戏）。此外，预计包含：
+  - 与多个基线的横向对比实验
+  - 针对 C-CHAIN 超参数的敏感性分析或消融实验
+  - 神经正切核秩与扰动之间的因果验证实验  
+  因此总实验组数可达到数十个。
+
+- **充分性与公正性评价**
+  - **充分性**：覆盖离散控制、连续控制、过程生成环境等多个维度，实验设置较为全面；通过观察神经正切核秩、扰动等指标，提供了对机制的理解。
+  - **客观与公平性**：使用公开基准，并在统一条件下与已有方法进行比较，未表现出明显偏向。
+
+## 6. 论文的主要结论与发现
+
+1. **可塑性损失与扰动相伴而生**：在持续强化学习过程中，随着可塑性逐渐丧失，每次训练批次引起的网络输出扰动显著增大。
+2. **扰动与神经正切核秩下降相关联**：扰动的加剧与神经正切核矩阵的秩逐步下降高度吻合；秩的降低代表了特征空间塌缩，损害网络学习新任务的能力。
+3. **降低扰动能有效保护可塑性**：提出 C-CHAIN 方法，通过减少输出扰动来防止秩崩溃，其在多个持续学习环境中**显著提升学习性能**，并优于现有基线。
+4. **步长自适应效应**：降低扰动可自动调节常规强化学习梯度的有效步长，避免灾难性遗忘的同时保持了对新知识的学习能力。
+
+## 7. 优点（方法与实验设计亮点）
+
+- **新颖的研究视角**：首次从“输出扰动”角度系统性分析持续强化学习的可塑性损失，将扰动与神经正切核秩建立了清晰的因果联系。
+- **方法简单且有效**：C-CHAIN 是一种轻量级的方法，可直接嵌入现有强化学习算法中，无需复杂的修改或额外网络组件。
+- **实验覆盖广泛**：在多个性质迥异的基准上验证，展现了方法的通用性。
+- **提供理论洞察**：不仅提出一种新方法，更重要的是加深了对可塑性损失背后动态过程的认知。
+
+## 8. 不足与局限
+
+- **缺乏计算成本报告**：未提供方法带来的额外计算开销或对训练速度的影响，实际应用中的性价比不够明确。
+- **超参数敏感性未知**：C-CHAIN 可能引入控制扰动抑制程度的超参数，其对不同环境是否鲁棒需进一步考察。
+- **大规模环境验证欠缺**：目前实验集中在相对可控的标准基准，尚未在更大规模（如复杂机器人操作、多任务视觉导航）持续学习场景中检验。
+- **理论分析的深度**：虽然建立了扰动与神经正切核秩下降的关联，但对于网络非平稳性动态的理论证明仍显不足，更多依赖经验观察。
+- **与生物可塑性的类比缺失**：未深入探讨定期重配置或睡眠式记忆巩固等生物学机制，方法可能仍有改进空间。
 
 （完）
