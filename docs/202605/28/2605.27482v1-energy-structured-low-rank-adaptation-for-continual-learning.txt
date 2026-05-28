@@ -1,0 +1,1077 @@
+Title: Energy-Structured Low-Rank Adaptation for Continual Learning
+
+URL Source: https://arxiv.org/pdf/2605.27482v1
+
+Published Time: Thu, 28 May 2026 00:07:05 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# Energy-Structured Low-Rank Adaptation for Continual Learning 
+
+Longhua Li 1 2 Lei Qi 1 2 Qi Tian 3 Xin Geng 1 2 
+
+## Abstract 
+
+While orthogonal subspace methods try to miti-gate task interference in Continual Learning (CL), they often suffer from energy diffusion across the basis, hindering knowledge compaction and ex-hausting capacity for future tasks. We observe that output feature drift induced by parameter updates is inherently low-rank, and theoretically prove that preserving parameters along the prin-cipal directions of this drift minimizes the output reconstruction error. Motivated by this, we pro-pose Energy-Concentrated and Energy-Ordered 
+
+Lo w-Rank Adaptation (E 2-LoRA). By explicitly ordering and concentrating knowledge into lead-ing ranks, E 2-LoRA frees capacity for subsequent tasks. Furthermore, we design a dynamic rank al-location strategy to balance stability and plasticity by jointly optimizing energy retention and model plasticity. Extensive experiments across multiple benchmarks demonstrate that E 2-LoRA achieves state-of-the-art performance. 
+
+## 1. Introduction 
+
+Continual Learning (CL) aims to build models that learn new tasks sequentially without forgetting previous knowl-edge, a capability crucial for real-world AI systems that evolve over time (Rebuffi et al., 2017; Zhou et al., 2023). While pre-trained models (PTMs) have revolutionized CL by providing robust foundational representations (Dosovitskiy, 2020; Zhou et al., 2025a), parameter drift remains a fun-damental challenge: sequential fine-tuning causes feature representations to degrade, leading to catastrophic forgetting (French, 1999; Kirkpatrick et al., 2017). Current parameter-efficient fine-tuning (PEFT) methods (Hu 
+
+> 1
+
+School of Computer Science and Engineering, Southeast University, Nanjing, China 2Key Laboratory of New Generation Artificial Intelligence Technology and Its Interdisciplinary Ap-plications (Southeast University), Ministry of Education, China 
+
+> 3
+
+Huawei Technologies, Shenzhen, China. Correspondence to: Lei Qi <qilei@seu.edu.cn >, Xin Geng <xgeng@seu.edu.cn >.
+
+Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s). (a) Param -Param Orthogonalization                          
+
+> BLoRA for
+> past tasks
+> BLoRA for the
+> current task
+> Energy is highly dispersed. e.g., O -LoRA
+> (c) 𝚫 Output -Param Orthogonalization
+> Energy is concentrated . e.g., E 2-LoRA ( Ours )
+> BB
+> 𝚫 Output Feature
+> SVD
+> Orthogo -
+> nalization
+> 𝐕 !
+> 𝐔
+> BB
+> Orthogonal
+> Regularization
+> (b) Input -Param Orthogonalization
+> Energy is relatively dispersed. e.g., InfLoRA
+> BB
+> Input Feature
+> SVD
+> Orthogo -
+> nalization
+> 𝐕 !
+> 𝐔
+> (d) Rank Retention vs. Energy Retention
+> Ranks
+> Σ
+> Σ
+
+Figure 1. Comparison of orthogonal constraints applied in: (a) parameter space; (b) input space; (c) energy-concentrated output drift space (ours). (d) E 2-LoRA maintains high energy retention after rank truncation, enabling stable knowledge preservation (for past tasks) and efficient subspace reuse (for new tasks). 
+
+et al., 2022; Wang et al., 2022a;b) mitigate this issue by freezing PTM weights and learning lightweight adapters. Orthogonalization-based methods have been proposed to mitigate catastrophic forgetting, and they mainly operate in either the parameter space or the input feature space (Saha et al., 2021; Liang & Li, 2023; Wang et al., 2023; Liang & Li, 2024). However, as illustrated in Figure 1, or-thogonalization in both spaces results in energy-dispersed representations, which severely restrict future model plastic-ity. In contrast, we observe that task-induced output feature drift resides in a far more concentrated and low-dimensional subspace. We further provide theoretical evidence that pre-serving parameters along the principal directions of this drift minimizes the output reconstruction error. By orthogonaliz-ing LoRA updates within this output-induced spectral space, we can effectively preserve knowledge of past tasks while simultaneously freeing up capacity for learning new ones. Based on these analysis, we propose Energy-Concentrated 1
+
+> arXiv:2605.27482v1 [cs.LG] 26 May 2026 Energy-Structured Low-Rank Adaptation for Continual Learning
+
+and Energy-Ordered Lo w-Rank Adaptation (E 2-LoRA). For each new task, we allocate a dedicated LoRA module and apply a post-hoc transformation to the learned LoRA such that task-specific knowledge is ordered by rank ( Energy-Ordered ) and concentrated in only a few leading ranks (Energy-Concentrated ). This design allows the majority of tail ranks to be reinitialized and reused for learning new tasks, thereby preserving the stability of previous tasks while providing sufficient capacity for new ones. Specifically, after training a LoRA module for a given task, we perform PCA on the output feature shifts induced by the LoRA to obtain an energy-concentrated and energy-ordered basis. By aligning LoRA parameters with this basis, we con-centrate task-specific knowledge into leading ranks. When a new task arrives, the parameters corresponding to the low-energy bases of previous tasks are released and repurposed to accommodate learning for the new task. Moreover, by jointly considering the energy retention required for old tasks and the plasticity needed for the new task, we design an adaptive rank allocation strategy that achieves a favorable stability–plasticity trade-off. Our main contributions are summarized as follows: • We propose E 2-LoRA. Our theoretical analysis shows that E 2-LoRA is optimal for preserving knowledge of previous tasks under rank decay, which also facilitates freeing capacity for learning new tasks. Extensive experimental results further validate this property. • By jointly considering the energy retention of previ-ous tasks and the plasticity required for new tasks, we design an effective strategy for allocating the LoRA rank of each task, achieving a well-balanced trade-off between model stability and plasticity. • Extensive experiments on both class-incremental learn-ing and domain-incremental learning benchmarks demonstrate that our proposed E 2-LoRA consistently outperforms existing methods. 
+
+## 2. Related Work 
+
+2.1. Continual Learning (CL) 
+
+Continual Learning (CL) aims to enable models to acquire new classes over time without forgetting previously learned ones (Li & Hoiem, 2017; Rebuffi et al., 2017). A central challenge in CL is catastrophic forgetting, where adapting to new tasks degrades performance on earlier ones (French, 1999; French & Ferrara, 2020), reflecting the fundamental stability–plasticity dilemma. Existing CL approaches can be broadly grouped into several categories. Rehearsal-based methods (Aljundi et al., 2019; Chaudhry et al., 2019; Liu et al., 2020) mitigate forgetting by replaying exemplars from past tasks, but require storing historical data. Knowledge dis-tillation–based methods (Dhar et al., 2019; Douillard et al., 2020; Simon et al., 2021; Tao et al., 2020) transfer knowl-edge from previous models to the current one, while param-eter regularization–based methods (Kirkpatrick et al., 2017; Aljundi et al., 2018) constrain important parameters during updates. Model rectification–based methods (Belouadah & Popescu, 2019; Pham et al., 2022; Shi et al., 2022) adjust inductive biases to reduce incremental prediction bias. More recently, expandable networks (Yan et al., 2021; Wang et al., 2022b; Douillard et al., 2022; Huang et al., 2023; Chen & Chang, 2023; Hu et al., 2023) have achieved strong perfor-mance by allocating task-specific backbones and classifiers. 
+
+2.2. CL with Pre-Trained Models 
+
+Large-scale pre-training (Han et al., 2021) has substan-tially advanced continual learning (CL) by endowing models with strong generalization capabilities. Pre-trained models (PTMs), particularly Vision Transformers (ViTs) (Dosovit-skiy, 2020), produce transferable representations that help mitigate catastrophic forgetting. Most PTM-based CL meth-ods freeze backbone weights and rely on parameter-efficient fine-tuning (PEFT) techniques for incremental adaptation (Smith et al., 2023; Yan et al., 2021). Among PEFT ap-proaches, prompt-based methods have received considerable attention. L2P (Wang et al., 2022b), DualPrompt (Wang et al., 2022a), and CODA-Prompt (Smith et al., 2023) adapt PTMs via learnable prompts to encode task-invariant and task-specific knowledge. While effective, these methods re-main susceptible to cross-task conflicts and prompt retrieval errors. Adapter-based methods offer an alternative. EASE (Zhou et al., 2024) and MOS (Sun et al., 2025) construct task-specific adapter subspaces to alleviate interference, while TUNA (Wang et al., 2025) integrates task-specific and shared adapters via entropy-based selection and fusion. More advanced PEFT techniques further improve task sep-aration. O-LoRA (Wang et al., 2023) reduces interference with previous tasks by incorporating an orthogonalization constraint loss between the parameters of prior and subse-quent tasks. GPM (Saha et al., 2021) and DualGPM (Liang & Li, 2023) leverage input representations to estimate domi-nant gradient directions, using them to constrain the gradient updates of subsequent tasks and thereby mitigate forget-ting. InfLoRA (Liang & Li, 2024) enforces orthogonality between LoRA modules, and BiLoRA (Zhu et al., 2025) ex-pands the parameter space to approximate orthogonal task subspaces. Recent studies have shown that proxy-based decomposition can transform a parameter matrix into two low-rank matrices while maximizing knowledge retention (Li et al., 2026a;b). Our analysis shows that orthogonal-izing subsequent-task parameters against previous-task pa-rameters or input features is suboptimal, as parameter en-ergy is dispersed and input features are high-dimensional 2Energy-Structured Low-Rank Adaptation for Continual Learning 
+
+in pre-trained models. However, the task-induced drift in the output features relative to the pre-trained model is low-dimensional and can be effectively captured via SVD de-composition. This allows preserving core knowledge by retaining only dominant directions, freeing parameter space for future tasks while balancing stability and plasticity. 
+
+## 3. Methodology 
+
+3.1. Preliminary and Motivation 
+
+Let W0 ∈ Rdout ×din denote the pre-trained weight matrix of a linear transformation (e.g., a projection layer in attention or an MLP). In continual learning, tasks arrive sequentially. Before training on the t-th task dataset Dt, the model pa-rameters are denoted as Wt−1. After training on task t, the parameters are updated as: 
+
+Wt = Wt−1 + ∆ Wt, (1) where ∆Wt represents the task-specific parameter update. Recent PEFT methods restrict the weight update ∆Wt to a low rank r, with r ≪ min ( dout , d in ), and fine-tune the model using a LoRA module of rank r. The resulting pa-rameter update can be written as ∆Wt = BtAt. A key challenge in continual learning is to reduce interference be-tween tasks while preserving sufficient plasticity to learn new tasks. To address this, orthogonalization techniques have been widely adopted, primarily including orthogonal-ization between the parameters of new and previous tasks (Wang et al., 2023), as well as between the input represen-tations of previous tasks and the parameters of new tasks (Saha et al., 2021; Liang & Li, 2023; 2024). 
+
+Param-Param Orthogonalization. A straightforward ap-proach (Wang et al., 2023) imposes orthogonality con-straints directly on the LoRA parameters Bt of the current task with respect to those of previous tasks, B1, · · · , Bt−1:
+
+Lorth (Bi, Bt) = B⊤ 
+
+> i
+
+Bt 
+
+> 2
+> F
+
+. (2) The LoRA parameters of previous tasks are frozen to prevent forgetting. However, since knowledge from earlier tasks is irregularly distributed across the column vectors formed by the B matrices, and the subspace occupied by old tasks grows linearly as more tasks are added, this strategy severely restricts the learning capacity of new tasks. 
+
+Input-Param Orthogonalization. Another line of work approximates the dominant gradient directions using in-put representations (Liang & Li, 2024). After each task is learned, these methods sample input representations and per-form SVD to extract their principal directions, then enforce the LoRA parameters At of the new task to be orthogonal to the leading singular vectors of U of previous tasks’ input representations, thereby effectively reducing interference with earlier tasks. However, in practice, due to the rich representational capacity of pre-trained models, input rep-resentations are often highly diverse and energy-dispersed. As a result, constraining parameter updates based on input principal directions can overly restrict the effective update directions, leading to reduced plasticity when learning new tasks. We provide an intuitive analysis in Appendix C.2. 
+
+3.2. Output Feature Drift–Induced Orthogonalization 
+
+In contrast to existing methods, we analyze parameter up-dates from the perspective of output feature drift. We find that, compared to parameter matrices or input represen-tations, the output drift induced by task-specific LoRA fine-tuning exhibits significantly more concentrated energy. After applying SVD, most of the energy is captured by only a few leading principal directions. By constraining old-task knowledge to these compact directions, this prop-erty both preserves existing knowledge and frees up ample, interference-free capacity for learning subsequent tasks. 
+
+Output Feature Drift. For task t, the parameter update 
+
+∆Wt = BtAt induces a change in output features: 
+
+δy t (x) = ∆ Wtx. (3) Given a batch of input features Xt = [ x1, · · · , xn], the corresponding output drift matrix is 
+
+∆Yt = ∆ WtXt ∈ Rdout ×n. (4) Empirically and theoretically, we observe that although in-put representations Xt may be high-rank, the induced output drift ∆Yt often lies in a much lower-dimensional subspace, reflecting task-specific semantic changes. 
+
+PCA on Output Drift. We perform PCA (or equivalently SVD) on the output drift matrix: 
+
+∆Yt = UtΣtV⊤ 
+
+> t
+
+, (5) where the columns of Ut form an orthonormal basis of output directions, ordered by descending singular values (energy). Crucially, we compute this decomposition using a proxy set sampled from the task feature distribution, and apply the resulting singular vectors to perform the energy-based transformation of the parameters BtAt as described in the following paragraph. This process is conducted af-ter completing training on the current task t and does not require storing any data. 
+
+Energy-Structured Transformation. We then transform the LoRA parameters accordingly, such that Bt aligns with the PCA basis Ut:
+
+Bt ← Ut[: , : rt], At ← (Ut[: , : rt]) ⊤BtAt, (6) 3Energy-Structured Low-Rank Adaptation for Continual Learning Op#mize in orthogonal subspaces , transform LoRA into energy -structured forms , release capacity upon new task arrival .   
+
+> 𝐁 !"#
+> Zero Init
+> Freed -up
+> Subspace
+> 𝐁 #
+> 𝐁 !
+> Concat
+> 𝒙
+> 𝒚
+> Pretrained
+> Weights
+> 𝐖 $∈ℝ%!"# ×%$%
+
+❄ : Frozen 🔥 : Learnable    
+
+> 𝐁 #𝐁 !-#𝐁 !
+> Orthogonal Bases
+
+❄ ❄ ❄
+
+🔥 ❄❄         
+
+> Proxy
+> Input
+> 𝑛 ×𝑑 !"
+> Output
+> Drif t
+> 𝑛 ×𝑑 #$%
+> 𝐁 !𝐔 !!
+> 𝑟 !: rank of 𝐁 !𝐀 !
+> 𝐔 "!:top 𝑟 !columns of 𝐔
+
+𝐔 𝐕 !ΣSVD  
+
+> Energy -Structured Transformation
+> 𝐁 !
+
+❄
+
+Figure 2. Overview of the proposed E 2-LoRA. Each new task is learned within a frozen orthogonal subspace to prevent interference with previous tasks. After task training, an energy-structured transformation reorganizes the LoRA parameters by rank-wise importance, enabling low-importance ranks to be discarded and reused for subsequent tasks. 
+
+where rt denotes the rank of the LoRA module BtAt. As a result, each rank component of LoRA becomes energy-ordered, and task-specific knowledge is concentrated in the leading ranks. Consequently, this construction enjoys a rank truncation optimality property, as formalized in Equa-tion 3.1, and admits the expected output feature reconstruc-tion error bound given in Equation 3.2. 
+
+Proposition 3.1 (Optimality Property) . Among all parame-ter updates with rank at most r, Bt[: , : r]At[: r, :] minimizes the expected output reconstruction error: 
+
+Ex∼D t Bt[: , : r]At[: r, :] x − BtAtx 2. (7) We provide a detailed proof in Appendix A.1. 
+
+Proposition 3.2 (Truncation Error) . When truncating weight update matrix ∆Wt = BtAt to retain only the leading r ranks, i.e., ∆W(r) 
+
+> t
+
+= Bt[: , : r]At[: r, :] , the expected truncated output feature error is given by: 
+
+Ex∼D t
+
+h
+
+∥∆Wx − ∆W(r) 
+
+> t
+
+x∥22
+
+i
+
+=
+
+> dout
+
+X
+
+> i=r+1
+
+σ2 
+
+> i
+
+. (8) We provide a detailed proof in Appendix A.2. This property implies that our energy-structured transfor-mation maximally preserves task-specific knowledge while reducing rank, making it particularly suitable for continual learning. 
+
+Output Feature Drift–Induced Orthogonalization. The above transformation ensures that the knowledge of previ-ous tasks is energy-ordered and concentrated in the leading ranks, allowing the remaining directions to be discarded with negligible loss and reused for learning new tasks. Sup-pose that when task t is about to be learned, the numbers of retained ranks for the previous tasks are r(t)1 , · · · , r (t) 
+
+> t−1
+
+(the rank allocation strategy is introduced in a later section). We first prune the LoRA parameters of previous tasks as: 
+
+Bk ← Bk[: , : r(t) 
+
+> k
+
+], Ak ← Ak[: r(t) 
+
+> k
+
+, :] , (9) We then initialize the LoRA module for the new task as: 
+
+Bt ← B1[: , r (t)1 :] , · · · , B2[: , r (t)2 :] , At ← 0. (10) During the learning of task t, Bt is kept frozen, which natu-rally enforces orthogonality between the output directions of the new task and those of previous tasks, thereby preventing interference. After task t is learned, the same output-drift-based transformation described in the previous sections is applied to BtAt, ensuring that the newly acquired knowl-edge is again energy-ordered and energy-concentrated. This iterative process progressively frees low-energy directions, providing sustainable capacity for subsequent tasks. 
+
+3.3. Dynamic Rank Allocation for Continual Learning 
+
+Building upon the proposed output feature drift–induced orthogonalization, we design a dynamic rank allocation strategy to manage the stability-plasticity trade-off within a bounded parameter space. We view the output dimension 
+
+dout as a finite capacity pool shared across all learned tasks. When a new task t arrives, we first release capacity from previously learned tasks by pruning their low-energy LoRA ranks. Specifically, for each previous task k < t, let 
+
+{σ2
+
+> k,i
+
+}rk 
+
+> i=1
+
+denote the squared singular values (energy) of its output drift, ordered in descending order. We retain only 4Energy-Structured Low-Rank Adaptation for Continual Learning 
+
+the smallest number of ranks r(t) 
+
+> k
+
+such that the cumulative energy retention ratio satisfies: 
+
+Pr(t) 
+
+> k
+> i=1
+
+σ2
+
+> k,i
+
+Prk 
+
+> i=1
+
+σ2
+
+> k,i
+
+≥ ρ, (11) where ρ ∈ (0 , 1) is a predefined energy retention threshold. The remaining low-energy ranks are discarded and their corresponding orthogonal subspaces are released for reuse by the new task. To ensure sufficient plasticity for learning task t, we enforce a minimum rank budget for the new task: 
+
+rmin  
+
+> t
+
+=
+
+ dout 
+
+t
+
+
+
+. (12) If the capacity freed by energy-based pruning is insuffi-cient to meet this minimum requirement, we further prune the least important ranks from all existing tasks in a uni-form manner—always removing the lowest-energy direc-tions—until the available capacity reaches rmin  
+
+> t
+
+. Since ranks are ordered by energy and contribute minimally to the task output, this additional pruning incurs negligible degradation of previously learned tasks. Overall, this dynamic rank allocation strategy enables adap-tive capacity management in continual learning: important knowledge from previous tasks is preserved optimally, while low-energy directions are progressively reclaimed to pro-vide sufficient learning space for new tasks. 
+
+3.4. Whole Process of E 2-LoRA 
+
+The training pipeline is illustrated in Algorithm 1. When the t-th task arrives, E 2-LoRA first allocates a task-specific learnable LoRA module following the dynamic rank allo-cation strategy described in Section 3.3. The backbone network and all LoRA components learned from previous tasks are kept frozen, while only the LoRA parameters as-sociated with the current task are optimized. To further mitigate catastrophic forgetting, we additionally incorpo-rate self-distillation and classifier alignment, two techniques commonly adopted in continual learning (Li & Hoiem, 2017; Zhang et al., 2023). 
+
+Self-Distillation. For tasks t > 1, we employ a self-distillation strategy to preserve knowledge of previously learned classes. Specifically, before updating the model on the current task, we treat the model with frozen backbone and historical LoRA parameters as a teacher, and obtain its predictions without gradient propagation. Let ztea denote the logits produced by the teacher model, and zstu denote the logits produced by the student model (i.e., the same network with the current task’s LoRA activated). For the old classes, indexed by Cold , we apply temperature-scaled 
+
+Algorithm 1 E2-LoRA for Continual Learning 
+
+Require: Pre-trained weights W0, task datasets {D t}Tt=1 . 
+
+> 1:
+
+for task t = 1 to T do  
+
+> 2:
+
+// Phase 1: Dynamic Rank Allocation  
+
+> 3:
+
+if t > 1 then  
+
+> 4:
+
+for previous task k = 1 to t − 1 do  
+
+> 5:
+
+Free-up orthogonal subspace (Eq. 9).  
+
+> 6:
+
+end for  
+
+> 7:
+
+Initialize Bt using the freed-up basis (Eq. 10).  
+
+> 8:
+
+else  
+
+> 9:
+
+Randomly initialize Bt with full rank.  
+
+> 10:
+
+end if  
+
+> 11:
+
+Initialize At to zero with the same rank as Bt. 
+
+> 12:
+
+// Phase 2: Task Training  
+
+> 13:
+
+Optimize At on Dt minimizing L (Eq. 15).  
+
+> 14:
+
+// Phase 3: Energy-Structured Transformation  
+
+> 15:
+
+Sample proxy input feature batch Xt. 
+
+> 16:
+
+Compute output drift: ∆Yt = BtAtXt (Eq. 4).  
+
+> 17:
+
+Perform SVD on drift: ∆Yt = UtΣtV⊤ 
+
+> t
+
+(Eq. 5).  
+
+> 18:
+
+Transform Bt, At using Ut (Eq. 6)  
+
+> 19:
+
+// Phase 4: Classifier Alignment  
+
+> 20:
+
+Fine-tune classifier heads using synthetic features generated from class statistics.  
+
+> 21:
+
+end for 
+
+distillation. The distillation loss is defined as: 
+
+Ldistill = T 2 · KL 
+
+
+
+Softmax 
+
+ ztea 
+
+> Cold
+
+T
+
+
+
+Softmax 
+
+ zstu 
+
+> Cold
+
+T
+
+ 
+
+,
+
+(13) where T is the temperature parameter (set to T = 2 in our experiments), and KL (·∥· ) denotes the Kullback–Leibler divergence. For the new classes Cnew , the standard cross-entropy loss is applied: 
+
+Lce = CE (zstu  
+
+> Cnew
+
+, yCnew ), (14) where yCnew denotes the ground-truth labels of the current task. The overall training objective is: 
+
+L = Lce + λLdistill , (15) where λ controls the strength of distillation. This self-distillation mechanism encourages the student model to maintain consistent predictions on previously learned classes, thereby alleviating forgetting. 
+
+Classifier Alignment. After completing training on the 
+
+t-th task, we further perform classifier alignment to reduce bias toward recently learned classes. Let Ft = {ri,t }nt
+
+> i=1
+
+denote the set of features extracted from the training sam-ples of task t, where ri,t = fΘ (xi,t ) and fΘ (·) represents the backbone network. For each class c encountered dur-ing continual learning, we estimate the class-wise feature 5Energy-Structured Low-Rank Adaptation for Continual Learning 
+
+Table 1. Average and last performance on class-incremental learning benchmarks with ViT-B/16-IN21K as the pre-trained backbone. 
+
+Method ImageNet-R CIFAR-100 CUB-200 Cars-196 Last-Acc Inc-Acc Last-Acc Inc-Acc Last-Acc Inc-Acc Last-Acc Inc-Acc 
+
+Joint Training 82.76 ±0.54 - 93.13 ±0.21 - 88.26 ±0.73 - 80.31 ±0.13 -L2P (Wang et al., 2022b) 66.49 ±0.40 72.83 ±0.56 82.76 ±1.17 88.48 ±0.83 62.21 ±1.92 73.83 ±1.67 38.18 ±2.33 51.79 ±4.19 
+
+DualPrompt (Wang et al., 2022a) 68.50 ±0.52 72.59 ±0.24 85.56 ±0.33 90.33 ±0.33 66.00 ±0.57 77.92 ±0.50 40.14 ±2.36 56.74 ±1.78 
+
+SLCA (Zhang et al., 2023) 77.00 ±0.33 81.17 ±0.64 91.53 ±0.28 94.09 ±0.87 84.71 ±0.40 90.94 ±0.68 67.73 ±0.85 76.93 ±1.21 
+
+RanPAC (McDonnell et al., 2023) 75.28 ±0.14 80.66 ±0.58 91.09 ±0.25 94.03 ±0.58 87.88 ±0.53 92.57 ±0.55 61.43 ±0.84 72.36 ±1.18 
+
+SSIAT (Tan et al., 2024) 79.38 ±0.59 83.63 ±0.43 91.35 ±0.26 94.35 ±0.60 88.75 ±0.38 93.00 ±0.90 71.02 ±0.69 76.93 ±0.62 
+
+EASE (Zhou et al., 2024) 77.75 ±0.18 83.87 ±0.78 86.54 ±0.29 91.68 ±0.18 79.90 ±0.29 86.65 ±0.63 35.46 ±1.50 48.96 ±0.96 
+
+BiLoRA (Zhu et al., 2025) 77.95 ±0.14 81.52 ±0.26 87.46 ±0.76 92.50 ±0.62 - - - -MOS (Sun et al., 2025) 78.10 ±0.12 83.61 ±0.40 90.53 ±0.35 94.09 ±0.91 89.91 ±0.25 92.87 ±0.56 67.76 ±1.28 74.38 ±1.13 
+
+TUNA (Wang et al., 2025) 79.44 ±0.38 84.80 ±0.37 91.79 ±0.15 94.88 ±0.06 88.40 ±0.42 92.01 ±0.68 69.46 ±0.35 76.95 ±0.39 
+
+E2-LoRA (Ours) 82.77 ±0.10 87.18 ±0.12 92.13 ±0.19 95.01 ±0.02 89.77 ±0.16 92.68 ±0.48 75.82 ±0.28 80.90 ±0.73 1 2 3 4 5 6 7 8 9 10 
+
+Task Index 
+
+> 80
+> 85
+> 90
+> 95
+> Accuracy (%)
+
+ImagNet-R                
+
+> SLCA EASE SSIAT MOS TUNA E2-LoRA (Ours) Joint Training
+> 12345678910
+
+Task Index 
+
+> 90
+> 95
+
+CIFAR-100          
+
+> 12345678910
+
+Task Index 
+
+> 80
+> 85
+> 90
+> 95
+> 100
+
+CUB-200          
+
+> 12345678910
+
+Task Index 
+
+> 35
+> 40
+> 45
+> 50
+> 55
+> 60
+> 65
+> 70
+> 75
+> 80
+> 85
+> 90
+
+Cars-196 
+
+Figure 3. Evolution of accuracy across sequential tasks with ViT-B/16-IN21K as the pre-trained backbone. 
+
+distribution by computing the empirical mean μc and co-variance Σc. We then sample S synthetic features from the Gaussian distribution r ∼ N (μc, Σc). Finally, we fine-tune the classifier using these generated samples and the stan-dard cross-entropy loss. This alignment step rebalances the classifier across old and new classes, effectively mitigating classifier bias induced by task-wise incremental training. 
+
+## 4. Experiments 
+
+4.1. Experimental Setup Datasets. We conduct comprehensive experiments on four widely-used class-incremental learning benchmarks: ImageNet-R (Hendrycks et al., 2021), CIFAR-100 (Krizhevsky et al., 2009), CUB-200 (Wah et al., 2011), and Cars-196 (Krause et al., 2013). Following (Zhang et al., 2023), we split each dataset into 10 sequential tasks. We also conduct experiments on two domain-incremental learn-ing benchmarks, Office-Home (Venkateswara et al., 2017) and DomainNet (Peng et al., 2019). 
+
+Evaluation Metrics. We adopt two standard evaluation protocols to measure both stability and plasticity. The Last-Accuracy (Last-Acc) metric represents the final average accuracy on all seen tasks after learning the last task, mea-suring overall performance. The Incremental Accuracy (Inc-Acc) metric indicates the average accuracy across all incre-mental steps, calculated as 1
+
+> T
+
+PTt=1 At where T is the total number of tasks and At is the accuracy after learning task t.
+
+Implementation Details. We consider two typical pre-trained weights, namely ViT-B/16-IN21K and ViT-B/16-IN1K. Both are initially pre-trained on ImageNet-21K (Ridnik et al., 2021), with the latter further fine-tuned on ImageNet-1K. The learning rate for the classification layer is set to 0.01, while that for LoRA is configured at 0.0005. We employ the SGD optimizer with a batch size of 64, and the weight for the distillation loss is set to λ = 0 .2. The energy retention ratio threshold is set to ρ = 0 .9999 . We conduct three independent runs for each experiment and report the mean and standard deviation of the results. 6Energy-Structured Low-Rank Adaptation for Continual Learning 
+
+Table 2. Average and last performance comparison on longer-term benchmarks with ViT-B/16-IN21K as the pre-trained backbone. 
+
+Method ImageNet-R 20 tasks ImageNet-R 50 tasks CIFAR-100 20 tasks CIFAR-100 50 tasks Last-Acc Inc-Acc Last-Acc Inc-Acc Last-Acc Inc-Acc Last-Acc Inc-Acc 
+
+Joint Training 82.76 ±0.54 - 82.76 ±0.54 - 93.13 ±0.21 - 93.13 ±0.21 -L2P (Wang et al., 2022b) 62.15 ±1.17 68.35 ±2.12 55.89 ±1.59 62.98 ±2.89 80.72 ±1.12 87.18 ±0.83 73.91 ±1.67 81.90 ±0.98 
+
+DualPrompt (Wang et al., 2022a) 66.89 ±0.40 73.07 ±1.21 61.50 ±0.86 68.63 ±1.31 83.82 ±0.51 90.22 ±0.68 76.66 ±0.74 85.18 ±0.92 
+
+CODA-Prompt (Smith et al., 2023) 67.53 ±0.24 73.64 ±0.95 48.89 ±0.90 55.59 ±2.67 81.19 ±0.31 87.27 ±0.35 55.45 ±0.48 68.39 ±0.53 
+
+InfLoRA (Liang & Li, 2024) 71.46 ±0.95 78.32 ±1.22 60.49 ±1.43 69.95 ±2.18 82.19 ±1.33 88.05 ±0.64 56.65 ±5.55 70.29 ±1.86 
+
+EASE (Zhou et al., 2024) 73.78 ±0.44 80.29 ±0.72 68.54 ±0.71 75.77 ±0.58 82.21 ±0.72 90.76 ±0.54 82.10 ±0.66 87.65 ±0.46 
+
+LORA −DRS (Liu & Chang, 2025) 74.80 ±0.73 80.69 ±0.75 72.12 ±0.87 77.94 ±0.74 88.69 ±0.15 92.25 ±0.24 87.29 ±0.31 91.29 ±0.29 
+
+MOS (Sun et al., 2025) 75.58 ±0.47 81.76 ±0.26 77.29 ±0.77 83.06 ±1.41 88.85 ±0.43 92.86 ±0.37 85.51 ±0.04 91.00 ±0.26 
+
+TUNA (Wang et al., 2025) 77.32 ±0.31 83.05 ±0.64 75.35 ±0.67 80.95 ±1.29 91.31 ±0.12 94.68 ±0.16 89.41 ±0.23 93.00 ±0.42 
+
+E2-LoRA (Ours) 80.77 ±0.13 86.37 ±0.39 78.58 ±0.22 83.96 ±0.76 91.42 ±0.10 94.55 ±0.07 90.70 ±0.29 93.86 ±0.09 
+
+Table 3. Average and last performance on domain-incremental learning benchmarks with ViT-B/16-IN1K as the backbone. 
+
+DS Method Last-Acc Inc-Acc Office-Home L2P (Wang et al., 2022b) 80.03 ±1.29 79.72 ±4.19 
+
+DualPrompt (Wang et al., 2022a) 80.85 ±0.14 80.20 ±3.81 
+
+CODA-Prompt (Smith et al., 2023) 85.07 ±0.34 84.70 ±2.94 
+
+MEMO (Zhou et al., 2023) 63.09 ±1.80 71.18 ±2.76 
+
+RanPAC (McDonnell et al., 2023) 82.28 ±0.07 82.30 ±3.34 
+
+EASE (Zhou et al., 2024) 76.33 ±2.16 81.16 ±3.52 
+
+SimpleCIL (Zhou et al., 2025a) 75.72 ±0.00 75.69 ±5.03 
+
+DCE (Li et al., 2025b) 84.40 ±0.20 84.60 ±3.00 
+
+DUCT (Zhou et al., 2025b) 85.42 ±0.33 81.28 ±0.31 
+
+E2-LoRA (Ours) 88.25 ±0.25 84.94 ±0.21 
+
+> DomainNet
+
+L2P (Wang et al., 2022b) 48.72 ±2.83 50.45 ±4.10 
+
+DualPrompt (Wang et al., 2022a) 50.46 ±3.17 52.28 ±3.35 
+
+CODA-Prompt (Smith et al., 2023) 59.99 ±0.88 59.85 ±4.49 
+
+MEMO (Zhou et al., 2023) 58.41 ±3.20 61.92 ±5.39 
+
+RanPAC (McDonnell et al., 2023) 54.80 ±0.36 55.20 ±3.93 
+
+EASE (Zhou et al., 2024) 43.72 ±1.70 50.50 ±2.27 
+
+SimpleCIL (Zhou et al., 2025a) 44.08 ±0.00 42.95 ±4.84 
+
+DCE (Li et al., 2025b) 63.50 ±0.50 64.30 ±6.00 
+
+DUCT (Zhou et al., 2025b) 67.01 ±1.35 67.16 ±3.75 
+
+E2-LoRA (Ours) 69.63 ±0.05 68.69 ±0.04 
+
+4.2. Main Results Class-Incremental Learning Results. Table 1 presents a comprehensive performance comparison on four widely-used benchmarks under a 10-task incremental setting. Fig-ure 3 illustrates the evolution of accuracy across sequential tasks. Across all datasets, E 2-LoRA consistently outper-forms existing state-of-the-art (SOTA) methods. Most no-tably, our method achieves results that are remarkably close to—and in some instances, even surpass—the Joint Train-ing upper bound. For example, on ImageNet-R, E 2-LoRA attains a Last-Acc of 82.77%, effectively matching the Joint Training performance of 82.76%. On Cars-196, we achieve 75.82% Last-Acc, drastically reducing the gap to the up-per bound compared to prior arts like TUNA (69.46%). This phenomenon suggests that our energy-concentrated subspace representation not only prevents catastrophic for-getting but also facilitates a ”denoising” effect that focuses the model on the most transferable spectral features, oc-casionally yielding better generalization than the standard full-rank joint optimization. 
+
+Domain-Incremental Learning Results. Table 3 reports the performance of domain-incremental learning on two widely used benchmarks, Office-Home and DomainNet. E2-LoRA consistently outperforms existing state-of-the-art methods by a clear margin on both benchmarks. These results demonstrate that our approach effectively isolates domain-specific information in orthogonal, energy-ordered subspaces, thereby preventing interference across domains and enabling robust continual adaptation. 
+
+Robustness in Long-Term Continual Learning. To fur-ther evaluate the scalability of our approach, Table 2 sum-marizes performance under more demanding, longer-term scenarios involving 20 and 50 sequential tasks. As the number of tasks increases, most baseline methods suffer from a severe performance collapse due to the accumulation of task interference and capacity saturation. In contrast, E2-LoRA maintains highly stable and superior accuracy even in the 50-task setting. Specifically, on ImageNet-R 50-tasks, E 2-LoRA preserves a Last-Acc of 78.58%, out-performing the competitive TUNA baseline by over 3%. Similarly, on CIFAR-100 50-tasks, we maintain a robust 90.70% Last-Acc. These results demonstrate that our dy-namic, energy-ordered rank allocation effectively mitigates the stability-plasticity dilemma; by prioritizing high-energy components and gracefully pruning less significant ones, E2-LoRA sustains a near-constant learning capacity over extended horizons. 7Energy-Structured Low-Rank Adaptation for Continual Learning 
+
+Table 4. Ablation study on the contribution of individual components in the proposed method. 
+
+Method KD CA ImageNet-R CIFAR-100 CUB-200 Cars-196 Last-Acc Inc-Acc Last-Acc Inc-Acc Last-Acc Inc-Acc Last-Acc Inc-Acc 
+
+Joint Training - - 82.76 ±0.54 - 93.13 ±0.21 - 88.26 ±0.73 - 80.31 ±0.13 -O-LoRA 
+
+✗ ✗ 75.38 ±0.39 80.53 ±0.24 88.34 ±0.16 92.45 ±0.16 82.49 ±0.58 89.31 ±0.37 54.26 ±0.88 62.94 ±3.54 
+
+✓ ✗ 75.37 ±0.51 80.42 ±0.26 88.16 ±0.50 92.21 ±0.16 82.40 ±0.26 89.27 ±0.06 52.47 ±1.00 61.62 ±1.04 
+
+✗ ✓ 77.88 ±0.41 82.39 ±0.27 90.78 ±0.28 93.62 ±0.27 88.89 ±0.75 92.52 ±0.35 65.67 ±0.42 72.73 ±0.49 
+
+✓ ✓ 77.92 ±0.61 82.25 ±0.40 90.72 ±0.12 93.61 ±0.20 89.18 ±0.38 92.91 ±0.68 67.61 ±0.85 73.51 ±0.40 
+
+InfLoRA 
+
+✗ ✗ 77.59 ±0.52 83.45 ±0.31 85.20 ±0.31 90.57 ±0.25 79.89 ±0.45 88.26 ±0.12 57.66 ±0.65 70.03 ±0.45 
+
+✓ ✗ 77.44 ±0.37 84.10 ±0.22 85.57 ±0.09 91.15 ±0.18 80.99 ±0.60 88.90 ±0.41 63.32 ±0.92 72.63 ±0.80 
+
+✗ ✓ 78.00 ±0.49 84.43 ±0.28 86.96 ±0.22 92.01 ±0.29 81.35 ±0.33 88.93 ±0.35 58.95 ±0.54 72.08 ±0.20 
+
+✓ ✓ 77.87 ±0.61 85.09 ±0.35 87.33 ±0.45 92.60 ±0.21 82.18 ±0.71 89.91 ±0.58 69.73 ±0.45 78.60 ±0.17 
+
+✗ ✗ 80.28 ±0.15 85.65 ±0.39 89.42 ±0.31 93.47 ±0.21 81.80 ±0.33 89.14 ±0.49 66.04 ±0.26 75.18 ±0.27 
+
+✓ ✗ 80.28 ±0.24 85.47 ±0.29 89.03 ±0.46 93.03 ±0.36 83.04 ±0.19 89.67 ±0.26 63.34 ±0.44 72.64 ±0.16 
+
+✗ ✓ 82.52 ±0.31 87.11 ±0.45 92.02 ±0.08 94.88 ±0.08 89.29 ±0.25 92.33 ±0.41 72.15 ±0.20 78.49 ±0.49 
+
+E2-LoRA (Ours) 
+
+✓ ✓ 82.77 ±0.10 87.18 ±0.12 92.13 ±0.19 95.01 ±0.02 89.77 ±0.16 92.68 ±0.48 75.82 ±0.28 80.90 ±0.73 
+
+Table 5. Effect analysis of the proposed rank allocation strategy. 
+
+Method ImageNet-R 10 tasks ImageNet-R 50 tasks Last-Acc Inc-Acc Last-Acc Inc-Acc 
+
+Full Rank 80.98 ±0.34 86.48 ±0.51 68.52 ±0.73 80.25 ±1.13 
+
+dout /5 82.01 ±0.32 86.08 ±0.72 77.90 ±0.14 82.82 ±0.96 
+
+dout /10 81.20 ±0.09 84.84 ±0.74 76.69 ±0.83 81.57 ±1.13 
+
+dout /50 77.71 ±0.10 81.19 ±0.93 73.65 ±0.10 78.52 ±1.14 
+
+Ours 82.77 ±0.10 87.18 ±0.12 78.58 ±0.22 83.96 ±0.76 
+
+4.3. Ablation and Analysis Ablation Study. We conduct comprehensive ablation and replacement experiments on each component of our method, as summarized in Table 4. Specifically, we replace our proposed E 2-LoRA with alternative backbone adaptation methods, including O-LoRA and InfLoRA, and evaluate their performance under the same continual learning set-ting. The results show that E 2-LoRA achieves significantly superior performance, demonstrating that energy ordering and concentration of LoRA ranks effectively balance the stability of previously learned knowledge and the plasticity required for learning new tasks. In addition, incorporating simple yet effective knowledge distillation (KD) and classi-fier alignment (CA) further improves performance, enabling our method to approach the upper bound achieved by joint training. 
+
+Effect of the Rank Allocation Strategy. Table 5 illus-trates the impact of allocating different ranks to new tasks on continual learning performance. The results show that fixed rank allocation strategies struggle to achieve optimal perfor-mance. In contrast, our method dynamically allocates ranks 1 2 4 8 16 32 64 
+
+> Proxy Samples per Task
+> 79
+> 80
+> 81
+> 82
+> 83
+> Last Accuracy (%)
+> Mean Accuracy
+> Individual Runs w/o PCA: 78.93%
+> Joint Training: 82.76%
+
+(a) ImageNet-R 1 2 4 8 16 32 64  
+
+> Proxy Samples per Task
+> 88
+> 90
+> 92
+> Last Accuracy (%)
+> Mean Accuracy
+> Individual Runs w/o PCA: 87.04%
+> Joint Training: 93.13%
+
+(b) CIFAR-100 
+
+Figure 4. Impact of the number of proxy samples used in E 2-LoRA. Each configuration is evaluated over three random runs. 
+
+by jointly considering the energy retention of previous tasks and the plasticity required for the new task, consistently yielding superior results across settings. 
+
+Effect of the Proxy Dataset Size. We analyze the number of samples required in the proxy dataset for Output Feature Drift–Induced Orthogonalization. Figure 4 shows the effect of different proxy dataset sizes on the final performance. The results indicate that as few as 16 samples are sufficient to obtain a stable, energy-ordered and energy-concentrated orthogonal basis. This entails a very lightweight computa-tional overhead, which can be performed immediately after task learning and does not require storing the proxy samples. 
+
+## 5. Conclusion 
+
+In this paper, we propose E 2-LoRA, a novel framework for continual learning that addresses the stability-plasticity dilemma by leveraging the spectral properties of task-specific output feature drift. Unlike prior methods that or-thogonalize in parameter or input spaces, we demonstrate that task-specific knowledge is highly concentrated within a 8Energy-Structured Low-Rank Adaptation for Continual Learning 
+
+low-dimensional subspace of the output drift. By applying an energy-structured transformation, E 2-LoRA explicitly orders knowledge by rank, enabling optimal preservation of past tasks while repurposing low-energy capacity for sub-sequent learning. Coupled with a dynamic rank allocation strategy, E 2-LoRA enables adaptive capacity management within a bounded parameter budget. Extensive evaluations across multiple benchmarks demonstrate that E 2-LoRA con-sistently achieves state-of-the-art performance, significantly mitigating catastrophic forgetting while maintaining high plasticity for future task adaptation. 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none which we feel must be specifically highlighted here. 
+
+## Acknowledgement 
+
+This research was supported by the Jiangsu Science Foun-dation (BG2024036, BK20243012), the National Science Foundation of China (62125602, U24A20324, 92464301), the New Cornerstone Science Foundation through the XPLORER PRIZE, the Fundamental Research Funds for the Central Universities (2242025K30024), and the Big Data Computing Center of Southeast University. 
+
+## References 
+
+Aljundi, R., Babiloni, F., Elhoseiny, M., Rohrbach, M., and Tuytelaars, T. Memory aware synapses: Learning what (not) to forget. In Proceedings of the European Conference on Computer Vision (ECCV) , pp. 139–154, 2018. Aljundi, R., Lin, M., Goujaud, B., and Bengio, Y. Gra-dient based sample selection for online continual learn-ing. Advances in Neural Information Processing Systems (NeurIPS) , 32, 2019. Belouadah, E. and Popescu, A. Il2m: Class incremen-tal learning with dual memory. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 583–592, 2019. Chaudhry, A., Marc’Aurelio, R., Rohrbach, M., and El-hoseiny, M. Efficient lifelong learning with a-gem. In 
+
+International Conference on Learning Representations (ICLR) , 2019. Chen, X. and Chang, X. Dynamic residual classifier for class incremental learning. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 18743–18752, 2023. Dhar, P., Singh, R. V., Peng, K.-C., Wu, Z., and Chellappa, R. Learning without memorizing. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 5138–5146, 2019. Dosovitskiy, A. An image is worth 16x16 words: Trans-formers for image recognition at scale. arXiv preprint arXiv:2010.11929 , 2020. Douillard, A., Cord, M., Ollion, C., Robert, T., and Valle, E. Podnet: Pooled outputs distillation for small-tasks incremental learning. In Proceedings of the European Conference on Computer Vision (ECCV) , pp. 86–102. Springer, 2020. Douillard, A., Ram ´e, A., Couairon, G., and Cord, M. Dytox: Transformers for continual learning with dynamic token expansion. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 9285–9295, 2022. French, R. M. Catastrophic forgetting in connectionist net-works. Trends in cognitive sciences , 3(4):128–135, 1999. French, R. M. and Ferrara, A. Modeling time perception in rats: Evidence for catastrophic interference in animal learning. In Proceedings of the Annual Conference of the Cognitive Science Society , pp. 173–178. Psychology Press, 2020. Han, X., Zhang, Z., Ding, N., Gu, Y., Liu, X., Huo, Y., Qiu, J., Yao, Y., Zhang, A., Zhang, L., et al. Pre-trained models: Past, present and future. Ai Open , 2:225–250, 2021. Hendrycks, D., Basart, S., Mu, N., Kadavath, S., Wang, F., Dorundo, E., Desai, R., Zhu, T., Parajuli, S., Guo, M., et al. The many faces of robustness: A critical analysis of out-of-distribution generalization. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 8340–8349, 2021. Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., Chen, W., et al. Lora: Low-rank adaptation of large language models. International Conference on Learning Representations (ICLR) , 1(2):3, 2022. Hu, Z., Li, Y., Lyu, J., Gao, D., and Vasconcelos, N. Dense network expansion for class incremental learning. In Pro-ceedings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition (CVPR) , pp. 11858–11867, 2023. Huang, B., Chen, Z., Zhou, P., Chen, J., and Wu, Z. Resolv-ing task confusion in dynamic expansion architectures for class incremental learning. In Proceedings of the AAAI Conference on Artificial Intelligence (AAAI) , volume 37, pp. 908–916, 2023. 9Energy-Structured Low-Rank Adaptation for Continual Learning 
+
+Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Des-jardins, G., Rusu, A. A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the Na-tional Academy of Sciences (PNAS) , 114(13):3521–3526, 2017. Krause, J., Stark, M., Deng, J., and Fei-Fei, L. 3d object representations for fine-grained categorization. In Pro-ceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) workshops , pp. 554–561, 2013. Krizhevsky, A., Hinton, G., et al. Learning multiple layers of features from tiny images. Technical report, University of Toronto, 2009. Li, L., Qi, L., and Geng, X. One-shot knowledge transfer for scalable person re-identification. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 668–677, 2025a. Li, L., Zhou, D.-W., Ye, H.-J., and Zhan, D.-C. Address-ing imbalanced domain-incremental learning through dual-balance collaborative experts. arXiv preprint arXiv:2507.07100 , 2025b. Li, L., Qi, L., and Geng, X. Stratified knowledge-density super-network for scalable vision transformers. In Pro-ceedings of the AAAI Conference on Artificial Intelligence (AAAI) , volume 40, pp. 22985–22993, 2026a. Li, L., Qi, L., Tian, Q., and Geng, X. Model merging in the essential subspace. arXiv preprint arXiv:2602.20208 ,2026b. Li, Z. and Hoiem, D. Learning without forgetting. IEEE Transactions on Pattern Analysis and Machine Intelli-gence (TPAMI) , 40(12):2935–2947, 2017. Liang, Y.-S. and Li, W.-J. Adaptive plasticity improvement for continual learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 7816–7825, 2023. Liang, Y.-S. and Li, W.-J. Inflora: Interference-free low-rank adaptation for continual learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 23638–23647, 2024. Liu, C., Yang, X., Wang, Q., Geng, X., et al. Inheriting gen-eralizable knowledge from llms to diverse vertical tasks. In International Conference on Learning Representations (ICLR) , 2026. Liu, X. and Chang, X. Lora subtraction for drift-resistant space in exemplar-free continual learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 15308–15318, 2025. Liu, Y., Su, Y., Liu, A.-A., Schiele, B., and Sun, Q. Mnemon-ics training: Multi-class incremental learning without for-getting. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 12245–12254, 2020. McDonnell, M. D., Gong, D., Parvaneh, A., Abbasnejad, E., and Van den Hengel, A. Ranpac: Random projections and pre-trained models for continual learning. Advances in Neural Information Processing Systems (NeurIPS) , 36: 12022–12053, 2023. Peng, X., Bai, Q., Xia, X., Huang, Z., Saenko, K., and Wang, B. Moment matching for multi-source domain adaptation. In Proceedings of the IEEE/CVF International Confer-ence on Computer Vision (ICCV) , pp. 1406–1415, 2019. Pham, Q., Liu, C., and Hoi, S. Continual normalization: Rethinking batch normalization for online continual learn-ing. arXiv preprint arXiv:2203.16102 , 2022. Rebuffi, S.-A., Kolesnikov, A., Sperl, G., and Lampert, C. H. icarl: Incremental classifier and representation learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 2001–2010, 2017. Ridnik, T., Ben-Baruch, E., Noy, A., and Zelnik-Manor, L. Imagenet-21k pretraining for the masses. arXiv preprint arXiv:2104.10972 , 2021. Saha, G., Garg, I., and Roy, K. Gradient projection memory for continual learning. In International Conference on Learning Representations (ICLR) , 2021. Shi, Y., Zhou, K., Liang, J., Jiang, Z., Feng, J., Torr, P. H., Bai, S., and Tan, V. Y. Mimicking the oracle: An ini-tial phase decorrelation approach for class incremental learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 16722–16731, 2022. Simon, C., Koniusz, P., and Harandi, M. On learning the geodesic path for incremental learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 1591–1600, 2021. Smith, J. S., Karlinsky, L., Gutta, V., Cascante-Bonilla, P., Kim, D., Arbelle, A., Panda, R., Feris, R., and Kira, Z. Coda-prompt: Continual decomposed attention-based prompting for rehearsal-free continual learning. In Pro-ceedings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition (CVPR) , pp. 11909–11919, 2023. Sun, H.-L., Zhou, D.-W., Zhao, H., Gan, L., Zhan, D.-C., and Ye, H.-J. Mos: Model surgery for pre-trained model-based class-incremental learning. In Proceedings 
+
+10 Energy-Structured Low-Rank Adaptation for Continual Learning 
+
+of the AAAI Conference on Artificial Intelligence (AAAI) ,volume 39, pp. 20699–20707, 2025. Tan, Y., Zhou, Q., Xiang, X., Wang, K., Wu, Y., and Li, Y. Semantically-shifted incremental adapter-tuning is a continual vitransformer. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 23252–23262, 2024. Tao, X., Chang, X., Hong, X., Wei, X., and Gong, Y. Topology-preserving class-incremental learning. In Pro-ceedings of the European Conference on Computer Vision (ECCV) , pp. 254–270. Springer, 2020. Venkateswara, H., Eusebio, J., Chakraborty, S., and Pan-chanathan, S. Deep hashing network for unsupervised domain adaptation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 5018–5027, 2017. Wah, C., Branson, S., Welinder, P., Perona, P., and Belongie, S. The caltech-ucsd birds-200-2011 dataset. Technical report, California Institute of Technology, 2011. Wang, X., Chen, T., Ge, Q., Xia, H., Bao, R., Zheng, R., Zhang, Q., Gui, T., and Huang, X.-J. Orthogonal sub-space learning for language model continual learning. In 
+
+Findings of the Association for Computational Linguis-tics: EMNLP 2023 , pp. 10658–10671, 2023. Wang, Y., Zhou, D.-W., and Ye, H.-J. Integrating task-specific and universal adapters for pre-trained model-based class-incremental learning. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 806–816, 2025. Wang, Z., Zhang, Z., Ebrahimi, S., Sun, R., Zhang, H., Lee, C.-Y., Ren, X., Su, G., Perot, V., Dy, J., et al. Dualprompt: Complementary prompting for rehearsal-free continual learning. In Proceedings of the European Conference on Computer Vision (ECCV) , pp. 631–648. Springer, 2022a. Wang, Z., Zhang, Z., Lee, C.-Y., Zhang, H., Sun, R., Ren, X., Su, G., Perot, V., Dy, J., and Pfister, T. Learning to prompt for continual learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 139–149, 2022b. Yan, S., Xie, J., and He, X. Der: Dynamically expandable representation for class incremental learning. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 3014–3023, 2021. Zhang, G., Wang, L., Kang, G., Chen, L., and Wei, Y. Slca: Slow learner with classifier alignment for continual learning on a pre-trained model. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 19148–19158, 2023. Zhou, D.-W., Wang, Q.-W., Ye, H.-J., and Zhan, D.-C. A model or 603 exemplars: Towards memory-efficient class-incremental learning. In International Conference on Learning Representations (ICLR) , 2023. Zhou, D.-W., Sun, H.-L., Ye, H.-J., and Zhan, D.-C. Expandable subspace ensemble for pre-trained model-based class-incremental learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 23554–23564, 2024. Zhou, D.-W., Cai, Z.-W., Ye, H.-J., Zhan, D.-C., and Liu, Z. Revisiting class-incremental learning with pre-trained models: Generalizability and adaptivity are all you need. 
+
+International Journal of Computer Vision (IJCV) , 133(3): 1012–1032, 2025a. Zhou, D.-W., Cai, Z.-W., Ye, H.-J., Zhang, L., and Zhan, D.-C. Dual consolidation for pre-trained model-based domain-incremental learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 20547–20557, 2025b. Zhu, H., Zhang, Y., Dong, J., and Koniusz, P. Bilora: Almost-orthogonal parameter spaces for continual learn-ing. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 25613–25622, 2025. 11 Energy-Structured Low-Rank Adaptation for Continual Learning 
+
+## A. Proofs 
+
+This section provides the proofs for the optimality property under rank truncation and the expected output error after truncation. 
+
+A.1. Optimality Property under Rank Truncation Proposition A.1 (Optimality Property) . Among all parame-ter updates with rank at most r, Bt[: , : r]At[: r, :] minimizes the expected output reconstruction error: 
+
+Ex∼D t Bt[: , : r]At[: r, :] x − BtAtx 2. (16) 
+
+Proof. For notational convenience, we denote ∆Wt =
+
+BtAt and ∆W(r) 
+
+> t
+
+= Bt[: , : r]At[: r, :] . For any rank-r
+
+parameter update ]∆W, the expected output reconstruction error can be written as: 
+
+Ex∼D t ∆Wtx − ]∆Wx 2
+
+= Ex∼D t (∆ Wt − ]∆W)x 2
+
+.
+
+(17) Let Σx = E[xx ⊤] denote the input covariance matrix. Then the expectation in (17) can be expressed as: 
+
+Ex∼D t (∆ Wt − ]∆W)x 2
+
+= (∆ Wt − ]∆W)Σ1/2
+
+> x
+> 2
+> F
+
+.
+
+(18) In practice, Σx is estimated using a proxy set Xt, yielding: 
+
+∆Yt = ∆ WtXt. (19) Thus, minimizing the expected reconstruction error over all rank-r updates ]∆W is equivalent to solving: 
+
+min 
+
+> rank( ]∆W)≤r
+
+∆Yt − ]∆WX t
+
+> 2
+> F
+
+. (20) Let the singular value decomposition of ∆Yt be: 
+
+∆Yt = UtΣtV⊤ 
+
+> t
+
+. (21) By the Eckart–Young–Mirsky theorem, the optimal rank-r
+
+approximation that minimizes (20) is given by: 
+
+∆Y(r) 
+
+> t
+
+= U(r) 
+
+> t
+
+Σ(r) 
+
+> t
+
+(V(r) 
+
+> t
+
+)⊤, (22) where U(r) 
+
+> t
+
+contains the top-r left singular vectors. Accord-ingly, the corresponding parameter update: 
+
+∆W(r) 
+
+> t
+
+= U(r) 
+
+> t
+
+(U(r) 
+
+> t
+
+)⊤∆Wt, (23) induces exactly ∆Y(r) 
+
+> t
+
+and achieves the minimum out-put feature reconstruction error among all rank-r updates. Therefore, ∆W(r) 
+
+> t
+
+minimizes: 
+
+Ex∼D t ∆Wtx − ∆W(r) 
+
+> t
+
+x 2
+
+, (24) over all rank-r parameter updates, completing the proof. 
+
+A.2. Output Truncation Error Proposition A.2 (Truncation Error) . When truncating weight update matrix ∆Wt = BtAt to retain only the leading r ranks, i.e., ∆W(r) 
+
+> t
+
+= Bt[: , : r]At[: r, :] , the expected truncated output feature error is given by: 
+
+Ex∼D t
+
+h
+
+∥∆Wx − ∆W(r) 
+
+> t
+
+x∥22
+
+i
+
+=
+
+> dout
+
+X
+
+> i=r+1
+
+σ2 
+
+> i
+
+. (25) 
+
+Proof. For simplicity of exposition, we omit the task index 
+
+t in the following proof. The expected L2 error over the input distribution D can be empirically estimated using the proxy set X (where N is the number of samples): 
+
+L = Ex∼D [∥(∆ W − ∆W(r))x∥22]
+
+≈ 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+∥(∆ W − ∆W(r))xn∥22
+
+= 1
+
+N ∥(∆ W − ∆W(r))X∥2 
+
+> F
+
+.
+
+(26) Recall that the actual output drift is ∆Y = ∆ WX . The output of the rank-r approximated model is ∆Y(r) =∆W(r)X. Thus: 
+
+L = 1
+
+N ∥∆Y − ∆Y(r)∥2 
+
+> F
+
+. (27) In E 2-LoRA, the approximation is constructed by projecting the original drift onto the subspace spanned by the first r
+
+principal components of the output space: 
+
+∆Y(r) = U(r)(U(r))⊤∆Y. (28) Substituting the full SVD ∆Y = UΣV ⊤ into this expres-sion: 
+
+∆Y(r) = U(r)(U(r))⊤(UΣV ⊤). (29) Since U is orthonormal ( U⊤U = I), the term (U(r))⊤U
+
+yields a truncated identity matrix [Ir×r | 0r×(dout −r)].Therefore: 
+
+∆Y(r) = UΣ r V⊤, (30) where Σr = diag (σ1, . . . , σ r , 0, . . . , 0) . The error matrix (residual) is: 
+
+Er = ∆ Y − ∆Y(r) = U(Σ − Σr )V⊤ =
+
+> dout
+
+X
+
+> i=r+1
+
+σiuiv⊤ 
+
+> i
+
+.
+
+(31) 12 Energy-Structured Low-Rank Adaptation for Continual Learning 
+
+Using the fact that ∥UAV ⊤∥2 
+
+> F
+
+= ∥A∥2 
+
+> F
+
+for orthonormal matrices U, V:
+
+∥Er ∥2 
+
+> F
+
+= ∥Σ − Σr ∥2 
+
+> F
+
+=
+
+> dout
+
+X
+
+> i=r+1
+
+σ2 
+
+> i
+
+. (32) Thus: 
+
+L = 1
+
+N
+
+> dout
+
+X
+
+> i=r+1
+
+σ2 
+
+> i
+
+. (33) If we consider the singular values normalized by the sample size, the factor 1/N is absorbed, yielding: 
+
+Ex∼D 
+
+h
+
+∥∆Wx − ∆W(r)x∥22
+
+i
+
+=
+
+> dout
+
+X
+
+> i=r+1
+
+σ2 
+
+> i
+
+. (34) This completes the proof. 
+
+## B. Experimental Details 
+
+B.1. Detailed Experimental Settings 
+
+Table 6 summarizes the experimental settings across differ-ent continual learning benchmarks, including the pre-trained models used, learning rates for the classifier and LoRA mod-ules, the number of training epochs per task, the number of epochs for classifier alignment, and the batch size. 
+
+B.2. Placement of LoRA Modules 
+
+In all experiments with E 2-LoRA, we integrate LoRA mod-ules into the QKV projection layer of the Attention and the first layer of the MLP. This configuration is informed by our post-training energy analysis of model parameters, where we observed that the energy of parameter updates in the Attention O-projection and the second MLP layer is negli-gible. By omitting LoRA in these layers, we significantly reduce the computational overhead during training while maintaining competitive performance. During inference, the learned LoRA weights can be seamlessly merged into the original pre-trained parameters; thus, our method introduces zero additional inference latency or computational cost. 
+
+B.3. Evaluation Strategy on Domain-Incremental Learning Benchmarks 
+
+In Domain-Incremental Learning (DIL), each task consists of samples from different domains belonging to a shared set of classes. To evaluate performance, we aggregate the prediction scores for each class by summing the outputs from the corresponding classifiers across all domains. The resulting cumulative score is then used to determine the final classification result for each category. 1 3 5 7 9      
+
+> Task Index
+> 1
+> 3
+> 5
+> 7
+> 9
+> 11
+> Layer Index
+> Attention Layers
+> 13579
+> Task Index
+> 1
+> 3
+> 5
+> 7
+> 9
+> 11
+> Layer Index
+> MLP Layers
+> Figure 5. Changes in the energy of parameter updates as new tasks arrive. Experiments are conducted on the ImageNet-R dataset. ranks
+> Figure 6. Energy Retention (%) vs. Rank Retention (%). Compari-son of energy concentration across three representative methods: parameter bases (O-LoRA), principal bases of the input space (In-fLoRA), and principal bases of the output drift space (E 2-LoRA).
+
+## C. Additional Experiments 
+
+C.1. Energy Evolution across Sequential Tasks. 
+
+We analyze the energy distribution of sequential tasks in Figure 5. Specifically, we conduct experiments on the ImageNet-R benchmark with 10 sequential tasks and record the singular values associated with the retained ranks of the LoRA modules for each task. The energy of a task is computed as the sum of the singular values over its allocated ranks. As the model learns classes in a sequential manner, the results reveal a clear trend: earlier tasks exhibit higher energy, while the energy gradually decreases as training pro-gresses. This behavior indicates that the model progressively adapts to the shared data distribution across tasks, leading to more compact and efficient representations. Eventually, the energy converges to a low-loss region that reflects an optimized representation for the entire benchmark. 
+
+C.2. Analysis of Energy Concentration 
+
+We analyze the energy concentration of different orthogonal-ization targets: the columns of weight matrices in O-LoRA, 13 Energy-Structured Low-Rank Adaptation for Continual Learning 
+
+Table 6. Continual learning settings across different benchmarks. CA denotes classifier alignment. 
+
+Benchmarks backbone lr (classifier) lr (LoRA) epochs/task CA epochs/task batchsize ImageNet-R (Hendrycks et al., 2021) ViT-B/16-IN21K 0.01 0.0005 5 3 64 CIFAR-100 (Krizhevsky et al., 2009) ViT-B/16-IN21K 0.01 0.0005 5 3 64 CUB-200 (Wah et al., 2011) ViT-B/16-IN21K 0.01 0.0005 10 3 64 Cars-196 (Krause et al., 2013) ViT-B/16-IN21K 0.01 0.0005 50 3 64 Office-Home (Venkateswara et al., 2017) ViT-B/16-IN1K 0.1 0.0005 15 5 64 DomainNet (Peng et al., 2019) ViT-B/16-IN1K 0.1 0.0005 15 5 64 0.0 0.1 0.2 0.3 0.4 0.5                
+
+> Distillation Weight
+> 82.4
+> 82.6
+> 82.8
+> 83.0
+> Accuracy (%)
+> ImageNet-R
+> 0.0 0.1 0.2 0.3 0.4 0.5
+> Distillation Weight
+> 92.05
+> 92.20
+> 92.35
+> Accuracy (%)
+> CIFAR-100
+> 0.0 0.1 0.2 0.3 0.4 0.5
+> Distillation Weight
+> 89.25
+> 89.50
+> 89.75
+> 90.00
+> Accuracy (%)
+> CUB-200
+> 0.0 0.1 0.2 0.3 0.4 0.5
+> Distillation Weight
+> 72.0
+> 73.5
+> 75.0
+> 76.5
+> Accuracy (%)
+> Cars-196
+
+Figure 7. Impact of the distillation loss weight λ.
+
+the principal directions of input representations in InfLoRA, and the principal directions of output feature drift in our E 2-LoRA, as shown in Figure 6. Experiments are conducted on ImageNet-R, where we capture the energy of the QKV linear projection layers in all 12 layers across all 10 tasks. The results indicate that the energy in the parameter col-umn vector space is uniformly distributed, which hinders the creation of free dimensions for subsequent tasks via space reduction. Applying SVD to the input representation space yields more concentrated energy than the parame-ter space; however, since the input features combine pre-trained and task-specific components, the space remains high-dimensional and energy is still relatively dispersed. In contrast, the task-specific output drift space identified by our method exhibits higher energy concentration, allowing parameter updates to be focused on a few dominant direc-tions, thereby preserving core knowledge while providing interference-free, orthogonal capacity for subsequent tasks. 
+
+C.3. Sensitivity Analysis of the Hyperparameter λ
+
+We conduct a sensitivity analysis on the distillation loss weight λ, as shown in Figure 7. When λ ranges from 0.1 to 0.5, the performance remains relatively stable. In the absence of the distillation loss ( λ = 0 ), performance on the Cars-196 dataset degrades noticeably, while the other datasets exhibit only slight drops. In all experiments re-ported in the main text, we set λ = 0 .2.
+
+Table 7. Last performance on 10-task benchmarks under standard random sampling and class-imbalance settings. 
+
+Sampling Strategy ImageNet-R CIFAR-100 CUB-200 Random 82.77 ±0.10 92.13 ±0.19 89.77 ±0.16 
+
+Class-Imbalance 82.62 ±0.19 92.09 ±0.19 89.64 ±0.42 
+
+C.4. Analysis of the Sampling Strategy for the Proxy Set 
+
+In our experiments, we employed a simple random sampling approach because we found the performance of E 2-LoRA to be remarkably stable. Even in an extreme class-imbalance scenario—where only a single category is sampled to com-pute the principal components—the performance remains consistent. Table 7 compares the Last-Acc under standard random sampling versus this extreme imbalance setting. 14
