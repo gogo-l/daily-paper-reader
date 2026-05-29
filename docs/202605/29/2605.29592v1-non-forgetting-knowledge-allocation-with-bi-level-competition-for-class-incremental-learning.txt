@@ -1,0 +1,954 @@
+Title: Non-Forgetting Knowledge Allocation with Bi-level Competition for Class-Incremental Learning
+
+URL Source: https://arxiv.org/pdf/2605.29592v1
+
+Published Time: Fri, 29 May 2026 00:53:42 GMT
+
+Number of Pages: 26
+
+Markdown Content:
+# Non-Forgetting Knowledge Allocation with Bi-level Competition for Class-Incremental Learning 
+
+Xiang Tan 1, Run He 1, Yawen Cui 2, Mengchen Zhao 1, Yan Wu 3,
+
+Tianyi Chen 4, Huiping Zhuang 1⋆, Xiaonan Luo 5, and Guanbin Li 6 
+
+> 11
+
+South China University of Technology 2Hong Kong Polytechnic University 
+
+> 3
+
+Agency for Science, Technology and Research 4Microsoft  
+
+> 25
+
+Guilin University of Electronic Technology 6Sun Yat-sen University 
+
+hpzhuang@scut.edu.cn 
+
+Abstract. Class-Incremental Learning (CIL) with pre-trained models (PTMs) aims to sequentially adapt PTMs to new categories without for-getting old knowledge. Built upon PTMs, existing adapter-based meth-ods mainly train models via distinct task-specific adapters, and present a uniform knowledge allocation for each adapter during inference. However, this allocation mechanism ignores the nature of task discrepancy and leads to suboptimal utilization of adapters. Also, under CIL constraint, an allocator is prone to forgetting when tasks evolve. To address these is-sues, we propose a Non-Forgetting Allocation with Bi-Level Competition (NoFA-BC). NoFA-BC constructs a non-forgetting allocator (NFA) by transforming the allocator training into a recursive least-squares prob-lem and achieves an allocator equivalent to that trained with all data. Based on the NFA, a Bi-Level Competition (BLC) including an intra-task level Winner-Takes-All (WTA) mechanism and inter-task Last-Ones-Fall (LOF) elimination is proposed to provide better allocation of adapter knowledge. WTA extracts the most significant logit within a task to represent the adapter’s contribution and LOF suppresses the irrelevant adapters. With BLC, participation ratio of each adapter can be tailored for each input. Moreover, a Stability Enhancement (SE) process is incor-porated to further improve the performance of old tasks. Extensive ex-periments demonstrate NoFA-BC’s superior performance across diverse datasets, consistently outperforming state-of-the-art methods. 
+
+Keywords: Continual Learning · Adapter · Knowledge Allocation 
+
+## 1 Introduction 
+
+In traditional deep learning, models are often trained on a fixed dataset that is available at all times. However, this protocol may fail in real-world scenarios, where data, e.g., new categories, appear in streaming form and are only available in certain time slots. In such circumstances, a model is required to be equipped  
+
+> ⋆
+
+Corresponding author. 
+
+> arXiv:2605.29592v1 [cs.CV] 28 May 2026
+
+2 Tan. et al. PTM      
+
+> 𝒜𝒜 1
+> × …
+> 𝒜𝒜 2
+> 𝒜𝒜 𝑡𝑡
+> PTM
+> 𝒜𝒜 1
+> × …
+> 𝒜𝒜 2
+> 𝒜𝒜 𝑡𝑡
+> …
+> ……
+> …
+> Average
+> Integration
+> Integration
+> with
+> correct weight
+
+Fig. 1: When aggregating multiple adapters for inference, uniform utilization of all adapters leads to insufficient application of task-relevant knowledge. Conversely, prop-erly allocating adapters optimally leverages task-specific knowledge, thereby enhancing classification accuracy. 
+
+with the capability of learning new tasks when new categories arise continually, i.e., the ability of class-incremental learning (CIL) [25, 41]. However, CIL suffers from the issue of catastrophic forgetting [1, 22], where the performance of the model plunges on old tasks after learning new tasks. Consequently, to achieve good performance during the CIL, model should mitigate the forgetting issue to retain old knowledge ( stability ) while maintaining the ability to attain new knowledge ( plasticity ) [23]. Recently, Pre-trained Models (PTMs) have demonstrated excellent perfor-mance in downstream applications due to their generalizability [5, 29]. However, the forgetting issue in the CIL of PTMs still persists when PTMs are transferred to downstream tasks that continually arise [32]. Existing PTM-based methods incorporate lightweight modules such as prompts [16] or adapters [2] to adapt PTMs to new tasks, among which adapter-based methods have exhibited prefer-able performance [9, 40]. Early attempts of adapter-based methods leverage a single adapter to continually adapt PTMs during CIL [8, 40]. However, they can fail to balance the stability and plasticity, and encounter a significant perfor-mance drop when substantial domain shifts exist across the tasks within CIL. To address this problem, multi-adapter strategies utilize task-specific adapters to accommodate PTMs to new knowledge within distinct subspaces and seek to aggregate task-specific knowledge [7, 42] during the inference. Although the idea of encapsulating task-specific knowledge within distinct adapters is promising, how to effectively utilize the task-specific knowl-edge within multi-adapters is a remaining problem that significantly in-fluences the performance of adapter-based methods. One idea is to treat the adapters as independent elements and choose only one distinct adapter during inference. However, this manner ignores the potential of knowledge transfer be-tween different tasks. On the contrary, most existing methods (e.g., ACMap [7], EASE [42]) seek to uniformly utilize these modules. However, when task dis-tributions exhibit significant discrepancies, uniformly assigning weights to all adapters results in diminished contribution of task-specific knowledge. For ex-ample, as shown in Figure 1, Adapter A2 (trained with data in task 2) contains NoFA-BC 3
+
+knowledge about “sharks”. When detecting “shark” samples, averagely allocating adapters weakens the contribution of A2, leading to knowledge interference from other adapters and misclassification. Conversely, increasing the utilization weight of A2 allows better extraction of image features, leading to correct classification. Therefore, a knowledge allocation mechanism should be established to correctly distinguish relevant adapter while suppressing irrelevant ones, thus guaranteeing the accuracy and efficiency of knowledge utilization. Moreover, given the con-straint of CIL, the allocator must be robust to forgetting during the incremental learning. Facing the aforementioned challenge, we propose No n-Forgetting Allocation with Bi-Level Competition (NoFA-BC) in this work. NoFA-BC introduces a Non-Forgetting Allocator (NFA) with a Bi-Level Competition (BLC) mechanism to provide more effective weighting coefficient of each adapter. NFA establishes an allocator by transforming the allocation into a recursive least-squares problem and equalizes the continual allocator training to the joint learning, achieving the non-forgetting for allocating. Based on NFA, BLC leverages the logits generated by the NFA to perform both intra-task level and inter-task level competition. A Winner-Takes-All (WTA) mechanism is proposed for the intra-task level to extract the most representative information related to the adapters to determine their contribution and a Last-Ones-Fall (LOF) mechanism is presented to elim-inate the negative effect of irrelevant adapters for inter-task level. With BLC, participation ratio of each adapter can be dynamically tailored for each input sample under the principle that distinguishing relevant adapter while suppressing irrelevant ones. Moreover, we observe the good potential of stability within the NFA and propose a Stability Enhancement (SE) process to further improve the stability of our method. By incorporating all these modules, NoFA-BC achieves state-of-the-art performance across multiple benchmark datasets. Specifically, NoFA-BC demonstrates superior performance on Task 40 of ImageNet-R (long-sequence scenario) and Task 10 of ImageNet-A (high-complexity scenario), sur-passing the second-best method by 4.09 % and 7.87 % in accuracy. Our key contributions are summarized as follows: 
+
+– We propose the NoFA-BC, a novel adapter-based method that better lever-ages the knowledge encoded in multi-adapters for CIL with PTMs. 
+
+– To obtain an allocator robust to forgetting, NFA is established via a recursive least-squares solution, enabling a non-forgetting allocator. 
+
+– To effectively manage the contribution of each adapter, based on the NFA, BLC introduces a WTA and an LOF mechanism for knowledge allocation, greatly enhancing knowledge utilization. 
+
+– An SE process is designed to leverage the stability within the NFA, further improving the model stability and overall performance. 
+
+– Extensive experiments across multiple benchmark datasets and settings are conducted, demonstrating that NoFA-BC achieves satisfactory knowledge allocations and outperforms state-of-the-art (SOTA) methods. 4 Tan. et al. 
+
+## 2 Related Work 
+
+Class-Incremental Learning (CIL). Traditional class-incremental learning aims to sequentially learns different categories based on a backbone without pre-training, and it can be broadly categorized into three paradigms. Replay-based methods [20, 26, 39] effectively mitigate catastrophic forgetting by storing and replaying a subset of historical data during CIL. However, this technique violates data privacy to some extent and introduce further storage overhead. Knowledge distillation-based approaches [17,19] incorporate additional regularization terms into the loss function to restrict parameter change and such a constraint can cause poor plasticity. Model expansion-based [3, 15, 30, 34] methods employ a dedicated backbone network for each task while freezing and saving parameters from previous backbones during training to keep previous knowledge, which leads to large storage overhead. 
+
+PTM-Based CIL. PTM-based CIL have emerged as a new branch in class-incremental learning. With PTMs, the CIL is conducted using parameter-efficient tuning (PET) methods including prompts and adapters. For example, L2P [32] introduces a key-query matching mechanism to select an optimal prompt. Du-alPrompt [31] further differentiates between G-Prompt (handling shared knowl-edge) and E-Prompt (addressing task-specific knowledge). CODA-Prompt [27] employs multiple trainable prompts with a dynamic weighting mechanism to de-termine their relative contributions during inference. APER [40] first revealed the remarkable effectiveness of prototype-based classification with only fine-tuning with PET on the first task. EASE [42] constructs a distinct subspace for each task via adapters and estimates prototype representations of historical classes based on similarity within the current subspace. Additionally, ACMap [7] fuses current and historical adapters in parameter space to share knowledge. How-ever, a more effective way for knowledge allocation remains underexplored in adapter-based CIL. 
+
+CIL with Least-Squares Solutions. The least-squares method has recently exhibited significant potential in CIL [11, 43, 46]. Inspired by pseudo-inverse learning [10], ACIL [48] first proves that, when equipped with a frozen feature-extraction backbone, recursive least squares can achieve performance equivalent to joint training, showing competitive performance in CIL. DS-AL [45] introduces a compensation module to address underfitting issue during training. AIR [6] in-corporates a class-wise weighting parameter into recursive least squares compu-tations to solve the problem of imbalanced training data. DPCR [12] addresses both semantic shift and decision bias using least-squares. Additionally, least squares methods show great performance in multi-modal CIL [33, 36], few-shot CIL [47], multi-label CIL [38], and other CIL-related applications [35, 44, 49]. In this paper, we leverage the non-forgetting property of recursive least-squares to construct an allocator for adapters. NoFA-BC 5Task 1     
+
+> Task 2
+> Input
+> 𝑻𝑻 1𝑻𝑻 2𝑻𝑻 3
+> Task 3
+
+×
+
+> NFA
+
+√√             
+
+> Bi-level
+> Competition
+> 𝑨𝑨 1𝑪𝑪 1
+> 𝑨𝑨 𝟑𝟑 𝑪𝑪 𝟑𝟑
+> update ……
+> Stability
+> Enhancement
+> PTM
+> …𝒜𝒜 1𝒜𝒜 2𝒜𝒜 3
+> …
+> Recursive Update for NFA
+> Training Task Specific Adapters
+> 𝒜𝒜 1𝒜𝒜 2𝒜𝒜 3
+> β
+> 1− β
+
+Training  Inference 
+
+> Winner Takes All
+> Last Ones
+> Fall
+
+Fig. 2: The Overview of NoFA-BC. Left : Training Phase, assuming current task is 3.Task-specific adapters are trained per incremental stage while the autocorrelation and cross correlation matrix is continuously updated with the help of adapter A1. Right :The NoFA-BC dynamically regulates the participation of each adapters with the help of Bi-level Competition mechanism. SE is utilized to enhance the stability of final output. 
+
+## 3 Preliminaries 
+
+3.1 Class-Incremental Learning 
+
+In Class-incremental learning scenarios, models are required to sequentially ac-quire knowledge across T distinct tasks, formally represented as a task sequence 
+
+{D 1, D2, · · · , DT }. The t-th task Dt = {(xt,i , y t,i )}nt
+
+> i=1
+
+, comprises nt data pairs. Each pair consists of input data xt,i ∈ X t and a label yti ∈ Y t, where Xt is the sample set and Yt is the label set in task t. The model at task t can thus be formulated as a parametric mapping function fθ : X1: t → Y 1: t for all seen classes, where θ denotes the trainable parameters. Under CIL protocols, label sets across each different tasks t and t′ are strictly disjoint, i.e., Yt ∩ Y t′ = ∅. Furthermore, considering the data privacy, we follow exemplar-free setting [21], in which data of previous tasks D1: t−1 remains inac-cessible during the training phase t. Consequently, only the current task data Dt
+
+participates in parameter updates at task t.
+
+3.2 Adapter-based CIL 
+
+Existing adapter-based CIL mainly utilizes a a pre-trained Visual Transformer (ViT) as backbone and incorporates lightweight adapters to adapt the backbone to new data. During the CIL, the backbone is frozen and only the adapters are updated. Suppose there are L blocks in the ViT, each with a self-attention module and an MLP layer, the adapter can be included in the MLP in paral-lel. An adapter is a bottleneck structure consisting of a down-projection layer 
+
+Wdown ∈ Rd×r , a non-linear activation function σ (ReLU in general), and an 6 Tan. et al. 
+
+up-projection layer Wup ∈ Rd×r , where r is the bottleneck dimension. Denote the input token xin ∈ Rd and output token xout ∈ Rd are the input and output of the MLP layer, the forward process of the MLP layer with the adapter can be formalized as: 
+
+xout = MLP (xin ) + σ(xin Wdown )Wup . (1) In practice, an adapter can be incorporated into each layer of a ViT. In this paper, we denote all adapters inserted into the pre-trained model as one adapter set A. In each task, we train a task-specific adapter set to learn the knowledge of coming data. For task t, the corresponding adapter is denoted as At, and the feature (i.e., the cls token of last block) processed with At and the original ViT is denoted as ϕ(x, At).
+
+## 4 Proposed Method 
+
+In this section, we present the details of the proposed NoFA-BC. Similar to exist-ing multi-adapter methods, NoFA-BC trains independent adapters for different tasks but seeks to effectively utilize the task-specific knowledge. To achieve this, NoFA-BC first conducts an Integration of Adapters (IA) process during inference to obtain knowledge transfer via prototypes across tasks, and then leverages a Non-Forgetting Allocator (NFA) with Bi-Level Competition (BLC) mechanism for allocating these knowledge. Finally, a Stability Enhancement (SE) process is incorporated to further improve the stability of model. 
+
+4.1 Integration of Adapters 
+
+To encapsulate task-specific knowledge into subspaces formed by the adapters, we follows previous works to train an adapter for each task. To achieve bet-ter knowledge transfer across each task, here we combine all adapters to use knowledge from all stages via task-related prototypes. In task t, NoFA-BC aver-ages embeddings in feature space, getting averaged features from each adapter’s inference output: 
+
+Φt(x) = 
+
+Pti=1 ϕ(x, Ai)
+
+t . (2) After the training of each task, we use the training dataset of the current task to construct a prototypical classifier. Specifically, we employ the integration strategy in Eq.2 to extract the prototypes of all categories and calculate their average values: 
+
+pc = 1
+
+Nc
+
+X|D t| 
+
+> j=1
+
+I(yj = c)Φt(xj ), (3) NoFA-BC 7
+
+where Nc is the sample number of class c, I(·) is the indicator function. These prototypes are used as the weight of the classifier, which could be represented as 
+
+W P = [ p1, ..., pc] ∈ RC×d, where C represents the total number of categories in dataset. During inference, the classifier calculates the cosine similarity between 
+
+W and Φt(X) for classification: 
+
+f (x) = ( W P
+
+∥W P ∥2
+
+)⊤( Φt(x)
+
+∥Φt(x)∥2
+
+). (4) 
+
+4.2 Non-Forgetting Allocation with Competition 
+
+The operation of IA is a direct way for knowledge transfer, but the critical issue of knowledge interference if uniformly utilizing adapters still remains. A simple technique is to train a learnable allocator to adjust the contributions of each adapter. However, directly using gradient-based optimization without access to previous data will lead to catastrophic forgetting of the allocator [27, 46]. Also, utilizing all adapters via task-level information may not be optimal due to the diversity of categories within a task. Consequently, we propose a Non-Forgetting Allocator with a Bi-Level Competition mechanism for allocating adapters. 
+
+Non-Forgetting Allocator. To develop a non-forgetting allocator, we trans-form the allocation process into a recursive least-squares problem with features extracted from a frozen backbone. This process ensures that the allocator trained in a sequential manner achieves identical results to that trained by jointly col-lected data, i.e., the Non-Forgetting Allocator. Inspired by APER [40], in order to bridge the domain gap between the PTM and downstream datasets, we incor-porate the adapter trained in the first task to the backbone for all subsequent tasks. Subsequently, a training-free random buffer fB (·) : Rd → RdB (B > d ) is applied to enhance the feature representation ϕ(x, A1). This process non-linearly maps the features to a higher-dimensional space and enhances separability across features [4, 48] via a fixed random feature expansion matrix B. For the stacked features in task t, it can be represented as 
+
+Xt = fstack (fB (ϕ(xt, A1))) = fstack (σB (ϕ(xt, A1)B)) , (5) where σB is a non-linear activation function and fstack denotes stacking all the features of inputs in task t.The primary objective for allocation is to utilize the most significant task-specific information. However, within the same task, the distribution differences between categories can be significant. Similarly, categories in different tasks may be relatively close. Such a distribution can result in poor discriminative performance across tasks. Therefore, we establish the allocator based on class-discriminative information by minimizing the following objective function: 
+
+argmin  
+
+> WAt
+
+∥X1: tW At − Y1: t∥2F + γ∥W At ∥2F, (6) where ∥ · ∥ 2F represents the Frobenius-norm and γ is regularization factor. X1: t
+
+and Y1: t indicate the stacked feature expansion matrix from task 1 to t obtained 8 Tan. et al. 
+
+by Eq. (5) and corresponding one-hot labels, formulated as follow 
+
+X1: t =
+
+X1: t−1
+
+Xt
+
+
+
+, Y 1: t =
+
+Y 1: t−1
+
+Yt
+
+
+
+. (7) The optimal solution of Eq. (6) is 
+
+W At =
+
+> t
+
+X
+
+> i=1
+
+X⊤ 
+
+> i
+
+Xi + γI
+
+!−1 tX
+
+> i=1
+
+X⊤ 
+
+> i
+
+Yi
+
+!
+
+. (8) Through Eq. 8, we obtain the weight of the allocator W At for phase t. How-ever, due to the exemplar-free constraints, we cannot access historical data 
+
+X1: t−1 from all previous tasks. To eliminate the reliance on previous data, we transform this process into a recursive manner. Suppose the autocorrelation ma-trix At and the cross correlation matrix Ct can be obtained by 
+
+At =
+
+> t
+
+X
+
+> i=1
+
+X⊤ 
+
+> i
+
+Xi, Ct =
+
+> t
+
+X
+
+> i=1
+
+X⊤ 
+
+> i
+
+Yi, (9) the update of W At can be transformed into the recursive update of At and Ct
+
+from the Eq. 9. At+1 and Ct+1 can be calculated by 
+
+At+1 = At + X⊤
+
+> t+1
+
+Xt+1 ,
+
+Ct+1 = Ct + X⊤
+
+> t+1
+
+Yt+1 . (10) Therefore, the update of W At can be written as 
+
+W At+1 =
+
+> t+1
+
+X
+
+> i=1
+
+X⊤ 
+
+> i
+
+Xi + γI
+
+!−1 t+1 X
+
+> i=1
+
+X⊤ 
+
+> i
+
+Yi
+
+!
+
+= ( At+1 + γI)−1 Ct+1 
+
+=  At + X⊤
+
+> t+1
+
+Xt+1 + γI−1  Ct + X⊤
+
+> t+1
+
+Yt+1 
+
+ .
+
+(11) As shown in Eq. 11, the solution to the joint learning problem in task t + 1 
+
+can be transformed into a recursive update with only the At, Ct and the data in current task. This process enables a non-forgetting allocator which can have a identical results to that trained with all the previous data. During the CIL, we can only store the autocorrelation matrix At and the cross correlation matrix 
+
+Ct to obtain a robust allocator after the training phase of each task t.
+
+Bi-Level Competition for Allocation. To obtain an effective utilization of each adapter, the output of NFA should be converted into weights that assigns contribution of each adapter. If the input is more related to a distinct adapter, the contribution of the knowledge from that adapter should be raised and other non-related adapters should be suppressed. To achieve this, we propose a bi-Level competition mechanism including the Winner Takes All (WTA) within the intra-task level and the Last Ones Fall (LOF) for the inter-task level. NoFA-BC 9
+
+Table 1: The average accuracy ¯A and the last-task accuracy AT . CIFAR refers to CIFAR-100 and IN-R/A stands for ImageNet-R/A. The best performance is shown in 
+
+bold and the second best performance is shown in underline. Method CIFAR B0 Inc5 IN-R B0 Inc5 IN-R B0 Inc20 IN-A B0 Inc20 VTAB B0 Inc10 
+
+¯A AT ¯A AT ¯A AT ¯A AT ¯A AT
+
+Finetune 38.90 ±0.09 20.17 ±0.16 21.61 ±1.68 10.79 ±2.48 32.31 ±0.98 22.78 ±1.26 24.28 ±1.34 14.51 ±1.66 34.95 ±0.71 21.25 ±0.82 
+
+Adapter-FT [40] 60.51 ±0.73 49.32 ±0.62 47.59 ±0.85 40.28 ±1.00 58.17 ±0.50 52.39 ±0.37 45.41 ±0.77 41.10 ±0.89 48.91 ±0.23 45.12 ±0.20 
+
+LwF [19] 46.29 ±0.28 41.07 ±0.33 39.93 ±0.14 26.47 ±0.22 45.72 ±0.09 34.17 ±0.12 37.75 ±0.81 26.84 ±0.90 40.48 ±0.07 27.54 ±0.10 
+
+L2P [32] 85.94 ±0.48 79.93 ±0.33 52.17 ±0.22 49.20 ±0.15 75.46 ±0.47 69.77 ±0.46 49.39 ±0.99 41.71 ±1.06 77.11 ±0.34 77.10 ±0.29 
+
+DualPrompt [31] 87.87 ±0.30 81.15 ±0.53 63.31 ±0.24 55.22 ±0.45 73.10 ±0.19 67.18 ±0.55 53.71 ±0.64 41.67 ±0.86 83.36 ±0.17 81.23 ±0.21 
+
+CODA [27] 89.11 ±0.99 81.96 ±1.43 64.42 ±0.59 55.08 ±0.68 77.97 ±0.58 72.27 ±0.36 53.54 ±0.49 42.73 ±0.83 83.90 ±0.67 83.02 ±0.37 
+
+SimpleCIL [40] 87.57 ±0.03 81.26 ±0.05 62.58 ±0.02 54.55 ±0.08 61.26 ±0.05 54.55 ±0.07 59.77 ±0.08 48.91 ±0.13 85.99 ±0.02 84.38 ±0.04 
+
+ACIL [48] 89.88 ±0.04 83.56 ±0.05 75.16 ±0.18 67.33 ±0.21 75.17 ±0.05 68.40 ±0.22 63.30 ±0.42 53.26 ±0.66 90.93 ±0.12 89.84 ±0.09 
+
+DS-AL [45] 90.24 ±0.35 84.12 ±0.41 74.59 ±0.64 67.57 ±0.81 73.88 ±0.56 68.13 ±0.33 56.78 ±0.48 53.13 ±0.69 89.48 ±0.73 88.17 ±0.87 
+
+APER [40] 90.65 ±0.06 85.15 ±0.15 75.82 ±0.11 67.95 ±0.07 75.82 ±0.03 67.95 ±0.08 60.47 ±0.72 49.37 ±0.66 85.95 ±0.05 84.35 ±0.04 
+
+EASE [42] 91.51 ±0.33 85.80 ±0.52 78.31 ±0.37 70.58 ±0.28 81.74 ±0.32 76.17 ±0.19 65.34 ±1.08 55.04 ±1.25 93.61 ±0.21 93.55 ±0.13 
+
+ACMap [7] 92.04 ±0.29 87.81 ±0.19 77.31 ±0.43 70.49 ±0.98 79.94 ±0.59 74.28 ±0.75 65.19 ±0.79 56.19 ±0.98 91.21 ±0.26 87.56 ±0.38 
+
+NoFA-BC 94.04 ±0.33 89.21 ±0.45 82.44 ±0.27 74.67 ±0.45 83.61 ±0.37 77.75 ±0.29 72.51 ±0.87 64.06 ±0.48 93.98 ±0.25 93.91 ±0.66 
+
+For the intra-task level, we seek to obtain the most significant task-relevant information to represent the contribution of the adapters. Since the categories within a task can vary drastically, averagely considering the contribution of each category may mislead the allocation. In such a situation, a class-wise compe-tition should be conducted to determine the contribution level. Here, a WTA mechanism, which selects the highest logit of classes in task i in the output as the weight coefficient is established as follow 
+
+αi = max 
+
+k∈Y i
+
+Softmax (fB (ϕ(x, Ai)) W At )[ k]. (12) In this way, the most representative weights of the task are extracted and a coefficient set for allocating each adapter {α1, α 2, ..., α t} can be obtained. How-ever, it is still possible that knowledge learned by an adapter is not related to the input despite the weighting coefficient is low. If such an adapter is inte-grated, it may inject harmful knowledge for the classification. To address this, an LOF mechanism for the inter-task level is designed to eliminate the less rele-vant adapters. After obtaining the coefficient set, we rank the weight coefficients of each task and set the lowest o-percent adapters to 0, only taking the significant ones. Then, we use the obtained weight coefficients {α1, α 2, ..., α t} to allocate the participation of each adapter in the integration of adapters. Hence, Eq. 2 should be rewritten by assigning weights to the adapters: 
+
+Φt(x) = 
+
+Pti=1 αi · ϕ(x, Ai)
+
+t . (13) This approach enables the model to dynamically adjust the participation ratios of adapters. The task-specific adapter can participate more dominantly during inference for the corresponding task, correcting the final output toward proper task knowledge. In addition, other adapters contribute at varying ratios and less relevant adapters are excluded, ensuring further satisfactory allocation. 10 Tan. et al. 0 20 40 60 80 100                  
+
+> Number of Classes
+> 70
+> 75
+> 80
+> 85
+> 90
+> 95
+> 100
+> Accuracy(%)  1.40
+> (a) CIFAR-100 B0-Inc5
+> 050 100 150 200
+> Number of Classes
+> 60
+> 70
+> 80
+> 90
+> 100
+> 4.09
+> (b) ImageNet-R B0-Inc20
+> 050 100 150 200
+> Number of Classes
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> 100
+> 1.58
+> (c) Imagenet-R B0-Inc5
+> 050 100 150 200
+> Number of Classes
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> 7.87
+> (d) Imagenet-A B0-Inc20
+> 10 20 30 40 50
+> Number of Classes
+> 70
+> 75
+> 80
+> 85
+> 90
+> 95
+> 100 0.36
+> (e) VTAB B0-Inc10
+> Aper+Adapter
+> SimpleCIL
+> L2P
+> DualPrompt
+> CODA-Prompt
+> EASE
+> ACIL
+> DS-AL
+> ACMap
+> Ours(NoFA-BC)
+
+Fig. 3: Accuracy curve of compared methods during CIL. We annotate the relative improvement of NoFA-BC above the runner-up method with numerical numbers at the last incremental stage. 
+
+4.3 Stability Enhancement 
+
+Maintaining stability is a prevalent challenge in CIL scenarios. Conventionally, updates or expansions of model/modules (e.g., IA in our method) embody plas-ticity through continual knowledge acquisition, while stability typically corre-sponds to freezing the backbone or module. Crucially, our NFA inherently pri-oritizes stability due to its frozen backbone with good generalization and non-forgetting properties. Here we present a Stability Enhancement (SE) process to leverage stability in NFA via fusing NFA’s class-relevant output with IA’s result, 
+
+ˆy = β · fB (ϕ(x, A1)) W A + (1 − β) · f (x), (14) where β is a hyperparameter to balance the stability and plasticity and W A
+
+is the classification weight of NFA. The pseudo-code of proposed NoFA-BC is summarized in Algorithm 1 in Supplementary Materials A. 
+
+## 5 Experiments 
+
+5.1 Experiment Setting Dataset and CIL Protocol. We follow the setting of [7] to evaluate our method on four benchmark datasets: CIFAR100 [18], ImageNet-R [13], ImageNet-A [14] and VTAB [37]. These datasets are all standard CIL benchmarks and exhibit a significant domain gap compared to ImageNet (used for pretraining). We divided each dataset into T tasks, utilizing the notation ‘B-m Inc-n’ to represent class splits, where m denotes the number of classes in the initial task and n indicates the number of classes added per incremental task thereafter. Additionally, to verify NoFA-BC’s resistance to forgetting with a large number of incremental tasks, we establish two distinct data splitting setting for ImageNet-R: ‘B 0 Inc 20 ’and ‘B 0 Inc 5’. We report the mean results and standard deviations of experi-ments with 5 random seeds. based on results from all seeds. More details are reported in the supplementary material B. NoFA-BC 11                           
+
+> Table 2: Ablation study for components on ImageNet-R and ImageNet-A. Modules IN-R B0 Inc5 IN-A B0 Inc20
+> ¯AAT¯AAT
+> IA 78.30 70.25 68.69 57.21 IA+NFA 80.16 71.35 70.47 58.91 IA+NFA+BLC 80.63 72.97 70.96 60.50 IA+NFA+SE 81.09 73.42 71.55 61.71 IA+NFA+BLC+SE 82.44 74.67 72.46 64.06
+
+Evaluation Metrics. Following the standard protocol established by [26], we use two evaluation metrics: the last-task accuracy AT measuring the perfor-mance upon completing all CIL tasks and the average incremental accuracy 
+
+¯A = 1
+
+> T
+
+PTi Ai across all tasks. 
+
+Implementation Details. We use the ViT-B/16-IN21K which is initially pre-trained on ImageNet-21K for all the experiments. For NoFA-BC, we follow the setting of F-OAL [46] to set the expansion dimension dB of the buffer layer 
+
+fB (·) to 5000. Other details of hyperparameters of NoFA-BC can be found in Supplementary Material B. 
+
+5.2 Comparative Study with SOTA Methods 
+
+We compare our method with numerous baselines and state-of-the-art methods and report the results on Table 1 and Figure 3. We choose Finetune (fine-tuning the entire pretrained model on each task) and Adapter-FT [2] (fine-tuning only the adapter), L2P [32], DualPrompt [31], CODA-Prompt [27], SimpleCIL [40], APER [40], ACMap [7] and EASE [42]. Meanwhile, we select ACIL [48] and DS-AL [45] as comparative methods among least squares-based approaches. Detailed experimental settings of all methods are reported in supplementary material B. As shown in Table 1, our NoFA-BC demonstrates competitive performance across all benchmark datasets for both ¯A and AT , with performance gains explic-itly marked by red arrows. Notably, NoFA-BC achieves significant improvements in long-sequence scenarios, showing substantial gains on ImageNet-R B0 Inc5. This indicates that NoFA-BC effectively preserve historical knowledge even af-ter numerous tasks. Critically, NoFA-BC demonstrates remarkable superiority over EASE and ACMap on ImageNet-A B0 Inc20, achieving accuracy gains of 
+
+9.02% and 7.87% in AT respectively. This empirically validates the effectiveness of the winner-takes-all allocation strategy and NoFA-BC’s robust performance in challenging classification tasks. Also, as shown in Figure 3, our NoFA-BC leads other compared methods at most time across different datasets and tasks, demonstrating a superior performance of NoFA-BC. 12 Tan. et al.                                               
+
+> Table 3: Ablation study for different strategies of intra-task competition with NFA. Intra-task Competition IN-R B0 Inc5 IN-A B0 Inc20
+> ¯AAT¯AAT
+> Weighted Sum 80.16 71.35 70.47 58.91 Top 50% 80.36 71.88 70.23 58.63 WTA 80.54 72.43 70.83 59.45 Table 4: Ablation study of inter-task com-petition strategy. Inter-task Competition IN-R B0 Inc5 IN-A B0 Inc20
+> ¯AAT¯AAT
+> Retain All 80.54 72.43 70.83 59.45
+> o=25 80.16 71.88 70.78 58.34
+> o=50 80.89 72.97 70.96 60.50
+> o=75 80.67 72.83 70.73 60.21 Highest 79.32 71.03 69.88 57.63
+
+5.3 Ablation Study Ablation Study of Proposed Components. We perform an ablation study of NFA, BLC and SE on ImageNet-R and ImageNet-A. Results are presented in Table 2. Starting from the IA baseline (uniformly fusing features from each adapter), we sequentially incorporate NFA, BLC and SE to validate each compo-nent’s contribution within the NoFA-BC framework. IA+NFA denotes summing all logits within a specific task from the NFA output as adapters’ probability. In Table 2, the results show that incorporating NFA yields a significant improve-ment over IA alone, and introducing BLC further enhances performance. This demonstrates that the allocation strategy to amplify dominant adapters greatly mitigates catastrophic forgetting. Subsequent utilization of the SE further im-proves the stability in previous tasks, leading to overall performance gain. These results confirm efficacy of all components within the proposed NoFA-BC. 
+
+Study on Strategy for Intra-Task Competition. In NoFA-BC, after get-ting the NFA, we employ the WTA to achieve optimal representation of task contribution via intra-task competition. To validate the effectiveness of WTA, we systematically evaluate several alternative approaches: (1) Weighted Sum :Perform summation over probabilities of all classes belonging to a specific task to fully leverage class information from the least squares solution. (2) Top 50% : Re-tains the highest-scoring 50% of logit indices per task, thereby pruning the lower 50% of category logits to eliminate potential irrelevant knowledge interference. To rigorously investigate impact of extraction strategies, we exclusively employ IA+NFA as baseline, thereby eliminating the influence of inter-task competition and SE. Results of these strategies are presented in Table 3. Experimental results validate that the WTA achieves optimal results among these strategies. The rea-son can be that, WTA effectively captures the most task-sensitive information, while the Weighted Sum introduces excessive redundancy by incorporating all class logits, and Top 50% still fails to achieve substantial improvement due to the introduction of irrelevant knowledge though half are eliminated. NoFA-BC 13 2 3 4 5 6 7 8 9 10                          
+
+> 75
+> 80
+> 85
+> 90
+> 95
+> ImageNet-R B0 Inc20
+> Accuracy(%)
+> (a) Old Classes
+> NoFA-BC w/o SE
+> NoFA-BC
+> 2345678910
+> 75
+> 80
+> 85
+> 90
+> 95 (b) New Classes
+> NoFA-BC w/o SE
+> NoFA-BC
+> 2345678910
+> 55
+> 60
+> 65
+> 70
+> 75
+> 80
+> 85
+> ImageNet-A B0 Inc20
+> Accuracy(%)  NoFA-BC w/o SE
+> NoFA-BC
+> 2345678910
+> 45
+> 50
+> 55
+> 60
+> 65
+> 70
+> 75
+> 80
+> 85
+> NoFA-BC w/o SE
+> NoFA-BC
+
+Fig. 4: Visualization of the impact of Stability Compensation in ImageNet-A B0 Inc20, ImageNet-R B0 Inc20. 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0  
+
+> Complementation ratio
+> 70
+> 75
+> 80
+> 85
+> Accuracy(%)
+> ImageNet-R B0-Inc5
+> AAT
+
+Fig. 5: The impact of hyperparameter Com-plementation ratio β values in SE on ImageNet-R B0 Inc5. 
+
+Study on Strategy for Inter-Task Competition. Following the intra-task competition, we further construct the LOF for inter-task competition to reduce the negative effect of less relevant knowledge. In this section, we compare LOF with retaining all adapters and selecting most relevant one. Also, the values of o
+
+in LOF are adjusted to modulate the intensity of the inter-task competition. In this experiment, we employ IA+NFA+BLC with WTA as the intra-task competi-tion strategy, eliminating the influence of SE. The results are tabulated in Table 4 and ‘Highest Adapter’ denotes retaining only the highest-weighted adapter. The results demonstrate that LOF with o = 50 achieves optimal performance. When comparing with other strategies, o = 50 can effectively preserve correct adapters while eliminating erroneous interference. Both the ‘Highest Adapter’ approach and the o = 75 setting discard more adapters, potentially resulting in excessive loss of valid knowledge and reduced fault tolerance in NoFA-BC. 
+
+Stability Enhancement’s impact on Stability and Plasticity. To intu-itively demonstrate SE’s impact, we present task-wise classification accuracy visualizations for both old classes (stability) and new classes (plasticity) on ImageNet-R B0 Inc20 and ImageNet-A B0 Inc20 in Figure 4. Results reveal that SE significantly enhances performance on old classes across both datasets. While SE’s effect on new classes exhibits fluctuations, it remains positive in most cases and performance degradation is small. This observation underscores SE’s vital role in boosting stability and overall effectiveness. 
+
+The impact of hyperparameter β. β serves as a critical hyperparameter in the SE operation, balancing contributions between the NFA and multi-adapters’ output. As shown in Figure 5, we evaluate β’s impact on NoFA-BC performance using ImageNet-R B0 Inc5. Results demonstrate performance degradation when 
+
+β approaches 0 or 1. Setting β = 0.5 yields optimal performance. 
+
+Further Analysis on BLC. To further demonstrate the ability of BLC to ef-fectively leverage adapter knowledge while filtering out interference, we designed 14 Tan. et al.               
+
+> Table 5: The mechanism of BLC utilizing useful knowledge and suppressing noise. Settings ABo= 50 correct adapter IN-R Inc5 59.14 0.12 72.97 95.93 IN-A Inc20 41.73 4.32 60.50 84.23
+
+experiments in Table 5 including A: Filter out the correct adapter in BLC with 
+
+o = 50 ; B: Remove the top 50 % most confident adapters to validate the impact of those excluded by BLC. Experiment A indicates that adapters within the top 50 % (aside from the correct adapter) also contribute useful features. This suggests that adapters retained by the BLC mechanism have minimal negative impact on the correct adapter while benefiting slightly from useful knowledge provided by other adapters. Experiment B further confirms our claim: irrelevant adapters introduce negative noise and BLC effectively filters them out. 
+
+Visualization. To provide a more intuitive demonstration of the effectiveness of NFA with BLC, we visualize contribution of each adapter when applying NFA with BLC. As shown in Figure 6, the contribution of each adapter for classify-ing an ostrich is depicted. NFA with BLC diminishes the weights of adapters unrelated to the task while enhancing those related to it, i.e., adapters contain-ing knowledge about ostriches and related categories (e.g., eagles) are rewarded, while others are suppressed by WTA or even eliminated by LOF. This obser-vation demonstrates that our method can improves the utilization of correct knowledge and effectively mitigates the mutual interference of knowledge. 
+
+Parameter Growth in NoFA-BC. Our method performs well across diverse scenarios, but adding one adapter per task leads to significant parameter growth. Here, we demonstrates that, NoFA-BC can retain good performance with fewer adapters under ImageNet-R B0-Inc40. As shown in Table 6, we empirically deter-mine an appropriate adapter count to balance capability and parameter growth. Results confirm that using a subset of adapters, combined with NoFA-BC, can still lead to good performance without excessive parameters (e.g., NoFA-BC with 10 adapters v.s. 40 adapters). This observation showcases that our NoFA-BC possesses potential in long-sequence scenarios with fewer storage overhead. 
+
+## 6 Conclusion 
+
+In this paper, we propose the Stability-Compensated Non-Forgetting Alloca-tion (NoFA-BC) for the CIL with PTMs. NoFA-BC integrates a Non-Forgetting Allocator (NFA) with a Bi-Level Competition (BLC) mechanism to deliver ac-curate and stable knowledge allocation. NFA frames allocation as a recursive least-squares problem, making continual allocator training equivalent to joint NoFA-BC 15 Weight Allocation  Classification           
+
+> ostrich
+> plane
+> …
+> eagle
+> frog
+> ……
+> dog
+> cat
+> …
+> ostrich
+> plane
+> …
+> eagle
+> frog
+> ……
+> dog
+> cat
+> …
+> 𝒜𝒜 1𝒜𝒜 2𝒜𝒜 t
+> 𝒜𝒜 1𝒜𝒜 2𝒜𝒜 t
+> …
+> …
+> be eliminated by LOF
+> be adjusted by NFA and WTA
+
+Fig. 6: Visualizations of NFA and BLC. Managing the utilization of different adapters improves classification. 
+
+Table 6: Exploring the impact of the number of adapters on the overall performance of our method in ImageNet-R B0 Inc5. NoFA-BC Params ¯A AT
+
+Only PTM 90.98M - -with 5 adapters 95.70M 81.59 73.87 with 10 adapters 101.71M 82.27 74.58 with 20 adapters 113.12M 82.45 74.93 with 40 adapters 135.28M 82.44 74.67 
+
+learning . Built on NFA, BLC performs intra-task Winner Takes All to cap-ture representative adapter signals and inter-task Last Ones Fall to suppress irrelevant adapters, enabling an effective knowledge allocation management. A Stability Enhancement (SE) process is proposed to further improves the sta-bility. Extensive experiments are conducted to validate NoFA-BC’s consistent superiority over existing methods. 
+
+## References 
+
+1. Belouadah, E., Popescu, A., Kanellos, I.: A comprehensive study of class incre-mental learning algorithms for visual tasks. Neural Networks 135 , 38–54 (2021). 
+
+https://doi.org/https://doi.org/10.1016/j.neunet.2020.12.003 , https: //www.sciencedirect.com/science/article/pii/S0893608020304202 
+
+2. Chen, S., GE, C., Tong, Z., Wang, J., Song, Y., Wang, J., Luo, P.: Adaptformer: Adapting vision transformers for scalable visual recognition. In: Koyejo, S., Mo-hamed, S., Agarwal, A., Belgrave, D., Cho, K., Oh, A. (eds.) Advances in Neu-ral Information Processing Systems. vol. 35, pp. 16664–16678. Curran Associates, Inc. (2022), https://proceedings.neurips.cc/paper_files/paper/2022/file/ 69e2f49ab0837b71b0e0cb7c555990f8-Paper-Conference.pdf 
+
+3. Chen, X., Chang, X.: Dynamic residual classifier for class incremental learning. In: Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV). pp. 18743–18752 (October 2023) 4. Cover, T.M.: Geometrical and statistical properties of systems of linear inequalities with applications in pattern recognition. IEEE Transactions on Electronic Com-puters EC-14 (3), 326–334 (1965). https://doi.org/10.1109/PGEC.1965.264137 
+
+5. Dosovitskiy, A., Beyer, L., Kolesnikov, A., Weissenborn, D., Zhai, X., Unterthiner, T., Dehghani, M., Minderer, M., Heigold, G., Gelly, S., Uszkoreit, J., Houlsby, N.: An image is worth 16x16 words: Transformers for image recognition at scale. In: In-ternational Conference on Learning Representations (2021), https://openreview. net/forum?id=YicbFdNTTy 
+
+6. Fang, D., Zhu, Y., Fang, R., Chen, C., Zeng, Z., Zhuang, H.: Air: Analytic imbal-ance rectifier for continual learning. arXiv preprint arXiv:2408.10349 (2024) 7. Fukuda, T., Kera, H., Kawamoto, K.: Adapter merging with centroid prototype mapping for scalable class-incremental learning. In: Proceedings of the IEEE/CVF 16 Tan. et al. Conference on Computer Vision and Pattern Recognition (CVPR). pp. 4884–4893 (June 2025) 8. Gao, Q., Zhao, C., Sun, Y., Xi, T., Zhang, G., Ghanem, B., Zhang, J.: A unified continual learning framework with general parameter-efficient tuning. In: Proceed-ings of the IEEE/CVF International Conference on Computer Vision (ICCV). pp. 11483–11493 (October 2023) 9. Gao, Z., Jia, W., Zhang, X., Zhou, D., Xu, K., Dawei, F., Dou, Y., Mao, X., Wang, H.: Knowledge memorization and rumination for pre-trained model-based class-incremental learning. In: Proceedings of the Computer Vision and Pattern Recognition Conference. pp. 20523–20533 (2025) 10. Guo, P., Lyu, M.R.: A pseudoinverse learning algorithm for feedforward neural networks with stacked generalization applications to software reliability growth data. Neurocomputing 56 , 101–121 (2004). https://doi.org/https://doi.org/ 10.1016/S0925-2312(03)00385-0 , https://www.sciencedirect.com/science/ article/pii/S0925231203003850 
+
+11. He, R., Fang, D., Chen, Y., Tong, K., Chen, C., Wang, Y., pui Chau, L., Zhuang, H.: Real: Representation enhanced analytic learning for exemplar-free class-incremental learning (2025), https://arxiv.org/abs/2403.13522 
+
+12. He, R., Fang, D., Xu, Y., Cui, Y., Li, M., Chen, C., Zeng, Z., Zhuang, H.: Seman-tic shift estimation via dual-projection and classifier reconstruction for exemplar-free class-incremental learning. In: Singh, A., Fazel, M., Hsu, D., Lacoste-Julien, S., Berkenkamp, F., Maharaj, T., Wagstaff, K., Zhu, J. (eds.) Proceedings of the 42nd International Conference on Machine Learning. Proceedings of Ma-chine Learning Research, vol. 267, pp. 22392–22406. PMLR (13–19 Jul 2025), 
+
+https://proceedings.mlr.press/v267/he25d.html 
+
+13. Hendrycks, D., Basart, S., Mu, N., Kadavath, S., Wang, F., Dorundo, E., Desai, R., Zhu, T., Parajuli, S., Guo, M., Song, D., Steinhardt, J., Gilmer, J.: The many faces of robustness: A critical analysis of out-of-distribution generalization. In: Proceed-ings of the IEEE/CVF International Conference on Computer Vision (ICCV). pp. 8340–8349 (October 2021) 14. Hendrycks, D., Zhao, K., Basart, S., Steinhardt, J., Song, D.: Natural adversarial examples. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 15262–15271 (June 2021) 15. Hu, Z., Li, Y., Lyu, J., Gao, D., Vasconcelos, N.: Dense network expansion for class incremental learning. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 11858–11867 (June 2023) 16. Jia, M., Tang, L., Chen, B.C., Cardie, C., Belongie, S., Hariharan, B., Lim, S.N.: Visual prompt tuning. In: Avidan, S., Brostow, G., Cissé, M., Farinella, G.M., Hassner, T. (eds.) Computer Vision – ECCV 2022. pp. 709–727. Springer Nature Switzerland, Cham (2022) 17. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Desjardins, G., Rusu, A.A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., Hassabis, D., Clopath, C., Kumaran, D., Hadsell, R.: Overcoming catastrophic forgetting in neural networks. Proceedings of the National Academy of Sciences 114 (13), 3521– 3526 (2017). https://doi.org/10.1073/pnas.1611835114 , https://www.pnas. org/doi/abs/10.1073/pnas.1611835114 
+
+18. Krizhevsky, A., Hinton, G., et al.: Learning multiple layers of features from tiny images. Tech. rep. (2009) 19. Li, Z., Hoiem, D.: Learning without forgetting. IEEE Transactions on Pattern Analysis and Machine Intelligence 40 (12), 2935–2947 (dec 2017). https://doi. org/10.1109/TPAMI.2017.2773081 NoFA-BC 17 20. Liu, Y., Su, Y., Liu, A.A., Schiele, B., Sun, Q.: Mnemonics training: Multi-class incremental learning without forgetting. In: Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition (CVPR) (June 2020) 21. Masana, M., Liu, X., Twardowski, B., Menta, M., Bagdanov, A.D., van de Weijer, J.: Class-incremental learning: Survey and performance evaluation on image clas-sification. IEEE Transactions on Pattern Analysis and Machine Intelligence 45 (5), 5513–5533 (2023). https://doi.org/10.1109/TPAMI.2022.3213473 
+
+22. McCloskey, M., Cohen, N.J.: Catastrophic interference in connectionist networks: The sequential learning problem. In: Psychology of learning and motivation, vol. 24, pp. 109–165. Elsevier (1989) 23. Mermillod, M., Bugaiska, A., Bonin, P.: The stability-plasticity dilemma: Investi-gating the continuum from catastrophic forgetting to age-limited learning effects. Frontiers in psychology 4, 504 (2013) 24. Paszke, A., Gross, S., Massa, F., Lerer, A., Bradbury, J., Chanan, G., Killeen, T., Lin, Z., Gimelshein, N., Antiga, L., et al.: Pytorch: An imperative style, high-performance deep learning library. In: NeurIPS. pp. 8026–8037 (2019) 25. Rebuffi, S.A., Bilen, H., Vedaldi, A.: Learning multiple visual domains with residual adapters. In: Guyon, I., Luxburg, U.V., Bengio, S., Wallach, H., Fergus, R., Vish-wanathan, S., Garnett, R. (eds.) Advances in Neural Information Processing Sys-tems. vol. 30. Curran Associates, Inc. (2017), https://proceedings.neurips.cc/ paper _ files / paper / 2017 / file / e7b24b112a44fdd9ee93bdf998c6ca0e - Paper . pdf 
+
+26. Rebuffi, S.A., Kolesnikov, A., Sperl, G., Lampert, C.H.: iCaRL: Incremental clas-sifier and representation learning. In: Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR). pp. 5533–5542 (Jul 2017). 
+
+https://doi.org/10.1109/CVPR.2017.587 
+
+27. Smith, J.S., Karlinsky, L., Gutta, V., Cascante-Bonilla, P., Kim, D., Arbelle, A., Panda, R., Feris, R., Kira, Z.: CODA-Prompt: Continual decomposed attention-based prompting for rehearsal-free continual learning. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 11909–11919 (June 2023) 28. Sun, H.L., Zhou, D.W., Ye, H.J., Zhan, D.C.: Pilot: A pre-trained model-based continual learning toolbox. arXiv preprint arXiv:2309.07117 (2023) 29. Thengane, V., Khan, S., Hayat, M., Khan, F.: Clip model is an efficient continual learner. arXiv preprint arXiv:2210.03114 (2022) 30. Wang, F.Y., Zhou, D.W., Ye, H.J., Zhan, D.C.: FOSTER: Feature boosting and compression for class-incremental learning. In: Computer Vision – ECCV 2022. pp. 398–414. Springer Nature Switzerland, Cham (2022). https://doi.org/10.1007/ 978-3-031-19806-9_23 
+
+31. Wang, Z., Zhang, Z., Ebrahimi, S., Sun, R., Zhang, H., Lee, C.Y., Ren, X., Su, G., Perot, V., Dy, J., Pfister, T.: Dualprompt: Complementary prompting for rehearsal-free continual learning. In: Avidan, S., Brostow, G., Cissé, M., Farinella, G.M., Hassner, T. (eds.) Computer Vision – ECCV 2022. pp. 631–648. Springer Nature Switzerland, Cham (2022) 32. Wang, Z., Zhang, Z., Lee, C.Y., Zhang, H., Sun, R., Ren, X., Su, G., Perot, V., Dy, J., Pfister, T.: Learning to prompt for continual learning. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 139–149 (June 2022) 33. Xu, Y., Chen, Y., Nie, J., Wang, Y., Zhuang, H., Okumura, M.: Advancing cross-domain discriminability in continual learning of vision-language models. In: The Thirty-eighth Annual Conference on Neural Information Processing Systems (2024) 18 Tan. et al. 34. Yan, S., Xie, J., He, X.: DER: Dynamically expandable representation for class incremental learning. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 3014–3023 (Jun 2021) 35. Yan, Y., Ji, J., Cheng, Y., Liu, Y., Xiong, P., Zhuang, H.: Crossacl: Analytic continual learning via feature cross for hyperspectral image classification. IEEE Geoscience and Remote Sensing Letters 22 , 1–5 (2025). https://doi.org/10. 1109/LGRS.2025.3587593 
+
+36. Yue, X., Zhang, X., Chen, Y., Zhang, C., Lao, M., Zhuang, H., Qian, X., Li, H.: MMAL: Multi-modal analytic learning for exemplar-free audio-visual class in-cremental tasks. In: Proceedings of the 32nd ACM International Conference on Multimedia. pp. 2428–2437. MM ’24, Association for Computing Machinery, New York, NY, USA (2024). https://doi.org/10.1145/3664647.3681607 
+
+37. Zhai, X., Puigcerver, J., Kolesnikov, A., Ruyssen, P., Riquelme, C., Lucic, M., Djo-longa, J., Pinto, A.S., Neumann, M., Dosovitskiy, A., et al.: A large-scale study of representation learning with the visual task adaptation benchmark. arXiv preprint arXiv:1910.04867 (2019) 38. Zhang, X., He, R., Jiao, C., Fang, D., Li, M., Zeng, Z., Chen, C., Zhuang, H.: L3A: Label-augmented analytic adaptation for multi-label class incremental learning. In: Singh, A., Fazel, M., Hsu, D., Lacoste-Julien, S., Berkenkamp, F., Maharaj, T., Wagstaff, K., Zhu, J. (eds.) Proceedings of the 42nd International Conference on Machine Learning. Proceedings of Machine Learning Research, vol. 267, pp. 74938–74949. PMLR (13–19 Jul 2025) 39. Zhao, H., Wang, H., Fu, Y., Wu, F., Li, X.: Memory-efficient class-incremental learning for image classification. IEEE Transactions on Neural Networks and Learn-ing Systems 33 (10), 5966–5977 (2022). https://doi.org/10.1109/TNNLS.2021. 3072041 
+
+40. Zhou, D.W., Cai, Z.W., Ye, H.J., Zhan, D.C., Liu, Z.: Revisiting class-incremental learning with pre-trained models: Generalizability and adaptivity are all you need. International Journal of Computer Vision (2024) 41. Zhou, D.W., Sun, H.L., Ning, J., Ye, H.J., Zhan, D.C.: Continual learning with pre-trained models: a survey. In: Proceedings of the Thirty-Third International Joint Conference on Artificial Intelligence. IJCAI ’24 (2024). https://doi.org/ 10.24963/ijcai.2024/924 , https://doi.org/10.24963/ijcai.2024/924 
+
+42. Zhou, D.W., Sun, H.L., Ye, H.J., Zhan, D.C.: Expandable subspace ensemble for pre-trained model-based class-incremental learning. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 23554–23564 (June 2024) 43. Zhuang, H., Chen, Y., Fang, D., He, R., Tong, K., Wei, H., Zeng, Z., Chen, C.: Gacl: Exemplar-free generalized analytic continual learning. In: Globerson, A., Mackey, L., Belgrave, D., Fan, A., Paquet, U., Tomczak, J., Zhang, C. (eds.) Advances in Neural Information Processing Systems. vol. 37, pp. 83024– 83047. Curran Associates, Inc. (2024). https://doi.org/10.52202/079017-2641 , https : / / proceedings . neurips . cc / paper _ files / paper / 2024 / file / 9713d53ee4f31781304b1ca43266f8d1-Paper-Conference.pdf 
+
+44. Zhuang, H., Fang, D., Tong, K., Liu, Y., Zeng, Z., Zhou, X., Chen, C.: Online analytic exemplar-free continual learning with large models for imbalanced au-tonomous driving task. IEEE Transactions on Vehicular Technology 74 (2), 1949– 1958 (Feb 2025). https://doi.org/10.1109/TVT.2024.3483557 
+
+45. Zhuang, H., He, R., Tong, K., Zeng, Z., Chen, C., Lin, Z.: DS-AL: A dual-stream analytic learning for exemplar-free class-incremental learning. Proceedings NoFA-BC 19 of the AAAI Conference on Artificial Intelligence 38 (15), 17237–17244 (Mar 2024). 
+
+https://doi.org/10.1609/aaai.v38i15.29670 
+
+46. Zhuang, H., Liu, Y., He, R., Tong, K., Zeng, Z., Chen, C., Wang, Y., Chau, L.P.: F-oal: Forward-only online analytic learning with fast training and low mem-ory footprint in class incremental learning. In: Globerson, A., Mackey, L., Bel-grave, D., Fan, A., Paquet, U., Tomczak, J., Zhang, C. (eds.) Advances in Neu-ral Information Processing Systems. vol. 37, pp. 41517–41538. Curran Associates, Inc. (2024), https://proceedings.neurips.cc/paper_files/paper/2024/file/ 48ffa38c13078d6ce26b328e7f373243-Paper-Conference.pdf 
+
+47. Zhuang, H., Weng, Z., He, R., Lin, Z., Zeng, Z.: Gkeal: Gaussian kernel embed-ded analytic learning for few-shot class incremental task. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 7746–7755 (June 2023) 48. Zhuang, H., Weng, Z., Wei, H., Xie, R., Toh, K.A., Lin, Z.: ACIL: Analytic class-incremental learning with absolute memorization and privacy protection. In: Ad-vances in Neural Information Processing Systems. vol. 35, pp. 11602–11614. Curran Associates, Inc. (2022) 49. Zhuang, H., Yan, Y., He, R., Zeng, Z.: Class incremental learning with ana-lytic learning for hyperspectral image classification. Journal of the Franklin In-stitute 361 (18), 107285 (2024). https://doi.org/https://doi.org/10.1016/j. jfranklin.2024.107285 , https://www.sciencedirect.com/science/article/ pii/S0016003224007063 NoFA-BC 1
+
+## Non-Forgetting Knowledge Allocation with Bi-level Competition for Class-Incremental Learning 
+
+Supplementary Materials 
+
+In the supplementary materials, we present additional information on NoFA-BC, encompassing more details on implementation and extended experimental results. The supplementary material is organized as follows: 
+
+– Section A proposes the pseudo-code of NoFA-BC. 
+
+– Section B presents more details of datasets and implementation of each com-pared method. 
+
+– Section C demonstrates the impact of projection dimension of the adapters on NoFA-BC. 
+
+– Section D presents a comparative study on Backward Transfer between NoFA-BC and other methods. 
+
+– Section E provides further analysis on the Bi-level Competition mechanism. 
+
+– Section F discusses the benefits and risks of knowledge allocation. 
+
+– Section G presents a comparison between NoFA-BC and recent Mixture of Adapter methods. 
+
+– Section H presents the comparison with EASE, ACIL, ACMap, SEMA and MoTE in extra settings. 
+
+– Section I lists the article references for the Mixture of Adapter methods mentioned in Section G. 
+
+## A Pseudo-code of NoFA-BC 
+
+In this section, we present the entire process of NoFA-BC in the form of pseudo-code, including both the training and testing phases. 
+
+## B Details of Compared Methods 
+
+In this section, we provide comprehensive implementation details for all com-pared methods. All approaches employ ViT-B/16-IN21K as the backbone to ensure a fair comparison. For the dataset setting, CIFAR-100 contains 100 classes, ImageNet-R and ImageNet-A each contain 200 classes, and VTAB consists of 50 classes. For all datasets, class order was randomized via a random seed set. We conduct experiments across five distinct random seeds {1993, 1994, 1995, 1996, 1997} and report the mean and standard deviation. For the implementation of each compared method, we follow the training set-tings in EASE, using PyTorch [24] to implement all models on a single NVIDIA RTX 4090. SGD with cosine annealing scheduler is chosen for optimizing the adapters. In our method, the learning rate, batch size and training epochs vary across different datasets and the details are depicted in Table A. Additionally, 2 Tan. et al. 
+
+Algorithm 1 NoFA-BC for CIL 
+
+Training: Input : Data stream {Dt = ( Xt, Yt)}Tt=1 , feature expansion projector fB (·).
+
+Initialization : A0 ← 0, C0 ← 0
+
+1: for t in 1 : T do 
+
+2: Get the incremental training set Dt.3: Train task-specific adapter At with Dt.4: Extract the prototypes Pt = {pc|c ∈ Y t} via Eq. 3. 5: Expand feature to get Xt via Eq. 5 with fB (·).6: Update At, Ct via Eq.10. 7: end for Inference after training on task t:Input : Input image x, a pre-trained ViT f (·), the weight of NFA W A, feature expan-sion projector fB (·).1: Calculate the task weight coefidient {α1, α 2, ..., α t} via Eq. 12 with W A and fB (·).2: Adjust the allocation of adapters via Bi-level Competition and Eq. 13. 3: Do Stability Enhancement via Eq. 14. 
+
+we follow the setting of F-OAL [46] to set the expansion dimension dB of the buffer layer fB (·) to 5000 in NoFA-BC. Other method-specific settings are as follows: 
+
+– SimpleCIL [40] . For SimpleCIL, we follow [40]’s setting, using solely the pretrained model for feature extraction with cosine similarity computation against class prototypes. 
+
+Table A: Details of the training settings for each dataset, based on the configurations provided in PILOT [28]. dataset batch size learning rate weight decay epochs  
+
+> CIFAR-100
+
+48 2.5 × 10 −2 5.0 × 10 −4 20  
+
+> ImageNet-R
+
+16 5.0 × 10 −2 5.0 × 10 −3 20  
+
+> ImageNet-A
+
+32 5.0 × 10 −2 5.0 × 10 −3 20  
+
+> VTAB
+
+16 3.0 × 10 −2 5.0 × 10 −3 45 
+
+– APER-Adapter [40] : For APER-Adapter, we follow [40]’s setting to train a single adapter only on the initial task, freeze it, and utilize it for subsequent feature extraction. The projection dimension r is set to 16 .
+
+– L2P [32] : For L2P, we set the size of prompt pool to 10 , prompt length= 5,selecting top-5 prompts per instance. 
+
+– DualPrompt [31] : For DualPrompt, we follow [31] to set G-Prompt length= 5
+
+and E-Prompt length= 20 .NoFA-BC 3
+
+– CODA-Prompt [27] : For CODA-Prompt, considering fairness, we allocate 
+
+20 incremental prompts per task (length= 8) to maintain parameter parity. 
+
+– ACIL [48] : For ACIL, we set the size of feature expansion matrix B to 5000. 
+
+– DS-AL [45] : For DS-AL, we set the compensation ratio C to 1.0 for all the datasets, with all other hyperparameters aligning with those of ACIL.. 
+
+– EASE [42] : For EASE, we follow the setting in [42] to use projection di-mension r = 64 and trade-off parameter α = 0 .1.
+
+– ACMap [7] : For ACMap, We follow the optimal setting from the paper: no Early Stopping Threshold, with adapter projection dimension r = 64 .
+
+## C Impact of Projection Dimension of Adapter 
+
+For the projection dimension of the adapter, we followed the experimental set-tings of EASE [42] by setting the adapter rank r = 64 . However, a larger rank leads to greater parameter growth. With r = 64 , each task’s adapter increases the model size by 1.18M parameters. To further explore the impact of the projection dimension, we conducted an extra experiment using different dimension within the adapters. As shown in Table ?? , we report the perfromance and parameter counts of NoFA-BC with r = 32 , r = 16 , and r = 8 .The results in Table ?? indicate that variations in the dimension r have only marginal impact on the performance of NoFA-BC, i.e., the performance consistently maintains with different setting of r. This demonstrates that even with relatively small r (e.g., r = 8 ), NoFA-BC can still effectively capture task-specific knowledge at each learning phase. This ovservation confirms that, for NoFA-BC, a smaller number of extra parameters can be achieved to significantly control parameter expansion in long-sequence continual learning scenarios. 
+
+## D Study on Backward Transfer 
+
+To more intuitively demonstrate the anti-forgetting capability of NoFA-BC, we evaluated backward transfer ( BTW ) for methods utilizing multiple adapters (EASE [42], ACMap [7]) 
+
+BW T = 1
+
+T − 1 
+
+> T−1
+
+X
+
+> t=1
+
+AT,t − At,t , (A) where AT,t denotes the accuracy achieved by the model when performing infer-ence on data from task t after learning task T . The results of BTW are shown in Table B. The results indicate that NoFA-BC exhibits strong anti-forgetting performance, surpassing EASE and ACMap across all datasets, demonstrating NoFA-BC’s remarkable competitiveness in addressing the core challenge of con-tinual learning, i.e., the catastrophic forgetting. 4 Tan. et al. 
+
+Table B: Results of BTW in five different datasets. Methods CIFAR-100 B0 Inc5 IN-R B0 Inc5 IN-R B0 Inc20 IN-A B0 Inc20 VTAB B0 Inc10                    
+
+> BW T BW T BW T BW T BW T
+> EASE -7.14 -11.00 -7.58 -12.18 -1.28 ACMap -7.13 -11.34 -12.09 -12.22 -1.74 NoFA-BC -3.33 -6.61 -6.54 -9.10 -0.52
+
+## E Further Study on Bi-level Competition 
+
+In this section, we delve deeper into the mechanism of Bi-level Competition. Both Intra-Task Competition and Inter-Task Competition aim to increase the utilization rate of the adapter corresponding to each sample. To quantify this effect, we introduce a new metric Pa, which records the average contributing proportion of the task-specific adapter relative to all adapters of all the sam-ples. That is, after learning all tasks, the sample-wise average of the weighting coefficients of correct adapter. 
+
+Pa = 1
+
+T
+
+> T
+
+X
+
+> t=1
+
+1
+
+NtNtX
+
+> i
+
+pt,i [t], (B) where pt,i is a coefficient vector that contains the contributions of each adapter and Pa can indicate how the knowledge of corresponding adapter is utilized. The results are summarized in Table C: 
+
+Table C: Correct adapter utilization proportions across different Bi-level Competition strategies. Bi-level Competition IN-R B0 Inc5 IN-A B0 Inc20 
+
+Pa AT Pa AT
+
+correct adapter 100.00 95.93 100.00 84.23 average adapter 2.50 70.83 10.00 56.12 Weighted Sum 17.83 71.35 27.63 58.91 Top 50% 20.03 71.88 29.45 58.63 WTA 23.14 72.43 30.61 59.45 
+
+WTA + “ o =25" 24.73 72.48 30.76 59.74 WTA + “ o =50" 33.89 72.97 35.78 60.50 
+
+WTA + “ o =75" 25.45 72.83 34.40 60.21 Highest Adapter 69.24 71.03 51.28 57.63 NoFA-BC 5
+
+Here, “correct adapter” refers to using only the sample-corresponding adapter during the entire inference process (equivalent to knowing the task identity of the sample in advance), and “average adapter” refers to uniformly utilizing all adapters (similar to EASE), without employing NFA and any Bi-level Compe-tition. In the Intra-task Competition, the WTA strategy outperforms the other ap-proaches, as reflected in both the accuracy metrics in the main paper and the Pa
+
+in Table C. This indicates that the WTA strategy is more effective at capturing task-specific information. In the Inter-task Competition, experiments demonstrate that the o = 50 
+
+setting optimizes the selection of the correct adapter, thereby improving the accuracy of NoFA-BC. Surprisingly, while the "Highest Adapter" setting achieves the highest Pa score, its accuracy is comparatively lower, contradicting the trend observed in other LOF settings. This occurs because, although the "Highest Adapter" setting eliminates all irrelevant adapters, it also completely eliminates the fault tolerance of NoFA-BC (which relies on the integration of adapters) when an incorrect adapter is selected. The loss of this error-correction mechanism leads to a significant drop in accuracy AT .
+
+## F Risk of failure cases caused by knowledge allocation 
+
+Knowledge allocation theoretically introduces certain risks. When the correct knowledge is effectively utilized, task accuracy improves significantly. However, there is also the risk that knowledge may be incorrectly discarded, potentially misleading originally correct classifications toward erroneous outcomes. To in-vestigate this trade-off, we conducted a comparative analysis between NoFA-BC and the "average adapter" strategy (defined in Table C). We quantified, for each sample, whether the application of knowledge allocation corrected an initially wrong prediction or led a previously correct prediction astray in ImageNet-R and ImageNet-A. The results are as follows in Table D:          
+
+> Table D: Observation of samples which are corrected and which are led astray. “average adapter" →BLC correct to wrong wrong to correct IN-R Inc5 21 381 IN-A Inc20 17 72
+
+The results demonstrate that knowledge allocation corrects a substantial number of misclassified samples. While a portion of data indeed becomes incor-rectly classified, likely due to the over-utilization of certain erroneous adapters, the benefits of knowledge allocation still far outweigh its risks. This experiment also further confirms the effectiveness of the NFA module from an empirical perspective. 6 Tan. et al. 
+
+Table E: The average accuracy ¯A and the last-task accuracy AT of Mixture of Adapters methods .The best performance is shown in bold and the second best performance is shown in underline. Method CIFAR B0 Inc5 IN-R B0 Inc5 IN-R B0 Inc20 IN-A B0 Inc20 VTAB B0 Inc10                                        
+
+> ¯AAT¯AAT¯AAT¯AAT¯AAT
+> SEMA 90.27 85.23 71.22 63.25 81.64 74.52 62.97 53.32 91.23 89.68 MoTE 93.78 88.98 73.21 65.43 82.13 76.39 64.91 57.93 92.77 91.26
+> NoFA-BC 94.04 89.21 82.44 74.67 83.61 77.75 72.51 64.06 93.98 93.91
+
+## G Comparison with other mixture of adapters methods 
+
+Recently, several new works based on the Mixture of Adapters (MOA) paradigm have been published. These methods also employ multiple adapters, utilizing them through different mechanisms: 
+
+– SEMA utilizes a self-expansion strategy where representation descriptors detect distribution shifts to automatically trigger the addition of new adapters at specific layers only when necessary. 
+
+– MoTE employs a training-free inference strategy that filters unreliable adapters based on task scope and fuses the remaining ones using confidence and self-confidence scores. We compared our method against these approaches using the same datasets as in the main results while controlling all hyperparameters (e.g., adapter rank) to ensure a fair comparison. The result is shown in Table E. Compared to other multi-adapter-based methods, NoFA-BC clearly achieves superior performance in accuracy. Notably, on the two challenging dataset settings: ImageNet-R B0 Inc5 and ImageNet-A B0 Inc20, both SEMA and MoTE exhibit varying degrees of performance degradation, whereas NoFA-BC maintains its superior perfor-mance, demonstrating that NoFA-BC utilizes the knowledge in adapters more reasonably. 
+
+## H Extra Comparison of Evaluation Curves 
+
+In this section, we present accuracy curves of NoFA-BC, ACMap, EASE, ACIL and the MOA methods mentioned before under additional experimental settings. The results in Fig A demonstrate that NoFA-BC consistently achieves superior performance. 
+
+## I Reference of MOA methods 
+
+– SEMA: Huiyi Wang, Haodong Lu, Lina Yao, and Dong Gong. Self-expansion of pre-trained models with mixture of adapters for continual learning. In Pro-ceedings of the Computer Vision and Pattern Recognition Conference, pages 10087–10098, 2025. NoFA-BC 70 20 40 60 80 100 
+
+Number of Classes 
+
+80 
+
+85 
+
+90 
+
+95 
+
+100 
+
+> Accuracy(%)
+
+(a) CIFAR-100 B0-Inc10 
+
+0 50 100 150 200 
+
+Number of Classes 
+
+60 
+
+70 
+
+80 
+
+90 
+
+100 
+
+(b) ImageNet-R B0-Inc10 
+
+40 80 120 160 200 
+
+Number of Classes 
+
+60 
+
+70 
+
+80 
+
+90 
+
+100 
+
+(c) Imagenet-R B0-Inc40 
+
+0 50 100 150 200 
+
+Number of Classes 
+
+30 
+
+40 
+
+50 
+
+60 
+
+70 
+
+80 
+
+90 
+
+(d) Imagenet-A B0-Inc5 
+
+0 50 100 150 200 
+
+Number of Classes 
+
+45 
+
+55 
+
+65 
+
+75 
+
+85 
+
+95 
+
+(e) Imagenet-A B0-Inc10 
+
+0 10 20 30 40 50 
+
+Number of Classes 
+
+85 
+
+90 
+
+95 
+
+100 
+
+(f) VTAB B0-Inc5 
+
+EASE 
+
+ACMap 
+
+ACIL 
+
+SEMA 
+
+MoTE Ours(NoFA-BC) 
+
+Fig. A: Accuracy curves of compared methods in dataset settings different from main paper. 
+
+– MoTE: Linjie Li, Zhenyu Wu, and Yang Ji. Mote: Mixture of task-specific experts for pre-trained model-based class-incremental learning. Knowledge-Based Systems, 324:113795, 2025.

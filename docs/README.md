@@ -6,58 +6,40 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-28
-- 运行时间：2026-05-28 22:03:17 UTC
+- 最新运行日期：2026-05-29
+- 运行时间：2026-05-29 22:07:56 UTC
 - 运行状态：成功
-- 本次总论文数：12
-- 精读区：6
-- 速读区：6
+- 本次总论文数：6
+- 精读区：4
+- 速读区：2
 
 ### 今日简报（AI）
-今日速递聚焦持续学习与智能体自适应，精读两篇高分工作来攻克稳定性-可塑性平衡。  
-最值得关注的是用快慢后继特征实现动态权衡，以及能量结构化低秩适应这种无需存储旧数据的新范式。  
-建议读者不必死磕单一模型，可以试试把状态自适应记忆或模型路由的思路融入你的日常任务流。
-- 详情：[/202605/28/README](/202605/28/README)
+今日精读高分论文聚焦现代霍普菲尔德网络的持续学习与类增量非遗忘分配，速读则涉及漂移检测和LLM代理适配。  
+最值得关注：用现代Hopfield网络实现持续学习并成功迁移至扩散模型（满分），以及通过双级竞争在类增量学习中彻底避免灾难性遗忘。  
+建议关注持续学习与生成模型的交叉突破，可尝试将Hopfield记忆机制引入你的增量训练流程。
+- 详情：[/202605/29/README](/202605/29/README)
 
 ### 精读区论文标签
-1. [Balancing Plasticity and Stability with Fast and Slow Successor Features](/202605/28/2605.26357v2-balancing-plasticity-and-stability-with-fast-and-slow-successor-features)  
+1. [Continual Learning in Modern Hopfield Networks with an Application to Diffusion Models](/202605/29/2605.27975v2-continual-learning-in-modern-hopfield-networks-with-an-application-to-diffusion-models)  
+   标签：评分：10.0/10、query:continual
+   evidence：利用现代霍普菲尔德能量分析扩散模型中的灾难性遗忘，提出优先化重放以缓解遗忘
+2. [Non-Forgetting Knowledge Allocation with Bi-level Competition for Class-Incremental Learning](/202605/29/2605.29592v1-non-forgetting-knowledge-allocation-with-bi-level-competition-for-class-incremental-learning)  
    标签：评分：9.0/10、query:continual
-   evidence：使用后继特征解决持续非平稳环境中的稳定性-可塑性困境
-2. [Energy-Structured Low-Rank Adaptation for Continual Learning](/202605/28/2605.27482v1-energy-structured-low-rank-adaptation-for-continual-learning)  
+   evidence：类增量学习中防止旧知识遗忘的方法
+3. [Active Continual Learning with Metaplastic Binary Bayesian Neural Networks](/202605/29/2605.30198v1-active-continual-learning-with-metaplastic-binary-bayesian-neural-networks)  
    标签：评分：9.0/10、query:continual
-   evidence：E^2-LoRA 通过集中和排序低秩适配器中的能量来减轻任务干扰并防止遗忘。
-3. [Continual Learning in Modern Hopfield Networks with an Application to Diffusion Models](/202605/28/2605.27975v1-continual-learning-in-modern-hopfield-networks-with-an-application-to-diffusion-models)  
-   标签：评分：9.0/10、query:continual
-   evidence：通过霍普菲尔德能量研究生成模型中的灾难性遗忘，并指导重放样本选择以防止遗忘。
-4. [You Live More Than Once: Towards Hierarchical Skill Meta-Evolving](/202605/28/2605.28390v1-you-live-more-than-once-towards-hierarchical-skill-meta-evolving)  
-   标签：评分：9.0/10、query:continual
-   evidence：分层技能元演化实现智能体持续改进
-5. [Janus-LoRA: A Balanced Low-Rank Adaptation for Continual Learning](/202605/28/2605.28495v1-janus-lora-a-balanced-low-rank-adaptation-for-continual-learning)  
-   标签：评分：9.0/10、query:continual
-   evidence：Janus-LoRA 解决 LoRA 在持续学习中的正交性违反问题以防止灾难性遗忘。
-6. [Understanding Generalization and Forgetting in In-Context Continual Learning](/202605/28/2605.28705v1-understanding-generalization-and-forgetting-in-in-context-continual-learning)  
-   标签：评分：9.0/10、query:continual
-   evidence：理论研究LLM在处理序列任务时的上下文持续学习中的遗忘现象
+   evidence：在边缘设备上对非平稳流进行在线持续学习和主动查询
+4. [Evolve as a Team: Collaborative Self-Evolution for LLM-based Multi-Agent Systems](/202605/29/2605.29790v1-evolve-as-a-team-collaborative-self-evolution-for-llm-based-multi-agent-systems)  
+   标签：评分：8.0/10、query:continual
+   evidence：基于经验的协作自我进化，实现多代理系统的持续改进。
 
 ### 速读区论文标签
-1. [Continual Model Routing in Evolving Model Hubs](/202605/28/2605.28577v1-continual-model-routing-in-evolving-model-hubs)  
-   标签：评分：8.0/10、query:continual
-   evidence：通过检查点锚定和结构化回放防止在模型路由更新中遗忘
-2. [FlyRoute: Self-Evolving Agent Profiling via Data Flywheel for Adaptive Task Routing](/202605/28/2605.22057v1-flyroute-self-evolving-agent-profiling-via-data-flywheel-for-adaptive-task-routing)  
+1. [Open World Autoencoding Drift Detection with Novel Class Recognition in Tabular Non-stationary Data Streams](/202605/29/2605.29834v1-open-world-autoencoding-drift-detection-with-novel-class-recognition-in-tabular-non-stationary-data-streams)  
    标签：评分：7.0/10、query:continual
-   evidence：提出一种自我进化的智能体画像系统，从流量中更新能力描述，实现自适应
-3. [SAM: State-Adaptive Memory for Long-Horizon Reasoning Agent](/202605/28/2605.24468v1-sam-state-adaptive-memory-for-long-horizon-reasoning-agent)  
-   标签：评分：7.0/10、query:continual
-   evidence：状态自适应记忆使智能体能够根据状态自适应访问历史交互以实现自我改进
-4. [Is Agent Memory a Database? Rethinking Data Foundations for Long-Term AI Agent Memory](/202605/28/2605.26252v1-is-agent-memory-a-database-rethinking-data-foundations-for-long-term-ai-agent-memory)  
-   标签：评分：7.0/10、query:continual
-   evidence：受控演化记忆防止长期智能体的容量驱动遗忘
-5. [Hierarchical Prompt-Domain Control and Learning for Resource-Constrained Agentic Language Models](/202605/28/2605.27703v1-hierarchical-prompt-domain-control-and-learning-for-resource-constrained-agentic-language-models)  
+   evidence：提出使用自编码器的无监督概念漂移检测与新类识别方法，适用于数据流的增量适应
+2. [Adapting the Interface, Not the Model: Runtime Harness Adaptation for Deterministic LLM Agents](/202605/29/2605.22166v2-adapting-the-interface-not-the-model-runtime-harness-adaptation-for-deterministic-llm-agents)  
    标签：评分：6.0/10、query:continual
-   evidence：分层在线学习框架使智能体LLM适应变化状态
-6. [Eco-evolutionary games in noisy environments](/202605/28/biorxiv-10-64898-2026-05-20-726658-v1-eco-evolutionary-games-in-noisy-environments)  
-   标签：评分：6.0/10、query:continual
-   evidence：随机演化博弈论研究行为与环境协同进化
+   evidence：从过去失败中学习可重用干预实现自主适应
 
 
 <div class="dpr-home-promo-card">
