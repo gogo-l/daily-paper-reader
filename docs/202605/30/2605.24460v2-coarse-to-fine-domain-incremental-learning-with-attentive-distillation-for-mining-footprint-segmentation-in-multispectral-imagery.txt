@@ -1,0 +1,542 @@
+Title: Coarse-to-Fine Domain Incremental Learning with Attentive Distillation for Mining Footprint Segmentation in Multispectral Imagery
+
+URL Source: https://arxiv.org/pdf/2605.24460v2
+
+Published Time: Fri, 29 May 2026 01:06:28 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# Coarse-to-Fine Domain Incremental Learning with Attentive Distillation for Mining Footprint Segmentation in Multispectral Imagery 
+
+# Alif Tri Handoyo 1∗ , Vincent C.S. Lee 2 , Rizka Widyarini Purwanto 1 , Alex M. Lechner 1,3 , Deanna Kemp 4 and Muhamad Risqi U. Saputra 1∗
+
+> 1
+
+# Monash University, Indonesia 
+
+> 2
+
+# Monash University, Australia 
+
+> 3
+
+# Northeastern University, China 
+
+> 4
+
+# The University of Queensland, Australia 
+
+# {alif.handoyo, vincent.cs.lee, rizka.purwanto, alex.lechner }@monash.edu, d.kemp@uq.edu.au, risqi.saputra@monash.edu 
+
+# Abstract 
+
+Automatically mapping and segmenting global mining footprints using remote sensing and deep learning is critical for monitoring the socio-environmental risks and impacts of mining, yet its progress is hindered by the scarcity of fine-grained annotated data. Although large-scale datasets with coarse boundaries are widely available, leveraging them to improve fine-grained segmentation is chal-lenging due to significant domain shift. To address this, we propose MineC2FNet, a coarse-to-fine do-main incremental learning framework that exploits abundant coarse data to enhance fine-grained min-ing footprint segmentation. MineC2FNet adopts a teacher–student architecture with attentive distilla-tion at both the feature and prediction levels, se-lectively transferring generalized knowledge from the coarse domain while enabling boundary re-finement using limited fine-grained data (fine do-main). We further introduce an expertly vali-dated dataset of 219 images with precise boundary annotations across diverse geographies and com-modities. Extensive experiments against state-of-the-art approaches, including domain adaptation and domain incremental learning methods, demon-strate that MineC2FNet achieves superior perfor-mance while effectively handling domain shift. The dataset and code are publicly available at https: //github.com/risqiutama/MineC2FNet. 
+
+# 1 Introduction 
+
+Mapping Global Mining Footprints: A Socio-Environmental Monitoring Challenge. Mining is fundamental to the global economy, yet mineral resource extraction can cause profound, often irreversible damage to people and the environment [Owen et al. , 2023]. Extractive activities can lead to large-scale landscape alter-ation, ecosystem loss, biodiversity decline, and air and water 
+
+> ∗Corresponding authors.
+
+pollution [Sonter et al. , 2018; Lechner et al. , 2017]. Many of these impacts can displace local and downstream popu-lations and adversely affect the health of local communities and indigenous peoples [Ang et al. , 2023; Owen et al. , 2023]. These pressures and impacts can also drive resource-related conflicts and grievances. Despite the promise of local economic development, host communities often live with long-term environmental lega-cies, long after mines cease operations [Kemp and Owen, 2025]. Multispectral remote sensing offers a method for con-tinuous and repeatable tracking of mining footprints, in par-ticularly in remote areas [Lechner et al. , 2019; Maus et al. ,2020; Saputra et al. , 2025]. This would enable scalable, re-mote monitoring of mining activity and its surrounding con-text, including how mining footprints change over time, and where change coincides with complex social and environ-mental risk factors. However, a critical bottleneck remains: while Deep Learn-ing (DL)-based semantic segmentation offers a transforma-tive alternative to labor-intensive manual mapping [Wieland 
+
+et al. , 2023; Cai et al. , 2023; Zhu et al. , 2025], these mod-els depend on vast amounts of meticulously annotated data. Generating such data is exceptionally challenging, as distin-guishing fine-grained features (e.g., pits, waste rock, tailings dams) requires substantial expert knowledge and field surveys [Maus et al. , 2020]. Although coarsely annotated data [Maus 
+
+et al. , 2022] offers a cost-effective alternative with extensive coverage, it merges distinct land cover features into impre-cise footprints (Figure 1 (a) - Task 1). Models trained on such labels inherit these imprecisions, leading to inaccurate boundary delineation and hindering effective environmental monitoring. 
+
+Our Contribution. To leverage both abundant coarse dataset and scarce fine dataset for mining footprint seg-mentation, and to bridge their domain gap in incremen-tal learning settings, we propose Mine Coarse-to-Fine Net (MineC2FNet). MineC2FNet uses attentive distillation in a teacher–student training settings to adapt the model to new domains while selectively retaining knowledge from previous domains. The attentive distillation is applied at both feature (via attentive feature injection ) and prediction levels (via at-   
+
+> arXiv:2605.24460v2 [cs.CV] 28 May 2026 Task 1: Coarse Domain Task 2: Fine Domain
+> background
+> pavement ground
+> road terrain vegetation sidewalk
+> Task 1: Coarse Label
+> Task 2: Fine Label
+> (a)  Our task  (b) Existing task Figure 1: Comparison between (a) our coarse-to-fine problem with (b) existing coarse-to-fine continual learning task.
+
+tentive knowledge transfer ) to transfer only high-quality de-lineation from the teacher (previous domain) to the student (new domain). Unlike prior coarse-to-fine continual learning methods defining ”coarse” as broad label categories [Shenaj 
+
+et al. , 2022; Alfarra et al. , 2024], we introduce a new task where ”coarse” refers to imprecise boundaries and ”fine” to accurate, expert-validated ones. The contributions of this pa-per are: • We present MineC2FNet, the first coarse-to-fine do-main incremental learning framework for mining foot-print segmentation using multispectral imagery. • We propose attentive distillation, a novel approach ap-plying selective distillation to both feature and predic-tion levels. • We introduce a new, expertly validated dataset of 219 globally distributed images for fine-grained mining foot-print segmentation. • We demonstrate the effectiveness of our framework and attentive distillation through comprehensive evaluation on this new dataset. 
+
+Team. Our project brought together a multidisciplinary team in remote sensing, deep learning, and mining domain experts, including professionals from the Faculty of IT at Monash University, the College of Resources and Civil Engi-neering at Northeastern University, China, and the Centre for Social Responsibility in Mining at the University of Queens-land. These experts were key to guiding the project conceptu-alisation, identifying detailed mining features, and validating the quality of our new dataset. More broadly, funded by the Ford Foundation, our research contributes to the foundations mission of advancing social and environmental justice by im-proving transparency and accountability in mining. 
+
+# 2 Related Works 
+
+Semantic Segmentation of Mining Footprint. Apply-ing deep learning-based semantic segmentation to multispec-tral satellite imagery has the potential to transform global mining footprint mapping and monitoring. Currently, global-scale studies, e.g., [Owen et al. , 2023], rely on a single geo-graphic coordinate to represent mining operations, failing to capture their true spatial extent. On the other hand, studies that leverage supervised semantic segmentation are typically mine- or region-specific [Qiao et al. , 2024; Tong et al. , 2020], restricting their application to global datasets. Although [Sa-putra et al. , 2025] has demonstrated mining segmentation on a global dataset, their model was trained on only 37 locations, limiting its generalization capability. Finally, the success of these methods is fundamentally dependent on the availability of large-scale, pixel-level annotated datasets, which are un-fortunately not yet available. 
+
+Continual Learning in Remote Sensing. Continual Learning (CL) addresses the challenge of training a model on a continuous stream of data or a sequence of tasks with-out experiencing catastrophic forgetting , a condition in which the model tends to lose previously learned knowledge when trained on a new dataset or tasks. In remote sensing, the coarse-to-fine paradigm is applied to address CL problems in several distinct ways, ranging from data quality to architectural precision. To mitigate the problem of high annotation costs, some frameworks lever-age coarse labels as a starting point to automatically generate more detailed, fine-grained pseudo-labels. These new pseudo labels then serve as the actual supervision to train the model. This strategy can be applied spatially, by turning imprecise polygons into sharp object boundaries [Das et al. , 2023], or semantically, by using coarse labels (broad classes, e.g., crop-land) to identify and classify fine labels (specific sub-classes, e.g., paddy field) [Chen et al. , 2024]. Similarly, [Shenaj et al. , 2022] facilitates this coarse-to-fine CL by using knowl-edge distillation and a specialized weight initialization rule, allowing the model to learn new classes and adapt to new do-mains without being fully retrained. Beyond class-incremental shifts, domain-incremental learning (DIL) tackles geographical variations by adapting the models to new spectral and spatial distributions with-out requiring access to original training data. The GSMF-RS-DIL [Huang et al. , 2024] framework utilizes graph space transformations and multifeature constraints to balance prior knowledge retention with the acquisition of new domain in-formation. Similarly, multi-domain incremental architec-tures [Garg et al. , 2022] employ domain-specific parameters and differential learning rates within Domain-Aware Resid-ual Units to optimize the stability-plasticity trade-off. These integrated strategies allow remote sensing models to remain effective across diverse environments while significantly mit-igating catastrophic forgetting. 
+
+# 3 Data 
+
+Coarse Dataset. The coarse dataset was derived from the global-scale mining polygons (Version 2) data introduced by [Maus et al. , 2022], which originally contained over 44,929 mining polygons. This dataset provides a broader set of im-age features for mine footprint identification, characterized by rough, less precise edge delineations. These polygons are labeled as ”Mining” and areas outside the polygons are con-sidered ”Non-Mining”, resulting in a binary segmentation. To create a usable subset for our training, we filtered these polygons by establishing a minimum area threshold of ap-proximately 9.8 km², corresponding to the smallest mine in Figure 2: Domain shift analysis using Kernel Density Estimation (KDE). (Left) The coarse dataset exhibits a balanced class distribu-tion, in contrast to the severe class imbalance of the fine dataset. (Right) Boundary roughness analysis demonstrating higher geomet-ric complexity of fine masks compared to coarse masks. 
+
+our fine-grained dataset. Polygons with an area greater than this threshold were retained, resulting in a collection of 1,380 coarse-labeled images. Satellite imagery for these locations were sourced from Sentinel-2 (10m) and Landsat 8 (15/30m) satellites and included RGB, Near-Infrared (NIR), and Short-Wave Infrared (SWIR) bands. 
+
+Fine Dataset. The fine dataset is a high-quality, expert-validated collection of images featuring precise and detailed boundaries for mining segmentation. This dataset consists of 219 images, which include RGB and NIR bands, with a subset of 200 images also containing SWIR bands. These data were manually harmonised from the original datasets of [Werner et al. , 2020; Lechner et al. , 2016; Lechner et al. ,2019], following methods outlined in [Saputra et al. , 2025]. Similar to the coarse dataset, the resolution and extent of the multispectral data varied as we used Sentinel and Landsat 8. We split the dataset into training, validation, and test sets us-ing an approximate 70:10:20 ratio. These locations was care-fully balanced to account for a wide range of mine commodi-ties, geographic regions, and climates. A key characteristic is its significant class imbalance, with non-mining pixels mak-ing up more than 80% of the labels across the dataset. 
+
+Domain Shift. Figure 2 demonstrates a clear domain gap between the coarse and fine datasets. The mining class cover-age analysis (left) reveals a significant disparity in class labels pixel distributions: Coarse annotations exhibit a relatively balanced occupancy peaking at 45% , whereas the fine dataset reflects the extreme sparsity of precise footprints, peaking at only 12% . The Boundary Roughness (right) measured as 
+
+R = P 2 
+
+> 4πA
+
+further differentiates the masks roughness. Coarse masks peak at R ≈ 2, identifying them as smooth, simpli-fied blobs. In contrast, fine labels capture the irregular, high-frequency boundary details of real-world mines, with values reaching up to R ≈ 12 . Collectively, these metrics confirm that while coarse labels provide a simplified approximation, fine labels capture the true geometric complexity and natural class imbalance inherent in the target domain. 
+
+# 4 Methodology 
+
+Our proposed method addresses the domain shift between coarse and fine datasets in training domain incremental learn-ing model for mining footprint segmentation using multispec-tral satellite imagery. Figure 3 illustrates the overall work-flow, highlighting our framework with attentive distillation applied at both the feature level (via Attentive Feature In-jection) and the prediction level (via Attentive Knowledge Transfer). The core objective is to enable the model to learn from the new domain while selectively retaining knowledge from the previous domain. 
+
+4.1 Problem Formulation 
+
+We frame our coarse-to-fine segmentation problem as a do-main incremental learning problem consisting of two sequen-tial tasks. The goal is to train a model M , parameterized by 
+
+θ, that leverages knowledge from an initial task trained on coarse domain Dc, to excel at a subsequent task with fine tar-get domain Df . This requires a domain incremental learning approach with selective attentive distillation, where the model is capable of transfering relevant general knowledge while discarding domain-specific noise (e.g., imprecise boundaries) from the coarse task. Let Dc = {(Xci , Y ci )}Nc 
+
+> i=1
+
+be the coarsely annotated dataset where Xci is an input image, Y ci is its corresponding coarse segmentation mask or label, and Nc is the number of coarse training images. Let Df = {(Xfi , Y fi )}Nf 
+
+> i=1
+
+be the fine-grained, expertly annotated dataset, where Y fi is the pre-cise, fine-grained mask, and Nf is the total images in the fine dataset. Our model, M (θ), which consists of a teacher component M (θT ) and a student component M (θS ), where 
+
+θ = {θT , θ S }, will be trained using the following steps: 1. Task 1 (Coarse Domain): The teacher model M (θT ) is trained on the coarse dataset Dc to learn a set of gener-alized parameters θT .2. Task 2 (Fine Domain): With the teacher M (θT ) frozen, the student model M (θS ) is trained on the fine dataset 
+
+Df to learn its parameters θS . During this phase, the student must learn to predict the fine labels Yf while se-lectively distilling knowledge from M (θT ).The final objective is to optimize the parameters θS as de-scribed in Equation 1, where L is the loss function. 
+
+M (θS ) = arg min 
+
+> θS
+
+L(θS |Df , M (θT )) (1) 
+
+4.2 Coarse-to-fine Domain Incremental Learning 
+
+In the context of our coarse-to-fine domain incremental learn-ing, the training for Task 1 follows the standard training pro-cedure for semantic segmentation, utilizing Binary Cross-Entropy (BCE) [Mao et al. , 2023] as the loss function. On the other hand, the training process for Task 2 is orchestrated by a composite loss function, Ltotal . This loss, shown in Eq. (2), is the core of our domain incremental learning approach. It combines Lstudent , the student’s loss function on the fine data, with Ldistill , the attentive distillation loss from the teacher. 
+
+Ltotal (Df ) = Lstudent + Ldistill (2) 
+
+Student Loss. The student loss, Lstudent , is a comprehen-sive objective function designed to train the student model 
+
+M (θS ) on the fine-grained dataset Df . As seen in Eq. (3), it Student Prediction               
+
+> Coarse Features
+> Encoder Decoder
+> Fine Features
+> Feature Injection
+> Encoder
+> Gated Fusion
+> Teacher Network (Pre-trained using Coarse Dataset)
+> Attentive Feature Injection
+> Frozen Weights
+> Multispectral Input Image (Fine Dataset)
+> CBAM
+> Diffusion Refinement
+> Output 1 Image 1
+> Image 2
+> Image i
+> Output 2 Output i GT 1 GT 2 GT i
+> Output 1 Output 2 Output i
+> Image-Level Selection
+> Groundtruth Segmentation Teacher Prediction
+> Pixel-Level Selection
+> Attentive Knowledge Transfer
+> LBCE
+> LDICE
+> LSSIM
+> LBoundary
+> LStudent
+> LDistil l
+> Selective Teacher Prediction
+> Output 2 Output i Pixel-level Mask Pixel-level Mask
+> Student Network
+
+Figure 3: Overview of our coarse-to-fine domain incremental learning framework for mining footprint segmentation (MineC2FNet). 
+
+consists of four components, including Binary Cross-Entropy (LBCE ), Dice Loss ( LDice ), Structural Similarity Loss ( LSSIM ), and Boundary Loss ( LBoundary ) functions. 
+
+Lstudent (Df ) = LBCE + LDice + LSSIM + LBoundary (3) 
+
+LBCE is utilized as a widely used loss function for binary clas-sification tasks, which we apply on a pixel-wise basis to mea-sure the difference between the student’s prediction ˆY fi and the ground truth fine mask Y fi . The Dice loss is added since it is particularly effective for segmentation tasks with imbal-anced classes by maximizing the overlap between ˆY fi and 
+
+Y fi [Sudre et al. , 2017]. Furthermore, we also incorporate 
+
+LSSIM [Zhao et al. , 2019] as this loss encourages the model to preserve the structural information of Y fi , which is crucial for maintaining realistic mining shapes. Besides the loss functions above, we also incorporate 
+
+LBoundary to explicitly improve the model performance on edge delineation. This loss is designed by generating a boundary importance map from the ground truth mask and then using it to weight the LBCE . In particular, we first apply Sobel filters to Y fi to compute the horizontal ( Gx) and verti-cal ( Gy ) gradients. The boundary importance map ˆW ∈ [0 , 1] 
+
+is then calculated as in Eq. (4). 
+
+ˆW = W − Wmin 
+
+Wmax − Wmin 
+
+, where W =
+
+q
+
+G2 
+
+> x
+
++ G2 
+
+> y
+
+(4) 
+
+LBoundary is then defined as a weighted binary-cross entropy loss as described in Eq. (5), where the weights are derived from image edges to emphasize optimizing the boundary re-gions of the segmented images. 
+
+LBoundary = 1
+
+K
+
+> K
+
+X
+
+> j=1
+
+ˆWj · LBCE j (5) Note that K represents the number of pixel in the images. This formulation forces the model to pay more attention to correctly classifying pixels on the segmented boundaries. 
+
+Distillation Loss. We adopt a knowledge distillation where the loss (LDistill ) is formulated as the standard Kullback-Leibler (KL) divergence between the softened probability distributions of the teacher ( P T ) and student (QT ), scaled by a temperature factor T . As the teacher is trained in a domain with imperfect coarse labels, we intro-duce attentive distillation to ensure only reliable knowledge is transferred. This mechanism is applied at both the feature and prediction levels, as we will detail next. 
+
+4.3 Attentive Feature Injection 
+
+Our attentive feature injection is a multi-stage pipeline de-signed to intelligently transfer generalized feature extrac-tion capabilities of the teacher model M (θT ) to the student 
+
+M (θS ). This pipeline was designed to solve our domain in-cremental challenge with the understanding that M (θT ) was trained on a larger set (source domain), capturing a more vi-sually diverse range of global mining footprints. As a result, 
+
+M (θT ) possesses generalized knowledge of how mining ar-eas appear in satellite imagery, even though its boundary de-lineation remains imprecise. To this end, rather than simply fine-tuning M (θT )’s weight in the Task 2 or even concatenat-ing M (θT )’s and M (θS )’s features, our attentive feature in-jection selectively fuses, refines, and enhances feature maps from both the teacher (generalized source domain features that uses coarse data) and student (specific target domain features that uses fine data). As illustrated in Figure 3, the pipeline consists of four stages: Feature Injection, Gated Fu-sion (GF), Convolutional Block Attention Module (CBAM), and Diffusion Refinement (DR). Feature Injection. A key distinction in our attentive dis-tillation approach is that we inject a subset of M (θT ), partic-ularly the feature extractor, to M (θS ), enabling M (θS ) to in-corporate dual, identical feature extractors: a ”teacher feature extractor” (a frozen copy of the teacher’s backbone, part of 
+
+θT ) and a ”student feature extractor” (with trainable parame-ters, part of θS ). During Task 2, for a given input image Xfi ,these two backbones operate in parallel. The student back-bone extracts high-fidelity features directly from the fine-grained target domain input, while the frozen teacher back-bone provides a parallel stream of generalized feature maps derived from the source domain. These two sets of features, one rich in precise target domain detail ( Ffine ) and the other in broad source domain context ( Fcoarse ), are then passed to the subsequent attentive fusion and refinement stages. 
+
+Gated Fusion (GF). To dynamically merge contextual information from the coarse teacher backbone with high-frequency details from the fine student backbone, we employ Gated Fusion [Takikawa et al. , 2019]. This module’s merit lies in its learnable, pixel-wise gating mechanism, which adaptively decides the contribution of each feature source. This allows the network to prioritize general context or pre-cise detail as needed, creating a richer, fused representation without the need for fixed fusion rules. 
+
+CBAM. The fused features are then refined using the Convolutional Block Attention Module [Woo et al. , 2018]. We use CBAM for its efficiency and effectiveness in fea-ture enhancement. Its primary benefit is that it sequentially infers attention maps along both channel and spatial dimen-sions. This process allows the model to learn what features are most salient (channel-wise) and where to focus its atten-tion (spatial-wise), further boosting the discriminative power of the representations. 
+
+Diffusion Refinement (DR). As a final stage, we intro-duce a new Diffusion Refinement module to produce a highly polished representation for segmentation. Inspired by itera-tive refinement frameworks [Lin et al. , 2017a], our module progressively enhances features by propagating information through a sequence of custom refinement blocks. The key idea of our design is the structure of each block, which com-bines a convolution, a CBAM layer, and a residual connec-tion to effectively sharpen noisy features. For each refine-ment step t ∈ [1 , T ], the feature map Ft−1 is updated using the operations detailed in Eq. (6)-(8). 
+
+Fconv t = Conv 3×3(Ft−1) (6) 
+
+Fatt t = CBAM (Fconv t ) (7) 
+
+Ft = Fatt t + Ft−1 (8) This iterative process results in a final feature map, Fref ined ,with an enhanced focus on the most salient regions and chan-nels, making it highly effective for achieving accurate seman-tic segmentation. 
+
+4.4 Attentive Knowledge Transfer 
+
+In addition to attentive feature injection, we introduce an attentive knowledge transfer mechanism at the prediction level. A key challenge is that a standard teacher trained on the coarse domain is not infallible; unconditional (non-selective) distillation transfers domain-specific noise like im-precise boundaries, degrading performance. To mitigate this, our framework adaptively selects when and where to apply the distillation loss, ensuring that the student only learns from the teacher’s most confident and accurate predictions. 
+
+Image-level Selection. The first layer of our attentive mechanism operates at the image level, aiming to identify im-ages within a training batch where the teacher model M (θT )
+
+produces more accurate predictions than the student model 
+
+M (θS ). This is based on the hypothesis that distillation is beneficial only when M (θT ) is more accurate than M (θS )
+
+for a given input image. We formalize this by utilizing an indicator function I(·)img which returns 1 if LBCE (Y fi , P i) <LBCE (Y fi , Q i) and 0 otherwise. Note that Pi and Qi denote the output prediction (logits) of M (θT ) and M (θS ), respec-tively, for image i. The distillation loss with image-level se-lection is then formulated in Eq. (9). 
+
+Limage distill = T 2
+
+NfNf
+
+X
+
+> i=1
+
+I LBCE (Y fi , P i)
+
+< L BCE (Y fi , Q i)
+
+!img 
+
+· KL (P Ti ∥ QTi )
+
+(9) 
+
+Pixel-level Selection. The second layer of attentive dis-tillation applies at the pixel level. In the context of seman-tic segmentation, as Ldistill will be computed for every single pixel, we realize that not all per-pixel teacher’s prediction will be accurate, especially when the teacher was trained using imprecise ground truth labels. To this end, we selectively ap-ply distillation only when the teacher’s prediction at the pixel level is more accurate than the student’s prediction. Similar to image-level selection, we formalize this pixel-level selec-tion by utilizing an indicator function I(·)pxl which returns 1 if LBCE (Y fij , P ij ) < L BCE (Y fij , Q ij ) and 0 otherwise. Note that j ∈ K represents the pixel index in image i. The distilla-tion loss with pixel-level selection is formulated in Equation 10. 
+
+Lpixel distill = T 2
+
+Nf
+
+X
+
+> i,j
+
+I LBCE (Y fij , P ij )
+
+< L BCE (Y fij , Q ij )
+
+!pxl 
+
+· KL (P Tij ∥ QTij )
+
+(10) Note that in practice, Ipxl will be in a matrix form rather than in a scalar form as in Iimg .
+
+Hybrid Selection. Our final approach combines both image-level and pixel-level selection strategies into a hybrid selection mask Ihybrid by performing element-wise multipli-cation of Ipxl and Iimg as shown in Eq. (11). 
+
+Ihybrid  
+
+> ij
+
+= Iimg  
+
+> i
+
+· Ipxl  
+
+> ij
+
+(11) This ensures that distillation is applied only to pixels where the teacher is more accurate than the student, and only within input images where the teacher demonstrates overall superior performance. The final distillation loss is computed as de-fined in Equ. (12): 
+
+Ldistill =
+
+P
+
+> i,j
+
+
+
+Ihybrid  
+
+> ij
+
+· T 2 · KL (P Tij ∥ QTij )
+
+P 
+
+> i,j
+
+Ihybrid  
+
+> ij
+
++ ϵ (12) Model Acc. mF1 mIoU 
+
+CNN and Transformer-based methods (Transfer Learning) 
+
+U-Net [Ronneberger et al. , 2015] 89.79 79.52 67.26 DeepLabV3+ [Chen et al. , 2018] 90.01 79.57 67.47 FPN [Lin et al. , 2017b] 90.65 80.06 68.26 Prithvi [Jakubik et al. , 2023] 66.14 66.21 49.74 
+
+Domain Adaptation 
+
+UDAforRS [Li et al. , 2022] 75.16 72.42 57.49 BUS [Choe et al. , 2024] 60.22 59.21 42.35 
+
+Baseline Continual Learning 
+
+LwF [Li and Hoiem, 2018] 90.22 78.94 67.02 LwM [Dhar et al. , 2019] 90.60 79.36 67.43 Replay [Rolnick et al. , 2019] 88.81 76.50 63.61 
+
+Class Incremental Learning 
+
+SPPA [Lin et al. , 2022] 54.68 48.32 31.85 CCDA [Shenaj et al. , 2022] 78.90 72.90 57.00 
+
+Domain Incremental Learning 
+
+MDIL-SS [Garg et al. , 2022] 88.62 85.36 71.99 GSMF-RS-DIL [Huang et al. , 2024] 88.83 85.02 71.25 
+
+MineC2FNet (ours) 92.33 84.10 73.64 
+
+Table 1: Performance comparison of different models across various models and learning paradigms. 
+
+where the numerator accumulates the KL divergence values, and the denominator normalizes it via the total number of se-lected pixels (with ϵ for numerical stability). This hierarchi-cal and attentive strategy ensures that the student selectively learns only from the teacher’s most reliable predictions. 
+
+4.5 Training 
+
+Experimentation Setting. We implemented our frame-work using a Feature Pyramid Network (FPN) with aDenseNet-121 backbone, initialized with ImageNet pre-trained weights and modified to process 6-channel inputs (RGB, NIR, SWIR) at a resolution of 256 × 256 . The model was trained using the AdamW optimizer [Loshchilov and Hutter, 2019] with an initial learning rate of 1 × 10 −3, weight decay of 1 × 10 −4, and a batch size of 8 for a maximum of 100 epochs. Standard geometric augmentations, includ-ing random flips, rotations, and scaling, were applied to en-hance generalization. All experiments were conducted on an NVIDIA RTX A4000 GPU. 
+
+Evaluation Metrics and Baselines. To assess perfor-mance, we benchmark MineC2FNet against five distinct learning paradigms: Transfer Learning (including the founda-tion model, e.g., Prithvi), Domain Adaptation, Baseline Con-tinual Learning, Class Incremental Learning (CIL), and Do-main Incremental Learning (DIL). Performance is evaluated using three standard metrics: Pixel Accuracy , Mean F1 Score (mF1) , and Mean Intersection over Union (mIoU) . More de-tails can be found in the supplementary material. (c) MDIL-SS Output  
+
+> (b) GT from Fine Dataset
+> (a) Input RGB (d) GSMF-RS-DIL Output
+> (e) MineC2FNet Output
+
+Figure 4: Segmentation results of MineC2FNet and several baseline models on the fine-grained test set. (a) Input RGB (b) GT from Coarse Dataset 
+
+> (c) Coarse model Output
+> (d) MineC2FNet Output
+
+Figure 5: Through our framework, MineC2FNet produces more fine-grained output in the coarse dataset. 
+
+# 5 Results and Discussion 
+
+5.1 Overall Performance 
+
+Quantitative Analysis. Table 1 summarizes the perfor-mance of MineC2FNet against state-of-the-art methods. Our model, termed MineC2FNet, demonstrates superior perfor-mance, achieving the highest Accuracy (92.33%) and mIoU (73.64%) compared to different methods across five distinct learning categories. It is worth noting that while leading DIL methods like MDIL-SS achieve a slightly higher mF1 score (85.36% vs. 84.10%), our framework secures a clear advan-tage in mIoU, surpassing them by over 1.6 percentage points. This numerical superiority translates directly to visual preci-sion, as shown in Figure 6, in which MineC2FNet success-fully captures more detailed boundaries compared to the ex-isting DIL models. Conversely, specialized CIL and Domain Adaptation methods struggle with this specific coarse-to-fine domain shift. Notably, methods such as SPPA (31.85%) and BUS (42.35%) perform significantly worse than even standard baseline continual learning approaches like LwF or LwM. This confirms that standard class-focused or domain adaptation strategies are ill-suited for this problem, whereas our approach successfully produces fine details while pre-serving coarse general knowledge. We further compare our method with the coarse baseline on the coarse-grained dataset, as reported in Table 2. Al-though MineC2FNet achieves a lower mIoU (44.29%) than the coarse baseline (72.49%), this outcome is expected due to the imprecise annotations in the coarse dataset. The coarse Metric Coarse Baseline MineC2FNet (Ours)                                      
+
+> Accuracy 0.8733 0.7681 mF1 0.8331 0.5612 mIoU 0.7249 0.4429 Table 2: Performance comparison between the coarse baseline and the proposed MineC2FNet.
+> GF CBAM DR Acc. mF1 mIoU ∆mIoU
+> ✗✗✗89.00 75.39 62.35 –
+> ✓✗✗90.31 76.72 64.35 +2.00
+> ✓✓✗91.33 79.15 67.79 +5.44
+> ✓✓✓91.08 79.84 68.41 +6.06
+> Table 3: Ablation study of Attentive Feature Injection.
+
+baseline is trained and evaluated entirely on the source do-main, and its predictions therefore closely match the coarse labels, which are known to contain inaccurate boundaries. In contrast, our model adapts to the target domain with finer and more precise annotations (see Figure 5), resulting in lower agreement when evaluated against coarse labels. This dis-crepancy does not indicate a failure of our approach; rather, it reflects superior boundary delineation while maintaining gen-eralization by retaining useful knowledge from both coarse and fine domain. Evaluations across five K¨ oppen–Geiger cli-mate zones (Beck et al. 2018) confirmed the model’s global robustness and generalizability (see supplementary material). 
+
+Qualitative Analysis. Figure 6 highlights the precise segmentation masks generated by MineC2FNet, demonstrat-ing its ability to accurately delineate complex boundaries. As shown in the second row, our model reduces false positives caused by noisy features more effectively than the baselines. Furthermore, when tested on the coarse dataset, our domain-adapted MineC2FNet yields fine-grained segmentation that reflects true features on the ground (Figure 5(d)). In con-trast, training the model only on the coarse dataset inherits imprecise identification and poor boundary delineation (Fig-ure 5(c)), underscoring the importance of our coarse-to-fine domain incremental learning. 
+
+Model Complexity and Efficiency. Finally, we evaluate MineC2FNet efficiency against the FPN baseline. The model achieves a substantial 5.4 point mIoU improvement, with a negligible speed reduction (13.38 to 11.00 FPS) due to added attention mechanisms. We consider this trade-off justified by the performance gain (detailed results in supplementary ma-terial). 
+
+5.2 Ablation Study 
+
+Impact of Attentive Feature Injection. We conducted ablation studies to clearly isolate the effects of each module within our attentive feature injection mechanism, i.e., Gated Fusion (GF), CBAM, and Diffusion Refinement (DR). Note that only RGB and NIR bands were used for this experi-ment. As shown in Table 3, while adding GF alone can im-proves performance, incorporating CBAM and DR yields a significant performance gain. The highest mIoU (68.41%) is                                            
+
+> Strategy Acc. mF1 mIoU ∆mIoU
+> No Distill. (Base) 89.00 75.39 62.35 –Standard Distill. 89.38 75.79 62.59 +0.24 Image-level Sel. 90.42 78.79 67.17 +4.82 Pixel-level Sel. 91.14 79.30 67.84 +5.49 Hybrid Sel. 91.10 79.61 67.91 +5.56
+> Table 4: Comparison of different Attentive Knowledge Transfer strategies (all configurations include feature injection).
+> Band Comb. Acc. mF1 mIoU ∆mIoU
+> RGB (Baseline) 87.08 71.12 57.09 –RGB+NIR 89.00 75.39 62.35 +5.26 RGB+NIR+SWIR 89.68 79.29 67.29 +10.20
+> Table 5: Impact of different band combinations.
+
+achieved when all three components are combined. This con-firms that these modules contribute critically to the complete pipeline for optimal fusion of coarse and fine features. 
+
+Impact of Attentive Knowledge Transfer. Table 4 high-lights the impact of different distillation methods. A model trained with standard distillation shows only marginal im-provement over the baseline, confirming the risk of nega-tive knowledge transfer. In contrast, our attentive distilla-tion, at either image or pixel level, shows a large improve-ment ( ≥ 4.82 ∆ mIoU). The hybrid method, distilling knowl-edge only from the teacher’s most accurate regions, achieves the highest performance, validating that a selective, hierarchi-cal mechanism is critical for successful coarse-to-fine domain knowledge transfer. 
+
+Bands Comparison. As shown in Table 5, incorporat-ing non-visible spectral bands is critical. While adding NIR significantly increases performance, the optimal results are achieved using the full RGB-NIR-SWIR combination. This underscores the value of NIR and SWIR bands in identifying distinct mining footprint features [Saputra et al. , 2025]. 
+
+# 6 Conclusion 
+
+In this paper, we addressed the critical challenge of domain shift between coarse (abundant) and fine (scarce) datasets in training domain incremental learning model for mining footprint segmentation. We introduce MineC2FNet, a novel coarse-to-fine domain incremental framework. Our core con-tribution, an attentive distillation mechanism, proved highly effective, achieving a state-of-the-art mIoU of 73.64% by suc-cessfully selectively transferring knowledge from coarse to fine-grained data and outperforming other continual learning models. This work also introduced a new, expertly validated global dataset to facilitate further research in this domain. However, given our current limitation to binary segmentation, future work will extend this framework to complex multi-class segmentation of diverse mining and non-mining cate-gories. Acknowledgments 
+
+This study was supported in part by the Google Re-search Scholar Program, Australian Research Council LP200301160, and the Ford Foundation. The work of A. T. H. was partially supported by the Monash University Indone-sia PhD Tuition Scholarship. We also sincerely thank John R. Owen for his contribution to the development of the training data. 
+
+# References 
+
+[Alfarra et al. , 2024] Motasem Alfarra, Zhipeng Cai, Adel Bibi, Bernard Ghanem, and Matthias M¨ uller. Simcs: Sim-ulation for domain incremental online continual segmen-tation. Proceedings of the AAAI Conference on Artificial Intelligence , 38(10):10795–10803, Mar. 2024. [Ang et al. , 2023] Michelle Li Ern Ang, John R. Owen, Christopher N. Gibbins, ´ El´ eonore L` ebre, Deanna Kemp, Muhamad Risqi U. Saputra, Jo-Anne Everingham, and Alex M. Lechner. Systematic review of gis and remote sensing applications for assessing the socioeconomic im-pacts of mining. The Journal of Environment & Develop-ment , 32(3):243–273, 2023. [Beck et al. , 2018] Hylke E. Beck, Niklaus E. Zimmermann, Tim R. McVicar, Noemi Vergopolan, Alexis Berg, and Eric F. Wood. Present and future k¨ oppen-geiger climate classification maps at 1-km resolution. Scientific Data ,5(1):180214, Oct 2018. [Cai et al. , 2023] Zhiwen Cai, Haodong Wei, Qiong Hu, Wei Zhou, Xinyu Zhang, Wenjie Jin, Ling Wang, Shuxia Yu, Zhen Wang, Baodong Xu, et al. Learning spectral-spatial representations from vhr images for fine-scale crop type mapping: A case study of rice-crayfish field extraction in south china. ISPRS Journal of Photogrammetry and Re-mote Sensing , 199:28–39, 2023. [Chen et al. , 2018] Liang-Chieh Chen, Yukun Zhu, George Papandreou, Florian Schroff, and Hartwig Adam. Encoder-decoder with atrous separable convolution for se-mantic image segmentation, 2018. [Chen et al. , 2024] Hao Chen, Wen Yang, Li Liu, and Gui-Song Xia. Coarse-to-fine semantic segmentation of satel-lite images. ISPRS Journal of Photogrammetry and Re-mote Sensing , 217:1–17, 2024. [Choe et al. , 2024] Seun-An Choe, Ah-Hyung Shin, Keon-Hee Park, Jinwoo Choi, and Gyeong-Moon Park. Open-set domain adaptation for semantic segmentation. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 23943–23953, 2024. [Das et al. , 2023] Anurag Das, Yongqin Xian, Yang He, Zeynep Akata, and Bernt Schiele. Urban scene seman-tic segmentation with low-cost coarse annotation. In 2023 IEEE/CVF Winter Conference on Applications of Com-puter Vision (WACV) , pages 5967–5976, 2023. [Dhar et al. , 2019] Prithviraj Dhar, Rajat Vikram Singh, Kuan-Chuan Peng, Ziyan Wu, and Rama Chellappa. Learning without memorizing. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 5138–5146, 2019. [Garg et al. , 2022] Prachi Garg, Rohit Saluja, Vineeth N Bal-asubramanian, Chetan Arora, Anbumani Subramanian, and CV Jawahar. Multi-domain incremental learning for semantic segmentation. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision ,pages 761–771, 2022. [Huang et al. , 2024] Wubiao Huang, Mingtao Ding, and Fei Deng. Domain-incremental learning for remote sensing semantic segmentation with multifeature constraints in graph space. IEEE Transactions on Geoscience and Re-mote Sensing , 62:1–15, 2024. [Jakubik et al. , 2023] Johannes Jakubik, Sujit Roy, C. E. Phillips, Paolo Fraccaro, Denys Godwin, Bianca Zadrozny, Daniela Szwarcman, Carlos Gomes, Gabby Nyirjesy, Blair Edwards, Daiki Kimura, Naomi Simumba, Linsong Chu, S. Karthik Mukkavilli, Devyani Lambhate, Kamal Das, Ranjini Bangalore, Dario Oliveira, Michal Muszynski, Kumar Ankur, Muthukumaran Ramasub-ramanian, Iksha Gurung, Sam Khallaghi, Hanxi, Li, Michael Cecil, Maryam Ahmadi, Fatemeh Kordi, Hamed Alemohammad, Manil Maskey, Raghu Ganti, Kommy Weldemariam, and Rahul Ramachandran. Foundation models for generalist geospatial artificial intelligence, 2023. [Kemp and Owen, 2025] Deanna Kemp and John R. Owen. Global mining and the production of inequality: a case for continued inquiry. World Development Perspectives ,39:100708, 2025. [Lechner et al. , 2016] Alex Mark Lechner, Owen Kassulke, and Corinne Unger. Spatial assessment of open cut coal mining progressive rehabilitation to support the monitor-ing of rehabilitation liabilities. Resources Policy , 50:234– 243, December 2016. Publisher Copyright: © 2016 El-sevier Ltd Copyright: Copyright 2017 Elsevier B.V., All rights reserved. [Lechner et al. , 2017] Alex M. Lechner, Neil McIntyre, Katherine Witt, Christopher M. Raymond, Sven Arnold, Margaretha Scott, and Will Rifkin. Challenges of inte-grated modelling in mining regions to address social, en-vironmental and economic impacts. Environmental Mod-elling & Software , 93:268–281, 2017. [Lechner et al. , 2019] Alex M Lechner, John Owen, Michelle Li Ern Ang, Mansour Edraki, Nor Ak-lima Che Awang, and Deanna Kemp. Historical socio-environmental assessment of resource develop-ment footprints using remote sensing. Remote Sensing Applications: Society and Environment , 15:100236, 2019. [Li and Hoiem, 2018] Zhizhong Li and Derek Hoiem. Learning without forgetting. IEEE Transactions on Pat-tern Analysis and Machine Intelligence , 40(12):2935– 2947, 2018. [Li et al. , 2022] Weitao Li, Hui Gao, Yi Su, and Bif-fon Manyura Momanyi. Unsupervised domain adapta-tion for remote sensing semantic segmentation with trans-former. Remote Sensing , 14(19), 2022. [Lin et al. , 2017a] Guosheng Lin, Anton Milan, Chunhua Shen, and Ian Reid. Refinenet: Multi-path refinement net-works for high-resolution semantic segmentation. In 2017 IEEE Conference on Computer Vision and Pattern Recog-nition (CVPR) , pages 5168–5177, 2017. [Lin et al. , 2017b] Tsung-Yi Lin, Piotr Doll´ ar, Ross Gir-shick, Kaiming He, Bharath Hariharan, and Serge Be-longie. Feature pyramid networks for object detection. In 
+
+2017 IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , pages 936–944, 2017. [Lin et al. , 2022] Zihan Lin, Zilei Wang, and Yixin Zhang. Continual semantic segmentation via structure preserving and projected feature alignment. In Shai Avidan, Gabriel Brostow, Moustapha Ciss´ e, Giovanni Maria Farinella, and Tal Hassner, editors, Computer Vision – ECCV 2022 ,pages 345–361, Cham, 2022. Springer Nature Switzer-land. [Loshchilov and Hutter, 2019] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization, 2019. [Mao et al. , 2023] Anqi Mao, Mehryar Mohri, and Yutao Zhong. Cross-entropy loss functions: Theoretical analy-sis and applications, 2023. [Maus et al. , 2020] Victor Maus, Stefan Giljum, Jakob Gutschlhofer, Dieison M. da Silva, Michael Probst, Sid-nei L. B. Gass, Sebastian Luckeneder, Mirko Lieber, and Ian McCallum. A global-scale data set of mining areas. 
+
+Scientific Data , 7(1):289, Sep 2020. [Maus et al. , 2022] Victor Maus, Dieison M da Silva, Jakob Gutschlhofer, Robson da Rosa, Stefan Giljum, Sidnei L B Gass, Sebastian Luckeneder, Mirko Lieber, and Ian Mc-Callum. Global-scale mining polygons (Version 2), 2022. [Owen et al. , 2023] John R. Owen, Deanna Kemp, Alex M. Lechner, Jill Harris, Ruilian Zhang, and ´ El´ eonore L` ebre. Energy transition minerals and their intersection with land-connected peoples. Nature Sustainability , 6(2):203–211, Feb 2023. [Qiao et al. , 2024] Qinghua Qiao, Yanyue Li, and Huaquan Lv. Open-pit mining area extraction using multispectral remote sensing images: A deep learning extraction method based on transformer. Applied Sciences , 14(14), 2024. [Rolnick et al. , 2019] David Rolnick, Arun Ahuja, Jonathan Schwarz, Timothy P. Lillicrap, and Greg Wayne. Experi-ence replay for continual learning, 2019. [Ronneberger et al. , 2015] Olaf Ronneberger, Philipp Fis-cher, and Thomas Brox. U-net: Convolutional net-works for biomedical image segmentation. ArXiv ,abs/1505.04597, 2015. [Saputra et al. , 2025] Muhamad Risqi U Saputra, Ir-fan Dwiki Bhaswara, Bahrul Ilmi Nasution, Michelle Ang Li Ern, Nur Laily Romadhotul Husna, Tahjudil Witra, Vicky Feliren, John R Owen, Deanna Kemp, and Alex M Lechner. Multi-modal deep learning approaches to semantic segmentation of mining footprints with multi-spectral satellite imagery. Remote Sensing of Environment ,318:114584, 2025. [Shenaj et al. , 2022] Donald Shenaj, Francesco Barbato, Umberto Michieli, and Pietro Zanuttigh. Continual coarse-to-fine domain adaptation in semantic segmentation. Im-age and Vision Computing , 121:104426, 2022. [Sonter et al. , 2018] Laura J Sonter, Saleem H Ali, and James E M Watson. Mining and biodiversity: key issues and research needs in conservation science. Proc Biol Sci ,285(1892), December 2018. [Sudre et al. , 2017] Carole H. Sudre, Wenqi Li, Tom Ver-cauteren, Sebastien Ourselin, and M. Jorge Cardoso. Gen-eralised Dice Overlap as a Deep Learning Loss Func-tion for Highly Unbalanced Segmentations , page 240–248. Springer International Publishing, 2017. [Takikawa et al. , 2019] Towaki Takikawa, David Acuna, Varun Jampani, and Sanja Fidler. Gated-scnn: Gated shape cnns for semantic segmentation, 2019. [Tong et al. , 2020] Xin-Yi Tong, Gui-Song Xia, Qikai Lu, Huanfeng Shen, Shengyang Li, Shucheng You, and Liang-pei Zhang. Land-cover classification with high-resolution remote sensing images using transferable deep models. 
+
+Remote Sensing of Environment , 237:111322, 2020. [Werner et al. , 2020] Tim T Werner, Gavin M Mudd, Aafke M Schipper, Mark AJ Huijbregts, Lakshay Taneja, and Stephen A Northey. Global-scale remote sensing of mine areas and analysis of factors explaining their extent. 
+
+Global Environmental Change , 60:102007, 2020. [Wieland et al. , 2023] Marc Wieland, Sandro Martinis, Ralph Kiefl, and Veronika Gstaiger. Semantic segmen-tation of water bodies in very high-resolution satellite and aerial images. Remote Sensing of Environment ,287:113452, 2023. [Woo et al. , 2018] Sanghyun Woo, Jongchan Park, Joon-Young Lee, and In So Kweon. Cbam: Convolutional block attention module. In Computer Vision – ECCV 2018: 15th European Conference, Munich, Germany, September 8–14, 2018, Proceedings, Part VII , page 3–19, Berlin, Hei-delberg, 2018. Springer-Verlag. [Zhao et al. , 2019] Shuai Zhao, Boxi Wu, Wenqing Chu, Yao Hu, and Deng Cai. Correlation maximized structural sim-ilarity loss for semantic segmentation, 2019. [Zhu et al. , 2025] Xiaoqian Zhu, Xiangrong Zhang, Tianyang Zhang, Chaowei Fang, Xu Tang, and Licheng Jiao. Regionmatch: Pixel-region collaboration for semi-supervised semantic segmentation in remote sensing images. In James Kwok, editor, Proceedings of the Thirty-Fourth International Joint Conference on Artificial Intelligence, IJCAI-25 , pages 2530–2538. International Joint Conferences on Artificial Intelligence Organization, 8 2025. Main Track. 7 Supplementary Material (a) Input RGB (b) GT from Fine Dataset     
+
+> (c) U-Net Output (d) DeepLabV3+ Output
+> (e) FPN Output (f) LwF Output (g) LwM Output (h) MineC2FNet Output
+
+Figure 6: Segmentation results of MineC2FNet and several baseline models on the fine-grained test set. 
+
+Mine ID Mine Name Country Commodity Climate Region Sensor 
+
+3 Alpamarca Peru PbZnCu 5 South America Sentinel 2 5 Atacocha Peru PbZnCu 5 South America Sentinel 2 14 Carmen de Andacollo Chile Cu 2 South America Sentinel 2 17 Cerro de Pasco Peru PbZnCu 5 South America Sentinel 2 18 Cerro Lindo Peru PbZnCu 2 South America Sentinel 2 29 Flying Fox Spotted Quoll Australia Ni S 2 Oceania Sentinel 2 31 Impala Group South Africa PGEs 2 Africa Sentinel 2 32 Julcani Peru PbZnCu 5 South America Sentinel 2 34 Kimberley South Africa Diamonds 2 Africa Sentinel 2 37 Letseng Lesotho Diamonds 5 Africa Sentinel 2 38 Magellan Australia PbZn 2 Oceania Sentinel 2 39 Mantoverde Chile Cu 2 South America Sentinel 2 41 McArthur River Australia Australia PbZn 2 Oceania Sentinel 2 43 Mogalakwena South Africa PGEs 2 Africa Sentinel 2 44 Mototolo South Africa PGEs 3 Africa Sentinel 2 46 Nkomati South Africa Ni S 3 Africa Sentinel 2 47 North Mara Tanzania Au 1 Africa Sentinel 2 50 Paracatu Brazil Au 1 South America Sentinel 2 51 Pinto Valley USA CuMo 2 North America Sentinel 2 55 Punitaqui Chile CuAg 2 South America Sentinel 2 58 Stawell Australia Au 3 Oceania Sentinel 2 60 Tara Ireland PbZn 3 Europe Sentinel 2 62 Tizapa Mexico PbZnCu 1 North America Sentinel 2 64 Two Rivers South Africa PGEs 3 Africa Sentinel 2 65 Union North South South Africa PGEs 2 Africa Sentinel 2 66 Velardena Mexico PbZnCu 2 North America Sentinel 2 68 Waihi New Zealand AuAg 3 Oceania Sentinel 2 69 Yauli Peru PbZnCu 5 South America Sentinel 2 70 Yauricocha Peru PbZnCu 5 South America Sentinel 2 72 Zawar India PbZn 2 Asia Sentinel 2 74 Agbaou Cˆ ote d’Ivoire Au 1 Africa Landsat 8 76 Batu Hijau Indonesia CuAu 1 Asia Landsat 8 
+
+Table 6: Details of the Training Set (153 images) (Continued on next page). Mine ID Mine Name Country Commodity Climate Region Sensor 
+
+78 Bokoni South Africa PGEs 2 Africa Landsat 8 79 Bolivar Mexico CuAu 3 North America Landsat 8 80 Bonikro Cˆ ote d’Ivoire AuAg 1 Africa Landsat 8 81 Boss Mining Group Dem. Rep. Congo CuCo 3 Africa Landsat 8 82 Cadia Group Australia AuCu 3 Oceania Landsat 8 85 Cerro Corona Peru AuCu 5 South America Landsat 8 88 Collahuasi Chile CuMo 2 South America Landsat 8 89 Costerfield Australia Au 2 Oceania Landsat 8 90 Cozamin Mexico PbZnCu 2 North America Landsat 8 91 Cracow Australia AuAg 3 Oceania Landsat 8 92 Cuajone Peru CuMo 2 South America Landsat 8 94 De Grussa Australia CuAu 2 Oceania Landsat 8 98 Essakane Burkina Faso Au 2 Africa Landsat 8 100 Fosterville Australia Au 2 Oceania Landsat 8 101 Franke Chile Cu 2 South America Landsat 8 103 Guelb Moghrein Mauritania CuAu 2 Africa Landsat 8 104 Hidden Valley Papua New Guinea AuAg 3 Oceania Landsat 8 105 Highland Valley Canada CuMo 4 North America Landsat 8 106 Huckleberry Canada CuAu 4 North America Landsat 8 108 Kanmantoo Australia CuAu 2 Oceania Landsat 8 109 Kansanshi Zambia CuAu 3 Africa Landsat 8 110 Khetri Group India Cu 2 Asia Landsat 8 111 Kittila Finland AuAg 4 Europe Landsat 8 114 Lady Annie Australia Cu 2 Oceania Landsat 8 115 Lagunas Norte Peru Au 5 South America Landsat 8 116 Lisheen Ireland PbZn 3 Europe Landsat 8 118 Macraes New Zealand Au 3 Oceania Landsat 8 119 Marlin Guatemala AuAg 3 North America Landsat 8 121 Mission USA Cu 2 North America Landsat 8 122 Mount Carlton Australia AuCu 1 Oceania Landsat 8 123 Mount Garnet Surveyor Australia PbZnCu 3 Oceania Landsat 8 124 Mount Milligan Canada CuAu 4 North America Landsat 8 126 Myra Falls Canada PbZnCu 3 North America Landsat 8 127 Olimpiada Russia AuAg 4 Europe Landsat 8 129 Oyu Tolgoi Mongolia CuAu 2 Asia Landsat 8 130 Parkers Mineral Hill Australia PbZnCu 2 Oceania Landsat 8 131 Peak Australia AuCu 2 Oceania Landsat 8 132 Pierina Peru Au 5 South America Landsat 8 133 Pilanesberg South Africa PGEs 2 Africa Landsat 8 134 Quebrada Blanca Chile Cu 2 South America Landsat 8 136 Ranger Australia U 1 Oceania Landsat 8 137 Ray USA Cu 2 North America Landsat 8 138 Rum Jungle Australia U-Cu 1 Oceania Landsat 8 139 Salobo Brazil CuAu 1 South America Landsat 8 140 Savannah Sally Malay Australia Ni S 2 Oceania Landsat 8 141 Sierra Gorda Chile CuMo 2 South America Landsat 8 142 Skorpion Namibia PbZn 2 Africa Landsat 8 143 Sossego Brazil CuAu 1 South America Landsat 8 145 Tenke Fungurume Dem. Rep. Congo CuCo 3 Africa Landsat 8 147 Togaruci Gosowong Indonesia AuAg 1 Asia Landsat 8 148 Toledo Carmen Lutopan Philippines CuAu 1 Asia Landsat 8 149 Toquepala Peru CuMo 2 South America Landsat 8 150 Tres Valles Chile Cu 2 South America Landsat 8 151 Trident Sentinel Zambia Cu 1 Africa Landsat 8 152 Venetia South Africa Diamonds 2 Africa Landsat 8 
+
+> Table 6: Details of the Training Set (153 images) (Continued on next page).
+
+Mine ID Mine Name Country Commodity Climate Region Sensor 
+
+153 Wetar Indonesia Cu 1 Asia Landsat 8 154 Akyem Ghana Au 1 Africa Landsat 8 156 Broken Hill Australia PbZn 2 Oceania Landsat 8 157 Century Australia PbZn 2 Oceania Landsat 8 158 Challenger Australia Au 2 Oceania Landsat 8 160 Cobar CSA Australia CuAg 2 Oceania Landsat 8 161 Ernest Henry Australia CuAu 2 Oceania Landsat 8 164 Henderson USA Mo 4 North America Landsat 8 165 Kalgoorlie SuperPit Australia Au 2 Oceania Landsat 8 166 Kevitsa Finland Ni S 4 Europe Landsat 8 169 La Caridad Mexico CuMo 2 North America Landsat 8 171 Lac des Iles Canada PGEs 4 North America Landsat 8 172 Langlois Canada PbZnCu 4 North America Landsat 8 173 Las Cruces Spain Cu 3 Europe Landsat 8 175 Madero Mexico PbZnCu 2 North America Landsat 8 176 Malanjkhand India Cu 1 Asia Landsat 8 177 Mary Kathleen Australia U 2 Oceania Landsat 8 178 Masbate Indonesia AuAg 1 Asia Landsat 8 179 Miaogou Sanguikou China PbZnCu 2 Asia Landsat 8 180 Mount Lyell Australia CuAu 3 Oceania Landsat 8 182 Nifty Australia Cu 2 Oceania Landsat 8 183 Northparkes Australia CuAu 2 Oceania Landsat 8 184 Olympic Dam Australia CuAu 2 Oceania Landsat 8 185 Orlovsky Kazakhstan PbZnCu 4 Asia Landsat 8 186 Prominent Hill Australia CuAu 2 Oceania Landsat 8 187 Pyhasalmi Finland PbZnCu 4 Europe Landsat 8 189 Reefton New Zealand Au 3 Oceania Landsat 8 191 Rosebery Australia PbZnCu 3 Oceania Landsat 8 193 Tarkwa Ghana Au 1 Africa Landsat 8 194 Telfer Australia AuCu 2 Oceania Landsat 8 195 Tritton Australia Cu 2 Oceania Landsat 8 196 Twangiza Congo-DRC Au 3 Africa Landsat 8 198 Zinkgruvan Sweden PbZnCu 4 Europe Landsat 8 199 Bald Mountain USA Au 4 North America Landsat 8 201 Chapada Brazil CuAu 1 South America Landsat 8 204 El Salvador Chile CuMo 2 South America Landsat 8 205 Galena USA PbZnCu 4 North America Landsat 8 206 Ghaghoo Botswana Diamonds 2 Africa Landsat 8 207 Golden Sunlight USA Au 2 North America Landsat 8 210 Ity Cˆ ote d’Ivoire Au 1 Africa Landsat 8 211 Letlhakane Botswana Diamonds 2 Africa Landsat 8 212 Lihir Papua New Guinea AuAg 1 Oceania Landsat 8 214 Marigold JV USA Au 2 North America Landsat 8 215 Mount Polley Canada CuAu 4 North America Landsat 8 217 Onca Puma Brazil Ni Lat 1 South America Landsat 8 218 Pajingo Australia AuAg 2 Oceania Landsat 8 219 Phoenix USA AuCu 2 North America Landsat 8 220 Phu Kham Laos CuAu 1 Asia Landsat 8 222 Sabodala Senegal Au 1 Africa Landsat 8 224 Thompson Canada Ni S 4 North America Landsat 8 225 Unki Zimbabwe PGEs 3 Africa Landsat 8 226 Veladero Argentina Au 5 South America Landsat 8 
+
+> Table 6: Details of the Training Set (153 images).
+
+Mine ID Mine Name Country Commodity Climate Region Sensor 
+
+1 Afton New Afton Canada CuAu 2 North America Sentinel 2 Ahafo Ghana Au 1 Africa Sentinel 7 Black Mountain Mexico PbZnCu 1 North America Sentinel 11 Campo Morado Peru PbZnCu 1 South America Sentinel 12 Candelaria Chile Cu 2 South America Sentinel 13 Cannington Australia PbZn 2 Oceania Sentinel 16 Cerro Corona Peru PbZnCu 5 South America Sentinel 20 Chatree Thailand Au 1 Asia Sentinel 21 Climax USA Mo 4 North America Sentinel 22 Constancia Peru CuAu 5 South America Sentinel 23 Contonga Peru PbZnCu 5 South America Sentinel 25 El Porvenir Peru PbZnCu 5 South America Sentinel 26 El Soldado Chile Cu 5 South America Sentinel 27 El Teniente Chile CuMo 5 South America Sentinel 28 Erdenet Mongolia CuMo 4 Asia Sentinel 35 Kinsevere DRC Cu 3 Africa Landsat 42 Modikwa South Africa PGEs 3 Africa Sentinel 48 Padcal Philippines CuAu 1 Asia Landsat 52 Polska Miedz Poland CuAg 4 Europe Landsat 53 Priargunsky Russia U 4 Europe Landsat 56 Sepon Laos CuAu 1 Asia Landsat 61 Thompson Canada NiS 4 North America Landsat 
+
+> Table 7: Details of the Validation Set (22 images).
+
+Mine Name Country Commodity Climate Region Sensor 
+
+Bulyanhulu Tanzania Au 1 Africa Sentinel 2 Cosala Nuestra Mexico PbZnCu 1 North America Sentinel 2 Chirano Ghana Au 1 Africa Landsat 8 Antucoya Chile Au 3 South America Sentinel 2 Goro New Caledonia Ni Lat 1 Oceania Landsat 8 Pueblo Viejo Dom. Rep. Au 1 North America Sentinel 2 Tongon Cˆ ote d’Ivoire Au 1 Africa Sentinel 2 Santa Rita Brazil Ni S 2 South America Landsat 8 Orapa Botswana Cu 2 Africa Sentinel 2 Tati Botswana Ni S 2 Africa Landsat 8 Marula South Africa PGEs 3 Africa Sentinel 2 Mount Isa Australia PbZnCu 2 Oceania Landsat 8 Gabriela Mistral Chile CuMo 2 South America Landsat 8 Centinela Chile Cu 1 South America Sentinel 2 Milpillas Mexico Cu 1 North America Landsat 8 Damtshaa Botswana Diamonds 2 Africa Landsat 8 Spence Chile Cu 2 South America Landsat 8 Antucoya Chile Cu 2 South America Sentinel 2 Ravensthorpe Australia Ni Lat 1 Oceania Landsat 8 Mantos Blancos Chile Cu 2 South America Landsat 8 Orapa Botswana Diamonds 2 Africa Landsat 8 Granny Smith Australia Au 2 Oceania Landsat 8 Goldstrike USA Au 2 North America Landsat 8 Cerro Verde Peru Cu 2 South America Sentinel 2 Endeavour Australia PbZn 2 Oceania Landsat 8 Cerro Color Chile Cu 2 South America Landsat 8 Silver Bell USA Cu 3 North America Sentinel 2 Robinson USA CuMo 2 North America Landsat 8 Jwaneng Botswana Diamonds 1 Africa Landsat 8 Argyle Australia Diamonds 1 Oceania Landsat 8 Konkola Nchanga Zambia Cu 1 Africa Landsat 8 Bafokeng Rasimone South Africa PGEs 2 Africa Sentinel 2 Ejimshan China Cu 3 Asia Landsat 8 Shishen China Cu 3 Asia Landsat 8 Kamoa DRC Ni S 1 Africa Landsat 8 Voorspoed South Africa Diamonds 3 Africa Landsat 8 Mount Rawdon Australia AuAg 3 Oceania Landsat 8 Boddington Australia AuCu 3 Oceania Landsat 8 Frontier DRC Au 3 Africa Sentinel 2 Bingham Canyon USA CuMoAu 4 North America Landsat 8 Los Pelambres Chile CuMo 5 South America Landsat 8 Antamina Peru PbZnCu 5 South America Sentinel 2 Porgera Papua New Guinea AuAg 3 Oceania Landsat 8 Santa Rita Brazil Ni S 1 South America Landsat 8 
+
+> Table 8: Details of the Test Set (44 images).
+
+Dataset Input Size Phase F1 Score Mean IoU Accuracy 
+
+FineDataset 128 Training 0.8854 0.7451 0.9501 Validation 0.6878 0.5391 0.8823 Testing 0.6808 0.5459 0.8692 FineDataset + Patching 128 Training 0.9435 0.7832 0.9764 Validation 0.6732 0.6324 0.9244 Testing 0.5373 0.4315 0.8447 FineDataset 256 Training 0.9333 0.8444 0.9715 Validation 0.7574 0.6193 0.9034 Testing 0.7539 0.6235 0.8900 FineDataset 512 Training 0.9290 0.8448 0.9709 Validation 0.7547 0.6240 0.9121 Testing 0.7596 0.6391 0.9025 
+
+CoarseDataset 128 Training 0.9475 0.8913 0.9576 Validation 0.8411 0.7359 0.8779 Testing 0.8358 0.7285 0.8778 CoarseDataset + Patching 128 Training 0.8399 0.6354 0.8662 Validation 0.6628 0.5884 0.8153 Testing 0.6366 0.5089 0.7241 CoarseDataset 256 Training 0.9071 0.8205 0.9250 Validation 0.8477 0.7450 0.8804 Testing 0.8438 0.7402 0.8811 
+
+CoarseDataset 512 Training 0.8710 0.7663 0.8972 Validation 0.8380 0.7337 0.8760 Testing 0.8336 0.7276 0.8756 
+
+> Table 9: Performance comparison for different input sizes and the effect of patching on both Fine and Coarse datasets. Each model was evaluated on its corresponding dataset (FineDataset on the Fine test set and CoarseDataset on the Coarse test set).
+
+Dataset Total Images Min Image Size F1 Score Mean IoU Accuracy 
+
+Full Coarse 44,319 7 × 7 0.5599 0.4231 0.7060 Coarse-128 12,155 128 × 128 0.5841 0.4443 0.7298 Coarse-FineFiltered 1,380 374 × 566 0.5931 0.4552 0.7334 
+
+Coarse-FineFiltered-100 1,280 669 × 362 0.5727 0.4335 0.7167 
+
+> Table 10: Performance on the fine dataset test split after pre-training on coarse datasets of varying sizes and compositions.
+
+7.1 Fine Datasets Details 
+
+The fine dataset comprises a total of 219 images, which are split into training (153 images), validation (22 images), and test (44 images) sets. To ensure a robust evaluation across di-verse global conditions, the dataset is sourced from 39 coun-tries across 6 continents: North America, South Amer- ica, Africa, Asia, Europe, and Oceania. The dataset is also bal-anced across five major climate zones, grouped accord- ing to the K¨ oppen-Geiger classification system: (1) Tropical, (2) Arid, (3) Temperate, (4) Cold, and (5) Polar. This com- pre-hensive distribution ensures the model is tested against a wide variety of geographical and environmental backdrops. 
+
+Training Set The training set consists of 153 images, cov-ering a diverse range of mine types, climates, and geographic locations. 
+
+Validation Set The validation set contains 22 images, used for tuning model hyperparameters during training. 
+
+Test Set The test set comprises 44 images, held out to pro-vide an unbiased evaluation of the final model’s performance. 
+
+7.2 Supplementary Experiments 
+
+To determine the optimal hyperparameters and dataset con-figurations for our pipeline, we conducted a series of abla-tion studies. These experiments analyze the impact of input image resolution, the use of patching, and the composition of the coarse dataset on model performance. Figure 1 visu-ally corroborates our findings and highlights the limitations of other approaches. As shown, the outputs from standard segmentation architectures (c-e) and other continual learning strategies (f-g) struggle with the task’s complexity, producing incomplete masks that fail to capture fine, connecting struc-tures. In contrast, the predictions from our proposed method, MiningNet (h) are qualitatively su- perior, aligning almost perfectly with the ground truth (b) by accurately delineating complex boundaries to generate a complete and precise seg-mentation mask. 
+
+Continual Learning Strategy To validate our frame-work’s core design, we compare it against established Con-tinual Learning (CL) strategies. For our coarse-to-fine task, these methods are re-contextualized: the ”continual” pro-cess involves transferring knowledge from a teacher model (trained on coarse data) to a student model (trained on fine data). We adapted LwF [Li and Hoiem, 2018], which uses knowledge distillation (KD) as a regularizer to preserve the teacher’s general knowledge, and LwM [Dhar et al. , 2019], which in our case uses attention distillation to focus the stu-dent model on critical boundary regions. Finally, we adopt a selective Replay strategy [Rolnick et al. , 2019] inspired by experience replay in reinforcement learning. In our ap-proach, we filter coarse-labeled samples based on a prede-fined quality heuristic: a model trained on fine data is used to generate predictions on the coarse images, and only sam-ples with high consistency between the prediction and the coarse label are retained for joint training. While these CL adaptations offer benefits, our proposed MiningNet still sur-passes them, demonstrating the advantage of its advanced attentive distillation mechanism for more effective and tar-geted knowledge transfer. 
+
+Impact of Input Resolution and Patching We first eval-uated the effect of different input sizes (128 × 128, 256 × 256, and 512 × 512 pixels) on both the Fine and Coarse datasets. Additionally, we investigated whether an image patching strategy could improve performance. For this exper-iment, we utilized the patchify Python library, a tool designed to split images into a grid of smaller, po- tentially overlap-ping patches. We configured it to extract patches of 128 × 128 pixels with a step size of 128 to avoid overlap between adjacent patches. The hypothesis was that training on these patches would allow the model to learn more fine-grained lo-cal features from the original high- resolution imagery, which is otherwise lost when down- scaling the entire image. By processing these high-detail patches, we aimed to improve the model’s ability to segment intricate boundaries. The re-sults for all experiments are de- tailed in Table 4. From the results, it is evident that an input size of 256 × 256 or 512 × 512 provides the best performance for the fine- tuned model, with the 512 × 512 input achieving a slightly higher testing F1-score (0.7596 vs 0.7539). For the coarse dataset, the 256 × 256 input size clearly outperforms the others, achieving the highest testing F1-score of 0.8438. Notably, the application of patching to the 128 × 128 in- put proved to be detrimental, significantly degrading perfor- mance for both datasets. This suggests that the model bene- fits more from a complete view of the image, even at a lower resolution, than from localized patches. Given the trade-off between perfor-mance and computational cost, an input size of 256×256 was selected as the optimal choice for our main experiments. 
+
+Impact of Coarse Dataset Composition The coarse dataset serves as a large-scale pre-training cor- pus. Our ini-tial set contained 44,319 images with extreme variations in dimension, from as small as 7x7 pixels to over 1300x1400 pixels. A significant portion of this dataset (32,164 im-ages) consisted of very low-resolution images smaller than 128x128 pixels. To find the most effective pre- training data, we tested several filtering strategies based on minimum im-age dimensions. We evaluated the full, unfil- tered dataset; a version filtered to include only images of at least 128x128 pixels (‘Coarse-128‘); and a more targeted version (‘Coarse-FineFiltered‘) designed to align the coarse data’s characteris-tics with our fine dataset, using the small- est fine mine’s area (9.81 km²) as a benchmark. The perfor- mance of a model pre-trained on each of these coarse dataset versions was then evaluated on the fine dataset’s test split. The results are shown in Table 5. The results demonstrate the critical importance of curat- ing the coarse dataset. Using the full, unfiltered set of 44,319 images yields the poorest performance, likely due to the noise introduced by the thousands of very low-resolution images. Filtering the data to remove images smaller than 128x128 pixels (‘Coarse-128‘) provides a notable improve-ment. However, the best results are achieved with the Coarse-FineFiltered set. This approach, which curated the coarse data to align with the area characteristics of the fine dataset, produced the highest F1-score of 0.5931. This in- dicates that pre-training on a well-curated, domain-relevant dataset is more effective than using a larger, noisier one. 7.3 Training 
+
+In this sub-section, we describe how to train the model, in-cluding data augmentation, model configuration, optimiza-tion parameters, evaluation metrics, and baselines. 
+
+Data Augmentation 
+
+To enhance the model’s robustness and generalizability, we applied a series of data augmentations to the training set. These included random horizontal and vertical flips, random 90-degree rotations, and a combination of shifting, scaling, and rotation with a scale limit of 0.3, a rotation limit of 15 degrees, and a shift limit of 0.1. Each augmentation was ap-plied with a probability of 0.5. 
+
+Model Configuration and Implementation 
+
+Theoretically, our CL approach can be applied to any deep learning models. However, in our implementation, a Fea-ture Pyramid Network (FPN) with a DenseNet-121 backbone, pre-trained on ImageNet, were used for both the teacher and the student models. The models were configured to accept 6-channel inputs (RGB, NIR, and SWIR) with a spatial di-mension of 256 × 256 pixels. For the student model, which incorporates features from both coarse and fine data, the en-tire network was fine-tuned during training. During the 2nd stage, the teacher model was frozen to act as a stable knowl-edge source. All models were implemented using Python 3.9 and TensorFlow 2.13. The training and evaluation were con-ducted on a PC workstation with an Intel Xeon W-1350 CPU and an NVIDIA RTX A4000 GPU with 16GB of VRAM. 
+
+Training Parameters and Optimization 
+
+We employed the AdamW [Loshchilov and Hutter, 2019] optimizer, a variant of Adam that decouples weight decay from the gradient updates, with an initial learning rate of 
+
+1 × 10 −3 and a weight decay of 1 × 10 −4. To manage the learning rate dynamically, we implemented a custom sched-ule that begins with a warm-up phase for the first 5 epochs, linearly increasing the learning rate to its base value. Follow-ing the warm-up, a ReduceLROnPlateau callback was activated, which reduces the learning rate by 0.5 if the val-idation Mean IoU ( val Mean IoU ) did not improve for 3 consecutive epochs. The models were trained for a maximum of 100 epochs with a batch size of 8. To prevent overfitting and ensure the retention of the best-performing model, we utilized an EarlyStopping callback that monitored the 
+
+val Mean IoU with a patience of 10 epochs. The model weights that yielded the highest val Mean IoU on the vali-dation set were saved and used for the final evaluation. 
+
+Baselines and Evaluation Metrics 
+
+We compare MineC2FNet against 2 groups of baselines: 1) CNN and Transformer-based models, and 2) CL-based meth-ods. For the CNN and Transformer-based models, we trained FPN, DeepLabV3+, U-Net, and Prithvi (IBM-NASA geospa-tial foundation model) directly on our fine-grained dataset to establish a strong performance. For the CL-based meth-ods, since no prior work addresses our coarse-to-fine CL do-main adaptation task, we adapt LwF [Li and Hoiem, 2018], LwM [Dhar et al. , 2019], and Replay strategy [Rolnick et al. ,2019] such that the training involves transferring knowledge                           
+
+> Climate Zone (train/val/test) Acc. mF1 mIoU
+> Tropical (25/4/8) 95.19 86.44 67.63 Arid (63/4/21) 90.78 82.93 72.21 Temperate (24/4/9) 95.24 86.45 77.34
+> Cold (16/4/1) 85.82 72.99 57.47 Polar (11/4/2) 87.41 81.87 69.42 Table 11: Performance across K¨ oppen-Geiger climate zones.
+> Metric FPN MineC2FNet (Ours)
+> mIoU 0.6825 0.7364 (+5.4)
+> Avg. Time (s) 0.0748 0.0909 (+0.0161) Speed (FPS) 13.38 11.00 (-2.38) Table 12: Model complexity and performance comparison between the baseline FPN and the proposed MineC2FNet.
+
+from a teacher model (trained on coarse data) to a student model (trained on fine data). All models were trained using RGB, NIR, and SWIR bands as the input. Finally, we evalu-ate our framework and the baselines using standard semantic segmentation metrics: Accuracy , Mean F1 Score (for class imbalance), and Mean Intersection over Union (mIoU) .
+
+7.4 Results and Discussion 
+
+Performance across K¨ oppen-Geiger climate zones To as-sess the model robustness and the generalizability of its domain adaptation, we evaluated the model across five K¨ oppen–Geiger climate zones [Beck et al. , 2018], cover-ing a wide range of global climates, from tropical to polar. The results in Table 11 confirm MineC2FNet adaptability as it performs exceptionally well in arid and tropical zones, where mining activities are often concentrated, and achieves a peak mIoU of 77.34% in temperate climates. The per-formance in polar (69.42%) and cold (57.47%) zones, even with very limited data, proves that our domain-adapted model can effectively differentiate mining footprints across diverse geographic locations, including in underrepresented climate types and homogenous terrains. 
+
+Model Complexity and Efficiency 
+
+Finally, we evaluate the computational cost of our proposed MineC2FNet against the FPN baseline, with results presented in Table 12. The table clearly shows that MineC2FNet achieves a substantial performance gain, improving the mIoU by 5.4 points over the baseline. This significant improvement in accuracy comes with a mod-erate trade-off in computational efficiency. Specifically, our model’s average inference time increased by 0.0161 seconds, resulting in a processing speed of 11.00 FPS compared to the baseline’s 13.38 FPS. This decrease in speed is an expected consequence of incorporating the more sophisticated selec-tive continual learning mechanism (attentive feature injec-tion and knowledge transfer). We argue that the considerable gain in segmentation accuracy justifies this modest increase in computational overhead for our remote sensing application, where model performance is often the primary consideration. Configuration Acc.(%) F1(%) mIoU(%) ∆mIoU                 
+
+> BCE 0.9096 0.7733 0.6518 -BCE+DICE 0.9016 0.7783 0.6545 +0.0027 BCE+DICE+SSIM 0.9039 0.7832 0.6642 +0.0124
+> BCE+DICE+SSIM+Bnd. 0.9102 0.7874 0.6687 +0.0169
+
+Table 13: Ablation Study on Student Loss Components                 
+
+> Method TN FP FN TP (Mining)
+> MDIL-SS [Garg et al., 2022] 67.90 4.96 6.42 20.72 GSMF-RS-DIL [Huang et al., 2024] 69.63 5.89 5.28 19.20
+> MineC2FNet (Ours) 68.10 3.52 4.15 24.23
+
+Table 14: Comparison of Confusion Matrix Results (%) 
+
+Impact of Student Loss Combinations 
+
+We conducted an ablation study to determine the optimal con-figuration for the student loss function, with a specific fo-cus on enhancing edge delineation (see Table 13). While the baseline Binary Cross-Entropy (BCE) provides a foundation for pixel-wise classification, it struggles with structural in-tegrity in fine-grained mining masks. The incremental addi-tion of Dice and SSIM losses improved regional overlap and geometric shape preservation, respectively. Notably, the final inclusion of Boundary Loss yielded the highest performance (0.6687 mIoU) by weighting optimization toward edge pixels. This four-part combination effectively eliminates segmenta-tion ”blurring,” ensuring the student model achieves the most precise delineation of mining site perimeters. 
+
+Confusion Matrix analysis 
+
+Based on our analysis of the confusion matrix (see Table 14), we provide quantitative evidence that MineC2FNet prioritizes foreground precision, a factor critical for high-fidelity envi-ronmental monitoring. While competing domain-incremental learning (DIL) methods, such as GSMF-RS-DIL, achieve high background classification accuracy, they exhibit higher False Positive Rates (FPR) and lower True Positive Rates (TPR) for the mining class. Specifically, MineC2FNet re-stricts the False Positive (FP) rate to 3.52%, marking a reduction of approximately 29–40% relative to MDIL-SS (4.96%) and GSMF-RS-DIL (5.89%). This transition from background-biased classification to foreground-focused pre-cision directly accounts for the +2% IoU gap (see Table 1 in the main paper); by suppressing erroneous mining detec-tions while simultaneously capturing more authentic mining footprints, MineC2FNet offers a more robust framework for tracking industrial expansion.

@@ -6,40 +6,28 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-29
-- 运行时间：2026-05-29 22:07:56 UTC
+- 最新运行日期：2026-05-30
+- 运行时间：2026-05-30 20:37:22 UTC
 - 运行状态：成功
-- 本次总论文数：6
-- 精读区：4
-- 速读区：2
+- 本次总论文数：2
+- 精读区：1
+- 速读区：1
 
 ### 今日简报（AI）
-今日精读高分论文聚焦现代霍普菲尔德网络的持续学习与类增量非遗忘分配，速读则涉及漂移检测和LLM代理适配。  
-最值得关注：用现代Hopfield网络实现持续学习并成功迁移至扩散模型（满分），以及通过双级竞争在类增量学习中彻底避免灾难性遗忘。  
-建议关注持续学习与生成模型的交叉突破，可尝试将Hopfield记忆机制引入你的增量训练流程。
-- 详情：[/202605/29/README](/202605/29/README)
+今日聚焦增量学习与多模态代理，从矿区智能解译到通用技能蒸馏皆有覆盖。
+最值得关注的是粗到细注意力蒸馏框架，让多光谱图像分割模型在不遗忘旧矿区知识的同时，持续学习新区域特征。
+建议读者可先从该高灵敏度遥感分割方法入手，理解增量学习的遗忘抑制机制，再延展至代理系统的在线进化思路。
+- 详情：[/202605/30/README](/202605/30/README)
 
 ### 精读区论文标签
-1. [Continual Learning in Modern Hopfield Networks with an Application to Diffusion Models](/202605/29/2605.27975v2-continual-learning-in-modern-hopfield-networks-with-an-application-to-diffusion-models)  
-   标签：评分：10.0/10、query:continual
-   evidence：利用现代霍普菲尔德能量分析扩散模型中的灾难性遗忘，提出优先化重放以缓解遗忘
-2. [Non-Forgetting Knowledge Allocation with Bi-level Competition for Class-Incremental Learning](/202605/29/2605.29592v1-non-forgetting-knowledge-allocation-with-bi-level-competition-for-class-incremental-learning)  
+1. [Coarse-to-Fine Domain Incremental Learning with Attentive Distillation for Mining Footprint Segmentation in Multispectral Imagery](/202605/30/2605.24460v2-coarse-to-fine-domain-incremental-learning-with-attentive-distillation-for-mining-footprint-segmentation-in-multispectral-imagery)  
    标签：评分：9.0/10、query:continual
-   evidence：类增量学习中防止旧知识遗忘的方法
-3. [Active Continual Learning with Metaplastic Binary Bayesian Neural Networks](/202605/29/2605.30198v1-active-continual-learning-with-metaplastic-binary-bayesian-neural-networks)  
-   标签：评分：9.0/10、query:continual
-   evidence：在边缘设备上对非平稳流进行在线持续学习和主动查询
-4. [Evolve as a Team: Collaborative Self-Evolution for LLM-based Multi-Agent Systems](/202605/29/2605.29790v1-evolve-as-a-team-collaborative-self-evolution-for-llm-based-multi-agent-systems)  
-   标签：评分：8.0/10、query:continual
-   evidence：基于经验的协作自我进化，实现多代理系统的持续改进。
+   evidence：使用注意力蒸馏的领域增量学习防止矿业分割中的遗忘
 
 ### 速读区论文标签
-1. [Open World Autoencoding Drift Detection with Novel Class Recognition in Tabular Non-stationary Data Streams](/202605/29/2605.29834v1-open-world-autoencoding-drift-detection-with-novel-class-recognition-in-tabular-non-stationary-data-streams)  
-   标签：评分：7.0/10、query:continual
-   evidence：提出使用自编码器的无监督概念漂移检测与新类识别方法，适用于数据流的增量适应
-2. [Adapting the Interface, Not the Model: Runtime Harness Adaptation for Deterministic LLM Agents](/202605/29/2605.22166v2-adapting-the-interface-not-the-model-runtime-harness-adaptation-for-deterministic-llm-agents)  
+1. [PANDO: Efficient Multimodal AI Agents via Online Skill Distillation](/202605/30/2605.24785v2-pando-efficient-multimodal-ai-agents-via-online-skill-distillation)  
    标签：评分：6.0/10、query:continual
-   evidence：从过去失败中学习可重用干预实现自主适应
+   evidence：在线技能蒸馏使智能体从积累经验中提升效率，属于自我改进型 AI。
 
 
 <div class="dpr-home-promo-card">
