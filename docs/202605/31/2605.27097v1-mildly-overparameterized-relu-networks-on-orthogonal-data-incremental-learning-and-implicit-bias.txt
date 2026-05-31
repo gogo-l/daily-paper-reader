@@ -1,0 +1,9044 @@
+Title: Mildly Overparameterized ReLU Networks on Orthogonal Data: Incremental Learning and Implicit Bias
+
+URL Source: https://arxiv.org/pdf/2605.27097v1
+
+Published Time: Wed, 27 May 2026 01:19:32 GMT
+
+Number of Pages: 66
+
+Markdown Content:
+# Mildly Overparameterized ReLU Networks on Orthogonal Data: Incremental Learning and Implicit Bias 
+
+## James Town University of Warwick 
+
+## james.p.town@warwick.ac.uk 
+
+## Etienne Boursier INRIA LMO, Université Paris-Saclay 
+
+## etienne.boursier@inria.fr 
+
+## Ben Lewis University of Warwick 
+
+## ben.lewis@warwick.ac.uk 
+
+## Matthias Englert University of Warwick 
+
+## m.englert@warwick.ac.uk 
+
+## Ranko Lazi´ cUniversity of Warwick 
+
+## r.s.lazic@warwick.ac.uk 
+
+## May 27, 2026 
+
+Abstract 
+
+The successful training of neural networks hinges on the use of first order optimization methods, yet the theoretical characterization of these methods remains incomplete. This is especially true in settings with mild overparameterization. In this work, we study the gradient flow dynamics of two-layer ReLU networks from small initialization with orthogonal training data. We prove the limiting flow converges to a saddle-to-saddle jump process as the initialization scale tends to zero, revealing an incremental learning phenomenon in which a new neuron activates at each saddle. This analysis recovers the known result of Dana et al. [2025] that the network interpolates the training data with high probability as soon as m ≳ log( n), where m is the network width and n is the number of training samples. This incremental process characterization also allows us to derive a novel implicit bias result: the learned interpolator has a squared ℓ2-norm scaling as √n, which is within a constant factor of the minimal ℓ2-norm interpolator. More broadly, our work provides the first rigorous proof of an incremental learning process for ReLU networks, whilst suggesting mildly overparameterized networks can converge to interpolating solutions whose complexity is of the same order as that of the optimal interpolator. 
+
+# 1 Introduction 
+
+Despite the remarkable empirical successes of deep learning [Lipman et al., 2023, Zagoruyko and Komodakis, 2016, Cheng et al., 2016], a precise theoretical understanding of the optimization dynamics of neural networks trained by first-order methods remains elusive. The Neural Tangent Kernel (NTK) framework offered an initial answer, establishing convergence to global minima for overparameterized networks [Jacot et al., 2018, Du et al., 2019, Arora et al., 2019b]. However, NTK operates under large initialization assumptions that cause network features to remain nearly unchanged during training; a regime aptly termed lazy by Chizat et al. [2019], and now understood to be unrepresentative of practice [Fort et al., 2020]. 1
+
+> arXiv:2605.27097v1 [cs.LG] 26 May 2026
+
+In the practically relevant small initialization regime, training induces significant changes in network fea-tures, a phenomenon known as feature learning . Theoretical analysis of this regime is considerably more challenging, as the resulting dynamics are highly non-convex. General convergence results exist for linear activation architectures [Arora et al., 2018, Woodworth et al., 2020] and, in the infinite-width limit, for nonlinear networks [Chizat and Bach, 2018, Wojtowytsch, 2020]. These results, however, require either smooth activations or infinite data [Holzmüller and Steinwart, 2022, Boursier and Flammarion, 2025a], and thus do not apply to the canonical case of two-layer ReLU networks. Beyond convergence, a central motivation for studying the small initialization regime is its implicit bias :gradient flow is known to favor sparse or low-complexity solutions that generalize well. For classifica-tion, two-layer networks trained to interpolation have been shown to converge to min-norm max-margin estimators [Lyu and Li, 2020, Chizat and Bach, 2020, Ji and Telgarsky, 2020], which coincide with sparse, narrow networks [Safran et al., 2022, Boursier and Flammarion, 2023]. Regression is however arguably more representative of practical training dynamics, as characterizing the implicit bias requires describ-ing the entire trajectory rather than only its asymptotic endpoint after interpolation is achieved. In the regression setting, diagonal linear networks favor sparse estimators [Woodworth et al., 2020], while fully connected linear networks favor low-rank solutions [Saxe et al., 2014, Arora et al., 2019a]. For two-layer ReLU networks, implicit bias in regression remains largely open, and constitutes the focus of this work. Progress has been made by restricting to structured data settings. Among these, orthogonal data has emerged as a natural and tractable setting: Boursier et al. [2022] established convergence of gradient flow to a minimal ℓ2-norm interpolator, but under an initialization condition requiring exponential overparameterization in the number of training samples. Dana et al. [2025] later showed that mild overparameterization suffices to guarantee convergence to an interpolating solution. However, their analysis leaves the norm of the reached interpolator uncharacterized, and understanding this implicit bias in the mildly overparameterized regime remained open until the present work. 
+
+Contributions. We prove a precise characterization of the implicit bias of gradient flow when training two-layer ReLU networks on orthogonal data in the mildly overparameterized regime, via a complete analysis of the training trajectory. Interestingly, our analysis reveals an incremental learning phenomenon, illustrated in Figure 1: as initialization scale vanishes, the loss alternates between long idle plateaus and abrupt decreases, each corresponding to the activation of a new neuron. While incremental learning has been characterized for linear networks, our work provides the first such characterization for networks with nonlinear activations. An informal statement of our main result follows, where m refers to the width of the network and n the number of training samples. 
+
+Theorem 1 (Informal) . In the regression setting with orthogonal training data, as initialization scale vanishes, and with high probability over the network initialization, the gradient flow trajectory over a two-layer ReLU network with log( n) ≲ m ≪ exp ( n log(2) /2) converges to a piecewise-constant process: the iterates move successively from one saddle of the training loss to another, with each transition corresponding to the creation of a new non-zero neuron. The sequence of visited saddles and transition times can be computed via Algorithm 1 without any actual training of the network. 
+
+Building on this algorithmic description of the limit dynamics, we derive an upper bound on the parameter ℓ2-norm of the solution found by gradient flow, showing it is within a constant factor of the minimal ℓ2-norm interpolator. 
+
+## 1.1 Related work 
+
+Incremental Learning. Arpit et al. [2017], Nakkiran et al. [2019] empirically demonstrated that stan-dard optimization of deep learning models follows a simplicity bias , whereby learned representations grow increasingly complex over the course of training. Separately, several works have shown that this complexity does not accumulate continuously, but rather incrementally: new data patterns are absorbed 2t1 t2 t3 t4 t5 t6
+
+10 −3
+
+10 −2
+
+10 −1
+
+> Loss
+
+0
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1
+
+> Fraction of data points fitted
+
+t1 t2 t3 t4 t5 t6
+
+0
+
+1
+
+2
+
+> Neuron norm
+
+Figure 1: We train a two-layer ReLU network of six neurons on 64 orthonormal data points in 64 dimensions. The initialization scale is small (experimental details in Appendix A.1). Left: During training, the loss (red) shows long periods of little change with sudden drops in between. Those drops correspond to an additional set of data points being fitted (green). The drops in the loss happen at the times independently predicted by algorithm 1, which are indicated by the dashed lines. Right: The norms of the hidden layer of the six neurons during the same training. one at a time [Rahaman et al., 2019, Charton, 2024], giving rise to a characteristic training curve marked by long stagnation plateaus and sharp drops in the loss. The resulting training dynamics can thus be understood as a succession of jumps between saddle points of the loss landscape — a phenomenon sometimes referred to as saddle-to-saddle dynamics [Jacot et al., 2021]. Theoretically characterizing this incremental behavior is challenging because it is specific to the small initialization regime, where networks operate in the rich regime and the resulting dynamics are highly non-convex. For two-layer networks, Kunin et al. [2025] offered high-level intuitions for this regime: during each plateau, a dormant neuron is activated in a manner shaped by the local geometry near the saddle point, after which the activated neurons undergo rapid updates as training transitions to the next plateau. However, these intuitions fall short of a complete and rigorous characterization, which has so far been confined to specific linear activation models: for diagonal linear networks, Berthier [2023], Pesme and Flammarion [2023] precisely characterized the incremental learning dynamics, showing that the estimator’s support grows one coordinate at a time; for linear networks and matrix sensing, Gidel et al. [2019], Jin et al. [2023] established, under favorable data or initialization conditions, that the learned matrix undergoes incremental rank increases throughout training. Our work advances this line of research by providing the first theoretical characterization of incremental learning under gradient flow for networks with non-linear activations, specifically two-layer ReLU networks trained on orthogonal data. In a related vein, Abbe et al. [2023] also studied incremental learning in two-layer networks with non-linear activations; however, their analysis is tailored to a specific activation function and optimization algorithm that depart from standard practice. 
+
+Training two-layer ReLU networks on orthogonal data. Since a theoretical analysis of two-layer ReLU network training remains out of reach for general data distributions, many works have focused on specific toy settings, such as XOR data [Glasgow, 2024], positively correlated data [Wang and Ma, 2023, Chistikov et al., 2023, Min et al., 2024], or linearly separable data [Phuong and Lampert, 2021, Lyu et al., 2021]. Among these, we focus on the orthogonal data setting, first studied by Boursier et al. [2022], who showed that under small initialization, the parameters converge to a minimal ℓ2-norm interpolator. However, their analysis requires an initialization condition that is only satisfied in a heavily overparameterized regime, where the number of neurons m is exponential in the number of training points n. Dana et al. [2025] later relaxed this assumption, showing that mild overparameterization 
+
+m ≳ log( n) suffices to guarantee convergence to a global minimum of the training loss. 3Yet the question of implicit bias in the mildly overparameterized regime remained open, as Dana et al. [2025] do not characterize the nature of the resulting estimator. Specifically, one may ask: does the network still converge to the minimal ℓ2-norm interpolator in the mildly overparameterized regime? Boursier et al. [2025] answered this negatively, showing that the minimal ℓ2-norm interpolator is not reached with high probability as soon as m ≲ 2n. Taken together, these results leave a gap precisely in the mildly overparameterized regime log( n) ≲ m ≲ 2n, which our work fills by characterizing the ℓ2-norm of the interpolator obtained in this setting. 
+
+More parameters lead to simpler models. The generalization of overparameterized models remains an active area of research in deep learning theory. A phenomenon of particular interest is double descent 
+
+[Belkin et al., 2019, Nakkiran et al., 2020], whereby overparameterization beyond the interpolation threshold leads to smaller test error. A likely driver of this behavior is that, as the number of parameters grows, the function represented at convergence becomes simpler [Wilson, 2025], exhibiting for example smaller norm [Belkin et al., 2019], fewer effective parameters [Maddox et al., 2020], or lower Kolmogorov complexity [Goldblum et al., 2024]. Numerous theoretical analyses of this phenomenon have been proposed in recent years, but remain confined to linear regression on random features [Liao et al., 2020, Belkin et al., 2020, Hastie et al., 2022, Mei and Montanari, 2022, Bach, 2024]. Our work establishes such a tendency for two-layer ReLU networks trained on orthogonal data: mildly overparameterized networks converge to interpolators with slightly larger parameter ℓ2-norm than those found in the heavily overparameterized regime. 
+
+# 2 Setting 
+
+We consider a two-layer neural network with the ReLU activation, whose output is given by 
+
+hθ (x) := Pmj=1 aj σ(w⊤ 
+
+> j
+
+x),
+
+where m is the network width, σ(z) := max {0, z } is the ReLU function, and θ = ( a, W ) are the network parameters, which consist of output weights a ∈ Rm and hidden neurons W ⊤ = ( wj )mj=1 ∈ Rd×m. We consider a training dataset (xi, y i)ni=1 , which consists of inputs xi ∈ Rd and outputs yi ∈ R, satisfying the following assumption. 
+
+Assumption 1. The training inputs are such that x⊤ 
+
+> i
+
+xi′ = 1 (i = i′) for all i, i ′ ∈ [n].
+
+Although restrictive, the orthogonality assumption is a useful test bed for analyzing training dynamics, which can even sometimes be relaxed to general random high dimensional data [Dana et al., 2025]. On the other hand, the norm constraint on the inputs implied by Assumption 1 is solely used for sake of simplicity and could be easily alleviated. Training aims at minimizing the mean squared error loss over the training data, 
+
+L(θ) := 12n
+
+Pni=1 (hθ (xi) − yi)2.
+
+For analytical purpose, we consider optimizing this loss function by gradient flow, which approximates (stochastic) gradient descent as the learning rate vanishes to 0:
+
+˙θ(t) ∈ − ∂L(θ(t)) for almost all t ≥ 0. (1) Here, ∂ denotes the Clarke [1975] subdifferential, which allows to define the gradient flow beyond differ-entiable functions. We direct the reader to Appendix B for further details on the Clarke subdifferential. Note that Assumption 1 and eq. (1) imply that 
+
+˙w⊤ 
+
+> j
+
+(t) xi ∈ 1
+
+n (yi − hθ(t)(xi)) aj (t) ∂σ (w⊤ 
+
+> j
+
+(t) xi).
+
+4Hence, for all i ∈ [n], all j ∈ [m], and almost all t ≥ 0, if a hidden neuron component w⊤ 
+
+> j
+
+(t) xi is negative then it must be constant for all t′ ≥ t. Empirically, the same is true with “negative” replaced by “non-positive”, 1 so Assumption 2 below restricts our attention to realistic training trajectories, which have that property. 
+
+Assumption 2. For all i ∈ [n] and all j ∈ [m], if w⊤ 
+
+> j
+
+(t) xi = 0 for some t ≥ 0, then w⊤ 
+
+> j
+
+(t′) xi = 0 for all 
+
+t′ > t .
+
+Note that whilst it is guaranteed that a solution of Equation (1) exists locally, it may not be unique. With Assumption 2, along every solution of the subdifferential inclusion eq. (1), the left-hand side 
+
+˙θ(t) exists — possibly except at the finitely many time points that are the minima of non-empty sets 
+
+{t ≥ 0 | w⊤ 
+
+> j
+
+(t) xi = 0 } — and is equal to the element of the right-hand side −∂L (θ(t)) that is obtained by using only 0 as the subderivative of the ReLU function σ at 0. Hence for simplicity of presentation, we fix the latter choice, i.e., in the remainder of the paper we work with 1 (z > 0) instead of ∂σ (z) and we may use the gradient notation to mean the subgradient obtained with that choice. Boursier et al. [2022] also proved that any other constant definition of the subgradient fails to yield global solutions of Equation (1) in presence of orthogonal data. Finally, we note that Bertoin et al. [2021] suggest that this fixed choice tends to be most efficient in practice. We consider balanced initialization of the parameters, which is specified by an initialization scale α.
+
+Assumption 3. For all j ∈ [m] we have aj (0) = α s j and wj (0) = α u j , where sj
+
+> iid
+
+∼ U ({± 1}) and uj
+
+> iid
+
+∼U(Sd−1).
+
+Whilst the assumption of strictly balanced initialization is partly to simplify the analysis, the work of Azulay et al. [2021] suggests that balanced initializations encourage bias towards the rich regime. Azulay et al. [2021] also note that the commonly used Xavier initialization [Glorot and Bengio, 2010] is approximately balanced. The balanced initialization simplifies the analysis of the training dynamics, as this weight balancedness will be preserved along training, thanks to the following result. 
+
+Proposition 1 (Du et al. 2018, Theorem 2.1) . For all j ∈ [m] and all t ≥ 0, we have |aj (t)| = ∥wj (t)∥ and 
+
+sgn( aj (t)) = sj .
+
+Proposition 1 also implies that the output layer signs remain constant during training. This allows us to treat separately the data associated with positive or negative labels, as well as the neurons with positive or negative output signs. To this end, we denote for s ∈ {± 1}, the set Is := {i ∈ [n] | sgn( yi) = s} of labels with sign s.
+
+Neuron dynamics. Denote the normalized hidden-layer weights by wj := wj /∥wj ∥ (in general we use bars to denote normalized vectors and ∥·∥ to denote the ℓ2-norm) and define the dynamical vector 
+
+Dj = − 1
+
+> n
+
+P 
+
+> i|w⊤
+> jxi>0
+
+(hθ (xi) − yi)xi. Equation (1), Proposition 1, and Assumption 2 imply the radial and tangential dynamics of neurons are given for almost all t ≥ 0 by 
+
+˙aj (t) = D⊤ 
+
+> j
+
+wj and ˙wj (t) = sj
+
+ Id − wj w⊤
+
+> j
+
+ Dj .
+
+Acceleration of time. Our goal is to study the limiting dynamics of the parameters trajectory as the initialization scale α goes to 0. When α → 0, escaping saddle points of the trajectory — starting with the initial one where all parameters are zero — takes an arbitrarily long time. Similarly to Berthier [2023], Pesme and Flammarion [2023], obtaining a non-trivial limit dynamics requires a proper rescaling of time, which is given by the time acceleration t 7 → log(1 /α )t. We denote the accelerated parameters by eθα(t) = θ(log(1 /α )t). In the following, we omit the superscript as the acceleration by a factor    
+
+> 1E.g., in PyTorch, the derivative of the ReLU non-linearity at 0is computed as 0.
+
+5of log(1 /α ) is implicit in the tilde notation. The flow defining this rescaled process then satisfies 
+
+˙eθ(t) ∈ − log(1 /α )∂L(eθ(t)) for almost all t ≥ 0.
+
+# 3 Limit process 
+
+In this section, we provide intuitions for deriving the limit process of the training trajectory as α → 0.We here only provide high level insights, and proving the exact convergence results claimed here requires much more detailed and intricate analyses, that are given in the complete proof of Theorem 2. We build the saddles visited by the limit process and the corresponding jump times recursively. Assume that eθ(t) α→0
+
+−→ θ◦(t) for almost every t ∈ [0 , t k], where tk is a jump time, and that the limit process has reached the saddle point θ(k) after the k-th jump, i.e., θ◦(tk) = θ(k). The limit process θ◦(t) will then be constant, equal to the saddle θ(k) on an interval [tk, t k+1 ), and will jump to a new saddle θ(k+1) at a jump time tk+1 to be determined. The initial saddle point is given by θ(0) = 0. Moreover, we will also show recursively that the limit process jumps from a saddle point to another by modifying a single neuron (w◦ 
+
+> j
+
+, a ◦ 
+
+> j
+
+), which is zero before jump time tk+1 , and will reach its final, non-zero value after the jump. Also, all the training points along which the neuron j is active will be fitted after the jump. During that jump, the values of all other neurons remain unchanged. In consequence, the saddle point 
+
+θ(k) visited by the limit process includes two types of neurons: • unfitted neurons, which are equal to zero, i.e., (w◦ 
+
+> j
+
+, a ◦ 
+
+> j
+
+) = 0;• fitted neurons, which perfectly fit the training points along which they are active: 
+
+1  w◦ ⊤  
+
+> j
+
+xi > 0 (hθ(k) (xi) − yi)2 = 0 for any i ∈ [n]. These neurons will not move further during the remainder of training. Describing the limit process then calls for describing how and when it jumps from a saddle point 
+
+θ(k) to the next one θ(k+1) . For that and following the heuristics developed by Maennel et al. [2018], Kunin et al. [2025], we will decompose the tangential and radial dynamics of the parameters, using the reparameterization (ewj , eℓj ) such that ewj = αeℓj ewj . This reparameterization captures the right quantities: while ewj is nearly zero for unfitted neurons, its renormalized counterpart ewj tracks the tangential movement of the neuron, which is key to understanding the dynamics in the vicinity of each saddle. The dynamics satisfied by these parameters can then be written as follows: 
+
+ddt ewj = log(1 /α )sj
+
+
+
+Id − ewj ew⊤
+
+> j
+
+
+
+Dj ; ddt eℓj = sj ew⊤ 
+
+> j
+
+Dj
+
+Around a saddle point θ(k), note that Dj ≈ 0 for already fitted neurons, which thus do not move anymore. For unfitted neurons, the tangential movement can be seen as gradient ascent/descent of some alignment restricted on the sphere, similarly to observations made by Boursier et al. [2022], Min et al. [2024], Kumar and Haupt [2024]. Because of its log(1 /α ) scaling, this tangential movement thus occurs instantly as α → 0, such that there exist some vectors D(k) 
+
+> j
+
+and for t ∈ (tk, t k+1 )
+
+ewj (t) α→0
+
+−→ sj D(k) 
+
+> j
+
+.
+
+These vectors D(k) 
+
+> j
+
+correspond to the (normalized) critical points reached by the gradient ascent/descent mentioned above. In the case of orthogonal data, they are simple to compute and are actually given for unfitted neurons by 
+
+D(k) 
+
+> j
+
+= 1
+
+n
+
+X
+
+> i∈S(k)
+> U
+
+1  wj (0) ⊤xi > 0 1 (sgn yi = sj ) yixi,
+
+where S(k) 
+
+> U
+
+is the set of training points that are not yet fitted by the network (a rigorous definition of all quantities is given in Algorithm 1 below). Since we have ewj (t) ≈ sj D(k) 
+
+> j
+
+, note that the time derivative 6of the norm exponent then satisfies on (tk, t k+1 ):
+
+ddt eℓj ≈ D(k) 
+
+> j2
+
+.
+
+Consequently, eℓj converges to a piecewise affine process ℓ◦ 
+
+> j
+
+that starts at −1, owing to our initialization choice, and is defined recursively by: 
+
+ℓ◦ 
+
+> j
+
+(0) = −1; ℓ◦ 
+
+> j
+
+(t) = ℓ◦ 
+
+> j
+
+(tk) + ( t − tk) D(k) 
+
+> j2
+
+for t ∈ [tk, t k+1 ].
+
+Moreover, the next jump happens as soon as one unfitted neuron becomes non-zero (in the limit α → 0). With our reparameterization, this occurs as soon as ℓ◦ 
+
+> j
+
+(t) ≥ 0 for some unfitted neuron. The jump time 
+
+tk+1 can then be deduced as the first time for which the exponent ℓ◦ 
+
+> j
+
+of some unfitted neuron becomes zero, and the corresponding neuron is the one to be updated at jump time tk+1 . In other words, we have the following: • j(k) 
+
+> ⋆
+
+= arg max j ℓ◦ 
+
+> j
+
+(tk)/ D(k) 
+
+> j2
+
+is the unfitted neuron that will grow in norm; • tk+1 = tk − ℓ◦
+
+> j(k)
+> ⋆
+
+(tk)/ D(k) 
+
+> j(k)
+> ⋆2
+
+is the jump time at which w◦
+
+> j(k)
+> ⋆
+
+becomes non-zero. At jump time tk+1 , the process then leaves the saddle θ(k), and due to the time acceleration log(1 /α ), it instantaneously reaches a new critical point of the training loss. Moreover, during this instantaneous jump, only the neuron (w◦
+
+> j(k)
+> ⋆
+
+, a ◦
+
+> j(k)
+> ⋆
+
+) of the limit process undergoes a change: it jumps from 0 to the value minimizing the new training loss over this single neuron, which is given by 
+
+w◦
+
+> j(k)
+> ⋆
+
+(t) = sj
+
+nD (k)
+
+> j(k)
+> ⋆
+
+r
+
+nD (k) 
+
+> j(k)
+> ⋆2
+
+; a◦
+
+> j(k)
+> ⋆
+
+(t) = sj
+
+r
+
+nD (k) 
+
+> j(k)
+> ⋆2
+
+for t ≥ tk+1 .
+
+Thanks to these high level insights, one can define formally the limit process (θ◦(t)) t≥0 in algorithm 1 below. Importantly, the while loop in algorithm 1 eventually stops after a finite number of iterations p,such that S(p) 
+
+> U
+
+∩ Sj = ∅ for all j ∈ N (p) 
+
+> U
+
+. In the following, Assumption 4 will guarantee that we actually stop when S(p) 
+
+> U
+
+= ∅, which corresponds to the training loss being zero. 
+
+# 4 Saddle-to-saddle dynamics 
+
+In this section, we present our main result. We first require some assumptions to ensure that the network interpolates at convergence, and avoid degenerate cases in the definition of the limit process. 
+
+Assumption 4. Let A ∈ { 0, 1}n×m be the matrix such that Ai,j = 1  w⊤ 
+
+> j
+
+(0) xi > 0 and i ∈ Isj
+
+.(i) Each row of the mask matrix A is non-zero, each column is non-zero, and its columns are pairwise distinct. (ii) The training outputs (yi)ni=1 are such that they are non-zero, and in each iteration defining the limit process, the arg max in algorithm 1 line 8 is unique. 
+
+We believe our main result could be extended to the case that columns are not pairwise distinct, at the expense of a more refined analysis, by merging neurons into groups with matching initial activation pattern in a similar manner to Boursier et al. [2022]: neurons which share activation patterns align and grow in the same directions throughout training, and the sum of their squared norms is equal to the squared norm achieved by a single neuron with this activation pattern. In this way, neurons sharing activation patterns form rank-1 sub-networks, so Algorithm 1 may be applied considering an aggregated collection of neurons with matching initial activation pattern as one neuron. 7Algorithm 1 Construction of the limit process.  
+
+> 1:
+
+Input: data (xi, y i)i∈[n] and initial weights (wj (0) , a j (0)) j∈[m]. 
+
+> 2:
+
+▷ Initialization  
+
+> 3:
+
+p ← 0; t0 = 0 ; N (0)  
+
+> U
+
+= [ m]; S(0)  
+
+> U
+
+= [ n] 
+
+> 4:
+
+Sj = {i ∈ [n] | wj (0) ⊤xi > 0 and sgn( yi) = sgn( aj (0)) }; and ℓ◦ 
+
+> j
+
+(0) = −1 for any j ∈ [m] 
+
+> 5:
+
+▷ Recursive definition of the jumps  
+
+> 6:
+
+while ∃j ∈ N (p) 
+
+> U
+
+, S (p) 
+
+> U
+
+∩ Sj̸ = ∅, do  
+
+> 7:
+
+for any j ∈ [m], D(p) 
+
+> j
+
+=
+
+( 1
+
+> n
+
+P  
+
+> i∈S(p)
+> U∩Sj
+
+yixi if j ∈ N (p)
+
+> U
+
+D(p−1)  
+
+> j
+
+otherwise  
+
+> 8:
+
+Let j(p) 
+
+> ⋆
+
+∈ arg max j∈N (p)
+
+> U
+
+ℓ◦ 
+
+> j
+
+(tp)/ D(p) 
+
+> j2
+
+# neuron to activate  
+
+> 9:
+
+tp+1 = tp − ℓ◦
+
+> j(p)
+> ⋆
+
+(tp)/ D(p) 
+
+> j(p)
+> ⋆2
+
+# jump time  
+
+> 10:
+
+ℓ◦ 
+
+> j
+
+(tp+1 ) = min 
+
+
+
+0, ℓ ◦ 
+
+> j
+
+(tp) + ( tp+1 − tp) D(p) 
+
+> j2
+
+
+
+for any j ∈ [m] # norm exponent  
+
+> 11:
+
+N (p+1)  
+
+> U
+
+= N (p) 
+
+> U
+
+\ { j(p) 
+
+> ⋆
+
+} and S(p+1)  
+
+> U
+
+= S(p) 
+
+> U
+
+\ Sj(p)
+
+> ⋆
+
+# unfitted neurons and data  
+
+> 12:
+
+p ← p + 1 ; 
+
+> 13:
+
+end while  
+
+> 14:
+
+▷ Definition of limit process  
+
+> 15:
+
+Let tp+1 = + ∞ by convention  
+
+> 16:
+
+For any k ∈ [p] and t ∈ [tk, t k+1 ), define θ◦(t) = ( w◦ 
+
+> j
+
+(t), a ◦ 
+
+> j
+
+(t)) j∈[m] as for any j ∈ N (k) 
+
+> U
+
+, (w◦ 
+
+> j
+
+(t), a ◦ 
+
+> j
+
+(t)) = 0;
+
+for any j̸ ∈ N (k) 
+
+> U
+
+, w◦ 
+
+> j
+
+(t) = sj
+
+nD (k)
+
+> j
+
+r
+
+nD (k) 
+
+> j2
+
+and a◦ 
+
+> j
+
+(t) = sj
+
+r
+
+nD (k) 
+
+> j2
+
+. 
+
+> 17:
+
+Output: limit process (θ◦(t)) t≥0 and jump times (t0, . . . , t p+1 ).The requirement that each row be non-zero ensures loss minimization. The requirement that each column be non-zero ensures that for each neuron, there exists a direction in which it can grow at initialization to reduce the loss, otherwise such neurons remain small throughout training and can be ignored. Proposition 2 below states that Assumption 4 holds with high probability in the mild overparameterization regime log( n)log(4 /3) ≲ m ≪ exp ( n log(2) /2) .
+
+Proposition 2. Let n+ = |I+| , n− = |I−| and consider the initialization scheme of Assumption 3. (i) Assumption 4 (i) holds with probability at least 1 − n   34
+
+m − m(m+3) 2
+
+  12
+
+min( n+,n −)+1 .(ii) When Assumption 4 (i) holds, the set of tuples (yi)ni=1 excluded by Assumption 4 (ii) has Lebesgue measure zero in Rn.
+
+The following result rigorously formulates the sense in which the gradient flow defined by eq. (1) converges, as the initialization scale tends to zero, to the limit process θ◦.
+
+Theorem 2. Under Assumptions 1, 2, 3 and 4, as the initialization scale α tends to 0, the accelerated flow eθα
+
+converges to θ◦, uniformly on every compact subset of R≥0 \ { t0, t 1, . . . , t p}, where θ◦ and (t0, t 1, . . . , t p) are respectively the limit process and jump times defined in algorithm 1. 
+
+Theorem 2 shows that as the initialization scale decreases, the trajectory of the parameters approximates 8a jump process between different saddles of the loss function. As each saddle increases the rank of the network by one from the previous saddle, this result shows an example of incremental feature learning. This provides the first complete theoretical characterization of a saddle-to-saddle process in a neural network with realistic assumptions on the architecture and overparameterization. Figure 1 illustrates this convergence towards the incremental limit process θ◦ and additional experiments are provided in appendix A Instead of Assumption 4, the analysis of Boursier et al. [2022] relies on the assumption that there exist at least two neurons j+, j − such that Ai,j + = 1 for all i ∈ I+ and Ai,j − = 1 for all i ∈ I−. In this case, algorithm 1 reduces to just two jumps: neuron j+ grows to fit all positive labels, and neuron j− grows to fit all negative labels. Moreover, as explained in appendix D.1, these two jumps are non-interfering :the neurons fitting positive and negative labels evolve independently throughout training. Under mild overparameterization, however, the process is considerably more intricate: fitting positive (resp. negative) labels requires multiple neurons and hence multiple jumps, which may interact with one another. Our proof therefore requires a substantially finer analysis of the dynamics than that of Boursier et al. [2022]. The two main additional difficulties are the following. First, the norm growth of a given neuron exhibits memory across multiple saddles, which is controlled by the term ℓ◦ 
+
+> j
+
+. Second, when a new neuron is activated, it may still be positively correlated with already fitted samples xi, and one must ensure that its activation does not cause the loss on these samples to increase significantly. 
+
+Sketch of Proof. The result is proven by an inductive argument on the number of saddles traversed by the flow. The schematic for the proof is depicted in Figure 2 and consists of splitting the dynamics into phases around the jump from saddle k to saddle k + 1 , where ε and ε′ are parameters of the proof which may be selected arbitrarily small, giving the desired uniform convergence. • Slow growth phase: For κ ∈ (tk, t k+1 ), τ1 is the first time that ewj(k)  
+
+> ⋆2
+
+= αε. We find that for 
+
+t ∈ [κ, τ 1] all neurons remain aligned in the directions D(k) 
+
+> j
+
+. Hence, eℓj increases towards 0 for all 
+
+j ∈ N (k) 
+
+> U
+
+, but eθ does not change significantly and remains near saddle k until any κ′ ∈ (τ1, t k+1 ).• Rapid fitting phase: τ3 is the first time that ewj(k) 
+
+> ⋆
+> 22
+
+= n D(k)  
+
+> j(k)
+> ⋆2
+
+− αε′/4 for a small enough ε′. We show τ3 − τ1 = O(ε, ε ′) through checking ewj(k)
+
+> ⋆
+
+continues to grow at an exponential rate D(k)  
+
+> j(k)
+> ⋆2
+
+by neither realigning in span (xi | i ∈ S(k) 
+
+> F
+
+). To show this we employ two techniques: first, we split the phase in two, defining τ2 as the first time ewj(k)  
+
+> ⋆2
+
+= η for some convenient η, as having a stronger bound on neuron j(k) 
+
+> ⋆
+
+helps control the loss on fitted data; second, we estimate how much neuron j(k)
+
+> ⋆
+
+realigns in span (xi | i ∈ S(k) 
+
+> F
+
+) in terms of the loss on this data, and then in turn show wj(k)
+
+> ⋆
+
+remains aligned in direction D(k)
+
+> j(k)
+> ⋆
+
+on [τ1, τ 3].• Realignment and slow growth: The unfitted neurons j ∈ N (k+1)  
+
+> U
+
+respond to the change in gradients due to a new set of data being fitted by realigning rapidly in direction D(k+1)  
+
+> j
+
+by some time τ4, after which time this alignment remains stable until any time κ′′ ∈ (tk+1 , t k+2 ).
+
+# 5 Implicit bias 
+
+Boursier et al. [2022] proved that gradient flow converges to a minimum ℓ2-norm interpolator θopt as the initialization scale tends to zero, which is equivalent to the sum of two neurons that respectively fit the positive and negative labels. However, this norm optimality relies on a specific initialization condition, that assumes that at least one neuron is active along all positively labeled data and another neuron is active along all negatively labeled data. Such a condition only realistically holds in a heavily 9Slow growth Fast growth Realignment Slow growth              
+
+> tkκκ′τ1τ2tk+1 τ3τ4κ′′ tk+2
+> Θ(1) O(ε)O(ε′)O(ε)Θ(1)
+
+Figure 2: Timeline of the training dynamics about the jump from saddle k to saddle k + 1 . The quantities 
+
+ε and ε′ are parameters of the proof of Theorem 2, τ1 is the beginning of the fast growth of neuron j(k) 
+
+> ⋆
+
+,
+
+τ3 is the time by which neuron j(k) 
+
+> ⋆
+
+has grown to its final norm, and τ4 is the time by which neurons in the set N (k+1)  
+
+> U
+
+have realigned. The quantities κ, κ ′, and κ′′ can be viewed as fixed for the proof of convergence. overparameterized regime with m ≳ 2n. Boursier et al. [2025] then proved in a later work that with high probability in the mild overparameterization regime ( m ≲ 2n), gradient flow does not converge towards a minimal ℓ2-norm interpolator as the initialization scales goes to 0. We yet prove in this section that with mild overparameterization, Algorithm 1 produces with high probability an interpolator that is only larger in ℓ2-norm than the optimal one by a constant multiplicative factor. We denote in the following by θpred the limiting parameters θ◦(t) for any t ≥ tp—the definition is independent of the choice of t > t p, thanks to Theorem 2—and by θopt any minimum ℓ2-norm interpolator. The squared ℓ2-norms of these parameters are given by 
+
+12 ∥θopt ∥22 =
+
+s X  
+
+> i|yi>0
+
+y2 
+
+> i
+
++
+
+s X  
+
+> i|yi<0
+
+y2 
+
+> i
+
+and 12 ∥θpred ∥22 = X
+
+> j∈[m]
+
+n D(p) 
+
+> j2
+
+. (2) where the last jump of the limit process p and D(p) 
+
+> j
+
+are all defined in Algorithm 1. Theorem 3 below upper bounds the norm of the learned interpolator in the mild overparameterization regime as the initialization scale goes to 0.
+
+Theorem 3. Let n+ = |I+|, n− = |I−|, and ¯n = min( n+, n −). Under Assumptions 1 and 3, if log( m) = o(¯ n1/8/ log(¯ n)) , then the final output of Algorithm 1 satisfies 
+
+12 ∥θpred ∥22 ≤ 5  √n+ + √n−
+
+ max  
+
+> i∈[n]
+
+|yi|,
+
+with probability at least 1 − exp( −Ω(¯ n1/8)) over the network initialization. 
+
+Theorem 3 implies that, in the presence of uniformly bounded labels, the achieved interpolator in the mild overparameterization regime as α → 0 scales as √n. Although this interpolator is not minimal in norm, it recovers the √n scaling of ∥θopt ∥22, thanks to Equation (2). Also note that this type of bound could be easily extended to random labels, replacing the max i∈[n] |yi| term by max i∈[n]
+
+pE[y2 
+
+> i
+
+] for, e.g., sub-Gaussian labels. Theorem 3 does not require any lower bound on m as Algorithm 1 is still defined in that case. However, m must be of order at least log( n) to ensure that the achieved estimator interpolates the data, which is guaranteed by Item (i) Assumption 4. The proof of Theorem 3 reflects the incremental nature of Algorithm 1. Each newly added positive (resp. negative) neuron approximately fits half of the remaining positive (resp. negative) labels. Consequently, after about log( n) increments, nearly all data points are fitted. The proof relies on a union bound over all subsets of the first log( n) neurons used to construct the estimator. This approach does not depend on the specific order induced by Algorithm 1. As a result, the bound in Theorem 3 does not capture how 10 the norm of the interpolator decreases as the number of neurons m grows. Establishing such a result remains open, as it would require a more refined analysis that accounts for dependencies between the successive increments in Algorithm 1. 
+
+# 6 Conclusion 
+
+In this work, we have provided a complete analysis of the gradient flow dynamics of mildly over-parameterized two-layer ReLU networks from small initialization in the special case of orthogonal data. In doing so, we have extended existing convergence results and shown an incremental learning phenomenon. There are several avenues for future research. It would be valuable to extend the proof of saddle-to-saddle dynamics to more general data distributions. Possibilities could include weakly interacting data [Dana et al., 2025] or clustered data with orthogonal centers [Min and Vidal, 2025]. Such work could shed light on incremental learning in more realistic settings. In Theorem 3 on the implicit bias, there is no reference to the width except in the restriction log( m) = o(¯ n1/8/ log(¯ n)) . Future work could seek to precisely quantify the dependence of the learned norm on the network width as one approaches the regime m = exp( n). Doing so would require a more intricate analysis of the dependence of each stage of Algorithm 1 on those that preceded it, which could be of independent interest in analyzing similar sequential algorithms. 
+
+Acknowledgments and Disclosure of Funding 
+
+The authors are thankful to Nikolaos Zygouras for insightful discussions. The authors acknowledge the Engineering and Physical Sciences Research Council (EPSRC) and DIMAP research centre at the University of Warwick for partial support. J. Town is supported by the EPSRC through the Mathematics of Systems II Centre for Doctoral Training at the University of Warwick (reference EP/S022244/1). B. Lewis is supported by the EPSRC studentship 2927289. The authors acknowledge the use of the Batch Compute System in the Department of Computer Science at the University of Warwick, and associated support services, in the completion of this work. 
+
+# References       
+
+> Emmanuel Abbe, Enric Boix Adserà, and Theodor Misiakiewicz. SGD learning on neural networks: leap complexity and saddle-to-saddle dynamics. In COLT , pages 2552–2623, 2023. 3 Sanjeev Arora, Nadav Cohen, and Elad Hazan. On the Optimization of Deep Networks: Implicit Acceleration by Overparameterization. In ICML , pages 244–253, 2018. 2 Sanjeev Arora, Nadav Cohen, Wei Hu, and Yuping Luo. Implicit Regularization in Deep Matrix Factorization. In
+> NeurIPS , pages 7411–7422, 2019a. 2 Sanjeev Arora, Simon S. Du, Wei Hu, Zhiyuan Li, and Ruosong Wang. Fine-Grained Analysis of Optimization and Generalization for Overparameterized Two-Layer Neural Networks. In ICML , pages 322–332, 2019b. 1 Devansh Arpit, Stanislaw Jastrzebski, Nicolas Ballas, David Krueger, Emmanuel Bengio, Maxinder S. Kanwal, Tegan Maharaj, Asja Fischer, Aaron C. Courville, Yoshua Bengio, and Simon Lacoste-Julien. A Closer Look at Memorization in Deep Networks. In ICML , pages 233–242, 2017. 2 Jean-Pierre Aubin and Arrigo Cellina. Differential Inclusions: Set-Valued Maps and Viability Theory . Springer, 1984. 20 Shahar Azulay, Edward Moroshko, Mor Shpigel Nacson, Blake E. Woodworth, Nathan Srebro, Amir Globerson, and Daniel Soudry. On the Implicit Bias of Initialization Shape: Beyond Infinitesimal Mirror Descent. In ICML ,pages 468–477, 2021. 5
+
+11 Francis Bach. High-dimensional analysis of double descent for linear regression with random projections. SIMODS ,6(1):26–50, 2024. 4 Mikhail Belkin, Daniel Hsu, Siyuan Ma, and Soumik Mandal. Reconciling modern machine-learning practice and the classical bias–variance trade-off. Proc. Natl. Acad. Sci. , 116(32):15849–15854, 2019. 4 Mikhail Belkin, Daniel Hsu, and Ji Xu. Two Models of Double Descent for Weak Features. SIAM J. Math. Data Sci. ,2(4):1167–1180, 2020. 4 Raphaël Berthier. Incremental Learning in Diagonal Linear Networks. J. Mach. Learn. Res. , 24(171):1–26, 2023. 3, 5 David Bertoin, Jerome Bolte, Sébastien Gerchinovitz, and Edouard Pauwels. Numerical influence of ReLU’(0) on backpropagation. In NeurIPS , 2021. 5 Etienne Boursier and Nicolas Flammarion. Penalising the biases in norm regularisation enforces sparsity. In 
+
+NeurIPS , 2023. Also in CoRR abs/2303.01353, which contains a correction to Theorem 4. 2 Etienne Boursier and Nicolas Flammarion. Early Alignment in Two-Layer Networks Training is a Two-Edged Sword. J. Mach. Learn. Res. , 26:183:1–183:75, 2025a. 2 Etienne Boursier and Nicolas Flammarion. Simplicity bias and optimization threshold in two-layer ReLU networks. In ICML , 2025b. 27 Etienne Boursier, Loucas Pillaud-Vivien, and Nicolas Flammarion. Gradient flow dynamics of shallow ReLU networks for square loss and orthogonal inputs. In NeurIPS , 2022. 2, 3, 5, 6, 7, 9 Etienne Boursier, Matthew Bowditch, Matthias Englert, and Ranko Lazi´ c. Benignity of loss landscape with weight decay requires both large overparametrization and initialization. CoRR , abs/2505.22578, 2025. 4, 10 François Charton. Learning the greatest common divisor: explaining transformer predictions. In ICLR , 2024. 3 Heng-Tze Cheng, Levent Koc, Jeremiah Harmsen, Tal Shaked, Tushar Chandra, Hrishi Aradhye, Glen Anderson, Greg Corrado, Wei Chai, Mustafa Ispir, Rohan Anil, Zakaria Haque, Lichan Hong, Vihan Jain, Xiaobing Liu, and Hemal Shah. Wide & Deep Learning for Recommender Systems. In DLRS , pages 7—-10, 2016. 1 Dmitry Chistikov, Matthias Englert, and Ranko Lazi´ c. Learning a Neuron by a Shallow ReLU Network: Dynamics and Implicit Bias for Correlated Inputs. In NeurIPS , 2023. 3 Lénaïc Chizat and Francis R. Bach. On the Global Convergence of Gradient Descent for Over-parameterized Models using Optimal Transport. In NeurIPS , pages 3040–3050, 2018. 2 Lénaïc Chizat and Francis R. Bach. Implicit Bias of Gradient Descent for Wide Two-layer Neural Networks Trained with the Logistic Loss. In COLT , pages 1305–1338, 2020. 2 Lénaïc Chizat, Edouard Oyallon, and Francis R. Bach. On Lazy Training in Differentiable Programming. In NeurIPS ,pages 2933–2943, 2019. 1 Frank H. Clarke. Generalized gradients and applications. Trans. Amer. Math. Soc. , 205:247–262, 1975. 4, 19 Léo Dana, Francis R. Bach, and Loucas Pillaud-Vivien. Convergence of Shallow ReLU Networks on Weakly Interacting Data. In NeurIPS , 2025. 1, 2, 3, 4, 11 Simon S. Du, Wei Hu, and Jason D. Lee. Algorithmic Regularization in Learning Deep Homogeneous Models: Layers are Automatically Balanced. In NeurIPS , pages 382–393, 2018. 5 Simon S. Du, Xiyu Zhai, Barnabás Póczos, and Aarti Singh. Gradient Descent Provably Optimizes Over-parameterized Neural Networks. In ICLR , 2019. 1 Stanislav Fort, Gintare Karolina Dziugaite, Mansheej Paul, Sepideh Kharaghani, Daniel M. Roy, and Surya Ganguli. Deep learning versus kernel learning: an empirical study of loss landscape geometry and the time evolution of the Neural Tangent Kernel. In NeurIPS , 2020. 1 
+
+12 Gauthier Gidel, Francis Bach, and Simon Lacoste-Julien. Implicit regularization of discrete gradient dynamics in linear neural networks. In NeurIPS , 2019. 3 Margalit Glasgow. SGD Finds then Tunes Features in Two-Layer Neural Networks with near-Optimal Sample Complexity: A Case Study in the XOR problem. In ICLR , 2024. 3 Xavier Glorot and Yoshua Bengio. Understanding the difficulty of training deep feedforward neural networks. In 
+
+AISTATS , pages 249–256, 2010. 5 Micah Goldblum, Marc Anton Finzi, Keefer Rowan, and Andrew Gordon Wilson. Position: The No Free Lunch Theorem, Kolmogorov Complexity, and the Role of Inductive Biases in Machine Learning. In ICML , pages 15788–15808, 2024. 4 Trevor Hastie, Andrea Montanari, Saharon Rosset, and Ryan J Tibshirani. Surprises in high-dimensional ridgeless least squares interpolation. Ann. Stat. , 50(2):949–986, 2022. 4 Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Delving Deep into Rectifiers: Surpassing Human-Level Performance on ImageNet Classification. In ICCV , pages 1026–1034, 2015. 19 David Holzmüller and Ingo Steinwart. Training Two-Layer ReLU Networks with Gradient Descent is Inconsistent. 
+
+J. Mach. Learn. Res. , 23(181):1–82, 2022. 2 Arthur Jacot, Clément Hongler, and Franck Gabriel. Neural Tangent Kernel: Convergence and Generalization in Neural Networks. In NeurIPS , pages 8580–8589, 2018. 1 Arthur Jacot, François Ged, Berfin ¸ Sim¸ sek, Clément Hongler, and Franck Gabriel. Saddle-to-Saddle Dynamics in Deep Linear Networks: Small Initialization Training, Symmetry, and Sparsity. CoRR , abs/2106.15933, 2021. 3 Ziwei Ji and Matus Telgarsky. Directional convergence and alignment in deep learning. In NeurIPS , 2020. 2 Jikai Jin, Zhiyuan Li, Kaifeng Lyu, Simon S. Du, and Jason D. Lee. Understanding Incremental Learning of Gradient Descent: A Fine-grained Analysis of Matrix Sensing. In ICML , pages 15200–15238, 2023. 3 Akshay Kumar and Jarvis Haupt. Directional Convergence Near Small Initializations and Saddles in Two-Homogeneous Neural Networks. TMLR , 2024. 6 Daniel Kunin, Giovanni Luca Marchetti, Feng Chen, Dhruva Karkada, James B Simon, Michael R DeWeese, Surya Ganguli, and Nina Miolane. Alternating Gradient Flows: A Theory of Feature Learning in Two-layer Neural Networks. In NeurIPS , 2025. 3, 6 Zhenyu Liao, Romain Couillet, and Michael W. Mahoney. A random matrix analysis of random Fourier features: beyond the Gaussian kernel, a precise phase transition, and the corresponding double descent. In NeurIPS , 2020. 4Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matthew Le. Flow Matching for Generative Modeling. In ICLR , 2023. 1 Kaifeng Lyu and Jian Li. Gradient Descent Maximizes the Margin of Homogeneous Neural Networks. In ICLR ,2020. 2, 20 Kaifeng Lyu, Zhiyuan Li, Runzhe Wang, and Sanjeev Arora. Gradient Descent on Two-layer Nets: Margin Maximization and Simplicity Bias. In NeurIPS , pages 12978–12991, 2021. 3 Wesley J. Maddox, Gregory W. Benton, and Andrew Gordon Wilson. Rethinking Parameter Counting in Deep Models: Effective Dimensionality Revisited. CoRR , abs/2003.02139, 2020. 4 Hartmut Maennel, Olivier Bousquet, and Sylvain Gelly. Gradient Descent Quantizes ReLU Network Features. 
+
+CoRR , abs/1803.08367, 2018. 6 Song Mei and Andrea Montanari. The generalization error of random features regression: Precise asymptotics and the double descent curve. Commun. Pure Appl. Math. , 75(4):667–766, 2022. 4 
+
+13 Hancheng Min and René Vidal. Gradient Flow Provably Learns Robust Classifiers for Orthonormal GMMs. In 
+
+ICML , 2025. 11 Hancheng Min, Enrique Mallada, and René Vidal. Early Neuron Alignment in Two-layer ReLU Networks with Small Initialization. In ICLR , 2024. 3, 6 Michael Mitzenmacher and Eli Upfal. Probability and computing: Randomization and probabilistic techniques in algorithms and data analysis . Cambridge University Press, 2nd edition, 2017. 60 Preetum Nakkiran, Gal Kaplun, Dimitris Kalimeris, Tristan Yang, Benjamin L. Edelman, Fred Zhang, and Boaz Barak. SGD on Neural Networks Learns Functions of Increasing Complexity. In NeurIPS , pages 3491–3501, 2019. 2Preetum Nakkiran, Gal Kaplun, Yamini Bansal, Tristan Yang, Boaz Barak, and Ilya Sutskever. Deep Double Descent: Where Bigger Models and More Data Hurt. In ICLR , 2020. 4 Scott Pesme and Nicolas Flammarion. Saddle-to-Saddle Dynamics in Diagonal Linear Networks. In NeurIPS , 2023. 3, 5 Mary Phuong and Christoph H. Lampert. The inductive bias of ReLU networks on orthogonally separable data. In 
+
+ICLR , 2021. 3 Nasim Rahaman, Aristide Baratin, Devansh Arpit, Felix Draxler, Min Lin, Fred A. Hamprecht, Yoshua Bengio, and Aaron C. Courville. On the Spectral Bias of Neural Networks. In ICML , pages 5301–5310, 2019. 3 Itay Safran, Gal Vardi, and Jason D. Lee. On the Effective Number of Linear Regions in Shallow Univariate ReLU Networks: Convergence Guarantees and Implicit Bias. In NeurIPS , 2022. 2 Andrew M. Saxe, James L. McClelland, and Surya Ganguli. Exact solutions to the nonlinear dynamics of learning in deep linear neural networks. In ICLR , 2014. 2 Mingze Wang and Chao Ma. Understanding Multi-phase Optimization Dynamics and Rich Nonlinear Behaviors of ReLU Networks. In NeurIPS , 2023. 3 Andrew Gordon Wilson. Position: Deep Learning is Not So Mysterious or Different. In ICML , pages 82326–82346, 2025. 4 Stephan Wojtowytsch. On the Convergence of Gradient Descent Training for Two-layer ReLU-networks in the Mean Field Regime. CoRR , abs/2005.13530, 2020. 2 Blake E. Woodworth, Suriya Gunasekar, Jason D. Lee, Edward Moroshko, Pedro Savarese, Itay Golan, Daniel Soudry, and Nathan Srebro. Kernel and Rich Regimes in Overparametrized Models. In COLT , pages 3635–3673, 2020. 2 Sergey Zagoruyko and Nikos Komodakis. Wide Residual Networks. In BMVC , 2016. 1 
+
+14 Appendix 
+
+# Table of contents 
+
+A Experiments 15 
+
+A.1 Experimental details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15 A.2 Additional experiments . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 
+
+B Technical background 19 
+
+B.1 Clarke subdifferential . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19 B.2 Time rescaling . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20 
+
+C Recap of notations 20 D Proof of Theorem 2 20 
+
+D.1 Basis case and autonomous systems . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22 D.2 Phase 1: Slow growth . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27 D.3 Phase 2a: Growth to constant order . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34 D.4 Phase 2b: Fitting of data . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 43 D.5 Phase 3: Realignment and slow growth . . . . . . . . . . . . . . . . . . . . . . . . . . . . 48 D.6 Final Saddle . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 55 D.7 Proof of Theorem 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 57 
+
+E Proof of Theorem 3 58 F Auxiliary results 62 
+
+F.1 Proof of Proposition 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 63 F.2 Other auxiliary results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 64 
+
+# A Experiments 
+
+## A.1 Experimental details 
+
+fig. 1 was generated by training a two-layer ReLU network with six neurons on 64 orthonormal data points in 64 dimension. The labels are chosen as the absolute values of standard Gaussian random variables. As explained in appendix D.1, without the sign restriction on the labels, we get two independent processes: neurons with negative output weights will turn and stay in the subspace orthogonal to the space spanned by the data points with positive labels, and vice versa. The sign restriction on the labels therefore helps to more clearly illustrate one of these processes in the plots, as opposed to a loss curve that is the combination of interleaving these two independent processes. The network weights are initialized such that the hidden layer neurons have random directions and 
+
+ℓ2 norm e−500 and the output weights are e−500 . To avoid numerical issues, we maintain a scaled version of the weights such that they are closer to 1 (i.e., initially scaled by e500 ) and separately track the logarithm of the scale of the weights (initially −500 ). During training, the stored weights are kept near 1 while the logarithm of the scale is adjusted. The loss is the mean squared error and we train the network with full batch gradient descent and a learning rate of 0.01 until the loss is less than 10 −20 .The plots in fig. 1 start at epoch ≈ 0.9 · t1, For the purposes of the illustration, we consider a data point fitted when the output of the network for that point is at least 50% of the corresponding label. Due to the exponential growth of neuron norms, once the output of a network for a data point reaches such a 15 t1 t2 t3 t4 t5 t6
+
+10 −60 
+
+10 −45 
+
+10 −30 
+
+10 −15 
+
+10 0
+
+> Neuron norm
+
+Figure 3: The same as the right plot of fig. 1 but with the y-axis on a logarithmic scale. The neuron norms increase exponentially. When new data points are fitted, the rate of this exponential increase reduces for the remaining neurons that were active on at least one of those newly fitted data points. significant proportion of the label, the output of the network at the data point very rapidly closes in on the label value. Therefore, the exact choice of the threshold (here 50%) is somewhat arbitrary but also immaterial in the sense that it does not greatly influence the general picture. 
+
+## A.2 Additional experiments 
+
+For the same training as in fig. 1, fig. 3 shows how the ℓ2 norms of the hidden layer neurons change over time, but with a logarithmic y-axis. This reveals that the norms grow at an exponential rate. At the jump times, when a neuron fits the data on which it is active, that neuron stops growing. Other neurons continue to grow. However, if they were active on some of the same data points as the newly fitted neuron, they are now growing at a slower exponential rate than before the jump time. Therefore, the logarithms of the neuron norms are piecewise linear curves with decreasing slopes. The slopes of these linear segments as well as the jump times are predicted by algorithm 1. Specifically, between jump times tp and tp+1 , the slope for neuron j is proportional to D(p) 
+
+> j2
+
+.Still for the same training, fig. 4 shows the norm (on a logarithmic scale) and direction (projected onto a random two-dimensional plane) of the six neurons at different points in time. Initially, the norms are very small. The neurons orient themselves in the directions predicted by algorithm 1 and their norm starts to increase exponentially. Just before time t1, one neuron has a significant norm while the remaining neurons have norms that are still much smaller. Just after time t1, the neuron directions predicted by algorithm 1 change and the neurons that did not fit any data yet turn quickly towards their new predicted directions. Time t1 approximately corresponds to epoch 507,000. Plot (c) shows the process at epoch 506,000, plot (d) shows it at epoch 508,000, plot (e) shows it at epoch 510,000, and plot (f) shows it at epoch 538,000. 
+
+Norm minimization. Theorem 3 gives an upper bound on the squared ℓ2 norm of the parameters of the achieved interpolator in the mild overparameterization regime. For uniformly bounded labels, this bound is of the order √n and therefore of the same order as the minimum norm interpolator. fig. 5 experimentally shows the growth of the squared norm of the parameters of the achieved interpolator versus that of the optimal interpolator, depending on the number n of data points. Specifically, we train a two-layer ReLU network with full batch gradient descent and a learning rate of 0.5. For different n, a network of width m = ⌈ln(10000 · n)/ ln(4 /3) ⌉ is initialized such that the hidden 16 (a) Near the start (b) Around time t1/2        
+
+> (c) Just before time t1(d) Just after time t1
+> (e) A short while after t1(f) Around time (t1+t2)/2
+
+Figure 4: For the same training as in fig. 1, these polar plots show the norm of each neuron (on a logarithmic scale) as well as the direction of the neuron projected onto a random two-dimensional plane, at different points in time. The projections of the neuron directions from the limit process θ◦(t)
+
+predicted by algorithm 1 are indicated by dashed lines. 17 10 2 10 3 10 4 10 5
+
+10 1
+
+10 2
+
+10 3
+
+n
+
+> Squared norm
+
+achieved squared norm of parameters 
+
+optimal squared norm of parameters Figure 5: We train a two-layer ReLU network with increasing data dimensionality and number of data points n, and plot the square of the norm of of the parameters of the final network as well as that of the optimal interpolator (see eq. (2)). The hidden layer size m increases logarithmically in n, and we use a balanced initialization of scale 10 −30 /√m. Each value plotted is the mean over three runs, with each run using fixed orthogonal inputs and different random labels which are standard Gaussians. We use full batch gradient descent with a learning rate of 0.5 for one million epochs or until the loss reaches 
+
+10 −10 . The area between the minimum and maximum values is shaded, however they are relatively concentrated. neurons have random directions and norm 10 −30 /√m and the output neurons have a random sign and absolute value 10 −30 /√m. The choice of m ensures that there are a sufficient number of neurons to ensure interpolation in a typical training run. The factor 1/√m in the initialization scale ensures that the initial squared norm of the network parameters remains the same regardless of the width of the network. The network is trained on data points corresponding to the n × n identity matrix and labels are drawn from a standard Gaussian distribution. The identity matrix is chosen for computational and memory efficiency, but we note that the training dynamics are rotation invariant and therefore the behavior for the identity matrix is the same as for any other orthonormal basis. Training is run for one million epochs but stopped earlier if the loss reaches 10 −10 . We record the squared norm of the parameters of the final network. This is repeated three times with new random initial weights. In fig. 5, we plot the mean values of the squared norms as well the the optimum squared norm ∥θopt ∥22 (see eq. (2)). We also indicate the min/max deviation over the three runs, but this is barely visible due to relatively low variance of the resulting squared norms. In the plot, both axes are logarithmic. The straight lines of slope about 1/2 therefore indicate that both squared norms grow proportional to √n and that the achieved squared norm is only by a constant factor larger than the optimal one. 
+
+Larger overparameterization. Our next experiment investigates what happens when we increase the overparameterization for two different initialization schemes. The first initialization scheme is the same as before used to produce fig. 5 (i.e., balanced small initialization with hidden layer neuron norms equal to 10 −30 /√m). The second scheme is a uniform He initialization which in our network draws hidden layer weights uniformly at random from [−1/√d, 1/√d] and output layer weights uniformly at random from [−1/√m, 1/√m]. This is the default initialization for linear layers in PyTorch. The experimental details are the same as before, except that n is now fixed at 32 while m is varied and the learning rate is 18 10 2 10 3 10 4 10 5
+
+10 1.5
+
+10 2
+
+m
+
+> Squared norm
+
+achieved squared norm of parameters (He initialization) 
+
+achieved squared norm of parameters (small initialization) 
+
+optimal squared norm of parameters Figure 6: We train two-layer ReLU networks of varying widths m on 32 orthonormal data points in 32 dimensions and labels drawn from the standard Gaussian distribution. We compare two initialization schemes: balanced small initialization where hidden neurons have norm 10 −30 /√m and uniform He initialization [He et al., 2015], which is the default used in PyTorch to initialize linear layers. We train using full batch gradient descent for one million epochs or until the loss reaches 10 −10 . Each value plotted is the mean over three runs with new random initial weights. The area between the minimum and maximum values is shaded, however they are relatively concentrated. 1 when using the first initialization scheme and 0.001 when using the second initialization scheme. Each point in the plot of fig. 6 is the mean of three runs with different random initial weights. We also indicate the min/max deviation over the three runs, but this is barely visible due to relatively low variance of the resulting squared norms. We observe that with small initialization, the square ℓ2 norm of the trained network approaches the theoretical optimum as the width of the network increases. This is in contrast to the uniform He initialization, for which the square ℓ2-norm of the trained network keeps increasing. 
+
+Compute. The experiment for figs. 1, 3 and 4 takes only about one minute to generate on a standard desktop CPU. Generating fig. 5 takes about 3 hours, and generating fig. 6 takes about 10 minutes, both on a consumer GPU. 
+
+# B Technical background 
+
+## B.1 Clarke subdifferential 
+
+We introduce the Clarke subdifferential [Clarke, 1975] and a basic result on the existence of gradient flows using this generalized derivative. 
+
+Definition 1. The Clarke subdifferential of a locally Lipschitz function f : X → R at the point x ∈ X is defined as the convex set 
+
+19 ∂f (x) = conv 
+
+
+
+lim  
+
+> k→∞
+
+∇f (xk) xk → x, f is differentiable at xk
+
+
+
+.
+
+One may see Lyu and Li [2020, Section 3] for further details. We present the following result guaranteeing the local existence of solutions. 
+
+Theorem 4. [Aubin and Cellina, 1984, Theorem 3, Chapter 2] Let X be a Hilbert space and Q ⊂ R × X be an open subset containing (0 , x 0). Let F be an upper semicontinuous map from Q into the non-empty closed convex subsets of X . We assume that (t, x ) 7 → m(F (t, x )) is locally compact, where for A ⊂ X we define 
+
+m(A) := inf {∥ v∥ | v ∈ A}. Then there exist T > 0 and an absolutely continuous function x(·) defined on [0 , T ],a solution to the differential inclusion 
+
+x′(t) ∈ F (t, x (t)); x(0) = x0.
+
+## B.2 Time rescaling 
+
+We provide here some intuition for why it is necessary to rescale time in order for dynamics to occur on a finite timescale as the initialization scale decreases to 0. Fundamentally, it is because gradients become small in the vicinity of critical points and so the dynamics slow down. Note that near to a critical point we may linearize a dynamical system. In the case that this critical point is the origin, which will already give the required scaling to have non-trivial dynamics, we obtain ˙θ ≈ −∇ 2L(0)θ, where 
+
+∇2 denotes the Hessian. The solution to the linearized dynamics is given by θ(t) = θ(0) exp( −∇ 2L(0)t).We can obtain a lower bound on the change in θ by projecting onto the eigenvectors of the Hessian which correspond to positive eigenvalues and assuming the slowest growth rate applies to all these components (i.e., take the smallest positive eigenvalue). Assuming the fastest growth rate in all components (i.e., take the largest positive eigenvalue) will give an upper bound. Concretely, taking norms gives ∥P⊥
+
+> +
+
+θ(0) ∥ exp( λmin  
+
+> +
+
+t) ≤ ∥ θ(t)∥ ≤ ∥ θ(0) ∥ exp( λmax t) where λmin  
+
+> +
+
+is the smallest positive eigenvalue of −∇ 2L(0), λmax is the largest eigenvalue, and P⊥ 
+
+> +
+
+is the orthogonal projection onto the span of eigenvectors of −∇ 2L(0) which correspond to positive eigenvalues. Based on these linearized dynamics, we expect that the escape time, Te, for ∥θ(t)∥ to reach some constant C obeys the bounds 
+
+1
+
+λmax 
+
+
+
+log( C) + log 
+
+ 1
+
+∥P⊥
+
+> +
+
+θ(0) ∥
+
+ 
+
+≤ Te ≤ 1
+
+λmin 
+
+> +
+
+
+
+log( C) + log 
+
+ 1
+
+∥θ(0) ∥
+
+ 
+
+.
+
+Supposing that ∥θ(0) ∥, ∥P⊥
+
+> +
+
+θ(0) ∥ ∼ α, we see that the required rescaling of time is t 7 → log(1 /α )t, as claimed, and we denote the accelerated parameters by eθα(t) = θ(log(1 /α )t). Typically, we omit the superscript as the acceleration by a factor of log(1 /α ) is implicit in the tilde notation. As noted in the main body of the paper, the flow defining this rescaled process is simply ˙eθ(t) ∈ − log(1 /α )∂L(eθ(t)) for almost all t ≥ 0.
+
+# C Recap of notations 
+
+For ease of reference, Table 1 collects notation used throughout the paper, including some symbols that appear only in the appendix. 
+
+# D Proof of Theorem 2 
+
+The proof convergence to the limit process defined in Algorithm 1 is due to a non-asymptotic analysis of the dynamics of all neurons around the jump from saddle k to saddle k + 1 . We use this to construct 20 Table 1: Definitions and descriptions of named quantities, collected here from the text. Hyperlinks in the Symbol column take the reader to the first point in the paper where a given symbol is introduced. 
+
+Symbol Definition Description 
+
+Is {i ∈ [n] | sgn( yi) = s} The set of data i with sign s, for 
+
+s ∈ {± 1}.
+
+Ai,j 1  w⊤ 
+
+> j
+
+(0) xi > 0 and i ∈ Isj
+
+ The set of data i on which, at initialization, neuron j is active with correct second-layer weight sign. 
+
+Js {j ∈ [m] | sgn( aj (0)) = s} The set of neurons j with sign s, for 
+
+s ∈ {± 1}.
+
+tk
+
+t0 = 0 
+
+tk+1 = min  
+
+> j∈N(k)
+> U
+
+tk − ℓ◦ 
+
+> j
+
+(tk)
+
+D(k)
+
+> j
+
+
+
+The jump times. 
+
+ℓ◦ 
+
+> j
+
+(t) ℓ◦ 
+
+> j
+
+(0) = −1
+
+ℓ◦ 
+
+> j
+
+(t) = min 
+
+
+
+ℓ◦ 
+
+> j
+
+(tk) + ( t − tk)∥D(k) 
+
+> j
+
+∥, 0
+
+ The exponents of the neurons’ norms, where t ∈ [tk, t k+1 ].
+
+j(k)
+
+> ⋆
+
+arg min  
+
+> j∈N(k)
+> U
+
+tk − ℓ◦ 
+
+> j
+
+(tk)
+
+D(k)
+
+> j
+
+
+
+The neuron which fits when moving from saddle k to saddle k + 1 .
+
+N (k)
+
+> U
+
+N (0)  
+
+> U
+
+= [ m]
+
+N (k+1)  
+
+> U
+
+= N (k) 
+
+> U
+
+\ { j⋆}
+
+The set of unfitted neurons at saddle k.
+
+N (k) 
+
+> F
+
+[m] \ N (k) 
+
+> U
+
+The set of fitted neurons at saddle k.
+
+S(k)
+
+> j
+
+S(0)  
+
+> j
+
+= Sj = {i ∈ [n] | Ai,j = 1 }
+
+S(k+1)  
+
+> j
+
+=
+
+
+
+S(k) 
+
+> j
+
+\ S(k)
+
+> j(k)
+> ⋆
+
+if j̸ = j(k)
+
+> ⋆
+
+S(k) 
+
+> j
+
+if j = j(k)
+
+> ⋆
+
+The set of unfitted data on which neuron j is active with correct second-layer weight at saddle k, and which has not yet been fitted by any other neuron. 
+
+S(k)
+
+> U
+
+S(0)  
+
+> U
+
+= [ n]
+
+S(k+1)  
+
+> U
+
+= S(k) 
+
+> U
+
+\ S(k)
+
+> j⋆
+
+The set of unfitted data at saddle k.
+
+S(k) 
+
+> F
+
+[n] \ S(k) 
+
+> U
+
+The set of fitted data at saddle k.
+
+D(k) 
+
+> j
+
+D(k) 
+
+> j
+
+= 1
+
+n
+
+X
+
+> i∈S(k)
+> j
+
+yixi
+
+The label-weighted sum of data in the set S(k) 
+
+> j
+
+, which is the direction in which neuron j aligns and grows at saddle k.
+
+E(k) E(k) = − 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+(heθ (xi) − yi)xi
+
+A dynamical vector encoding the loss on data which has already been fitted, with n E(k) 2 directly corresponding to these terms of the loss. 
+
+Dj Dj = − 1
+
+n
+
+X  
+
+> i∈[n]|
+> w⊤
+> jxi>0
+
+(heθ (xi) − yi)xi
+
+A dynamical vector encoding the loss on all data on which neuron j is active, with n∥D j ∥2 directly corresponding to these terms of the loss. 21 an inductive argument for convergence, with the number of saddles traversed by the flow serving as the parameter of the induction. Specifically, we will assume the following inductive hypothesis on convergence at saddle k:
+
+Hypothesis 1 (for k ∈ { 0, 1, . . . , p }). Given any κ ∈ (tk, t k+1 ), there exists δ > 0 such that for all ξ > 0, there exists α∗ > 0 such that for all α ∈ (0 , α ∗):1. ∀j ∈ N (k) 
+
+> U
+
+, ℓ◦ 
+
+> j
+
+(κ) + log α(∥ ewj (κ)∥) < ξ. 
+
+2. ∀j ∈ N (k) 
+
+> F
+
+, n D(k) 
+
+> j
+
+− ∥ ewj (κ)∥2 < α δ .
+
+3. ∀i ∈ S(k) 
+
+> F
+
+, |heθ(κ)(xi) − yi| < α δ .
+
+4. ∀j ∈ [m], ew⊤ 
+
+> j
+
+(κ)D(k) 
+
+> j
+
+> 1 − αδ .
+
+In the above, and throughout the proof, we use ∥·∥ to denote the ℓ2-norm. The reader should note that δ
+
+depends on κ in Hypothesis 1; in particular we have lim κ→0 δ = 0 . This does not present a problem, since the proof is of convergence on compact subsets of R which exclude (tk)pk=1 . Therefore, κ may be viewed as a quantity which is fixed at the beginning of the proof depending on the compact set in question. The following lemma states that on compact intervals not containing a jump time, we have the desired uniform convergence to the limit process under Hypothesis 1. 
+
+Lemma 1. Suppose that Hypothesis 1 holds for some k ∈ 0, 1, . . . , p − 1. Then given any κ, κ ′ > 0 such that 
+
+tk < κ < κ ′ < t k+1 , eθα converges uniformly to θ◦ on [κ, κ ′].
+
+The following lemma recovers Hypothesis 1 at saddle k + 1 .
+
+Lemma 2. If Hypothesis 1 holds for some k ∈ { 0, 1, . . . , p − 1}, then it holds for k + 1 .
+
+Each of these lemmas, as well as the final proof of Theorem 2, are provided in Appendix D.7. We deal with the final saddle separately in Appendix D.6 because, although the arguments for uniform convergence on closed intervals contained in (tp, ∞) are essentially the same as those for k < p , it is simpler to account for this case separately. 
+
+## D.1 Basis case and autonomous systems 
+
+We provide here an analysis of the early time dynamics, specifically a proof of the alignment of neurons towards the directions D(0)  
+
+> j
+
+by an arbitrary positive time, where 
+
+D(0)  
+
+> j
+
+:= 1
+
+n
+
+X
+
+> i∈[n]
+
+Ai,j yixi,
+
+and we recall that 
+
+Ai,j = 1  w⊤ 
+
+> j
+
+(0) xi > 0 and i ∈ Isj
+
+ .
+
+This will amount to a proof of a statement similar to the case k = 0 for Hypothesis 1. At this point, it will also be helpful to introduce the vector 
+
+D(k) 
+
+> j
+
+:= 1
+
+n
+
+X
+
+> i∈S(k)
+> j
+
+yixi.
+
+22 In the above display, S(k) 
+
+> j
+
+is recursively defined by 
+
+S(0)  
+
+> j
+
+= {i ∈ [n] | Ai,j = 1 }
+
+S(k+1)  
+
+> j
+
+=
+
+
+
+S(k) 
+
+> j
+
+\ S(k)
+
+> j(k)
+> ⋆
+
+if j̸ = j(k)
+
+> ⋆
+
+S(k) 
+
+> j
+
+if j = j(k)
+
+> ⋆
+
+and denotes the set of data on which neuron j is active at saddle k and on which no neuron in the set 
+
+N (k) 
+
+> F
+
+:= [ m] \ N (k)
+
+> U
+
+is active. Note that Sj (as introduced in Algorithm 1) is the same set as S(0)  
+
+> j
+
+. In a similar way to how we define the set of neurons which have fitted their data, we can also define the set of fitted data itself by 
+
+S(k) 
+
+> F
+
+:= [ n] \ S(k) 
+
+> U
+
+.
+
+One may see Algorithm 1 for the construction of the sets N (k) 
+
+> U
+
+and S(k) 
+
+> U
+
+. Our arguments will use the equations 
+
+˙eaj = log(1 /α ) ew⊤ 
+
+> j
+
+Dj ˙ewj = log(1 /α )eaj Dj ,
+
+where we have 
+
+Dj = − 1
+
+n
+
+X   
+
+> i∈[n]|ew⊤
+> jxi>0
+
+(heθ (xi) − yi)xi.
+
+As noted in section 2, these equations combined with Proposition 1 and Assumption 2 imply that 
+
+˙ewj (t) = sj log(1 /α )
+
+
+
+Dj (t) − ewj (t)ew⊤ 
+
+> j
+
+(t)Dj (t)
+
+
+
+.
+
+Using these equations, we will ensure that by an arbitrary time κ > 0, all neurons have aligned towards the directions D(0)  
+
+> j
+
+. Furthermore, we will verify by introducing an auxiliary parameter of the proof, 
+
+bκ, that −eℓj (κ) ≈ − ℓ◦ 
+
+> j
+
+(κ) with arbitrary precision. The sketch of the proof is to ensure that by any time 
+
+bκ > 0, the realignment has occurred and then remains stable until time κ. Therefore, the precision of the exponents of the unfitted neurons is controlled by the arbitrary parameter bκ. To state the lemma below, we define for s ∈ {± 1} the set of neurons with output sign given by s:
+
+Js := {j ∈ [m] | sgn( aj (0)) = s}.
+
+Lemma 3. For any κ ∈
+
+
+
+0, 14
+
+q n
+
+> 2L(0)
+
+
+
+there exists δ > 0 such that for any ξ > 0 there exists α∗(κ, ξ ) > 0
+
+such that for all α ∈ (0 , α ∗) and both signs s ∈ {± 1} the following are true: 1. ∀j ∈ Js, s j ew⊤ 
+
+> j
+
+(κ)D(0)  
+
+> j
+
+> 1 − αδ .
+
+2. ∀j ∈ Js, ∀t ∈ (0 , κ ), ℓ◦ 
+
+> j
+
+(t) + log α(∥ ewj ∥) < ξ .
+
+23 3. ∀i ∈ I−s, ∀j ∈ Js, ew⊤ 
+
+> j
+
+(κ)xi ≤ 0.
+
+The monotonicity of the gradient flow means there exists a maximum rate of growth it is possible for any neuron to achieve. Therefore, the upper bound on κ appears as a technicality to ensure that even if a neuron were to have grown at this maximum rate from initialization, it could not have exceeded the threshold α1/2 which we introduce for the purpose of the proof. This kind of argument will be used several times throughout subsequent analyses (see Proposition 3 and its application in the proof of Lemmas 4 to 7). Item 3 Lemma 3 is a particularly important point, because it ensures that neurons deactivate within an arbitrarily short length of time on the data for which Ai,j = 0 . Combining this with Assumption 2 will allow us to see that the network splits into two sub-networks, consisting only of neurons with positive (resp. negative) second-layer weight and which are active on data with only positive (resp. negative) labels. This allows us to consider w.l.o.g. the case that sj > 0 for all j ∈ [m] and sgn( yi) > 0 for all 
+
+i ∈ [n]. This is explained more precisely after the proof. We stress now that the statement of Lemma 3 does not exactly correspond to the statement of Hy-pothesis 1, since the interval 
+
+
+
+0, 14
+
+q n
+
+> 2L(0)
+
+
+
+does not correspond to the interval (0 , t 1). However, when uniform convergence to θ◦ is proven, we will apply Lemma 1, and this statement is sufficient to obtain uniform convergence on arbitrary closed intervals contained in (0 , t 1). Concretely, if we were to con-sider a compact set partially or entirely contained in 
+
+
+
+> 14
+
+q n 
+
+> 2L(0)
+
+, t 1
+
+
+
+, we could obtain convergence by applying Lemma 1 on some interval whose lower endpoint is contained in 
+
+
+
+0, 14
+
+q n
+
+> 2L(0)
+
+
+
+and whose upper endpoint is greater than the maximum of the compact set. 
+
+Proof. Define τ := inf {t ≥ 0 | ∃ j ∈ [m] s .t. ∥ ewj ∥ ≥ α1/2}. As a preliminary, we check that κ < τ . On 
+
+[0 , τ ],
+
+1log(1 /α )ddt ∥ ewj ∥ = − ∥ ewj ∥
+
+n
+
+X   
+
+> i∈[n]|ew⊤
+> jxi>0
+
+(heθ (xi) − yi)ew⊤ 
+
+> j
+
+xi (3) 
+
+≤
+
+r 2L(0) 
+
+n ∥ ewj ∥.
+
+This follows from the Cauchy-Schwarz inequality combined with the fact that L is monotone decreasing, by definition of the gradient flow. Grönwall’s inequality gives that on this interval, 
+
+∥ ewj (t)∥ ≤ ∥ ewj (0) ∥α−  
+
+> q2L(0)
+> nt
+
+= α1−  
+
+> q2L(0)
+> nt
+
+.
+
+where the second inequality is valid for α sufficiently small. Since κ < 14
+
+q 2L(0)  
+
+> n
+
+t, we indeed have κ < τ .We may reverse the inequality and consequently obtain for t ∈ [0 , τ ] the lower bound 
+
+∥ ewj (t)∥ > α 1+   
+
+> q2L(0)
+> nt
+
+.
+
+We conclude that for t ∈ [0 , κ ]
+
+24 α1+    
+
+> q2L(0)
+> nt
+
+< ∥ ewj (t)∥ < α 1−  
+
+> q2L(0)
+> nt
+
+. (4) Observe at this point that the signs are symmetric, and so we prove w.l.o.g. the statements for sj = 1 .
+
+Proof of Item 1. For the claimed alignment, we compute that 
+
+1log(1 /α )ddt ew⊤ 
+
+> j
+
+D(0)  
+
+> j
+
+≥ D(0) 
+
+> j
+> 2
+
+−
+
+ew⊤ 
+
+> j
+
+D(0) 
+
+> j
+
+2
+
+− 1
+
+n
+
+X   
+
+> i|ew⊤
+> jxi>0
+
+heθ (xi)
+
+
+
+x⊤ 
+
+> i
+
+D(0)  
+
+> j
+
+− x⊤ 
+
+> i
+
+ewj ew⊤ 
+
+> j
+
+D(0) 
+
+> j
+
+
+
+> D(0) 
+
+> j
+> 2
+
+−
+
+ew⊤ 
+
+> j
+
+D(0) 
+
+> j
+
+2
+
+− 2m D(0)  
+
+> j
+
+α, 
+
+where the first inequality is from discarding negatively labeled data on which neuron j is active. This is because such data add a positive contribution for α small enough that |heθ (xi)| < |yi|. We then use the fact that f ′(t) = log(1 /α )( a2 − f (t)2) is solved by a tanh( a log(1 /α )t + t0), where t0 is an integration constant. Since the inner product is positive at initialization by definition, t0 is positive. By the fact that 
+
+tanh is monotone increasing, we obtain a lower bound by discarding this integration constant. This leaves 
+
+ew⊤ 
+
+> j
+
+D(0)  
+
+> j
+
+>
+
+
+
+D(0) 
+
+> j
+> 2
+
+− 2mα 
+
+1/2
+
+tanh log(1 /α )
+
+
+
+D(0) 
+
+> j
+> 2
+
+− 2mα 
+
+1/2
+
+t
+
+!
+
+≥
+
+
+
+D(0)  
+
+> j
+
+− √2mα 
+
+ 
+
+1 − α2 
+
+> 
+> D(0)
+> j−√2mα
+> 
+> t
+
+
+
+,
+
+where above we applied the inequalities √1 − x2 ≥ 1 − x and tanh( x) ≥ 1 − 2 exp( −2x). Note that there exists α sufficiently small that for any j, 2
+
+
+
+D(0)  
+
+> j
+
+− √2mα 
+
+
+
+> D(0)  
+
+> j
+
+, so for α below this threshold at time t ∈ [0 , κ ] one has 
+
+ew⊤ 
+
+> j
+
+(t)D(0)  
+
+> j
+
+>
+
+
+
+D(0)  
+
+> j
+
+− √2mα 
+
+ 
+
+1 − α D(0)  
+
+> jt
+
+
+
+> D(0) 
+
+> j
+
+
+
+1 − α D(0)   
+
+> jt
+
+− α1/4
+
+
+
+, (5) where the second inequality is valid for α ≤ 1(2 m)2 . This directly implies that for α small enough and any κ ∈
+
+
+
+0, 14
+
+q n
+
+> 2L(0)
+
+
+
+, there exists δ > 0 such that the alignment of any neuron j with direction D(0)  
+
+> j
+
+is bounded by below by 1 − αδ at time κ, as required. Note here that δ depends on κ, and α∗ only depends on the data. □
+
+Proof of Item 2. We select some arbitrary bκ ∈ (0 , κ ). Since bκ < τ , we may insert it into eq. (4) to obtain 
+
+α1+    
+
+> q2L(0)
+> nbκ
+
+< ∥ ewj (bκ)∥ < α 1−  
+
+> q2L(0)
+> nbκ
+
+.
+
+25 We express this deviation in terms of the quantity ℓ◦ 
+
+> j
+
+(bκ). We note that −ℓ◦ 
+
+> j
+
+(bκ) = 1 − D(0)  
+
+> j
+
+bκ for all 
+
+j ∈ [m]. Therefore, 
+
+α−ℓ◦   
+
+> j(bκ)+
+> 
+> D(0)
+> j+
+> q2L(0)
+> n
+> bκ
+
+< ∥ ewj (bκ)∥ < α −ℓ◦   
+
+> j(bκ)+
+> 
+> D(0)
+> j−
+> q2L(0)
+> n
+> bκ
+
+.
+
+Then, eq. (5) gives that for bκ sufficiently small, α may be chosen sufficiently small that for any time 
+
+t ∈ [bκ, κ ]
+
+D(0) 
+
+> j
+
+
+
+1 − α D(0)  
+
+> jbκ/ 2
+
+
+
+< ew⊤ 
+
+> j
+
+(t)D(0)  
+
+> j
+
+≤ D(0)  
+
+> j
+
+. (6) Note that by definition of τ , |heθ (xi)| < mα for all i ∈ [n]. Putting this back into eq. (3), we obtain as an upper bound that 
+
+∥ ewj (κ)∥ < ∥ ewj (bκ)∥α− 
+
+> 
+> D(0)
+> j+mα
+> 
+> (κ−bκ)
+
+< α −ℓ◦   
+
+> j(κ)+
+> 
+> D(0)
+> j−
+> q2L(0)
+> n
+> bκ−mα (κ−bκ)
+
+< α −ℓ◦   
+
+> j(κ)+
+> 
+> D(0)
+> j−2
+> q2L(0)
+> n
+> bκ
+
+.
+
+For the lower bound, we get 
+
+∥ ewj (κ)∥ > ∥ ewj (bκ)∥ exp α
+
+
+
+−
+
+
+
+D(0) 
+
+> j
+
+
+
+1 − α D(0)  
+
+> jκ′/2
+
+
+
+− mα 
+
+
+
+(κ − bκ)
+
+
+
+> exp α −ℓ◦ 
+
+> j
+
+(κ) + D(0)  
+
+> j
+
++
+
+r 2L(0) 
+
+n
+
+!bκ +
+
+
+
+D(0)  
+
+> j
+
+α D(0)   
+
+> jκ′/2
+
++ mα 
+
+
+
+(κ − bκ)
+
+!
+
+> α −ℓ◦   
+
+> j(κ)+
+> 
+> D(0)
+> j+2
+> q2L(0)
+> n
+> bκ
+
+,
+
+where the final inequality is valid for α sufficiently small. Since bκ is arbitrary, we conclude that given any ξ > 0, we may select α sufficiently small that the deviation of the neurons’ norms from those predicted by the algorithm 1 does not exceed ξ. □
+
+Proof of Item 3. We compute that for some yi < 0 such that ew⊤ 
+
+> j
+
+(0) xi > 0, and for t ∈ [0 , κ ],
+
+1log(1 /α )ddt ew⊤ 
+
+> j
+
+xi = D⊤ 
+
+> j
+
+xi − D ⊤ 
+
+> j
+
+ewj ew⊤ 
+
+> j
+
+xi
+
+= 1
+
+n (yi − heθ (xi)) + 1
+
+n
+
+X   
+
+> v|ew⊤
+> jxi>0
+
+(heθ (xv ) − yv ) ew⊤ 
+
+> j
+
+xv ew⊤ 
+
+> j
+
+xi
+
+≤ 1
+
+n yi − 1
+
+n
+
+X     
+
+> v|yv<0,
+> ew⊤
+> jxv>0
+
+yv ew⊤ 
+
+> j
+
+xv ew⊤ 
+
+> j
+
+xi + 2 mα. 
+
+26 The is obtained by plugging in the bound on the network output. This bound also implies that for α
+
+sufficiently small, 1 (yv > 0) ( yv − hθt (xv )) > 0, which allowed us to discard the sum over positively labeled data. Since neurons are aligned by time bκ, we conclude using eq. (6) and Proposition 7 that 
+
+ddt ew⊤ 
+
+> j
+
+xi ≤ log(1 /α )
+
+n yi + √2αbκ D(0)  
+
+> j/4
+
+,
+
+where this holds for α sufficiently small and any t ∈ [bκ, κ ]. Therefore, by time 2bκ and for α sufficiently small, ew⊤ 
+
+> j
+
+xi = 0 for all i / ∈ Isj . □
+
+This completes the proof of Lemma 3. ■
+
+From Lemma 3 and Assumption 2, we conclude that given any κ > 0, there exists α∗ sufficiently small that θ+ := ( ai, w j )j∈J+ satisfies 
+
+˙θ+(t) ∈ − ∂L+(θ+(t)) for almost all t ≥ κ, 
+
+where 
+
+L+(θ+) := 12n
+
+X
+
+> i∈I+
+
+(hθ+ (xi) − yi)2.
+
+By the symmetry of the signs, an analogous statement is true of θ− := ( ai, w j )j∈J− . Therefore, on the interval [κ, ∞) neurons in the set J+ evolve independently from those in the set J− according to the autonomous systems just described above. Consequently, we can treat the systems θ+ and θ−
+
+independently from now on, which we do by assuming w.l.o.g. sj = 1 for all j ∈ [m] and sgn yi = 1 for all i ∈ [n]. We note that with this assumption, Ai,j = 1   ew⊤ 
+
+> j
+
+(0) xi > 0.Similar autonomous systems arguments have been used in Boursier and Flammarion [2025b, Appendix F.3], but are even simpler here, due to the orthogonal data assumption. 
+
+## D.2 Phase 1: Slow growth 
+
+In this stage, we verify that up to a time arbitrarily close to the next jump time, tk+1 , all neurons in the set N (k) 
+
+> U
+
+are still small and aligned in the directions D(k) 
+
+> j
+
+, and all neurons in the set N (k) 
+
+> F
+
+have not changed significantly. For ε > 0, define the time 
+
+τ1 := inf 
+
+n
+
+t ≥ κ ∃ j ∈ [m] s .t. ew⊤ 
+
+> j
+
+D(k) 
+
+> j
+
+≤ 1 − αε/ 2 (7) 
+
+or ∃ i ∈ S(k) 
+
+> F
+
+s.t. |heθ (xi) − yi| ≥ αε (8) 
+
+or ∃ j ∈ [m] s .t. ∥ ewj ∥ > 2 max  
+
+> j∈[m]
+
+D(k) 
+
+> j
+
+(9) 
+
+or ∃ j ∈ N (k) 
+
+> U
+
+s.t. ∥ ewj ∥ ≥ αεo ^ tk+1 . (10) The condition ∥ ewj ∥ ≤ 2∥D(k) 
+
+> j
+
+∥ is simply used to ensure that our analysis is restricted to a domain on which eθ is Lipschitz continuous, as this will allow us to apply Rademacher’s theorem to conclude certain functions thereof are differentiable almost everywhere. Our analysis will actually show that this condition does not break, meaning that for α sufficiently small, the gradient flow trajectory on [κ, τ 1] is restricted to the compact set 
+
+n
+
+( ewj )j∈[m] ∥ ewj ∥ ≤ 2 D(k) 
+
+> j
+
+for all j ∈ [m]
+
+o
+
+.27 In the result below and throughout the account of subsequent phases, we use the notation j⋆ in place of 
+
+j(k) 
+
+> ⋆
+
+for the neuron which grows to constant order when passing from saddle k to saddle k +1 to improve readability. Assuming Hypothesis 1, we will prove in the lemma below that on the interval [κ, τ 1], the alignment of all neurons remains stable and the loss on fitted data does not increase significantly. We will also show that provided ε is selected sufficiently small we have ∥ ewj⋆ (τ1)∥ = αε, meaning neuron 
+
+j⋆ is the largest of all of the unfitted neurons at time τ1. We will also prove that as ε decreases, τ1
+
+approaches tk+1 .
+
+Lemma 4. Suppose that Hypothesis 1 holds. Then for all κ ∈ (tk, t k+1 ), there exists ε∗ such that for all 
+
+ε ∈ (0 , ε ∗) there exists α∗ > 0 such that for all α ∈ (0 , α ∗) the following are true: 1. ∀i ∈ S(k) 
+
+> F
+
+, ∀t ∈ [κ, τ 1], |heθ (xi) − yi| < α ε.
+
+2. ∀j ∈ [m], ∀t ∈ [κ, τ 1], ew⊤ 
+
+> j
+
+D(k) 
+
+> j
+
+> 1 − αε/ 2.
+
+3. ∀j ∈ N (k) 
+
+> F
+
+, ∀t ∈ [κ, τ 1],
+
+r
+
+n D(k) 
+
+> j
+
+− αε/ 4 < ∥ ewj ∥ <
+
+r
+
+n D(k) 
+
+> j
+
++ αε/ 4.
+
+4. tk+1 − 3ε 
+
+> 2D(k)
+> j⋆
+
+< τ 1 < t k+1 − ε 
+
+> 2D(k)
+> j⋆
+
+.
+
+5. ∥ ewj⋆ (τ1)∥ = αε.
+
+6. ∀j ∈ N (k) 
+
+> U
+
+, ∀t ∈ [κ, τ 1], ℓ◦ 
+
+> j
+
+(t) + log α(∥ ewj ∥) < ε 
+
+> 2
+
+.Proof. Proof of Item 1 Lemma 4. Let δ be such that the conditions of Hypothesis 1 hold. In order to check that |heθ (xi) − yi| < α ε, we will bound the growth in norm of the quantity 
+
+E(k) = − 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+ heθ (xi) − yi
+
+ xi.
+
+To begin this section, it will be useful to note now that 
+
+∥D j ∥ ≤ 1
+
+n
+
+vuuut X
+
+> i∈[n]
+
+(heθ (xi) − yi)2
+
+
+
+≤
+
+r 2L(0) 
+
+n , (11) where we have applied the Cauchy-Schwarz inequality and the monotonicity of the gradient flow. We will use this inequality repeatedly. We compute that 28 12 log(1 /α )ddt E(k) 2
+
+= 1log(1 /α ) E(k) ⊤ ddt E(k)
+
+= − 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+X
+
+> j∈[m]
+
+Ai,j ∥ ewj ∥2
+
+
+
+x⊤ 
+
+> i
+
+E(k)2
+
++ D⊤ 
+
+> j
+
+ewj ew⊤ 
+
+> j
+
+xix⊤ 
+
+> i
+
+E(k)
+
+
+
+≤ − 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+X
+
+> j∈[m]
+
+Ai,j ∥ ewj ∥2D⊤ 
+
+> j
+
+ewj ew⊤ 
+
+> j
+
+xix⊤ 
+
+> i
+
+E(k)
+
+≤ − 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+X 
+
+> j∈N(k)
+> U
+
+Ai,j ∥ ewj ∥2D⊤ 
+
+> j
+
+ewj ew⊤ 
+
+> j
+
+xix⊤ 
+
+> i
+
+E(k), (12) where the final inequality follows from the fact that for any j ∈ N (k) 
+
+> F
+
+, the sum may be written as 
+
+− ∥ ewj ∥2
+
+n3
+
+ X
+
+> v∈[n]
+
+Av,j (heθ (xv ) − yv )ew⊤ 
+
+> j
+
+xv
+
+X
+
+> i∈S(k)
+> F
+
+Ai,j (heθ (xi) − yi)ew⊤ 
+
+> j
+
+xi
+
+ ≤ 0.
+
+The above inequality follows from noting that, since we are considering some j ∈ N (k) 
+
+> F
+
+, {v ∈ [n] |
+
+Av,j = 1 } = {i ∈ S(k) 
+
+> F
+
+| Ai,j = 1 } (such neurons are by definition active only on fitted data) so this is a square. We have therefore only to obtain a bound on the contribution of those j ∈ N (k) 
+
+> U
+
+. Note that for any j ∈ [m], the fact that ewj is a unit vector combined with (11) implies 
+
+|ew⊤ 
+
+> j
+
+Dj | ≤ ∥D j ∥ ≤ 
+
+r 2L(0) 
+
+n .
+
+Also, we have for any j ∈ N (k) 
+
+> U
+
+by (7) and Proposition 7 that ew⊤ 
+
+> j
+
+xi < √2αε/ 4 on [κ, τ 1]. We combine these observations with (10) to obtain 
+
+1log(1 /α ) E(k) ⊤ ddt E(k) ≤ 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+m
+
+r 4L(0) 
+
+n α9ε/ 4 x⊤ 
+
+> i
+
+E(k)
+
+≤ 2mn
+
+pL(0) α9ε/ 4 E(k) ,
+
+where we have used the Cauchy-Schwarz inequality in the final line. On a compact domain, ∂L is bounded. Therefore, the function t 7 → eθ(t) is Lipschitz continuous on the domain specified in the definition of τ1 for any fixed α. Since the composition of Lipschitz continuous functions is also Lipschitz continuous, E(k) is Lipschitz continuous on [κ, τ 1]. Therefore, it is differentiable almost everywhere on 
+
+[κ, τ 1], and furthermore has bounded subdifferential at every point in [κ, τ 1]. In subsequent arguments when we appeal briefly to Rademacher’s theorem for differentiability, it is implicit that this argument has been used. This affords us the bound 
+
+ddt E(k) ≤ 2mn
+
+pL(0) log(1 /α )α9ε/ 4
+
+< α 2ε,
+
+29 for α sufficiently small. Since |heθκ (xi) − yi| ≤ αδ by Item 3 Hypothesis 1, we have E(k)(κ) < α δ /√n.Integrating and using this initial condition, we have 
+
+E(k) < E(k)(κ) + ( t − κ)α2ε
+
+< αδ
+
+√n + ( tk+1 − κ)α2ε
+
+< α 3ε/ 2,
+
+for ε < δ 
+
+> 2
+
+and α ≤ 1(1+ tk+1 −tk )2/ε . This implies that 
+
+max 
+
+> i∈S(k)
+> F
+
+|heθ (xi) − yi| < nα 3ε/ 2
+
+< α ε,
+
+for all t ∈ [κ, τ 1], concluding the proof of this item. □
+
+Proof of Item 2 Lemma 4. We verify now the stability of alignment of the neurons. We split this into the case j ∈ N (k) 
+
+> F
+
+and the case j ∈ N (k) 
+
+> U
+
+. For the former, first note that for j ∈ N (k) 
+
+> F
+
+, {i ∈ S(k) 
+
+> U
+
+| Ai,j = 1 } = ∅
+
+by definition. Consequently, 
+
+Dj < 1
+
+√n αε.
+
+Inserting this into the differential equation governing tangential dynamics, we get 
+
+1log(1 /α )ddt ew⊤ 
+
+> j
+
+D(k) 
+
+> j
+
+= D⊤ 
+
+> j
+
+D(k) 
+
+> j
+
+− D ⊤ 
+
+> j
+
+ewj ew⊤ 
+
+> j
+
+D(k)
+
+> j
+
+≥ − 2 D(k) 
+
+> j
+
+Dj
+
+> −
+
+2 D(k)
+
+> j
+
+√n αε, (13) We simply integrate, using Item 4 Hypothesis 1 for the alignment value at time κ, to obtain 
+
+ew⊤ 
+
+> j
+
+D(k) 
+
+> j
+
+> D(k)
+
+> j
+
+ 1 − αδ  −
+
+2 D(k)
+
+> j
+
+√n (tk+1 − κ) log(1 /α )αε
+
+> D(k)
+
+> j
+
+
+
+1 − αε/ 2
+
+,
+
+where the final inequality is again valid for ε and α sufficiently small. For the case j ∈ N (k) 
+
+> U
+
+, we first use eq. (10) to bound the network output on data i ∈ S(k) 
+
+> U
+
+:30 heθ (xi) = X
+
+> j∈[m]
+
+∥ ewj ∥2 ew⊤ 
+
+> j
+
+xi
+
+
+
+> +
+
+< mα 2ε. (14) Using this, we estimate the alignment of an arbitrary neuron j ∈ N (k) 
+
+> U
+
+with direction D(k) 
+
+> j
+
+as follows: 
+
+1log(1 /α )ddt ew⊤ 
+
+> j
+
+D(k) 
+
+> j
+
+= D(k)
+
+> j
+> 2
+
+−
+
+ew⊤ 
+
+> j
+
+D(k)
+
+> j
+
+2
+
+− 1
+
+n
+
+X
+
+> i∈S(k)
+> j
+
+heθ (xi)
+
+
+
+x⊤ 
+
+> i
+
+D(k) 
+
+> j
+
+− x⊤ 
+
+> i
+
+ewj ew⊤ 
+
+> j
+
+D(k)
+
+> j
+
+
+
+− 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+Ai,j (heθ (xi) − yi)
+
+
+
+x⊤ 
+
+> i
+
+D(k) 
+
+> j
+
+− x⊤ 
+
+> i
+
+ewj ew⊤ 
+
+> j
+
+D(k)
+
+> j
+
+
+
+> D(k)
+
+> j
+> 2
+
+−
+
+ew⊤ 
+
+> j
+
+D(k)
+
+> j
+
+2
+
+− 2 D(k) 
+
+> j
+
+mα 9ε/ 4 − 2 D(k) 
+
+> j
+
+α5ε/ 4
+
+> D(k)
+
+> j
+> 2
+
+−
+
+ew⊤ 
+
+> j
+
+D(k)
+
+> j
+
+2
+
+− α6ε/ 5. (15) The first inequality is an application of Corollary 2 to both sums (given (7) ) as well as using (14) for the sum over i ∈ S(k) 
+
+> j
+
+and (8) for the sum over i ∈ S(k) 
+
+> F
+
+. The second inequality follows for α sufficiently small. The above implies that the solutions of the differential equation f ′(t) = b(a2 − f (t)2), where 
+
+a2 = D(k)
+
+> j
+> 2
+
+− α6ε/ 5 and b = log(1 /α ), furnish us with a lower bound on the alignment. Solutions of this differential equation approach a limiting value of a monotonically. Since a > D(k) 
+
+> j
+
+− α3ε/ 5 from the inequality √1 − x2 > 1 − x, and Item 4 Hypothesis 1 allows us to lower bound the alignment value at time κ, we have that for all t ∈ [κ, τ 1],
+
+ew⊤ 
+
+> j
+
+D(k) 
+
+> j
+
+> D(k) 
+
+> j
+
+min 
+
+
+
+1 − αδ , 1 − α3ε/ 5
+
+> D(k)
+
+> j
+
+
+
+1 − αε/ 2
+
+,
+
+for ε and α sufficiently small. □
+
+Proof of Item 3 Lemma 4. We check that all the neurons in the set N (k) 
+
+> F
+
+cannot change in norm significantly in the first phase. Recall that for j ∈ N (k) 
+
+> F
+
+, {i ∈ S(k) 
+
+> U
+
+| Ai,j = 1 } = ∅. Therefore, the differential equation governing radial dynamics admits the bound 
+
+1log(1 /α )ddt ∥ ewj ∥ = D⊤ 
+
+> j
+
+ewj
+
+≥ − E(k) ∥ ewj ∥.
+
+Applying Grönwall’s inequality combined with the initial conditions from Item 2 Hypothesis 1, we get that for any t ∈ [κ, τ 1] and j ∈ N (k) 
+
+> U
+
+,31 ∥ ewj ∥ ≥ ∥ ewj (κ)∥ exp 
+
+
+
+− log(1 /α )
+
+Z τ1
+
+> κ
+
+E(k) ds 
+
+
+
+> ∥ ewj (κ)∥ exp 
+
+
+
+− log(1 /α ) αε
+
+√n (tk+1 − κ)
+
+
+
+> ∥ ewj (κ)∥ exp 
+
+
+
+−αε/ 2
+
+≥ ∥ ewj (κ)∥
+
+
+
+1 − αε/ 2
+
+>
+
+r
+
+n D(k) 
+
+> j
+
+− αδ
+
+
+
+1 − αε/ 2
+
+>
+
+r
+
+n D(k) 
+
+> j
+
+− αε/ 4. (16) The above inequalities are valid for ε and α sufficiently small. An analogous argument yields the claimed upper bound 
+
+∥ ewj (t)∥ <
+
+r
+
+n D(k) 
+
+> j
+
++ αε/ 4.
+
+Note that this implies that for α sufficiently small, for all j ∈ N (k) 
+
+> F
+
+, ∥ ewj (t)∥ ≤ 2 D(k) 
+
+> j
+
+. Combining this with (10), we see that (9) does not break at time τ1. □
+
+Proof of Item 6 Lemma 4. To estimate the growth of any neuron j ∈ N (k) 
+
+> U
+
+, we compute that 
+
+1log(1 /α )ddt ∥ ewj ∥ = − ∥wj ∥
+
+n
+
+X
+
+> i∈[n]
+
+Ai,j (heθ (xi) − yi)ew⊤ 
+
+> j
+
+xi
+
+>
+
+
+
+D(k) 
+
+> j
+
+− αε/ 2 − mα 2ε
+
+∥ ewj ∥ − ∥wj ∥
+
+n
+
+X
+
+> i / ∈S(k)
+> j
+
+Ai,j (heθ (xi) − yi)ew⊤ 
+
+> j
+
+xi
+
+>
+
+
+
+D(k) 
+
+> j
+
+− αε/ 2 − mα 2ε
+
+∥ ewj ∥ − √2α5ε/ 4∥ ewj ∥. (17) The first inequality is from the assumption on alignment, (7) , combined with the assumed bound on the norms of the unfitted neurons, (10) . The second is the combination of this assumed alignment with (7) and (8). The above implies that for α sufficiently small, 
+
+ddt ∥ ewj ∥ > log(1 /α )
+
+
+
+D(k) 
+
+> j
+
+− 2αε/ 2
+
+∥ ewj ∥.
+
+Grönwall’s inequality then gives that for t ∈ [κ, τ 1],32 ∥ ewj ∥ > ∥ ewj (τ1)∥ exp 
+
+
+
+log(1 /α )
+
+
+
+D(k) 
+
+> j
+
+− 2αε/ 2
+
+(t − κ)
+
+
+
+= ∥ ewj (τ1)∥α− D(k) 
+
+> j(t−κ)+2 αε/ 2(t−κ)(1)
+
+> α −ℓ◦   
+
+> j(κ)−D(k)
+> j(t−κ)+ ε/ 3+2 αε/ 2(tk+1 −κ)(2)
+
+> α −ℓ◦   
+
+> j(κ)−D(k)
+> j(t−κ)+ ε/ 2
+
+= α−ℓ◦ 
+
+> j(t)+ ε/ 2
+
+.
+
+In the above, (1) is from an application of Item 1 Hypothesis 1 with the choice ξ = ε/ 3 and (2) is valid for α sufficiently small. For the upper bound, we compute in a similar manner that for any j ∈ N (k) 
+
+> U
+
+,
+
+1log(1 /α )ddt ∥ ewj ∥ = − ∥wj ∥
+
+n
+
+X
+
+> i∈[n]
+
+Ai,j (heθ (xi) − yi)ew⊤ 
+
+> j
+
+xi
+
+<
+
+
+
+D(k) 
+
+> j
+
++ √2α5ε/ 4
+
+∥ ewj ∥.
+
+Again by Grönwall’s inequality combined with the initial conditions from Hypothesis 1 with ξ = ε/ 3,we have the bound 
+
+∥ ewj ∥ < α −ℓ◦   
+
+> j(κ)−D(k)
+> j(t−κ)−ε/ 3−√2α5ε/ 4(tk+1 −κ)
+
+< α −ℓ◦ 
+
+> j(t)−ε/ 2
+
+. (18) 
+
+□
+
+Proof of Items 4 and 5 Lemma 4. Note that for t, t ′ ∈ [tk, t k+1 ], −ℓ◦ 
+
+> j
+
+(t) − D(k) 
+
+> j
+
+(t′ − t) = −ℓ◦ 
+
+> j
+
+(t′). Using this fact and that ∥ ewj ∥ < ε on [κ, τ 1), we obtain that for all j ∈ N (k) 
+
+> U
+
+,
+
+ε < −ℓ◦ 
+
+> j
+
+(τ1) + ε
+
+2= −ℓ◦ 
+
+> j
+
+(tk+1 ) − D(k) 
+
+> j
+
+(τ1 − tk+1 ) + ε
+
+2 .
+
+We have −ℓj⋆ (tk+1 ) = 0 , and hence the upper bound τ1 of 
+
+τ1 < t k+1 − ε
+
+2 D(k)
+
+> j⋆
+
+. (19) To verify that neuron j⋆ is the largest at time τ1 note the upper bound on the neurons’ norms provided by (18) is monotone increasing in t. From this observation followed by inserting the upper bound on τ1
+
+derived in eq. (19), we get 33 ∥ ewj (τ1)∥ < exp α
+
+
+
+−ℓ◦ 
+
+> j
+
+(τ1) − ε
+
+2
+
+
+
+(20) 
+
+< exp α
+
+−ℓ◦ 
+
+> j
+
+(tk+1 ) + 12
+
+ D(k)
+
+> j
+
+D(k)
+
+> j⋆
+
+− 1
+
+ ε
+
+ . (21) Note that −ℓ◦ 
+
+> j
+
+(tk+1 ) > 0 for j ∈ N (k) 
+
+> U
+
+\ { j⋆}. This implies that for such j the exists α sufficiently small that 
+
+−ℓ◦ 
+
+> j
+
+(tk+1 ) + 12
+
+ D(k)
+
+> j
+
+D(k)
+
+> j⋆
+
+− 1
+
+ ε > ε. 
+
+Hence, ∥ ewj (τ1)∥ < α ε for j ∈ N (k) 
+
+> U
+
+\ { j⋆}. This proves that no neuron other than j⋆ could have 
+
+∥ ewj (τ1)∥ = αε for ε sufficiently small, and since no other condition breaks we have ∥ ewj⋆ (τ1)∥ = αε. We obtain a lower bound on τ1 by considering that 
+
+ε > − D(k) 
+
+> j⋆
+
+(τ1 − tk+1 ) − ε
+
+2
+
+imposes the condition 
+
+τ1 > t k+1 − 3ε
+
+2 D(k)
+
+> j⋆
+
+. (22) Note that by selecting ε sufficiently small depending on κ, we can indeed ensure that τ1 > κ . □
+
+This completes the proof of Lemma 4. ■
+
+## D.3 Phase 2a: Growth to constant order 
+
+Next, we deal with the rapid growth of neuron j⋆, the account of which is split into two parts. To begin, it will be important to obtain a uniform bound on the norms of neurons in the set j ∈ N (k) 
+
+> U
+
+\ { j⋆}, in much the same way that in the proof of Lemma 4 we had by definition of τ1 that ∥ ewj ∥ < α ε on [κ, τ 1] or in the proof of Lemma 3 we had ∥ ewj ∥ < α 1/2. The idea of the proof is to verify that, given the upper bound on neurons in the set N (k) 
+
+> U
+
+\ { j⋆} at time τ1, if these neurons were to subsequently grow at the fastest possible rate, they would still not have exceeded some constant threshold by a certain time after 
+
+τ1.
+
+Proposition 3. For all κ ∈ (tk, t k+1 ), there exists ε∗ > 0 such that for all ε ∈ (0 , ε ∗) there exists α∗ > 0 such that for all α ∈ (0 , α ∗) the following holds: 
+
+∀j ∈ N (k) 
+
+> U
+
+\ { j⋆}, ∀t ∈
+
+
+
+τ1, τ 1 + 2 
+
+r n
+
+2L(0) cU
+
+
+
+, ∥ ewj ∥ < α cU , (23) 
+
+where cU := − 14 max j′∈N (k)  
+
+> U\{ j⋆}
+
+ℓj′ (tk+1 ).
+
+34 Proof. Recall that for any j ∈ [m],
+
+1log(1 /α )ddt ∥ ewj ∥ ≤ 
+
+r 2L(0) 
+
+n ∥ ewj ∥.
+
+Recall also the upper bound on neurons in the set N (k) 
+
+> U
+
+\ { j⋆} at time τ1 provided by (20) . Using Grönwall’s inequality we obtain from these observations that on the considered interval, 
+
+∥ ewj ∥ ≤ ∥ ewj (τ1)∥ exp 
+
+r 2L(0) 
+
+n log(1 /α )( t − τ1)
+
+!
+
+< exp α −ℓ◦ 
+
+> j
+
+(τ1) − ε
+
+2 −
+
+r 2L(0) 
+
+n (t − τ1)
+
+!
+
+< exp α −ℓ◦ 
+
+> j
+
+(tk+1 ) − ε
+
+2 −
+
+r 2L(0) 
+
+n (t − τ1)
+
+!
+
+≤ exp α −ℓ◦ 
+
+> j
+
+(tk+1 ) − ε
+
+2 + 12 max   
+
+> j′∈N(k)
+> U\{ j⋆}
+
+ℓj′ (tk+1 )
+
+!
+
+≤ exp α − 12 max   
+
+> j′∈N(k)
+> U\{ j⋆}
+
+ℓ◦ 
+
+> j
+
+(tk+1 ) − ε
+
+2
+
+!
+
+< exp α − 14 max   
+
+> j′∈N(k)
+> U\{ j⋆}
+
+ℓ◦ 
+
+> j
+
+(tk+1 )
+
+!
+
+.
+
+The final inequality is valid for ε sufficiently small, proving the claim. ■
+
+We will throughout the account of several subsequent results assume that ε is selected small enough that ε < c U , meaning that, informally, contributions of order cU can be thought of as negligible relative to those of order ε. We define the quantity 
+
+η := 12 min 
+
+
+
+√n
+
+60 √2
+
+D(k)
+
+> j⋆
+> 4
+
+p2L(0) ,
+
+r
+
+n D(k)
+
+> j⋆
+
+ .
+
+This is a constant threshold which we will use to break the account of the growth of neuron j⋆ in two. We do so by defining 
+
+τ2 := inf 
+
+n
+
+t ≥τ1 ew⊤ 
+
+> j⋆
+
+D(k) 
+
+> j⋆
+
+≤ 1 − αε/ 12 (24) 
+
+or ∃ i ∈ S(k) 
+
+> F
+
+s.t. |heθ (xi) − yi| ≥ αε/ 6 (25) 
+
+or ∃ j ∈ [m] s .t. ∥ ewj ∥ > 2 max  
+
+> j∈[m]
+
+D(k) 
+
+> j
+
+(26) 
+
+or ∥ ewj⋆ ∥ ≥ η
+
+o ^ 
+
+τ1 + 2 
+
+r n
+
+2L(0) cU
+
+
+
+. (27) 35 We will prove in the lemma below that ∥ ewj⋆ (τ2)∥ = η, meaning that neuron j⋆ has grown to constant order. In order to do so, we will verify that the loss on fitted data does not increase significantly during this phase. As a consequence, the alignment of neurons in the set N (k) 
+
+> F
+
+∪ { j⋆} remains stable. The use of the constant threshold η is that there is a tradeoff between proving the growth conditions and the stability of the loss on fitted data. Specifically, one must ensure that the growth phase lasts long enough that neuron j⋆ can grow to constant order. On the other hand, this increases the time interval on which one must control E(k) and increases the coefficients of terms in (12) . Introducing this constant threshold, the specific choice of which simply emerges as a consequence of they way we bound E(k) ,allows us to balance these two competing aims across both parts of the growth phase. We believe that more delicate arguments when estimating the derivative of the quantity max i∈S(k)
+
+> F
+
+ew⊤ 
+
+> j⋆
+
+xi
+
+
+
+> +
+
+, which controls the extent to which neuron j⋆ could align in the direction of data which has already been fitted, may allow the account of growth to occur in only only one phase. For instance, the bound when passing to (36) loses a lot of control. The final stopping condition given by the time τ1 + 2 q n 
+
+> 2L(0)
+
+cU is required to ensure, using Proposition 3, that we have a uniform bound on all of the neurons in the set N (k) 
+
+> U
+
+\ { j⋆} on the interval [τ1, τ 2]. That we apply this kind of bound is reflective of the fact we do not consider at all the precise alignment or growth rates of the neurons N (k) 
+
+> U
+
+\ { j⋆} during the growth phases; we only ensure that the duration of these phases is sufficiently short that these neurons do not change significantly. 
+
+Lemma 5. Suppose the Hypothesis 1 holds. Then for all κ ∈ (tk, t k+1 ), there exists ε∗ > 0 such that for all 
+
+ε ∈ (0 , ε ∗) there exists α∗ > 0 such that for all α ∈ (0 , α ∗) the following are true: 1. τ2 − τ1 < 3ε
+
+> D(k)
+> j⋆
+
+.
+
+2. ∀j ∈ N (k) 
+
+> F
+
+, ∀t ∈ [τ1, τ 2],
+
+r
+
+n D(k) 
+
+> j
+
+− αε/ 8 < ∥ ewj ∥ <
+
+r
+
+n D(k) 
+
+> j
+
++ αε/ 8.
+
+3. ∀i ∈ S(k) 
+
+> F
+
+, ∀t ∈ [τ1, τ 2], max i∈S(k)
+
+> F
+
+ew⊤ 
+
+> j⋆
+
+xi
+
+
+
+> +
+
+< α ε/ 6.
+
+4. ∀t ∈ [τ1, τ 2], ew⊤ 
+
+> j⋆
+
+D(k) 
+
+> j⋆
+
+> 1 − αε/ 12 .
+
+5. ∀i ∈ S(k) 
+
+> F
+
+, ∀t ∈ [τ1, τ 2], |heθ (xi) − yi| < α ε/ 6.
+
+6. ∥ ewj⋆ (τ2)∥ = η.
+
+We observe at this point that although Item 4 Lemma 5 would seem to imply a statement on realignment with fitted data, we are required in the proof to obtain Item 3 Lemma 5 first in order to prove Item 4 Lemma 5. This is an interesting result of the fact that a bootstrapping argument, in which one would assume some level of alignment of neuron j⋆ in direction D(k) 
+
+> j⋆
+
+and then insert this into (12) , leads to too weak a control on E(k) to be able to use this to get the assumed alignment back at the end (and vice versa). This circularity was not an issue in the arguments leading to (15) , because in this setting we had a the growth conditions ∥ ewj ∥ ≤ αε for all j ∈ N (k) 
+
+> U
+
+on the interval [κ, τ 1]. The reader may also note that our statement includes no control on the alignment of neurons in the set N (k) 
+
+> F
+
+. This is because we can simply control the loss on fitted data and use this when needed to estimate the alignment of such neurons across several phases at the end (this will ultimately be done in Lemma 8). We cannot, on the other hand, avoid estimating the norms of such neurons in every phase we describe, since we must prove the flow is restricted to a bounded domain in order to apply Rademacher’s theorem. 
+
+Proof. We consider the items in the statement of Lemma 5. 36 Proof of Item 1. We bound the phase duration above by examining the growth of neuron j⋆. We have that on [τ1, τ 2],
+
+12 log(1 /α )ddt ∥ ewj⋆ ∥2
+
+= ∥ ewj⋆ ∥2
+
+− 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+Ai,j ⋆ (heθ (xi) − yi)ew⊤ 
+
+> j⋆
+
+xi − 1
+
+n
+
+X
+
+> i∈S(k)
+> j⋆
+
+(heθ (xi) − yi)ew⊤ 
+
+> j⋆
+
+xi
+
+
+
+> ∥ ewj⋆ ∥2
+
+∥D(k) 
+
+> j⋆
+
+∥(1 − αε/ 12 ) − αε/ 6 − 1
+
+n
+
+X
+
+> i∈S(k)
+> j⋆
+
+heθ (xi)ew⊤ 
+
+> j⋆
+
+xi
+
+ (28) 
+
+= ∥ ewj⋆ ∥2
+
+∥D(k) 
+
+> j⋆
+
+∥(1 − αε/ 12 ) − αε/ 6
+
+− 1
+
+n
+
+X
+
+> i∈S(k)
+> j⋆
+
+∥ ewj⋆ ∥2 ew⊤ 
+
+> j⋆
+
+xi + X 
+
+> j̸=j⋆
+
+Ai,j ∥ ewj ∥2 ew⊤ 
+
+> j
+
+xi
+
+ e w⊤ 
+
+> j⋆
+
+xi
+
+
+
+≥ ∥ ewj⋆ ∥2
+
+
+
+∥D(k) 
+
+> j⋆
+
+∥(1 − αε/ 12 ) − αε/ 6 − ∥ ewj⋆ ∥2
+
+n − mα 2cU
+
+
+
+(29) 
+
+> ∥ ewj⋆ ∥2 
+
+∥D(k) 
+
+> j⋆
+
+∥ − αε/ 13 
+
+− ∥ ewj⋆ ∥4
+
+n . (30) In the above, (28) is from the definition of τ2 (where we have not used the alignment in the estimate of the sum over the fitted data as it is not necessary here) and (29) is from the fact that for any i ∈ S(k) 
+
+> j⋆
+
+,
+
+{j ∈ N (k) 
+
+> F
+
+| Ai,j = 1 } = ∅. A function satisfying the differential inequality f ′(t) > 2 log(1 /α )af (t) −
+
+2 log(1 /α )bf (t)2 has a lower bound 
+
+f (t) > ab
+
+exp (2 log(1 /α )a(t − C)) 1 + exp (2 log(1 /α )a(t − C)) = ab
+
+1
+
+α2a(t−C) + 1 ,
+
+where C is an integration constant. In our case, f = ∥ ewj⋆ ∥2, a = D(k) 
+
+> j⋆
+
+− αε/ 13 , and b = 1 
+
+> n
+
+. We will obtain an upper bound on this constant C, since this will in turn provide a lower bound on f (t) and hence an upper bound on τ2. By Item 5 Lemma 4, ∥ ewj⋆ (τ1)∥2 = α2ε. Simple algebra then gives 
+
+C < τ 1 − log   ab α−2ε − 1
+
+2a log( α) .
+
+This implies that for t ∈ [τ1, τ 2],
+
+f (t) > ab
+
+11 + exp α
+
+
+
+2a(t − τ1) + log ( ab α−2ε−1)
+
+> log( α)
+
+ .
+
+Rearranging 37 ab
+
+11 + exp α
+
+
+
+2a(t − τ1) + log ( ab α−2ε−1)
+
+> log( α)
+
+ < η 2
+
+gives 
+
+t − τ1 < 12a log( α)
+
+
+
+log 
+
+ abη 2 − 1
+
+
+
+− log 
+
+ ab α−2ε − 1
+
+
+
+< 12a log( α)
+
+
+
+log 
+
+ abη 2 − 1
+
+
+
+− log 
+
+ ab α−2ε
+
+< 3ε
+
+D(k)
+
+> j⋆
+
+,
+
+valid provided α is taken sufficiently small owing to the fact we take η < 
+
+r
+
+n D(k) 
+
+> j⋆
+
+fixed. □
+
+Proof of Items 3 and 5. We derive an upper bound on the alignment of neuron j⋆ with data in the set 
+
+S(k) 
+
+> F
+
+in terms of E(k) . We have for any i ∈ S(k)
+
+> F
+
+1log(1 /α )ddt ew⊤ 
+
+> j⋆
+
+xi = − 1
+
+n Ai,j ⋆ (heθ (xi) − yi)+ 1
+
+n
+
+X
+
+> v∈[n]
+
+Av,j ⋆ (heθ (xv ) − yv )ew⊤ 
+
+> j⋆
+
+xv ew⊤ 
+
+> j⋆
+
+xi. (31) For the first term, if i ∈ S(k) 
+
+> F
+
+, then 
+
+− 1
+
+n (heθ (xi) − yi) ≤ E(k) . (32) For the sum, we obtain separate estimates over unfitted and fitted data. For v ∈ S(k) 
+
+> j⋆
+
+, recall that by construction of the set N (k) 
+
+> F
+
+, {j ∈ N (k) 
+
+> F
+
+| ew⊤ 
+
+> j
+
+D(k) 
+
+> j⋆
+
+> 0} = ∅. Therefore, the only contribution to the network output on such data is from neurons in the set N (k) 
+
+> U
+
+. This leads to the inequalities 
+
+heθ (xv ) − yv = ∥ ewj⋆ ∥2 ew⊤ 
+
+> j⋆
+
+xi + X  
+
+> j∈N(k)
+> U\{ j⋆}
+
+∥ ewj ∥2 ew⊤ 
+
+> j
+
+xi − yv
+
+< ∥ ewj⋆ ∥2 ew⊤ 
+
+> j⋆
+
+xi + mα 2cU − yv
+
+< η 2
+
+ yv
+
+n D(k)
+
+> j⋆
+
++ √2αε/ 24 
+
+ + mα 2cU
+
+< y v
+
+ η2
+
+n D(k)
+
+> j⋆
+
+− 1
+
+ + αε/ 25 ,
+
+38 where (1) is from Proposition 3, (2) is an application of Proposition 7 to (24) , and (3) is valid for α
+
+sufficiently small. Using the same application of Proposition 7 to (24), we obtain 
+
+1
+
+n
+
+X
+
+> v∈S(k)
+> j⋆
+
+(heθ (xv ) − yv )ew⊤ 
+
+> j⋆
+
+xv
+
+< 1
+
+n
+
+X
+
+> v∈S(k)
+> j⋆
+
+yv
+
+ η2
+
+n D(k)
+
+> j⋆
+
+− 1
+
+ + αε/ 25 
+
+ yv
+
+n D(k)
+
+> j⋆
+
+− √2αε/ 24 
+
+
+
+< X
+
+> v∈S(k)
+> j⋆
+
+y2
+
+> v
+
+n2 D(k)
+
+> j⋆
+
+ η2
+
+n D(k)
+
+> j⋆
+
+− 1
+
+ + αε/ 26 
+
+= D(k)
+
+> j⋆
+
+ η2
+
+n D(k)
+
+> j⋆
+
+− 1
+
+ + αε/ 26 , (33) where the second inequality is valid for α sufficiently small. For v ∈ S(k) 
+
+> F
+
+, we have the obvious inequality 
+
+ew⊤ 
+
+> j⋆
+
+xv ≤ max v∈S(k)
+
+> F
+
+ew⊤ 
+
+> j⋆
+
+xv . Using the Cauchy-Schwarz inequality gives 
+
+1
+
+n
+
+X
+
+> v∈S(k)
+> F
+
+Av,j ⋆ (heθ (xv ) − yv )ew⊤ 
+
+> j⋆
+
+xv ≤ √n E(k) max 
+
+> v∈S(k)
+> F
+
+ew⊤ 
+
+> j⋆
+
+xv . (34) Inserting (32), (33), and (34) into (31), we obtain that for [τ1, τ 2] and i ∈ S(k) 
+
+> F
+
+,
+
+1log(1 /α )ddt ew⊤ 
+
+> j⋆
+
+xi ≤ E(k) +
+
+ D(k)
+
+> j⋆
+
+ η2
+
+n D(k)
+
+> j⋆
+
+− 1
+
+ + αε/ 26 
+
+ e w⊤ 
+
+> j⋆
+
+xi
+
++ √n E(k) max 
+
+> v∈S(k)
+> F
+
+ew⊤ 
+
+> j⋆
+
+xv ew⊤ 
+
+> j⋆
+
+xi.
+
+Since the above inequality holds for any i ∈ S(k) 
+
+> F
+
+, we have that, when differentiable, the continuous function f (t) := max i∈S(k)
+
+> F
+
+ew⊤ 
+
+> j⋆
+
+xi
+
+
+
+> +
+
+obeys the differential inequality 
+
+1log(1 /α ) f ′(t) < E(k)  1 + √nf (t)2 −
+
+ D(k)
+
+> j⋆
+
+1 − η2
+
+n D(k)
+
+> j⋆
+
+ + αε/ 26 
+
+ f (t).
+
+Rademacher’s theorem applies here also, however we must be more careful since the function w 7 → w
+
+is not Lipschitz continuous (in fact, it is not even continuous at the origin). However, it is Lipschitz continuous on any set bounded away from the origin. Note that the arguments in the proof of Item 1 Lemma 5 show that neuron j⋆ is increasing in norm monotonically on [τ1, τ 2]. Combining this observation with Item 5 Lemma 4, we have that αε < ∥ ewj⋆ ∥ < η , a domain on which w 7 → w
+
+is indeed Lipschitz continuous for α fixed. As the boundedness of the subdifferential on compact domains (note (26) in the definition of τ2) implies eθ is Lipschitz in t and the composition of Lipschitz continuous functions is Lipschitz continuous (we note max is 1-Lipschitz), we finally get the required 39 differentiability. We use (24) and Proposition 7 to see that f (t)2 < 2αε/ 12 on [τ1, τ 2]. Plugging this back in we have for α sufficiently small 
+
+1log(1 /α ) f ′(t) ≤ E(k) 
+
+1 + 2 √nα ε/ 12 
+
+−
+
+ D(k)
+
+> j⋆
+
+1 − η2
+
+n D(k)
+
+> j⋆
+
+ + αε/ 26 
+
+ f (t).
+
+We have the differential inequality f ′(t) < a E(k) log(1 /α )−b log(1 /α )f (t), where a =  1 + 2 √nα ε/ 12 
+
+and b = D(k)
+
+> j⋆
+
+
+
+1 − η2 
+
+> nD(k)
+> j⋆
+
+
+
++αε/ 26 . Multiplying both sides by exp( b log(1 /α )t), we get (exp( b log(1 /α )t)f (t)) ′ <a log(1 /α ) E(k) exp( b log(1 /α )t). Integration leads to 
+
+f (t) < α b(t−τ1)f (τ1) + a log(1 /α )αbt 
+
+Z tτ1
+
+α−bs E(k) ds < √2αε/ 4 + a log(1 /α )αbt 
+
+Z tτ1
+
+α−bs E(k) ds (35) 
+
+< √2αε/ 4 + a log(1 /α )
+
+Z tτ1
+
+E(k) ds, (36) where the second inequality comes from an application of Proposition 7 to the initial condition from Item 2 Lemma 4 and the fact b > 0. We use this bound to derive a differential equation governing the growth of the residual. We must again estimate (12), which we recall states 
+
+− 1log(1 /α )ddt E(k) 2
+
+≤ − 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+X 
+
+> j∈N(k)
+> U
+
+Ai,j ∥ ewj ∥2D⊤ 
+
+> j
+
+ewj ew⊤ 
+
+> j
+
+xix⊤ 
+
+> i
+
+E(k).
+
+We consider separately the cases j ∈ N (k) 
+
+> U
+
+\ j⋆ and j = j⋆. Beginning with the former, Proposition 3 implies ∥ ewj ∥2 < α 2cU . We simply reuse (11) combined with the Cauchy-Schwarz inequality to obtain 
+
+− 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+X  
+
+> j∈N(k)
+> U\{ j⋆}
+
+Ai,j ∥ ewj ∥2D⊤ 
+
+> j
+
+ewj ew⊤ 
+
+> j
+
+xix⊤ 
+
+> i
+
+E(k) ≤ mn
+
+p2L(0) α2cU E(k) . (37) Note that we have simply estimated |ew⊤ 
+
+> j
+
+xi| ≤ 1, since we have imposed no assumption on the alignment of neurons j ∈ N (k) 
+
+> U
+
+during this phase. For the contribution of the term corresponding to j = j⋆, we have 
+
+− 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+Ai,j ⋆ ∥ ewj⋆ ∥2D⊤ 
+
+> j⋆
+
+ewj⋆ ew⊤ 
+
+> j⋆
+
+xix⊤ 
+
+> i
+
+E(k) < 1
+
+n
+
+p2L(0) η2f (t) E(k) ,
+
+where we have applied the bound (27) on the norm of neuron j⋆ in the definition of τ2 and (11) combined with the Cauchy-Schwarz inequality. Substituting in (36), we obtain 40 − 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+Ai,j ⋆ ∥ ewj⋆ ∥2D⊤ 
+
+> j⋆
+
+ewj⋆ ew⊤ 
+
+> j⋆
+
+xix⊤ 
+
+> i
+
+E(k)
+
+≤ 1
+
+n
+
+p2L(0) η2
+
+√2αε/ 4 + a log(1 /α )
+
+Z tτ1
+
+E(k) ds 
+
+
+
+E(k) (38) Inserting (37) and (38) into (12), we have 
+
+ddt E(k) ≤ 1
+
+n
+
+p2L(0) η2 log(1 /α )
+
+√2αε/ 4 + a log(1 /α )
+
+Z tτ1
+
+E(k) ds 
+
+
+
++ mn
+
+p2L(0) log(1 /α )α2cU
+
+< 2
+
+n
+
+p2L(0) η2 log(1 /α )αε/ 4 + 2
+
+n
+
+p2L(0) η2 log(1 /α )2
+
+Z tτ1
+
+E(k) ds, 
+
+where the second inequality is valid for α sufficiently small by increasing the coefficient of the αε/ 4
+
+term (recall here that cU > ε ) and by using the estimate a = 1 + 2 √nα ε/ 12 < 2 for α sufficiently small. Differentiability almost everywhere is again due to Rademacher’s theorem. This is a differential inequality of the form F ′′ < pF + q, where F = R tτ1 E(k) ds . Applying Lemma 10, 
+
+F ′(t) <
+
+ q
+
+√p + F ′(τ1)
+
+
+
+exp ( √p(t − τ1)) =
+
+r 2
+
+n
+
+> 4
+
+p2L(0) ηα ε/ 4 + αε
+
+!
+
+exp α −
+
+r 2
+
+n
+
+> 4
+
+p2L(0) η(t − τ1)
+
+!
+
+> (1)
+
+< 2
+
+r 2
+
+n
+
+> 4
+
+p2L(0) ηα ε/ 4 exp α −
+
+r 2
+
+n
+
+> 4
+
+p2L(0) η(t − τ1)
+
+!
+
+> (2)
+
+< 4
+
+√n
+
+> 4
+
+p2L(0) ηα ε/ 4 exp α
+
+−
+
+r 2
+
+n
+
+> 4
+
+p2L(0) η 3ε
+
+D(k)
+
+> j⋆
+
+
+
+> (3)
+
+< α ε/ 5. (39) In these workings, (1) is valid for α sufficiently small, (2) follows from inserting the upper bound on 
+
+τ2 − τ1 derived in Item 1 Lemma 5, and (3) follows from the fact η < √n
+
+> 60 √2
+> D(k)
+> j⋆
+> 4
+
+√2L(0) .We are now able to plug (39) back into (35) to estimate 
+
+max 
+
+> i∈S(k)
+> F
+
+Ai,j ⋆ ew⊤ 
+
+> j⋆
+
+xi < √2αε/ 4 + a log(1 /α )αε/ 5
+
+Z tτ1
+
+αb(t−s)ds 
+
+= √2αε/ 4 + ab αε/ 5 
+
+1 − αb(t−τ1)
+
+< c 1αε/ 5, (40) for some c1 > 0. Item 3 Lemma 5 then follows for α sufficiently small. □
+
+41 Proof of Item 4. Next, we verify the stability of alignment of neuron j⋆. We have 
+
+1log(1 /α )ddt ew⊤ 
+
+> j⋆
+
+D(k) 
+
+> j⋆
+
+= D(k)
+
+> j
+> 2
+
+−
+
+ew⊤ 
+
+> j
+
+D(k)
+
+> j
+
+2
+
+(41) 
+
+− 1
+
+n
+
+X
+
+> i∈S(k)
+> j
+
+heθ (xi)
+
+
+
+x⊤ 
+
+> i
+
+D(k) 
+
+> j
+
+− x⊤ 
+
+> i
+
+ewj ew⊤ 
+
+> j
+
+D(k)
+
+> j
+
+
+
+− 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+(heθ (xi) − yi)
+
+
+
+x⊤ 
+
+> i
+
+D(k) 
+
+> j
+
+− x⊤ 
+
+> i
+
+ewj ew⊤ 
+
+> j
+
+D(k)
+
+> j
+
+
+
+> D(k)
+
+> j⋆
+> 2
+
+−
+
+ew⊤ 
+
+> j⋆
+
+D(k)
+
+> j⋆
+
+2
+
+− 1
+
+n
+
+X
+
+> i∈S(k)
+> j⋆
+
+heθ (xi)
+
+
+
+x⊤ 
+
+> i
+
+D(k) 
+
+> j⋆
+
+− x⊤ 
+
+> i
+
+ewj⋆ ew⊤ 
+
+> j⋆
+
+D(k)
+
+> j⋆
+
+
+
+− 2 D(k) 
+
+> j⋆
+
+α5ε/ 24 ,
+
+This bound comes from (25) combined with an application of Corollary 2 to (24) . We recall that for 
+
+i ∈ S(k) 
+
+> j⋆
+
+, heθ (xi) ≤ ∥ ewj⋆ ∥2 ew⊤ 
+
+> j⋆
+
+xi + mα 2cU . The growth to constant order of the norm of neuron j⋆ means that the previously used bootstrapping argument, where Corollary 2 was combined with a uniform growth bound, is no longer possible. Instead, from (40) , we have that if i / ∈ S(k) 
+
+> j
+
+, then on the interval 
+
+[τ1, τ 2], ew⊤ 
+
+> j⋆
+
+xi ≤ c1αε/ 5. We apply this to see 
+
+1
+
+n
+
+X
+
+> i∈S(k)
+> j⋆
+
+heθ (xi)
+
+
+
+x⊤ 
+
+> i
+
+D(k) 
+
+> j⋆
+
+− x⊤ 
+
+> i
+
+ewj⋆ ew⊤ 
+
+> j⋆
+
+D(k)
+
+> j⋆
+
+
+
+= 1
+
+n
+
+X
+
+> i∈S(k)
+> j⋆
+
+∥ ewj⋆ ∥2 ew⊤ 
+
+> j⋆
+
+xi + X 
+
+> j̸=j⋆
+
+Ai,j ∥ ewj ∥2 ew⊤ 
+
+> j
+
+xi
+
+ 
+
+x⊤ 
+
+> i
+
+D(k) 
+
+> j⋆
+
+− x⊤ 
+
+> i
+
+ewj⋆ ew⊤ 
+
+> j⋆
+
+D(k)
+
+> j⋆
+
+
+
+≤ 1
+
+n ∥ ewj⋆ ∥2 ew⊤ 
+
+> j⋆
+
+D(k)
+
+> j⋆
+
+1 − X
+
+> i∈S(k)
+> j⋆
+
+ew⊤ 
+
+> j⋆
+
+xi
+
+2
+
+ + 2 m D(k) 
+
+> j⋆
+
+α2cU
+
+= 1
+
+n ∥ ewj⋆ ∥2 ew⊤ 
+
+> j⋆
+
+D(k)
+
+> j⋆
+
+X
+
+> i / ∈S(k)
+> j⋆
+
+ew⊤ 
+
+> j⋆
+
+xi
+
+2
+
+ + 2 m D(k) 
+
+> j⋆
+
+α2cU
+
+≤ c21η2 D(k) 
+
+> j⋆
+
+α2ε/ 5 + 2 m D(k) 
+
+> j⋆
+
+α2cU . (42) Putting (42) into (41), we have for t ∈ [τ1, τ 2] and for α sufficiently small that 
+
+1log(1 /α )ddt ew⊤ 
+
+> j⋆
+
+D(k) 
+
+> j⋆
+
+> D(k)
+
+> j⋆
+> 2
+
+−
+
+ew⊤ 
+
+> j⋆
+
+D(k)
+
+> j⋆
+
+2
+
+− c21η2 D(k) 
+
+> j⋆
+
+α2ε/ 5 − 2m D(k) 
+
+> j⋆
+
+α2cU − 2 D(k) 
+
+> j⋆
+
+α5ε/ 24 
+
+> D(k)
+
+> j⋆
+> 2
+
+−
+
+ew⊤ 
+
+> j⋆
+
+D(k)
+
+> j⋆
+
+2
+
+− α9ε/ 48 .
+
+42 We can now use arguments similar to those employed in the proof of Item 2 Lemma 4. From the initial conditions given by item 2 Lemma 4 and the inequality √1 − x2 > 1 − x, we obtain that on [τ1, τ 2] the alignment is lower bounded a function converging monotonically to min  αε/ 2, α 9ε/ 96 . It then follows that for α sufficiently small, 
+
+ew⊤ 
+
+> j⋆
+
+D(k) 
+
+> j⋆
+
+> D(k) 
+
+> j⋆
+
+(1 − αε/ 12 ).
+
+□
+
+Proof. Proof of Item 2 We verify that the norms of neurons in the set N (k) 
+
+> F
+
+did not change significantly on the interval [τ1, τ 2], which will lead us to conclude in combination with Proposition 3 that (26) did not fail on this interval. Item 3 Lemma 4 provides upper and lower bounds on the norms of neurons in the set N (k) 
+
+> F
+
+at time τ1. In light of these initial conditions and the bound on the loss on data in the set 
+
+S(k) 
+
+> F
+
+given in (25), identical workings to those yielding (16) give 
+
+r
+
+n D(k) 
+
+> j
+
+− αε/ 8 < ∥ ewj ∥ <
+
+r
+
+n D(k) 
+
+> j
+
++ αε/ 8
+
+for all t ∈ [τ1, τ 2] for α sufficiently small. 
+
+□
+
+Proof. Proof of Item 6 We have concluded that no condition except for that on the norm of neuron j⋆
+
+could have broken at time τ2, therefore ∥ ewj⋆ (τ2)∥ = η, as claimed. 
+
+□
+
+This completes the proof of Lemma 5. ■
+
+## D.4 Phase 2b: Fitting of data 
+
+Define for ε′ > 0 the time 
+
+τ3 := inf 
+
+n
+
+t ≥τ2 ew⊤ 
+
+> j⋆
+
+D(k) 
+
+> j⋆
+
+≤ 1 − αε′/2 (43) 
+
+or ∃ i ∈ S(k) 
+
+> F
+
+s.t. |heθ (xi) − yi| ≥ αε′
+
+(44) 
+
+or ∃ j ∈ N (k) 
+
+> F
+
+s.t. ∥ ewj ∥ > 2 max  
+
+> j∈[m]
+
+D(k) 
+
+> j
+
+(45) 
+
+or ∥ ewj⋆ ∥2 ≥ n D(k) 
+
+> j⋆
+
+− αε′/4o ^ 
+
+τ1 + 2 
+
+r n
+
+2L(0) cU
+
+
+
+. (46) The lemma below provides an account of the phase where neuron j⋆ fits the data on which is it active. We prove that the alignment of neuron j⋆ remains stable, the loss on fitted data does not increase significantly, and by the end of the phase neuron j⋆ has grown very close to its final norm as predicted by Algorithm 1. The proof for this phase is almost identical to that for Phase 2a. 
+
+Lemma 6. Suppose that Hypothesis 1 holds. Then for all κ ∈ (tk, t k+1 ), there exists ε∗ > 0 such that for all ε ∈ (0 , ε ∗), there exists ε′∗ > 0 such that for all ε′ ∈ (0 , ε ′∗ ) there exists α∗ such that for α ∈ (0 , α ∗) the following are true: 
+
+43 1. τ3 − τ2 < ε′
+
+> D(k)
+> j⋆
+
+.
+
+2. ∀j ∈ N (k) 
+
+> F
+
+, ∀t ∈ [τ2, τ 3],
+
+r
+
+n D(k) 
+
+> j
+
+− αε′/2 < ∥ ewj ∥ <
+
+r
+
+n D(k) 
+
+> j
+
++ αε′/2.
+
+3. ∀i ∈ S(k) 
+
+> F
+
+, ∀t ∈ [τ2, τ 3], |heθ (xi) − yi| < α ε′
+
+.
+
+4. ∀i ∈ S(k) 
+
+> F
+
+, ∀t ∈ [τ2, τ 3], max i∈S(k)
+
+> F
+
+ew⊤ 
+
+> j⋆
+
+xi
+
+
+
+> +
+
+< α 5ε′/4.5. ∀t ∈ [τ2, τ 3], ew⊤ 
+
+> j⋆
+
+D(k) 
+
+> j⋆
+
+> 1 − αε′
+
+.
+
+6. ∥ ewj⋆ (τ3)∥2 = n D(k) 
+
+> j⋆
+
+− αε′/4.Proof. We work out a useful preliminary bound to begin this section. We upper bound the network output on i ∈ S(k) 
+
+> j⋆
+
+:
+
+heθ (xi) (1) 
+
+< ew⊤ 
+
+> j⋆
+
+xi∥ ewj⋆ ∥2 + mα 2cU
+
+> (2)
+
+<
+
+ yi
+
+n D(k)
+
+> j⋆
+
++ √2αε′/2
+
+ 
+
+n D(k) 
+
+> j⋆
+
+− αε′/4
+
++ mα 2cU
+
+> (3)
+
+< y i − αε′/3. (47) Here, (1) is from Proposition 3, (2) is from combining (46) with an application of Proposition 7 to (43) ,and (3) is valid for α sufficiently small. 
+
+Proof of Item 1. We estimate the growth of neuron j⋆. Similar workings to those which allowed us to obtain (30) in the proof of Item 1 Lemma 5 allow us to conclude that for α sufficiently small, on [τ2, τ 3]
+
+we have 
+
+12 log(1 /α )ddt ∥ ewj⋆ ∥2 > ∥ ewj⋆ ∥2
+
+
+
+D(k) 
+
+> j⋆
+
+(1 − αε′
+
+) − αε′
+
+− ∥ ewj⋆ ∥2
+
+n − mα 2cU
+
+
+
+> ∥ ewj⋆ ∥2 
+
+D(k) 
+
+> j⋆
+
+− αε′/2
+
+− ∥ ewj⋆ ∥4
+
+n .
+
+As before, solutions of differential inequality f ′(t) = 2 log(1 /α )af (t) − 2 log(1 /α )bf (t)2 for t ∈ [τ2, τ 3]
+
+have the lower bound 
+
+f (t) > ab
+
+1
+
+α2a(t−C) + 1 .
+
+From Lemma 5, we have ∥ ewj⋆ (τ2)∥2 = η2, and determining the integration constant yields 
+
+f (t) > ab
+
+11 + exp α
+
+
+
+2a(t − τ2) + log ( ab η−2−1)
+
+> log( α)
+
+ .
+
+Therefore, 44 f
+
+τ2 + ε′
+
+D(k)
+
+> j⋆
+
+ (1) 
+
+> ab
+
+11 + exp α
+
+
+
+> 2ε′
+> D(k)
+> j⋆
+
+
+
+D(k) 
+
+> j⋆
+
+− αε′/2
+
+
+
++ log ( ab η−2−1)
+
+> log( α)
+
+
+
+> (1)
+
+> ab
+
+11 + αε′
+
+> ab (1 − 2αε′
+
+)
+
+> (2)
+
+> n D(k) 
+
+> j⋆
+
+− αε′/4, (48) which contradicts the definition of τ3. Inequality (1) comes from noting ab η−2 − 1 is bounded away from 0 as α decreases owing to the fact η is fixed and inequality (2) comes from estimating ab . Note that each of the inequalities above is only valid for α sufficiently small, depending on ε and the data. Necessarily, we have τ3 < τ 2 + ε′
+
+> D(k)
+> j⋆
+
+. □
+
+Proof of Items 3 and 4. In this section it will again be important to derive a bound on the realignment of neuron j⋆ with fitted data in terms of the residual on fitted data. We recall that for i ∈ S(k) 
+
+> F
+
+,
+
+1log(1 /α )ddt ew⊤ 
+
+> j⋆
+
+xi = − 1
+
+n (heθ (xi) − yi)1   ew⊤ 
+
+> j⋆
+
+xi > 0
+
++ 1
+
+n
+
+X
+
+> v∈[n]
+
+Av,j (heθ (xv ) − yv )ew⊤ 
+
+> j⋆
+
+xv ew⊤ 
+
+> j⋆
+
+xi
+
+≤ E(k) 1 + √n max 
+
+> v∈S(k)
+> F
+
+ew⊤ 
+
+> j⋆
+
+xv ew⊤ 
+
+> j⋆
+
+xi)
+
+!
+
+,
+
+where we have discarded the sum over v ∈ S(k) 
+
+> j⋆
+
+since (47) gives that this adds a negative contribution. Since this holds for all i ∈ S(k) 
+
+> F
+
+and for all t ∈ [τ2, τ 3], we have that f (t) := max i∈S(k)
+
+> F
+
+ew⊤ 
+
+> j⋆
+
+xi
+
+
+
+> +
+
+obeys the inequality 
+
+1log(1 /α ) f ′(t) ≤ E(k) 
+
+1 + 2 √nα ε′ 
+
+,
+
+where again we have estimated f (t)2 by plugging in the assumed bound on alignment. Differentiability almost everywhere follows from Rademacher’s theorem. Integration gives 
+
+f (t) < √2αε/ 24 +
+
+
+
+1 + 2 √nα ε′ 
+
+log(1 /α )
+
+Z tτ2
+
+E(k) ds. (49) We proceed to estimate (12), which we recall for convenience is 
+
+12 log(1 /α )ddt E(k) 2
+
+≤ − 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+X 
+
+> j∈N(k)
+> U
+
+Ai,j ∥ ewj ∥2D⊤ 
+
+> j
+
+ewj ew⊤ 
+
+> j
+
+xix⊤ 
+
+> i
+
+E(k).
+
+45 We can again discard the sum over j ∈ N (k) 
+
+> F
+
+, leaving only the cases j = j⋆ and j ∈ N (k) 
+
+> U
+
+\ { j⋆}. For the latter, we apply Proposition 3 in a similar manner to the previous phase to get 
+
+− 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+X  
+
+> j∈N(k)
+> U\{ j⋆}
+
+Ai,j ∥ ewj ∥2D⊤ 
+
+> j
+
+ewj ew⊤ 
+
+> j
+
+xix⊤ 
+
+> i
+
+E(k) ≤ mn
+
+p2L(0) α2cU E(k) . (50) For the case j = j⋆, we obtain the estimate 
+
+− 1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+Ai,j ⋆ ∥ ewj⋆ ∥2D⊤ 
+
+> j⋆
+
+ewj⋆ ew⊤ 
+
+> j⋆
+
+xix⊤ 
+
+> i
+
+E(k)
+
+≤
+
+
+
+n D(k) 
+
+> j⋆
+
+− αε′/4 r 2L(0) 
+
+n
+
+1
+
+n
+
+X
+
+> i∈S(k)
+> F
+
+Ai,j ⋆ ew⊤ 
+
+> j⋆
+
+xix⊤ 
+
+> i
+
+E(k)
+
+≤ D(k)
+
+> j⋆
+
+p2L(0) f (t) E(k) . (51) where in the final line we apply the Cauchy-Schwarz inequality. Inserting (51) and (50) into (12) , we get 
+
+ddt E(k) ≤ D(k)
+
+> j⋆
+
+p2L(0) log(1 /α )
+
+√2αε/ 24 +
+
+
+
+1 + 2 √nα ε′ 
+
+log(1 /α )
+
+Z tτ2
+
+E(k) ds 
+
+
+
++ mn
+
+p2L(0) log(1 /α )α2cU
+
+< 2 D(k)
+
+> j⋆
+
+p2L(0) log(1 /α )αε/ 24 + 2 D(k)
+
+> j⋆
+
+p2L(0) log(1 /α )2
+
+Z tτ2
+
+E(k) ds, 
+
+for α sufficiently small. Again, we have a differential inequality of the form F ′′ < pF + q, for which we employ Lemma 10: 
+
+F ′(t) <
+
+ q
+
+√p + F ′(τ2)
+
+
+
+exp ( √p(t − τ2)) 
+
+<
+
+
+
+2 D(k)
+
+> j⋆
+
+p2L(0) 
+
+1/2
+
+αε/ 24 + αε/ 6
+
+
+
+exp α
+
+
+
+−
+
+
+
+2 D(k)
+
+> j⋆
+
+p2L(0) 
+
+1/2
+
+(t − τ2)
+
+
+
+< α ε/ 25 exp α
+
+−
+
+
+
+2 D(k)
+
+> j⋆
+
+p2L(0) 
+
+1/2 ε′
+
+D(k)
+
+> j⋆
+
+
+
+> (2)
+
+< α 3ε′/2, (52) provided ε′ is selected sufficiently small depending on ε. We may now plug (52) back into (49) to get that for t ∈ [τ2, τ 3],46 max 
+
+i∈S(k)
+
+> F
+
+Ai,j ⋆ ew⊤
+
+j⋆ xi < √2αε/ 24 +
+
+
+
+1 + 2 √nα ε′ 
+
+log(1 /α )
+
+Z tτ2
+
+E(k) ds < √2αε/ 24 +
+
+
+
+1 + 2 √nα ε′ 
+
+log(1 /α )α3ε′/2 ε′
+
+D(k)
+
+j⋆
+
+< α 5ε′/4, (53) where the final inequality is valid for ε′ sufficiently small depending on ε and for α sufficiently small. □
+
+Proof of Item 5. To estimate the alignment of neuron j⋆, we have from (53) that if i ∈ S(k)
+
+F then ew⊤
+
+j⋆ xi <α5ε′/4. Combined with (52), we have 
+
+1log(1 /α )ddt ew⊤
+
+j⋆ D(k)
+
+j⋆ = D(k)
+
+j⋆
+
+2
+
+−
+
+ew⊤
+
+j⋆ D(k)
+
+j⋆
+
+2
+
+− 1
+
+n
+
+X
+
+i∈S(k)
+
+> j⋆
+
+heθ (xi)
+
+
+
+x⊤
+
+i D(k)
+
+j⋆ − x⊤
+
+i ewj⋆ ew⊤
+
+j⋆ D(k)
+
+j⋆
+
+
+
+− 1
+
+n
+
+X
+
+i∈S(k)
+
+> F
+
+(heθ (xi) − yi)
+
+
+
+x⊤
+
+i D(k)
+
+j⋆ − x⊤
+
+i ewj⋆ ew⊤
+
+j⋆ D(k)
+
+j⋆
+
+
+
+> D(k)
+
+j⋆
+
+2
+
+−
+
+ew⊤
+
+j⋆ D(k)
+
+j⋆
+
+2
+
+− 1
+
+n
+
+X
+
+i∈S(k)
+
+> j⋆
+
+heθ (xi)
+
+
+
+x⊤
+
+i D(k)
+
+j⋆ − x⊤
+
+i ewj⋆ ew⊤
+
+j⋆ D(k)
+
+j⋆
+
+
+
+− 2 D(k)
+
+j⋆ α11 ε′/4. (54) As in the previous section, we apply the bound on the norms of all neurons j ∈ N (k)
+
+U \ { j⋆} to get 
+
+1
+
+n
+
+X
+
+i∈S(k)
+
+> j⋆
+
+heθ (xi)
+
+
+
+x⊤
+
+i D(k)
+
+j⋆ − x⊤
+
+i ewj⋆ ew⊤
+
+j⋆ D(k)
+
+j⋆
+
+
+
+= 1
+
+n
+
+X
+
+i∈S(k)
+
+> j⋆
+
+∥ ewj⋆ ∥2 ew⊤
+
+j⋆ xi + X
+
+j̸ =j⋆
+
+Ai,j ∥ ewj ∥2 ew⊤
+
+j xi
+
+ 
+
+x⊤
+
+i D(k)
+
+j⋆ − x⊤
+
+i ewj⋆ ew⊤
+
+j⋆ D(k)
+
+j⋆
+
+
+
+< 1
+
+n ∥ ewj⋆ ∥2 ew⊤
+
+j⋆ D(k)
+
+j⋆
+
+1 − X
+
+i∈S(k)
+
+> j⋆
+
+ew⊤
+
+j⋆ xi
+
+2
+
+ + 2 m D(k)
+
+j⋆ α2cU
+
+= 1
+
+n ∥ ewj⋆ ∥2 ew⊤
+
+j⋆ D(k)
+
+j⋆
+
+X
+
+i / ∈S(k)
+
+> j⋆
+
+ew⊤
+
+j⋆ xi
+
+2
+
+ + 2 m D(k)
+
+j⋆ α2cU
+
+< n D(k)
+
+j⋆
+
+2
+
+α5ε′/2 + 2 m D(k)
+
+j⋆ α2cU , (55) 47 where in the final inequality we used (53) and (46) . Putting (55) into (54) , we have for t ∈ [τ2, τ 3] and for 
+
+α sufficiently small that 
+
+1log(1 /α )ddt ew⊤ 
+
+> j⋆
+
+D(k) 
+
+> j⋆
+
+> D(k)
+
+> j⋆
+> 2
+
+−
+
+ew⊤ 
+
+> j⋆
+
+D(k)
+
+> j⋆
+
+2
+
+− α2ε′
+
+.
+
+From the initial conditions provided by Item 4 combined with the inequality √1 − x2 > 1 − x, we obtain for t ∈ [τ2, τ 3]
+
+ew⊤ 
+
+> j⋆
+
+D(k) 
+
+> j⋆
+
+> D(k)
+
+> j⋆
+
+
+
+1 − αε′ 
+
+,
+
+which implies the required alignment for α sufficiently small. 
+
+□
+
+Proof. Proof of Item 2 We verify that the norms of neurons in the set N (k) 
+
+> F
+
+did not change significantly on the interval [τ1, τ 2], which will lead us to conclude in combination with Proposition 3 that (45) did not fail on this interval. Item 2 Lemma 5 provides upper and lower bounds on the norms of neurons in the set N (k) 
+
+> F
+
+at time τ2. In light of these initial conditions and the bound on the loss on data in the set 
+
+S(k) 
+
+> F
+
+given in (44), identical workings to those yielding (16) give 
+
+r
+
+n D(k) 
+
+> j
+
+− αε′/2 < ∥ ewj ∥ <
+
+r
+
+n D(k) 
+
+> j
+
++ αε′/2
+
+for all t ∈ [τ2, τ 3] for α sufficiently small. 
+
+□
+
+Proof of Item 6. For this point, we simply note that (48) in the proof of Item 1 Lemma 6 gives that if no other condition in the definition of τ3 breaks then it must be that ∥ ewj⋆ (τ3)∥ = n D(k) 
+
+> j⋆
+
+− αε′/4. □
+
+This completes the proof of Lemma 6. ■
+
+## D.5 Phase 3: Realignment and slow growth 
+
+Define the time 
+
+τ4 := inf 
+
+n
+
+t ≥τ3 ∃ i ∈ S(k+1)  
+
+> F
+
+s.t. |heθ (xi) − yi| ≥ αε′/6 (56) 
+
+or ∃ j ∈ N (k) 
+
+> F
+
+s.t. ∥ ewj ∥ > 2 max  
+
+> j∈[m]
+
+D(k)
+
+> j
+
+o ^ τ3 + 3ε
+
+2 D(k)
+
+> j⋆
+
+^ 
+
+τ1 + 2 
+
+r n
+
+2L(0) cU
+
+
+
+.
+
+This phase is that during which neurons in the set N (k) 
+
+> U
+
+\ { j⋆} = N (k+1)  
+
+> U
+
+realign in directions D(k+1) 
+
+> j
+
+to respond to the fact that neuron j⋆ has grown to reduce the loss on the data on which it is active. We will find that τ4 = τ3 + 3ε 
+
+> 2D(k)
+> j⋆
+
+, and combining this with the bounds on the duration of phases 2a 48 and 2b, we will see that the norms of the neurons in the set N (k+1)  
+
+> U
+
+did not change significantly on the interval [τ1, τ 4]. This choice is motivated by the lower bound on τ1 afforded to us by (22) , as we can then guarantee that τ4 > t k+1 . The reader may note that in the lemma below, we do not track the alignment of neuron j⋆, the reason being that it is now a member of the set S(k+1)  
+
+> F
+
+. As noted before Lemma 5, we can avoid laboriously tracking the alignment of all of these neurons throughout each phase, because this is not necessary to ensure the loss on fitted data remains small. Once this has been done, we will be able to estimate the alignment across several phases at once, using the alignment at time τ3 as the initial condition for neuron j⋆ and the alignment at time τ1 as the initial condition for neurons in the set N (k) 
+
+> F
+
+.
+
+Lemma 7. Suppose that Hypothesis 1 holds. Then for all κ ∈ (tk, t k+1 ), there exists ε∗ > 0 such that for all 
+
+ε ∈ (0 , ε ∗) there exists ε′∗ such that for all ε′ ∈ (0 , ε ′∗ ) then there exists α∗ > 0 such that for all α ∈ (0 , α ∗) the following are true: 1. tk+1 < τ 4 < t k+1 + 4ε
+
+> D(k)
+> j⋆
+
++ ε′
+
+> D(k)
+> j⋆
+
+.2. ∀i ∈ S(k+1)  
+
+> F
+
+, ∀t ∈ [τ3, τ 4], |heθ (xi) − yi| < α ε′/6.
+
+3. ∀j ∈ N (k+1)  
+
+> F
+
+, ∀t ∈ [τ3, τ 4],
+
+r
+
+n D(k) 
+
+> j
+
+− αε′/8 < ∥ ewj ∥ <
+
+r
+
+n D(k) 
+
+> j
+
++ αε′/8
+
+4. ∀j ∈ N (k+1)  
+
+> U
+
+, ew⊤ 
+
+> j
+
+(τ4)D(k+1)  
+
+> j
+
+> 1 − αε′/15 .
+
+5. ∀i ∈ N (k+1)  
+
+> U
+
+, ∀t ∈ [τ1, τ 4], ℓ◦ 
+
+> j
+
+(t) + log α(∥ ewj ∥) < ζ j (ε, ε ′), where ζj (ε, ε ′) :=  
+
+> ε
+> 2
+
++
+
+
+
+D(k) 
+
+> j
+
++
+
+q 2L(0) 
+
+> n
+
+   
+
+> 9ε
+> 2D(k)
+> j⋆
+
++ ε′
+
+> D(k)
+> j⋆
+
+
+
+.Proof. The reader should note it will be convenient to derive the bounds in Item 1 Lemma 7 as conse-quences of analyses for the other points, as it is not possible to derive the upper and lower bounds at the same time. 
+
+Proof of Item 2. For an upper bound on τ4, combining the upper bound on τ1 provided by Item 4 Lemma 4, the upper bound on τ2 provided by Item 1 Lemma 5, and the upper bound on τ3 provided by Item 1 Lemma 6, we conclude that 
+
+τ4 < τ 1 + 3ε
+
+D(k)
+
+> j⋆
+
++ ε′
+
+D(k)
+
+> j⋆
+
++ 3ε
+
+2 D(k)
+
+> j⋆
+
+(57) 
+
+< t k+1 + 4ε
+
+D(k)
+
+> j⋆
+
++ ε′
+
+D(k)
+
+> j⋆
+
+.
+
+As ε and ε′ are arbitrary, we may select these quantities sufficiently small that τ3 + 3ε 
+
+> 2D(k)
+> j⋆
+
+< τ 1 +2q n 
+
+> 2L(0)
+
+cU . In this case, we may apply Proposition 3 to bound the norms of the neurons in the set 
+
+N (k) 
+
+> U
+
+\ { j⋆}. Therefore, we have on [τ3, τ 4] the bound ∥ ewj ∥ < α cU for all j ∈ N (k) 
+
+> U
+
+\ { j⋆}. To determine the loss on data fitted by neuron j⋆, this observation combined with Item 5 and Item 6 Lemma 6 implies that for i ∈ S(k) 
+
+> j⋆
+
+, |heθ (xi) − yi| ≲ αε′/4. Furthermore, by definition of τ3, E(k)(τ3) < α ε′
+
+. From these facts we conclude that for α sufficiently small, 
+
+E(k+1) (τ3) < α ε′/5.
+
+49 We now use arguments similar to those employed in the proof of Item 1 Lemma 4 to control the residual on fitted data. The same reasoning used to obtain (12) leads us to conclude 
+
+12 log(1 /α )ddt E(k+1) 2
+
+≤ − 1
+
+n
+
+X
+
+> i∈S(k+1)
+> F
+
+X 
+
+> j∈N(k+1)
+> U
+
+Ai,j ∥ ewj ∥2D⊤ 
+
+> j
+
+ewj ew⊤ 
+
+> j
+
+xix⊤ 
+
+> i
+
+E(k+1) .
+
+We use Proposition 3 to obtain the estimate 
+
+ddt E(k+1) ≤ mn
+
+p2L(0) log(1 /α )α2cU
+
+< α ε′
+
+,
+
+where the final inequality is valid for α sufficiently small and differentiability almost everywhere follows from Rademacher’s theorem. Integration yields 
+
+E(k+1) < α ε′/5 + ( τ4 − τ3)αε′
+
+.
+
+Hence, 
+
+max 
+
+> i∈S(k+1)
+> F
+
+|heθt (xi) − yi| < n 
+
+
+
+αε′/5 + ε′αε′ 
+
+< α ε′/6,
+
+as claimed. □
+
+Proof. Proof of Item 3 We verify that the norms of neurons in the set N (k) 
+
+> F
+
+did not change significantly on the interval [τ3, τ 4], which will lead us to conclude in combination with Proposition 3 that the condition on neurons’ norms did not fail on this interval. Item 2 Lemma 6 and Item 6 provide upper and lower bounds on the norms of neurons in the set N (k+1)  
+
+> F
+
+at time τ3. In light of these initial conditions and the bound on the loss on data in the set S(k+1)  
+
+> F
+
+given in (56) , identical workings to those yielding (16) give 
+
+r
+
+n D(k) 
+
+> j
+
+− αε′/8 < ∥ ewj ∥ <
+
+r
+
+n D(k) 
+
+> j
+
++ αε′/8
+
+for all t ∈ [τ3, τ 4] for α sufficiently small. Since none of the other conditions in the definition of τ4 break, as a result of our analysis so far, we conclude that τ4 = τ3 + 3ε 
+
+> 2D(k)
+> j⋆
+
+. This leads to the easy lower bound 
+
+τ4 > τ 1 + 3ε
+
+2 D(k)
+
+> j⋆
+
+> t k+1 ,
+
+where the first inequality is by definition of τ2, τ 3, and τ4 and the second is from the lower bound on τ1
+
+provided by Item 4 Lemma 4 
+
+□
+
+50 Proof of Item 4. We verify that by time τ3 + 3ε 
+
+> 2D(k)
+> j⋆
+
+, the neurons in the set N (k+1)  
+
+> U
+
+have realigned. We first check that in the interval [τ1, τ 3], no such neurons deactivated on the data in the set S(k+1)  
+
+> j
+
+. We recall that ddt ew⊤ 
+
+> j
+
+xi = − 1 
+
+> n
+
+1  w⊤ 
+
+> j
+
+xi > 0 log(1 /α )( hθt (xi) − yi) ∥ ewj ∥. By (23) , on [τ1, τ 3] we had for every 
+
+i ∈ S(k+1)  
+
+> U
+
+that hθt (xi) − yi ≤ 0 for α sufficiently small. From the alignment at time τ1 given by Item 2 Lemma 4 we conclude that no deactivation occurred. Similarly to the proof of Lemma 3, we estimate 
+
+1log(1 /α )ddt ew⊤ 
+
+> j
+
+D(k+1)  
+
+> j
+
+= D(k+1) 
+
+> j
+> 2
+
+−
+
+ew⊤ 
+
+> j
+
+D(k+1) 
+
+> j
+
+2
+
+− 1
+
+n
+
+X
+
+> i∈S(k+1)
+> j
+
+heθ (xi)
+
+
+
+x⊤ 
+
+> i
+
+D(k+1)  
+
+> j
+
+− x⊤ 
+
+> i
+
+ewj ew⊤ 
+
+> j
+
+D(k+1) 
+
+> j
+
+
+
+− 1
+
+n
+
+X
+
+> i∈S(k+1)
+> F
+
+(heθ (xi) − yi)
+
+
+
+x⊤ 
+
+> i
+
+D(k+1)  
+
+> j
+
+− x⊤ 
+
+> i
+
+ewj ew⊤ 
+
+> j
+
+D(k+1) 
+
+> j
+
+
+
+> D(k+1) 
+
+> j
+> 2
+
+−
+
+ew⊤ 
+
+> j
+
+D(k+1) 
+
+> j
+
+2
+
+− 2m D(k+1)  
+
+> j
+
+α2cU − 2 D(k+1)  
+
+> j
+
+αε′/6
+
+> D(k+1) 
+
+> j
+> 2
+
+−
+
+ew⊤ 
+
+> j
+
+D(k+1) 
+
+> j
+
+2
+
+− αε′/7,
+
+where the final inequality is valid for α sufficiently small. Similar workings to those which led to (5) give 
+
+ew⊤
+
+> j
+
+τ3 + 3ε
+
+2 D(k)
+
+> j⋆
+
+ D(k+1) 
+
+> j
+
+>
+
+
+
+D(k+1)  
+
+> j
+
+− αε′/14  1 − exp α
+
+
+
+D(k+1)  
+
+> j
+
+− ε′/14 
+
+ 3ε
+
+2 D(k)
+
+> j⋆
+
+
+
+> D(k+1)  
+
+> j
+
+− αε′/15 ,
+
+where the final inequality is valid for ε′ selected sufficiently small dependent on ε (and α sufficiently small in turn). □
+
+Proof of Item 5. At this point, we are in a position to estimate the deviation of the norms of the neurons 
+
+j ∈ N (k+1)  
+
+> U
+
+from that predicted by Algorithm 1. A simple Grönwall argument gives that 
+
+∥ ewj (τ4)∥ ≤ ∥ ewj (τ1)∥α−(τ4−τ1) 
+
+> q2L(0)
+> n
+
+< exp α
+
+−ℓ◦ 
+
+> j
+
+(τ1) − ε
+
+2 −
+
+r 2L(0) 
+
+n
+
+ 9ε
+
+2 D(k)
+
+> j⋆
+
++ ε′
+
+D(k)
+
+> j⋆
+
+ , (58) where above we have combined (21) with the upper bound on τ4−τ1 from (57) . Note that |ℓ◦ 
+
+> j
+
+(t)−ℓ◦ 
+
+> j
+
+(t′)| ≤ 
+
+D(k) 
+
+> j
+
+(t − t′) for any t, t ′ ∈ (tk, ∞). Using (57) again, we get 51 | − ℓ◦ 
+
+> j
+
+(τ1) + ℓ◦ 
+
+> j
+
+(τ4)| < D(k) 
+
+> j
+
+|τ1 − τ4|
+
+< D(k)
+
+> j
+
+ 9ε
+
+2 D(k)
+
+> j⋆
+
++ ε′
+
+D(k)
+
+> j⋆
+
+ . (59) Putting (59) back into (58), we conclude that for any j ∈ N (k+1)  
+
+> U
+
+and for any t ∈ [τ1, τ 4],
+
+∥ ewj (τ4)∥ < exp α
+
+−ℓ◦ 
+
+> j
+
+(τ4) − ε
+
+2 − D(k) 
+
+> j
+
++
+
+r 2L(0) 
+
+n
+
+!  9ε
+
+2 D(k)
+
+> j⋆
+
++ ε′
+
+D(k)
+
+> j⋆
+
+ . (60) For the converse inequality, we argue in an identical fashion to obtain 
+
+∥ ewj (τ4)∥ > exp α
+
+−ℓ◦ 
+
+> j
+
+(τ4) + ε
+
+2 + D(k) 
+
+> j
+
++
+
+r 2L(0) 
+
+n
+
+!  9ε
+
+2 D(k)
+
+> j⋆
+
++ ε′
+
+D(k)
+
+> j⋆
+
+ . (61) 
+
+□
+
+This completes the proof of Lemma 7. ■
+
+We can now provide a result from which Lemma 2 follows as a corollary. We will verify that the alignment, norm, and residual conditions propagate forwards after the jump having applied Lemma 7. We will also verify that the norms of neurons in the set N (k+1)  
+
+> U
+
+consequently grow at a rate close to that predicted by Algorithm 1 after the jump. Define for any κ′′ ∈ (tk+1 , t k+2 ) the time 
+
+τ5 := inf 
+
+n
+
+t ≥τ4 ∃ j ∈ [m] s.t. ew⊤ 
+
+> j
+
+D(k+1)  
+
+> j
+
+≤ 1 − αε′/32 
+
+or ∃ i ∈ S(k+1)  
+
+> F
+
+s.t. |heθ (xi) − yi| ≥ αε′/8 (62) 
+
+or ∃ j ∈ N (k+1)  
+
+> F
+
+s.t. ∥ ewj ∥ > 2 max  
+
+> j∈[m]
+
+D(k+1)  
+
+> j
+
+(63) 
+
+or ∃ j ∈ N (k+1)  
+
+> U
+
+s.t. ∥ ewj ∥ ≥ αε′ o ^ κ′′ (64) This phase is very similar to that described in Appendix D.2, in that it is also a period of slow growth during which the network parameters do not change significantly. Indeed, the structure of the proof is almost identical to that of Lemma 4. 
+
+Lemma 8. For all κ and κ′′ such that κ ∈ (tk, t k+1 ) and κ′′ ∈ (tk+1 , t k+2 ), there exists ε∗ such that for all 
+
+ε ∈ (0 , ε ∗) there exists ε′∗ such that for all ε′ ∈ (0 , ε ′∗ ) there exists α∗ such that for all α ∈ (0 , α ∗) the following are true: 1. τ5 = κ′′ .2. ∀i ∈ S(k+1)  
+
+> F
+
+, ∀t ∈ [τ4, τ 5], |heθ (xi) − yi| < α ε′/8.
+
+52 3. ∀j ∈ [m], ∀t ∈ [τ4, τ 5], ew⊤ 
+
+> j
+
+D(k+1)  
+
+> j
+
+> 1 − αε′/32 
+
+4. ∀j ∈ N (k+1)  
+
+> F
+
+, ∀t ∈ [τ4, τ 5],
+
+r
+
+n D(k) 
+
+> j
+
+− αε′/10 < ∥ ewj ∥ <
+
+r
+
+n D(k) 
+
+> j
+
++ αε′/10 .5. ∀j ∈ N (k+1)  
+
+> U
+
+, ∀t ∈ [τ4, τ 5], ℓ◦ 
+
+> j
+
+(t) + log α(∥ ewj ∥) < ζ j (ε, ε ′) + ε′, where ζj (ε, ε ′) is as defined in Lemma 7. Proof. Given any κ′′ ∈ (tk+1 , t k+2 ), Item 1 Lemma 7 guarantees that we may select ε and ε′ sufficiently small that τ4 < κ ′′ . Assume that this has been done and that α has been selected sufficiently small that all of the conditions of Lemma 7 hold. It remains to check that all of these conditions remain stable for 
+
+t ∈ [τ4, κ ′′ ].
+
+Proof of Item 2. In a similar manner to workings for pervious phases, we have only to estimate 
+
+12 log(1 /α )ddt E(k+1) 2
+
+≤ − 1
+
+n
+
+X
+
+> i∈S(k+1)
+> F
+
+X 
+
+> j∈N(k+1)
+> U
+
+Ai,j ∥ ewj ∥2D⊤ 
+
+> j
+
+ewj ew⊤ 
+
+> j
+
+xix⊤ 
+
+> i
+
+E(k+1) .
+
+From the uniform bound on j ∈ N (k+1)  
+
+> U
+
+given by (64) , we have for i ∈ S(k+1)  
+
+> U
+
+that on [τ4, κ ′′ ], |heθ (xi)| <mα 2ε′
+
+. Hence, 
+
+ddt E(k+1) ≤ mn
+
+p2L(0) log(1 /α )α2ε′
+
+.
+
+Integration implies that 
+
+E(k+1) < α ε′/6 + mn
+
+p2L(0) log(1 /α )α2ε′
+
+(κ′′ − τ4).
+
+Hence, 
+
+max 
+
+> i∈S(k+1)
+> U
+
+|heθ (xi) − yi| < n 
+
+
+
+αε′/6 + mn
+
+p2L(0) log(1 /α )α2ε′
+
+(κ′′ − τ4)
+
+
+
+< α ε′/8
+
+for α sufficiently small, as required. □
+
+Proof of Item 3. We again split this argument into the cases j = j⋆, j ∈ N (k+1)  
+
+> F
+
+\ { j⋆}, and j ∈ N (k+1)  
+
+> U
+
+.For the case j ∈ N (k+1)  
+
+> F
+
+\ { j⋆}, note that Item 2 Lemma 4 provides an initial condition for the alignment of these neurons in the directions D(k+1)  
+
+> j
+
+(since for such neurons, D(k+1)  
+
+> j
+
+= D(k) 
+
+> j
+
+by construction). We can reuse arguments similar to those which led to (13) to obtain 
+
+1log(1 /α )ddt ew⊤ 
+
+> j
+
+D(k) 
+
+> j
+
+> −
+
+2 D(k+1) 
+
+> j
+
+√n αε′/8,
+
+given that ∥E(k)∥ < α ε′/8 for t ∈ [τ1, τ 5]. Integrating over this time interval, we get 53 ew⊤ 
+
+> j
+
+D(k) 
+
+> j
+
+> ew⊤ 
+
+> j
+
+(τ1)D(k) 
+
+> j
+
+−
+
+2 D(k+1) 
+
+> j
+
+√n log(1 /α )αε′/8(τ5 − τ1)
+
+> D(k+1) 
+
+> j
+
+
+
+1 − αε/ 2
+
+−
+
+2 D(k+1) 
+
+> j
+
+√n log(1 /α )αε′/8(τ5 − τ1)
+
+> D(k)
+
+> j
+
+
+
+1 − αε′/9
+
+,
+
+where the final inequality is valid for α sufficiently small. For the case j = j⋆, note that Item 5 Lemma 6 provides an initial condition for the alignment of neuron j⋆ in the direction D(k) 
+
+> j⋆
+
+(where again we have 
+
+D(k+1)  
+
+> j⋆
+
+= D(k) 
+
+> j⋆
+
+by construction). Identical reasoning to the case j ∈ N (k+1)  
+
+> F
+
+\ { j⋆}, except integrating from τ3 to τ5 with initial conditions ew⊤ 
+
+> j
+
+(τ3)D(k+1)  
+
+> j
+
+> D(k+1) 
+
+> j
+
+
+
+1 − αε′ 
+
+, gives the desired lower bound for α sufficiently small. For the case j ∈ N (k+1)  
+
+> U
+
+, we have 
+
+1log(1 /α )ddt ew⊤ 
+
+> j
+
+D(k+1)  
+
+> j
+
+= D(k+1) 
+
+> j
+> 2
+
+−
+
+ew⊤ 
+
+> j
+
+D(k+1) 
+
+> j
+
+2
+
+− 1
+
+n
+
+X
+
+> i∈S(k+1)
+> j
+
+heθ (xi)
+
+
+
+x⊤ 
+
+> i
+
+D(k+1)  
+
+> j
+
+− x⊤ 
+
+> i
+
+ewj ew⊤ 
+
+> j
+
+D(k+1) 
+
+> j
+
+
+
+− 1
+
+n
+
+X
+
+> i∈S(k+1)
+> F
+
+Ai,j (heθ (xi) − yi)
+
+
+
+x⊤ 
+
+> i
+
+D(k+1)  
+
+> j
+
+− x⊤ 
+
+> i
+
+ewj ew⊤ 
+
+> j
+
+D(k+1) 
+
+> j
+
+
+
+> D(k+1) 
+
+> j
+> 2
+
+−
+
+ew⊤ 
+
+> j
+
+D(k+1) 
+
+> j
+
+2
+
+− 2 D(k+1)  
+
+> j
+
+mα 129 ε′/64 − 2 D(k+1)  
+
+> j
+
+α9ε′/64 
+
+> D(k+1) 
+
+> j
+> 2
+
+−
+
+ew⊤ 
+
+> j
+
+D(k+1) 
+
+> j
+
+2
+
+− αε′/8.
+
+By similar arguments to previous phases, we have convergence of alignment monotonically for t ∈
+
+[τ4, τ 5] to a value lower bounded by D(k+1) 
+
+> j
+
+
+
+1 − αε′/16 
+
+
+
+. Combining this with the initial conditions from Item 4 Lemma 7, we conclude that 
+
+ew⊤ 
+
+> j
+
+D(k+1)  
+
+> j
+
+> D(k+1) 
+
+> j
+
+
+
+1 − αε′/32 
+
+for all t ∈ [τ4, τ 5] provided α is selected sufficiently small. □
+
+Proof. Proof of Item 4 We verify that the norms of neurons in the set N (k) 
+
+> F
+
+did not change significantly on the interval [τ4, τ 5], which will lead us to conclude in combination with (64) that (63) did not fail on this interval. Item 3 Lemma 7 provides upper and lower bounds on the norms of neurons in the set 
+
+N (k+1)  
+
+> F
+
+at time τ4. In light of these initial conditions and the bound on the loss on data in the set S(k+1) 
+
+> F
+
+given in (62), identical workings to those yielding (16) give 
+
+r
+
+n D(k) 
+
+> j
+
+− αε′/10 < ∥ ewj ∥ <
+
+r
+
+n D(k) 
+
+> j
+
++ αε′/10 
+
+54 for all t ∈ [τ4, τ 5] for α sufficiently small. 
+
+□
+
+Proof of Items 1 and 5. To estimate the growth of any neuron j ∈ N (k+1)  
+
+> U
+
+, we follow similar arguments to those which yielded (17) in the proof of Lemma 4 to obtain 
+
+1log(1 /α )ddt ∥ ewj ∥ >
+
+
+
+D(k+1)  
+
+> j
+
+− αε′/32 − mα 2ε′ 
+
+∥ ewj ∥ − √2α9ε′/64 ∥ ewj ∥
+
+>
+
+
+
+D(k+1)  
+
+> j
+
+− αε′/33 
+
+∥ ewj ∥.
+
+Grönwall’s inequality yields for α sufficiently small the inequalities 
+
+∥ ewj (t)∥ > ∥ ewj (τ4)∥α− D(k+1)  
+
+> j(t−τ4)+ ε′
+
+> α −ℓ◦  
+
+> j(t)+ ζj(ε,ε ′)+ ε′
+
+,
+
+where in the second inequality we inserted (61) . Analogous arguments yield the claimed upper bound 
+
+∥ ewj (t)∥ < α −ℓ◦  
+
+> j(t)−ζj(ε,ε ′)−ε′
+
+,
+
+where we have inserted (60) . By construction, for every j ∈ N (k+1)  
+
+> U
+
+, −ℓ◦ 
+
+> j
+
+(κ′′ ) > 0. Therefore, we may select ε and ε′ sufficiently small that for all such j, ∥ ewj (κ′′ )∥ < α ε′
+
+. For this choice of ε and ε′, we conclude that necessarily τ5 = κ′′ , since none of the other conditions in the definition of τ5 break. □
+
+This completes the proof of Lemma 8. ■
+
+## D.6 Final Saddle 
+
+We provide a lemma which is a version of Lemma 1 for t > t p. Specifically, we prove uniform convergence under the assumption the conditions of Hypothesis 1 hold at some time κ > t p.
+
+Lemma 9. Suppose that for some κ ∈ (tp, ∞), there exists δ > 0 such that for all ξ > 0, there exists α∗ > 0
+
+such that for all α ∈ (0 , α ∗):1. ∀j ∈ N (p) 
+
+> U
+
+, ℓ◦ 
+
+> j
+
+(κ) + log α(∥ ewj (κ)∥) < ξ. 
+
+2. ∀j ∈ N (p) 
+
+> F
+
+, n D(p) 
+
+> j
+
+− ∥ ewj (κ)∥2 < α δ .
+
+3. ∀i ∈ [n], |heθ(κ)(xi) − yi| < α δ .
+
+4. ∀j ∈ [m], ew⊤ 
+
+> j
+
+(κ)D(p) 
+
+> j
+
+> 1 − αδ .
+
+Then given any κ′ ∈ [κ, ∞), eθα converges uniformly to θ◦ on [κ, κ ′].Proof. We note that Item 3 Lemma 9 and the monotonicity of the gradient flow imply that for all j ∈ [m]
+
+and for all t ∈ [κ, ∞), ∥D j ∥ < αδ 
+
+> √n
+
+. To estimate the change in the network parameters from κ to κ′, we have that for each j ∈ [m],55 1log(1 /α )ddt ∥ ewj ∥ < αδ
+
+√n ∥ ewj ∥.
+
+Grönwall’s inequality gives 
+
+∥ ewj ∥ < ∥ ewj (κ)∥ exp 
+
+
+
+log(1 /α ) αδ
+
+√n (t − κ)
+
+
+
+< ∥ ewj (κ)∥ exp 
+
+
+
+log(1 /α ) αδ
+
+√n (κ′ − κ)
+
+
+
+< ∥ ewj (κ)∥ exp 
+
+
+
+αδ/ 2
+
+< ∥ ewj (κ)∥
+
+
+
+1 + αδ/ 2
+
+,
+
+where the last two inequalities are valid for α sufficiently small. For j ∈ N (p) 
+
+> U
+
+, we obtain that for α
+
+sufficiently small, ∥ ewj ∥ < 2 exp α
+
+ 12 min j∈N (p)
+
+> U
+
+−ℓ◦ 
+
+> j
+
+(κ)
+
+
+
+, by selecting ξ < 12 min j∈N (p)
+
+> U
+
+−ℓ◦ 
+
+> j
+
+(κ) in Item 1 Lemma 9. Noting that for ∈ N (p) 
+
+> U
+
+, −ℓ◦ 
+
+> j
+
+(κ) > 0, we conclude that such neurons converge uniformly to 
+
+(0)j∈N (p)
+
+> U
+
+. Analogous arguments yield the lower bound 
+
+∥ ewj ∥ > ∥ ewj (κ)∥
+
+
+
+1 − αδ/ 2
+
+.
+
+For j ∈ N (p) 
+
+> F
+
+and α sufficiently small, we use Item 2 Lemma 9 to obtain 
+
+r
+
+n D(k) 
+
+> j
+
+− αδ/ 3 < ∥ ewj ∥ <
+
+r
+
+n D(k) 
+
+> j
+
++ αδ/ 3. (65) For alignment of neurons j ∈ N (p) 
+
+> F
+
+, we obtain 
+
+1log(1 /α )ddt ew⊤ 
+
+> j
+
+D(k) 
+
+> j
+
+> −
+
+2 D(k)
+
+> j
+
+√n αδ .
+
+Simple integration yields 
+
+ew⊤ 
+
+> j
+
+D(p) 
+
+> j
+
+> ew⊤ 
+
+> j
+
+(κ)D(p) 
+
+> j
+
+−
+
+2 D(p)
+
+> j
+
+√n αδ (t − κ)
+
+> D(p)
+
+> j
+
+ 1 − αδ  −
+
+2 D(p)
+
+> j
+
+√n αδ (κ′ − κ)
+
+> D(p)
+
+> j
+
+
+
+1 − αδ/ 2
+
+, (66) where the final inequality is valid for α sufficiently small. Combining (65) and (66) , we get for j ∈ N (k)
+
+> F
+
+56 eaj ewj − nD (p)
+
+> j
+> 2
+
+= ∥ ewj ∥4 + n2 D(p)
+
+> j
+> 2
+
+− 2neaj ew⊤ 
+
+> j
+
+D(p)
+
+> j
+
+<
+
+r
+
+n D(p) 
+
+> j
+
++ αδ/ 3
+
+!4
+
++ n2 D(p)
+
+> j
+> 2
+
+− 2n D(p)
+
+> j
+
+r
+
+n D(p) 
+
+> j
+
+− αδ/ 3
+
+!2 
+
+1 − αδ/ 2
+
+< α δ/ 4, (67) for α sufficiently small. This yields the required uniform convergence on [κ, κ ′] for neurons in the set 
+
+N (p) 
+
+> F
+
+. ■
+
+## D.7 Proof of Theorem 2 
+
+In this section, we prove Lemma 1 and Lemma 2 using the multiphase analysis of the previous subsections. Once these two lemmas are proven, it will be possible to provide a short proof of Theorem 2. The proof of Lemma 1 is a fairly direct application of Lemma 4 (and in the case of the final saddle, the proof is provided in Lemma 9). 
+
+Proof of Lemma 1. From item 4 Lemma 4, we conclude there exists ε sufficiently small such that there exists α sufficiently small that τ1 > κ ′. For such ε and α, we have by definition of τ1 that for all j ∈ N (k)
+
+> U
+
+and for all t ∈ [κ, κ ′], ∥ ewj ∥ < α ε. As a consequence, neurons in the set N (k) 
+
+> U
+
+converge uniformly to 
+
+(0)j∈N (k)
+
+> U
+
+. For the neurons in the set N (k) 
+
+> F
+
+, we follow similar workings to those leading to (67) . The combination of Item 2 Lemma 4 and Item 3 Lemma 4 imply 
+
+eaj ewj − nD (k)
+
+> j
+> 2
+
+= ewj 
+
+> 4
+
++ n2 D(k)
+
+> j
+> 2
+
+− 2neaj ew⊤ 
+
+> j
+
+D(k)
+
+> j
+
+<
+
+r
+
+n D(k) 
+
+> j
+
++ αε/ 4
+
+!4
+
++ n2 D(k)
+
+> j
+> 2
+
+− 2n D(k)
+
+> j
+
+r
+
+n D(k) 
+
+> j
+
+− αε/ 4
+
+!2 
+
+1 − αε/ 2
+
+< α ε/ 5,
+
+for α sufficiently small. Therefore, (eaj ewj )j∈N (k)
+
+> F
+
+converges uniformly to 
+
+
+
+nD (k)
+
+> j
+
+ 
+
+> j∈N(k)
+> F
+
+on [κ, κ ′]. ■
+
+Next, we prove Lemma 2, which recovers Hypothesis 1 at saddle k + 1 and allows us to construct the argument for uniform convergence of the whole process. To prove this lemma, we require that given any any κ′′ ∈ (tk+1 , t k+2 ) (where we will take the convention that tp+1 = ∞), there exists δ′′ > 0 such that for all ξ′′ > 0, there exists α∗ > 0 such that for all α ∈ (0 , α ∗):1. ∀j ∈ N (k+1)  
+
+> U
+
+, ℓ◦ 
+
+> j
+
+(κ′′ ) + log α(∥ ewj (κ′′ )∥) < ξ ′′ .
+
+2. ∀j ∈ N (k+1)  
+
+> F
+
+, n D(k+1)  
+
+> j
+
+− ∥ ewj (κ′′ )∥2 < α δ′′ 
+
+3. ∀i ∈ S(k+1)  
+
+> F
+
+, |heθ(κ′′ )(xi) − yi| < α δ′′ 
+
+.
+
+57 4. ∀j ∈ [m], ew⊤ 
+
+> j
+
+(κ′′ )D(k+1)  
+
+> j
+
+> 1 − αδ′′ 
+
+.
+
+The proof consists of two applications of Lemma 8: one choice of ε, ε ′ in order to get the existence of δ′′ 
+
+such that the alignment, norm, and loss conditions all hold at time κ′′ ; the other choice of ε, ε ′ in order to get the arbitrary precision of the norms of the unfitted neurons. That the same choice does not work to get all of the points at once is a result of the fact that our analysis ends up linking the alignment, norm, and loss conditions with the precision of the unfitted neurons’ norms, so it is impossible to prove Lemma 2 with a single choice of ε, ε ′ (otherwise one would have to have δ′′ depending on ξ′′ ). 
+
+Proof of Lemma 2. Note that Lemma 8 immediately guarantees that for ε0 sufficiently small, for ε′
+
+> 0
+
+sufficiently small, and for α sufficiently small Item 4, Item 2, and Item 3 immediately above all hold with 
+
+δ′′ = ε′
+
+> 0
+
+/32 . For Item 4 immediately above, we note that Item 5 Lemma 8 states that for ε sufficiently small one can choose ε′ sufficiently small that for α sufficiently small, α−ℓ◦  
+
+> j(κ′′ )+ ζj(ε,ε ′)+ ε′
+
+< ∥ ewj (κ′′ )∥ <α−ℓ◦  
+
+> j(κ′′ )−ζj(ε,ε ′)−ε′
+
+. Simply choosing ε1 and ε′ 
+
+> 1
+
+such that |ζj (ε1, ε ′
+
+> 1
+
+) + ε′| < ξ ′′ for all j ∈ N (k+1)  
+
+> U
+
+gives the claim. ■
+
+Finally, we are able to provide a proof of Theorem 2. This proof consists of iteratively concluding uniform convergence on arbitrary closed intervals contained in (tk, t k+1 ) using Hypothesis 1, and then using Lemma 2 to apply the same reasoning to the next interval. 
+
+Proof of Theorem 2. Let S ⊂ R \ { t0, t 1, . . . , t p} be a compact set. By compactness, there exists a cover of 
+
+S by disjoint closed intervals ([ κk, κ ′
+
+> k
+
+]) pk=0 whose endpoints satisfy κk, κ ′ 
+
+> k
+
+∈ (tk, t k+1 ). We note from Lemma 3 that Hypothesis 1 holds for any κ0 ∈
+
+
+
+0, 14
+
+q n
+
+> 2L(0)
+
+
+
+. From Lemma 1, we obtain that for such 
+
+κ0 and for any κ′ 
+
+> 0
+
+∈ (κ0, t 1), eθ converges uniformly to θ◦ = 0. Furthermore, we have from Lemma 2 that for any κ1 ∈ (t1, t 2), Hypothesis 1 also holds. Iterating this argument, we can use Lemma 1 to conclude that there exists α∗ 
+
+> k
+
+> 0 such that eθ converges uniformly to θ◦ on [κk, κ ′
+
+> k
+
+] with rate αδk for some δk > 0,followed by Lemma 2 to conclude that Hypothesis 1 holds at each κk+1 ∈ (tk+1 , t k+2 ). Since the number of saddles is finite, we may select α ∈ (0 , min k∈[p] α∗
+
+> k
+
+) so that each application of Lemma 1 and Lemma 2 holds. This gives the claimed uniform convergence, the rate of which is αδ∗
+
+where δ∗ = min k∈[p] δ∗ 
+
+> k
+
+. ■
+
+# E Proof of Theorem 3 
+
+We consider in this section the setting where we have only positive labels and condition all the probabilities on the fact that ai > 0 for all i ∈ [m]. The argument generalizes directly to the case of mixed signs, by treating positive and negative labels separately. Recall that Theorem 3 provides a bound on the squared ℓ2-norm of θpred , which satisfies 
+
+12 ∥θpred ∥2 = X
+
+> j∈[m]
+
+n∥D(p) 
+
+> j
+
+∥2
+
+= X
+
+> j∈[m]
+
+vuutX
+
+> i∈S(p)
+> j
+
+y2
+
+> i
+
+= X
+
+> k∈[p]
+
+vuutX 
+
+> i∈S(k)
+> U∩Sj(k)
+> ∗
+
+y2 
+
+> i
+
+.
+
+Algorithm 1 relies on a specific ordering of the neurons, given by (j(1)  
+
+> ⋆
+
+, . . . , j (p) 
+
+> ⋆
+
+), that depends on both the data and initialization scheme. Instead, our proof here considers a fixed ordering π = ( j1, . . . , j m)
+
+58 that is independent of both data and initialization, and aims at bounding 
+
+X
+
+> k∈[m]
+
+s X 
+
+> i∈SkU∩Sjk
+
+y2 
+
+> i
+
+, (68) where we define similarly the sets SkU in a recursive way, as 
+
+S0 
+
+> U
+
+= [ n], Sk+1  
+
+> U
+
+= SkU \ Sjk
+
+Sj = {i ∈ [n] | Ai,j = 1 },
+
+i.e., SkU represent the data points that remain to be fitted after increment k, and Sj refers to the data points with which neuron j is positively correlated. Note that when the ordering π coincides with the one induced by j⋆ on its first p elements, eq. (68) is exactly 12 ∥θpred ∥2. We thus aim at bounding this quantity with high probability over all possible orderings by a union bound argument, which then directly translates to a bound of 12 ∥θpred ∥2.Note that when initializing the neurons according to Assumption 3, and conditioning on the fact that 2
+
+ai > 0, (Ai,j )j∈[m], i ∈[n] are independent Bernoulli   12
+
+ variables. For each i ∈ [n], we define 
+
+Y ki = 1  i ∈ SkU
+
+ ,
+
+which is the random variable that is equal to 1 if the data point i remains to be fitted after increment k.Obviously, we have 
+
+SkU =
+
+> n
+
+X
+
+> i=1
+
+Y ki .
+
+For a fixed δ ∈ (0 , 12 ), we define for each k the events 
+
+Gk =
+
+( nX
+
+> i=1
+
+Y ki − 12
+
+> n
+
+X
+
+> i=1
+
+Y k−1 
+
+> i
+
+≤ δ
+
+> n
+
+X
+
+> i=1
+
+Y k−1
+
+> i
+
+)
+
+.
+
+The interpretation of the event Gk—which has high probability, as shown below—is that at iteration k
+
+of our incremental algorithm (for the fixed ordering π), the cardinality of the set of unfitted data has almost halved from the previous iteration. Finally, denote for some ρ ∈ (0 , 12 ), to be fixed later, 
+
+k⋆ = (1 − ρ) log( n)log(2) .
+
+For the remainder of the proof, we assume m ≥ k⋆ to simplify notation and exposition. The upper bounds extend straightforwardly to the case m < k ⋆ by truncating the estimator considered here. 
+
+Proposition 4. Given any 0 < ρ < 12 and a fixed deterministic ordering π = ( j1, . . . , j m), for any δ ∈
+
+0, ρ log(2) 8(1 −ρ)
+
+
+
+and n,
+
+P (∀k ≤ k⋆, G k) ≥ 1 − 3 log( n) exp 
+
+
+
+− 43 nρ/ 2δ2
+
+
+
+.
+
+Note that as δ approaches zero here, the probability bound degrades to 0, but the events Gk get more restrictive, as δ controls the relative distance by which the increments Pni=1 Y ki can deviate from their conditional expectation.     
+
+> 2In the remaining of the section, we omit the conditioning on ai>0for ease of exposition.
+
+59 Proof. By conditioning 
+
+P (∀k ≤ k⋆, G k) = 
+
+> ⌊k⋆⌋
+
+Y
+
+> k=1
+
+P (Gk | ∀ l ≤ k − 1, G l) ,
+
+Our goal is thus for any k ≤ k⋆, to lower bound P (Gk | ∀ l ≤ k − 1, G l).Note that Y ki = Y k−1 
+
+> i
+
+· Ai,j k by definition. Since the variables (Ai,j )i,j are independent, Ai,j k is independent from (Ai,j l )l≤k−1 for a fixed ordering 3 π. Consequently, 
+
+> n
+
+X
+
+> i=1
+
+Y ki (Ai,j l ) i∈[n]
+
+> l≤k−1
+
+∼ Bin 
+
+> n
+
+X
+
+> i=1
+
+Y k−1 
+
+> i
+
+, 12
+
+!
+
+.
+
+Using the multiplicative Chernoff bound [see, e.g., Mitzenmacher and Upfal, 2017, Corollary 4.6], we have for any δ ∈ (0 , 12 ):
+
+P
+
+> n
+
+X
+
+> i=1
+
+Y ki − 12
+
+> n
+
+X
+
+> i=1
+
+Y k−1 
+
+> i
+
+≤ δ
+
+> n
+
+X
+
+> i=1
+
+Y k−1 
+
+> i
+
+(Ai,j l ) i∈[n]
+
+> l≤k−1
+
+!
+
+≥ 1 − 2 exp − 43 · 12
+
+> n
+
+X
+
+> i=1
+
+Y k−1 
+
+> i
+
+δ2
+
+!
+
+Conditioned on the event {∀ l ≤ k − 1, G l}, we have that 
+
+> n
+
+X
+
+> i=1
+
+Y k−1 
+
+> i
+
+≥ n
+
+ 12 − δ
+
+k−1
+
+,
+
+so that the previous inequality becomes, when conditioning on this event, 
+
+P ( Gk | ∀ l ≤ k − 1, G l) ≥ 1 − 2 exp − 43 · n
+
+2
+
+ 12 − δ
+
+k−1
+
+δ2
+
+!
+
+≥ 1 − 2 exp − 43 n
+
+ 12 − δ
+
+k⋆
+
+δ2
+
+!
+
+.
+
+Using that for any 0 < x < 12 , (1 − 2x)k⋆
+
+≥ 1 − 2k⋆x, we get 
+
+P (∀k ≤ k⋆, G k) = 
+
+> ⌊k⋆⌋
+
+Y
+
+> k=1
+
+P (Gk | ∀ l ≤ k − 1, G l) ,
+
+≥ 1 − 2k⋆ exp − 43 n
+
+ 12 − δ
+
+k⋆
+
+δ2
+
+!
+
+. (69) Now inserting k⋆ = (1 −ρ) log( n)log(2) , we obtain that 
+
+n
+
+ 12 − δ
+
+k⋆
+
+= n2−k⋆
+
+(1 − 2δ)k⋆
+
+= n1+ ρ−1+ (1 −ρ)log(2) log(1 −2δ)
+
+> n ρ/ 2, (70) 
+
+> 3
+
+The choice of a fixed ordering is crucial here. If we were to consider the ordering j⋆ induced by Algorithm 1, this independence argument would not hold anymore. 
+
+60 where we here used the upper bound on δ that gives (1 −ρ)log(2) log(1 − 2δ) ≥ − ρ 
+
+> 2
+
+. It will be useful for later to note that similar logic allows us to obtain the following inequality, given {∀ k ≤ k⋆, G k}:
+
+n
+
+ 12 − δ
+
+k
+
+≤
+
+> n
+
+X
+
+> i=1
+
+Y ki ≤ n
+
+ 12 + δ
+
+k
+
+for any k ≤ k⋆ (71) and nρ/ 2 <
+
+> n
+
+X
+
+> i=1
+
+Y ⌊k⋆⌋ 
+
+> i
+
+< 2 · n2ρ. (72) Putting eq. (70) back into eq. (69), we obtain 
+
+P (∀k ≤ k⋆, G k) ≥ 1 − 2 (1 − ρ) log( n)log(2) exp 
+
+
+
+− 43 nρ/ 2δ2
+
+
+
+> 1 − 3 log( n) exp 
+
+
+
+− 43 nρ/ 2δ2
+
+
+
+. ■
+
+Proposition 4 demonstrates that with high probability, the cardinality of the set SkU decreases by roughly one half for each of the first k⋆ iterations. Note that we here worked with a fixed, arbitrary ordering π.However, Algorithm 1 selects a specific ordering π that depends on the data. Corollary 1 provides a union bound over all the possible orderings, guaranteeing that the event {∀ k ≤ k⋆, G k} holds with high probability for the ordering π returned by Algorithm 1. 
+
+Corollary 1. Given any 0 < ρ < 12 , δ ∈
+
+
+
+0, ρ log(2) 8(1 −ρ)
+
+
+
+and n ∈ N,
+
+P (∃ π, k ≤ k⋆, ¬Gk) ≤ 3 log( n) exp 
+
+ log( n)log(2) log ( m) − 43 nρ/ 2δ2
+
+
+
+.
+
+Proof. Proposition 4 is established for an arbitrary fixed permutation π. We then apply a union bound over all injective mappings from [k⋆] to [m], whose total number is at most mk⋆
+
+. Thus we directly obtain from Proposition 4 the bound 
+
+P (∃ π, k ≤ k⋆, ¬Gk) ≤ mk⋆
+
+· 3 log( n) exp 
+
+
+
+− 43 nρ/ 2δ2
+
+
+
+= 3 log( n) exp 
+
+
+
+k⋆ log( m) − 43 nρ/ 2δ2
+
+
+
+= 3 log( n) exp 
+
+ (1 − ρ) log( n)log(2) log ( m) − 43 nρ/ 2δ2
+
+
+
+. ■
+
+In the following, we work under the event {∀ k ≤ k⋆, G k} for the considered permutation π and bound the squared ℓ2-norm of the estimator returned by Algorithm 1 by splitting it into two terms: that induced by the first k⋆ iterations of the algorithm, and the remaining ones. 
+
+Proposition 5. If for all i ∈ [n], |yi| ≤ ymax , then 
+
+∀k ≤ k⋆, G k =⇒ X
+
+> k≤k⋆
+
+s X 
+
+> i∈SkU∩Sjk
+
+y2 
+
+> i
+
+≤
+
+q 12 + δ
+
+1 −
+
+q 12 + δymax 
+
+√n. 
+
+61 Proof. The bound |yi| ≤ M directly implies that 
+
+X
+
+> k≤k⋆
+
+s X 
+
+> i∈SkU∩Sjk
+
+y2 
+
+> i
+
+≤ ymax 
+
+X
+
+> k≤k⋆
+
+q
+
+SkU ∩ Sjk .
+
+Note that {∀ k ≤ k⋆, G k} implies that for any k ≤ k⋆, |SkU ∩ Sjk | ≤ n   12 + δk thanks to eq. (71). So that if it holds, 
+
+X
+
+> k≤k⋆
+
+s X 
+
+> i∈SkU∩Sjk
+
+y2 
+
+> i
+
+≤ ymax 
+
+√n
+
+> ⌊k⋆⌋
+
+X
+
+> k=1
+
+ 12 + δ
+
+k/ 2
+
+≤ ymax 
+
+√n ·
+
+q 12 + δ
+
+1 −
+
+q 12 + δ. ■
+
+Finally, we bound the squared ℓ2-norm of the remaining increments. 
+
+Proposition 6. If for all i ∈ [n], |yi| ≤ ymax , then 
+
+∀k ≤ k⋆, G k =⇒ X
+
+> k>k ⋆
+
+s X 
+
+> k∈SkU∩Sjk
+
+y2 
+
+> i
+
+< 2ymax n2ρ
+
+Proof. By subadditivity of the square root, we simply have 
+
+X
+
+> k>k ⋆
+
+s X 
+
+> i∈SkU∩Sjk
+
+y2 
+
+> i
+
+≤ X
+
+> i∈S⌊k⋆⌋
+> U
+
+|yi|≤ ymax |S⌊k⋆⌋ 
+
+> U
+
+|.
+
+Now, thanks to eq. (72), we recall that {∀ k ≤ k⋆, G k} implies that |S⌊k⋆⌋ 
+
+> U
+
+| < 2 · n2ρ, which concludes the proof. ■
+
+Combining Propositions 5 and 6 and Corollary 1, we conclude taking ρ = 1 /4 and δ = 140 that for any n,
+
+X
+
+> j∈[m]
+
+n∥D(p) 
+
+> j
+
+∥ ≤ 5ymax 
+
+√n
+
+with probability at least 1 − 3 log( n) exp 
+
+ log( n)log(2) log ( m) − 43·40 2 n1/8
+
+
+
+.This concludes the proof when considering only positive labels and neurons. Theorem 3 directly extends to the general case, by separating positive and negative cases. 
+
+# F Auxiliary results 
+
+We provide in this section auxiliary results that are useful for our analysis, as well as Proposition 2. 62 F.1 Proof of Proposition 2 
+
+Proof of Item (i). The proof is a simple union bound. Indeed, observe that 1) (Ai,j )j∈[m] are independent i.i.d. Bernoulli   14
+
+ variables. Then, the probability for a row i to be zero is exactly   34
+
+m, so that the probability that any row is zero is smaller than n   34
+
+m.2) Conditionally on aj , (Ai,j )i∈[n] are independent variables, each of them being either the deterministic variable 0 if i̸ ∈ Isj , or a Bernoulli   12
+
+ i ∈ Isj . Since |Isj | ≥ min( n−, n +) almost surely by definition, we then have that a column j is zero with probability at most   12
+
+min( n−,n +). So that the probability for any column to be zero is bounded by m   12
+
+min( n−,n +).3) Note that two non-zero columns j and j′ are equal if and only if both sgn( aj ) = sgn( aj′ ) and 
+
+1(w⊤ 
+
+> j
+
+xi) = 1(w⊤ 
+
+> j′
+
+xi) for all i ∈ Isj . All these variables are independent Bernoulli   12
+
+, so that a union bound argument again yields that the probability for two non-zero columns to be equal is at most 
+
+> m(m−1) 2
+
+  12
+
+min( n−,n +)+1 .A union bound on these three events and summing the different terms then yields Item (i) of Proposi-tion 2. □
+
+Proof of Item (ii). Similarly to the proof of Theorem 3, we here fix an arbitrary ordering π = ( j1, . . . , j m),and define an alternative Algorithm 1 with the fixed ordering π, i.e., 
+
+S0 
+
+> U
+
+= [ n], Sk+1  
+
+> U
+
+= SkU \ Sjk
+
+Sj = {i ∈ [n] | Ai,j = 1 }.
+
+Similarly, we also define the increment times as t′ 
+
+> 0
+
+= 0 , and for any k ≥ 0:
+
+t′ 
+
+> k+1
+
+= max( t′ 
+
+> k
+
+− ℓ′ 
+
+> jk+1
+
+(t′
+
+> k
+
+)
+
+∥Dkjk+1 ∥ , t ′
+
+> k
+
+)
+
+where Dkj = 1
+
+n
+
+X 
+
+> i∈SkU∩Sj
+
+yixi,ℓ′ 
+
+> j
+
+(0) = −1 and ℓ′ 
+
+> j
+
+(t) = ℓ′ 
+
+> j
+
+(t′
+
+> k
+
+) + ( t − t′
+
+> k
+
+)∥Dkj ∥ for any t ∈ [t′
+
+> k
+
+, t ′
+
+> k+1
+
+],
+
+where ℓ′    
+
+> jk+1 (t′
+> k)
+> ∥Dkjk+1 ∥
+
+= −∞ when ∥Dkjk+1 ∥ = 0 by convention. Note that when π coincides with j⋆ on its first 
+
+p elements, we have the equality (t0, . . . , t p) = ( t′
+
+> 0
+
+, t ′
+
+> p
+
+), as well as ℓ′ 
+
+> j
+
+(t) = ℓ◦ 
+
+> j
+
+(t) on [0 , t p] and Dkj = D(k)
+
+> j
+
+for k ≤ p.From there, we can see all t′
+
+> k
+
+, ℓ′ 
+
+> j
+
+(t) and ∥Dkj ∥ as functions of (y1, . . . , y n). Consider two neurons j, j †.Since we assume Assumption 4 (i) holds, the columns of the masking matrix A·,j and A·,j † are both non-zero and distinct; and also consider k such that jl̸ ∈ { j, j †} for all l ≤ k, i.e., both neurons j and j†
+
+have not been selected by the alternative algorithm in the first k increments. From there, we want to show that the following system of inequalities 
+
+− ℓ′ 
+
+> j
+
+(t′
+
+> k
+
+)
+
+∥Dkj ∥ = − ℓ′ 
+
+> j†
+
+(t′
+
+> k
+
+)
+
+∥Dkj† ∥ , (73) 
+
+∥Dkj ∥ > 0 and max( ℓ′ 
+
+> j†
+
+(t′
+
+> k
+
+), ℓ ′ 
+
+> j
+
+(t′
+
+> k
+
+)) < 0 (74) only holds on a measure zero set for the values of (y1, . . . , y n). Indeed, since the two masking columns are different, there exists some i ∈ [n] such that, w.l.o.g., Ai,j = 1 and Ai,j † = 0 . We then have two cases. 63 Either i ∈ SkU , i.e., i remains to be fitted at iteration k. In that case, note that all (t′
+
+> 0
+
+, . . . , t ′
+
+> k
+
+), ℓ′ 
+
+> j†
+
+and 
+
+(D0 
+
+> j†
+
+, . . . , D kj† ) do not depend on the value yi. On the other hand, − ℓ′    
+
+> j(t′
+> k)
+> ∥Dkj∥
+
+decreases (strictly) with |yi|,when eq. (74) holds. Indeed, note that 
+
+−ℓ′ 
+
+> j
+
+(t′
+
+> k
+
+) = 1 − X
+
+> l<k
+
+(t′ 
+
+> l+1
+
+− t′
+
+> l
+
+)∥Dlj ∥ and ∥Dlj ∥ =
+
+vuut 1
+
+n
+
+X 
+
+> i′∈SlU∩Sj
+
+y2 
+
+> i′
+
+.
+
+so that −ℓ′ 
+
+> j
+
+(t′
+
+> k
+
+) decreases with |yi| and is positive, while ∥Dkj ∥ increases with it. In consequence, − ℓ′   
+
+> j(t′
+> k)
+> ∥Dkj∥
+
+is a decreasing function of |yi|, so that for fixed values (yi′ )i′̸ =i, there is at most one value of |yi| such that the system of eqs. (73) and (74) holds. This implies over all labels that the system of eqs. (73) and (74) can only be satisfied on a zero measure set. The other possible case is when for all i such that Ai,j ̸ = Ai,j † , i̸ ∈ SkU . In other words, this means that 
+
+SkU ∩ Sj = SkU ∩ Sj† . By definition of the quantities of interest, if the system of eqs. (73) and (74) holds for k, the following system also holds 
+
+ℓ′ 
+
+> j
+
+(t′
+
+> k
+
+) = ℓ′ 
+
+> j†
+
+(t′
+
+> k
+
+), (75) 
+
+∥Dkj ∥ > 0 and max( ℓ′ 
+
+> j†
+
+(t′
+
+> k
+
+), ℓ ′ 
+
+> j
+
+(t′
+
+> k
+
+)) < 0, (76) where k ≤ k is the largest integer such that SkU ∩ Sj̸ = SkU ∩ Sj† —indeed, for any k < l ≤ k, we would have Dlj = Dlj† . Now note that we could have chosen i such that Ai,j ̸ = Ai,j † and it is the last such i to be fitted by the algorithm. In that case, we necessarily have i ∈ SkU and we are in a case very similar to the one treated above. We can then show with a similar study—which is even simpler here, as we only have to consider the numerator of the previous fraction—that the system of eqs. (75) and (76) only holds for a zero measure set. We thus have proven that the system of eqs. (73) and (74) only holds on a zero measure set for the values of (y1, . . . , y n), for a fixed ordering π, iteration k, and neurons j, j † not yet fitted at iteration k. By doing a finite union, it remains true that this system is only satisfied on a zero measure set for all choices of ordering, iterations and neuron couples. In particular, it holds for some ordering that coincides with the one returned by Algorithm 1 on the first p iterations, i.e., (j(1)  
+
+> ⋆
+
+, . . . , j (p) 
+
+> ⋆
+
+). For this specific choice of ordering, we observe that the case of a non-unique minimizer of the loop in Algorithm 1 corresponds to a couple satisfying the system of eqs. (73) and (74), such that both neurons have not fitted yet, which concludes the proof of Item (ii) of Proposition 2. □
+
+## F.2 Other auxiliary results 
+
+The following result estimates the normalized component of ewj in the direction xi under the assumption that this neuron is aligned in direction D(k) 
+
+> j
+
+.
+
+Proposition 7. For any j ∈ [m] and k ∈ [p], if ew⊤ 
+
+> j
+
+D(k) 
+
+> j
+
+> 1 − α, then for all i ∈ [n],
+
+ew⊤ 
+
+> j
+
+xi −
+
+1
+
+
+
+yi ∈ S(k)
+
+> j
+
+
+
+yi
+
+n D(k)
+
+> j
+
+< √2α1/2.
+
+Proof. Let u = P 
+
+> i
+
+uixi and v = P 
+
+> i
+
+vixi be the representations of two unit vectors in the orthonormal 64 basis given by (xi)di=1 such that u⊤v > 1 − α. We have for any i0
+
+(ui0 − vi0 )2 ≤ X
+
+> i
+
+(ui − vi)2
+
+= X
+
+> i
+
+ u2 
+
+> i
+
++ v2 
+
+> i
+
+− 2uivi
+
+
+
+< 2α. 
+
+Taking square roots yields |ui0 − vi0 | < √2α1/2. Recalling that 
+
+D(k) 
+
+> j
+
+= 1
+
+n D(k)
+
+> j
+
+X
+
+> i∈[n]
+
+1
+
+
+
+yi ∈ S(k)
+
+> j
+
+
+
+yixi
+
+gives the claim. ■
+
+The following result applies the preceding proposition to deduce an inequality which will prove useful in our analysis. 
+
+Corollary 2. If ew⊤ 
+
+> j
+
+D(k) 
+
+> j
+
+> 1 − α, then 
+
+x⊤ 
+
+> i
+
+D(k) 
+
+> j
+
+− (x⊤ 
+
+> i
+
+ewj )( ew⊤ 
+
+> j
+
+D(k) 
+
+> j
+
+) < 2 D(k) 
+
+> j
+
+α1/2
+
+for α sufficiently small. Proof. We simply plug in the bounds from Proposition 7 to obtain 
+
+−√2 D(k) 
+
+> j
+
+α1/2 < x ⊤ 
+
+> i
+
+D(k) 
+
+> j
+
+− (x⊤ 
+
+> i
+
+ewj )( ew⊤ 
+
+> j
+
+D(k) 
+
+> j
+
+)
+
+< yi
+
+n α + √2 D(k)
+
+> j
+
+
+
+α1/2 − α3/2
+
+,
+
+from which the claim follows. ■
+
+Lemma 10. Suppose that the following hold: 1. F ∈ C 1([ T1, T 2]) and F ′ is Lipschitz continuous. 2. F ≥ 0 and F (T1) = 0 .3. F ′′ (t) ≤ pF (t) + q for almost every t ∈ [T1, T 2], where p, q > 0.Then for every t ∈ [T1, T 2],
+
+F ′(t) ≤
+
+ q
+
+√p + F ′(T1)
+
+
+
+exp( √p(t − T1)) .
+
+Proof. Let G = F + q/p . Then G obeys for almost every t ∈ [T1, T 2] the differential inequality G′′ < pG .We compute using this inequality that 
+
+ddt (G′ + √pG ) ≤ pG + √pG ′ = √p (√pG + G′) .
+
+Since F ′ is Lipschitz continuous, both F ′ and F are in fact absolutely continuous. Therefore, √pG + G′
+
+is absolutely continuous. We may apply Grönwall’s inequality to see that 65 √pG + G′ ≤ exp ( √p(t − T1)) ( √pG (T1) + G′(T1)) .
+
+Noting that G ≥ F , the imposition of the condition that F ≥ 0 gives 
+
+G′ ≤ exp ( √p(t − T1)) ( √pG (T1) + G′(T1)) .
+
+Substituting F into the above and using the initial condition F (T1) = 0 , we get 
+
+F ′(t) ≤
+
+ q
+
+√p + F ′(T1)
+
+
+
+exp( √p(t − T1)) .
+
+as claimed. ■
+
+66

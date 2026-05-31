@@ -1,0 +1,2001 @@
+Title: AREA: Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning
+
+URL Source: https://arxiv.org/pdf/2605.28809v1
+
+Published Time: Thu, 28 May 2026 01:43:51 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 
+
+Zhen-Hao Xie * 1 2 Yu-Cheng Shi * 2 Da-Wei Zhou 1 2 
+
+## Abstract 
+
+Class-Incremental Learning (CIL) is important in building real-world learning systems. In CLIP-based CIL, the model performs classification by comparing similarity between visual and textual embeddings obtained from template prompts, e.g. ,“a photo of a [CLASS] ”. This seemingly mono-lithic matching process can be decomposed into two conceptually distinct stages: attribute extrac-tion and attribute aggregation . For example, a model may recognize cat using attributes such as fur texture and whiskers . When learning a new class like car , the model must extract addi-tional attributes like wheels and adjust how they are aggregated in the shared representation space. However, since only data from the current task is available, incremental updates can bias both attribute extraction and aggregation toward new classes, leading to catastrophic forgetting. There-fore, we propose A REA for A tt Ribute E xtraction and A ggregation in CLIP-based CIL. To stabilize extraction, we anchor class-level visual and tex-tual attributes on the hyperspherical embedding space via principal geodesic analysis. To stabilize aggregation, we learn lightweight task-specific experts with scoring and residual refinement, reg-ularized by a variational information bottleneck objective. During inference, we perform routing over task attribute manifolds via optimal transport for more concise prediction. Experiments show that A REA consistently outperforms SOTA meth-ods. Code is available at https://github. com/LAMDA-CL/ICML2026-AREA .
+
+> *
+
+Equal contribution 1School of Artificial Intelligence, Nanjing University, China 2State Key Laboratory of Novel Software Tech-nology, Nanjing University, China. Correspondence to: Da-Wei Zhou <zhoudw@lamda.nju.edu.cn >.
+
+Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s). 
+
+## 1. Introduction 
+
+Class-Incremental Learning (CIL) (Zhou et al., 2024b; Kirk-patrick et al., 2017) aims to enable models to continuously acquire new knowledge over time while preserving perfor-mance on previously learned ones. In this scenario, training data arrive sequentially and past data are no longer acces-sible, making catastrophic forgetting (Serra et al., 2018; Ramasesh et al., 2021; Shi et al., 2021) a persistent chal-lenge. Recently, increasing attention has shifted to lever-aging pre-trained models (Zhou et al., 2024a; Dosovitskiy et al., 2021; Radford et al., 2021; Li et al., 2026a), as their strong generalization and semantic priors can substantially reduce the amount of task-specific adaptation needed and thereby improve stability under continual updates. Building on this trend, vision–language models (Liu et al., 2023; Bai et al., 2023; Ning et al., 2025; Zhang et al., 2025) such as CLIP (Radford et al., 2021) have emerged as a powerful foundation for CIL (Zhou et al., 2025c;b). CLIP maps images and texts into a shared embedding space, mak-ing it well-suited for CIL due to its strong transferability. In vanilla CLIP-based CIL, classification is performed by directly matching an image embedding to class text em-beddings induced by template prompts, e.g. , “a photo of a 
+
+[CLASS] ” via cosine similarity. Nevertheless, treating CLIP classification as a single simi-larity match hides what the model actually relies on. In prac-tice, a prediction is supported by multiple visual cues, and these cues are combined in the shared embedding space. For example, after learning cat , a model may base its predic-tions on visual attributes such as fur texture , whiskers , and 
+
+ear shape . When a new class such as car arrives, the model must incorporate new attributes such as wheels and windows 
+
+and recalibrate how all available attributes are aggregated to discriminate car from previously learned classes. Without access to old data, this adjustment biases toward the current task, overfitting the new attribute-combination pattern and implicitly diminishing the influence of old attributes. In this work, we formalize this process by decomposing prediction into two functional components: 1) attribute extraction, which extracts task-agnostic discriminative at-tributes from the input; and 2) attribute aggregation, which 1
+
+> arXiv:2605.28809v1 [cs.CV] 27 May 2026 AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning
+
+dynamically aggregates such attributes to produce final pre-dictions. With this formulation, catastrophic forgetting can originate from two sources: the extracted attributes may drift across tasks, weakening the discriminative geometry of previously learned classes, while the aggregation may change how attributes are weighted, increasingly favoring newly introduced classes. Consequently, addressing catas-trophic forgetting requires jointly stabilizing both attribute extraction and aggregation. Hence, we propose A REA (A tt Ribute Extraction and A ggregation) to boost CLIP-based CIL regarding these steps. We first build class-level visual and textual anchors on the hypersphere using principal geodesic analysis, so that the extracted attribute structure remains fixed once a class is observed. On top of these anchors, A REA trains lightweight task experts that aggregate attribute evidence through scor-ing with residual refinement, and we regularize this aggre-gation with a variational information bottleneck objective to avoid shortcut-driven task-specific bias. At test time, we route queries to compatible experts via optimal transport on task attribute manifolds and combine their outputs in a soft mixture. Across multiple benchmarks, A REA achieves consistent state-of-the-art performance. 
+
+## 2. Related Work 
+
+Class-Incremental Learning (CIL). CIL (Zhou et al., 2024b; De Lange et al., 2021; Masana et al., 2022; Xie et al., 2026b; Lai et al., 2026) studies how to continually incorporate novel classes without access to previously seen data, while maintaining performance on all past classes. A broad spectrum of methods has been developed. Replay-based approaches (Rebuffi et al., 2017; Wu et al., 2019; Liu et al., 2020) mitigate forgetting by storing or generating a subset of past samples and replaying them during new-task training, often providing strong performance but can easily introduce privacy concerns. Regularization-based methods (Shi et al., 2022; Tan et al., 2024; Liu & Chang, 2025; Wen et al., 2025; Xie et al., 2026b;a) estimate param-eter importance and penalize updates that would damage previously learned knowledge, thereby reducing drift at the cost of limited plasticity under large distribution shifts. Ar-chitectural isolation and expansion techniques (Wang et al., 2023; Yan et al., 2021; Douillard et al., 2022; Zheng et al., 2025) allocate dedicated parameters to new classes or tasks to reduce interference. 
+
+CLIP-Based CIL. CLIP-style vision-language mod-els (Radford et al., 2021) offer a unified embedding space where images and texts are aligned via cosine similarity, enabling strong zero-shot transfer with minimal supervi-sion. This property has made CLIP a natural backbone for CIL: many methods (Zhou et al., 2025c;b; Thengane et al., 2022) freeze the visual and textual encoders to preserve the pre-trained alignment, and adapt to new classes by training only lightweight and task-specific components. Existing CLIP-based CIL approaches broadly fall into three families. Prompt-based methods (Singha et al., 2023; Lu et al., 2025) adapt the text side by selecting or generating prompts to better match new classes. Adapter-based methods (Zhou et al., 2025c; Huang et al., 2024; Zhou et al., 2025b; Wen et al., 2025; Cheng et al., 2026) inject small trainable mod-ules into the encoders to steer representations while keeping most weights fixed. Low-rank adaptation approaches (Li et al., 2026b; Al Rahhal et al., 2025) update a compact low-rank subspace of parameters and leave the backbone intact, balancing plasticity and retention. 
+
+## 3. Preliminaries 
+
+Class-Incremental Learning (CIL). CIL studies the prob-lem of learning a growing set of classes from a data stream while maintaining performance on all previously observed classes (Rebuffi et al., 2017; Wang et al., 2022b). We con-sider a sequence of training datasets {D 1, D2, . . . , DB },where each task Db = {(xi, y i)}nb 
+
+> i=1
+
+contains nb labeled samples. Each instance xi ∈ RD belongs to a class yi ∈ Y b,and the class sets are disjoint across tasks, i.e. , Yb ∩Y b′ = ∅
+
+for b̸ = b′. We follow the exemplar-free CIL setting (Wang et al., 2022a), where no data from previous tasks can be stored or revisited. At task b, the learner only has access to Db and must produce a unified classifier over all seen classes Y≤b = Sbk=1 Yk. The objective is to learn a predic-tor f : X → Y ≤b that minimizes the expected classification error over the joint distribution of all observed tasks: 
+
+f ∗ = arg min   
+
+> f∈H
+
+E(x,y )∼D 1∪···∪D b I y̸ = f (x), (1) where H denotes the hypothesis space and I(·) is the indica-tor function. 
+
+CLIP-Based CIL. In this work, we consider CIL built upon a pre-trained CLIP model (Radford et al., 2021), which consists of a visual encoder gv : RDv → Rd and a textual encoder gt : RDt → Rd, mapping images and texts into a shared embedding space. Given an input image x, its visual embedding is gv (x). Each class c ∈ Y ≤b is associated with a textual description wc of the form “a photo of a 
+
+[CLASS] c”, where the embedding of this description is 
+
+gt(wc) (Huang et al., 2024; Yu et al., 2024). CLIP performs classification by comparing visual and textual embeddings through cosine similarity: 
+
+p(y = c | x) = exp   cos( gv (x), g t(wc)) /τ P 
+
+> c′∈Y ≤b
+
+exp   cos( gv (x), g t(wc′ )) /τ  ,
+
+(2) where τ is a temperature parameter. The backbones are typi-cally frozen, limiting adaptation to lightweight components. 2AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 
+
+In Eq. (2) , classification is governed by the matching degree between visual and textual embeddings. 
+
+Decomposed Prediction. A key observation from Eq. (2) is that, while CLIP appears to classify by a single cosine matching, this direct similarity computation hides the fact that the decision is implicitly supported by multiple class-specific cues and by how these cues are weighted and com-posed in the shared embedding space. For any input x and class c, the cosine similarity cos( gv (x), g t(wc)) acts as a basic signal of how much x supports class c. More broadly, prediction can be decomposed into a two-step process: ex-tracting attributes from the input and then aggregating at-tributes to form a final class representation. To make the above decomposition explicit, we rewrite Eq. (2) in terms of attribute extraction and aggregation. For an input image xi, we assume it gives rise to a series of la-tent attributes [ui, 1, ui, 2, . . . , ui,K ], where each ui,k ∈ Rd
+
+corresponds to a discriminative attribute extracted from the input image xi. Similarly, each class c is associated with a series of class-level attributes [vc, 1, vc, 2, . . . , vc,K ], where each vc,k ∈ Rd encodes how different attributes character-ize class c. Prediction is performed by aggregating attribute-level similarities with learnable weights. Specifically, the logit p(y = c | xi) for class c can be defined as: 
+
+exp   cos( KP
+
+> k=1
+
+αi,k ui,k , KP
+
+> k=1
+
+βc,k vc,k )/τ P 
+
+> c′∈Y ≤b
+
+exp   cos( KP
+
+> k=1
+
+αi,k ui,k , KP
+
+> k=1
+
+βc′,k vc′,k )/τ  , (3) where αi,k ≥ 0 denotes the aggregation weight over the extracted k-th attribute of input xi, and βc,k ≥ 0 de-notes the aggregation weight associated with class c, with PKk=1 αi,k = PKk=1 βc,k = 1 . Under this formulation, catastrophic forgetting can arise from two distinct sources. Extraction drift corresponds to changes in the extracted at-tribute ui,k or class attribute vc,k for previously learned classes. Aggregation drift corresponds to shifts in the ag-gregation weights αi,k and βc,k , which may increasingly emphasize attributes useful for newly introduced classes while suppressing those critical for old ones. Both types of drift may cause catastrophic forgetting. 
+
+## 4. Method 
+
+In this section, we present A REA to mitigate catastrophic forgetting by stabilizing attribute extraction and aggregation. We first anchor class-level visual and textual attributes on the hypersphere via PGA to prevent extraction drift. We then aggregate anchored attributes using scoring and residual refinement, regularized by a variational information bottle-neck objective for stable and generalizable evidence. At inference time, we perform soft routing over task manifolds to select compatible task experts under cross-task overlap. 
+
+4.1. Extracting Multi-Modal Attributes 
+
+Following Eq. (3) , we first stabilize attribute extraction by constructing geometry-aware class-level anchors that remain fixed once a class is observed. Therefore, we build a com-pact set of class-specific attributes and reuse them across subsequent tasks as stable references for later aggregation. 
+
+Visual Attributes. Conceptually, a class representation in hidden space can be decomposed from a single point to a small set of dominant directions around its prototype. We capture these directions as a K-dimensional attribute basis V vis  
+
+> c
+
+. In Euclidean space, one would obtain V vis  
+
+> c
+
+by decomposing a covariance matrix, but on Sd−1 the notion of variation must follow geodesics. This motivates princi-pal geodesic analysis (PGA) (Fletcher et al., 2004), which computes a covariance in a locally linear neighborhood on the hypersphere and extracts its leading directions: 
+
+Cvis  
+
+> c
+
+= U vis  
+
+> c
+
+Σvis  
+
+> c
+
+U vis ⊤ 
+
+> c
+
+, V vis  
+
+> c
+
+= U vis  
+
+> c
+
+[: , : K]. (4) To construct Cvis  
+
+> c
+
+in a geometry-faithful way, when task b
+
+arrives we collect normalized visual embeddings {xi}nc
+
+> i=1
+
+for each class c ∈ Y b using the frozen encoder gv , where 
+
+∥xi∥2 = 1 implies xi ∈ Sd−1. We first locate the class prototype on the hypersphere by the Fr´ echet mean: 
+
+μvis  
+
+> c
+
+= argmin 
+
+> p∈Sd−1
+> nc
+
+X
+
+> i=1
+
+d2(p, xi; Sd−1), (5) where d(p, x; Sd−1) = arccos( p⊤x) is the geodesic dis-tance induced by cosine similarity. We then flatten the local neighborhood around μvis  
+
+> c
+
+by mapping each sample to the tangent space via the logarithmic map: 
+
+ui = arccos( μvis ⊤ 
+
+> c
+
+xi)
+
+p1 − (μvis ⊤ 
+
+> c
+
+xi)2
+
+ xi − (μvis ⊤ 
+
+> c
+
+xi)μvis 
+
+> c
+
+ . (6) We then compute the tangent covariance Cvis  
+
+> c
+
+=
+
+> 1
+> nc
+
+Pnc 
+
+> i=1
+
+uiu⊤ 
+
+> i
+
+, and finally obtain V vis  
+
+> c
+
+via Eq. (4) . The columns of V vis  
+
+> c
+
+form an orthonormal basis in the tangent space and define a class-specific attribute subspace whose directions correspond to principal geodesics through μvis  
+
+> c
+
+.
+
+Textual Attributes. We anchor textual cues in the same manner. For each sample xi, we obtain a fine-grained cap-tion ci using an MLLM and fuse it with the class prompt 
+
+wc to form ht(xi) = Norm( gt(wc) + gt(ci)) , ensuring 
+
+ht(xi) ∈ Sd−1. We then apply the same PGA procedure to the textual set Hc = {ht(xi)}nc 
+
+> i=1
+
+to obtain (μtxt  
+
+> c
+
+, V txt  
+
+> c
+
+).
+
+Discussions. We instantiate the class attributes by the an-chored bases V vis  
+
+> c
+
+and V txt  
+
+> c
+
+obtained in Eq. (4) , where each column corresponds to one attribute direction ( i.e. , vc,k ) in Eq. (3) . By computing these bases with PGA on Sd−1, the anchors respect the cosine-based hyperspherical structure of CLIP features and avoid geometry-induced distortion. Once 3AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning A photo of a marmot .                                                  
+
+> Astocky furry animal .
+> [Templated ]
+> MLLM
+> Answer :
+> Atan -and -gray, coarse -
+> furred animal with dark
+> paws and arounded snout .
+> Answer :
+> Tan -and -gray coarse fur
+> on astocky body with
+> dark paws .
+> Answer :
+> An upside -down tan -and -
+> gray, coarse -furred animal
+> with dark paws .
+> Query :
+> Generate adetailed description of
+> the image, focusing on the main
+> object and any notable features .
+> Text
+> Image
+> Augmentation
+> Mask
+> Visual
+> Encoder
+> Textual
+> Encoder
+> Contrastive Loss
+> Embedding
+> Embedding
+> Task -specific Scorers
+> Task -specific Scorers
+> Visual Score
+> Textual Score
+> 𝓛 VIB
+> Monotonous
+> Invariant
+> VIB Optimization
+> 𝓛 cont
+> PGA -based Extraction
+> Training
+> Optimal Transport
+> for Prediction 0.1
+> 0.1
+> 0.2
+> 0.6
+> 0.0
+> 0.0
+> 1.0
+> 0.0
+> Inference
+> Task Attributes
+> Query for Inference
+> Instance Query
+> Sinkhorn
+> Cost
+> Task -specific
+> Residual
+> Refinement
+> Task -specific
+> Residual
+> Refinement
+
+Figure 1. Overview of A REA . We freeze CLIP throughout training. For each incoming task, we build multi-modal class attributes on the hypersphere via PGA from visual features and caption-augmented text embeddings. Then we train a lightweight task expert that aggregates anchored attributes using scoring and residual refinement, regularized with a variational information bottleneck objective. At inference time, we use Sinkhorn optimal-transport routing over task attribute manifolds and softly combine the experts’ predictions. 
+
+constructed, V vis  
+
+> c
+
+and V txt  
+
+> c
+
+are frozen and reused in later tasks, providing fixed attribute banks for aggregation and thereby mitigating extraction drift. 
+
+4.2. Aggregating Attributes 
+
+Following the acquisition of visual and textual attributes, 
+
+how could we effectively aggregate the attributes without drift? To address this challenge, we introduce a dual-branch architecture that consists of two modules: the aggregation scoring and the residual refinement module, which are ap-pended to the visual and textual encoders, respectively. The aggregation scoring module aims to transform raw multi-modal attributes into structured and attribute-aware embeddings. For task b, we parameterize it with a score mapping branch Svis  
+
+> b
+
+, Stxt  
+
+> b
+
+∈ Rd×K that projects visual and textual embeddings into score space, and a residual refine-ment branch Rvis  
+
+> b
+
+, Rtxt  
+
+> b
+
+∈ Rd×d that provides complemen-tary corrections. The resulting visual score embedding for sample xi is computed as follows: 
+
+Ev (xi) = V vis  
+
+> c
+
+Svis  
+
+> b
+
+(gv (xi)) + Rvis  
+
+> b
+
+(gv (xi)) , (7) where Svis  
+
+> b
+
+(gv (xi)) computes the visual score from the raw visual embedding, and Rvis  
+
+> b
+
+(gv (xi)) provides the corre-sponding residual refinement to further improve this embed-ding. V vis  
+
+> c
+
+are the fixed visual attributes of class c. Similarly, the textual score embedding is 
+
+Et(xi) = T txt  
+
+> c
+
+Stxt  
+
+> b
+
+(ht(xi)) + Rtxt  
+
+> b
+
+(ht(xi)) . (8) 
+
+Discussions. Recall that Eq. (3) decomposes prediction into attribute extraction and aggregation, where αi,k weights how much the k-th extracted attribute contributes for input xi. In our design, the aggregation scoring branch plays exactly this role: it produces a K-dimensional score vector that serves as a sample-specific weighting over the anchored attribute basis. Concretely, we interpret αvis  
+
+> i
+
+= Svis  
+
+> b
+
+(gv (xi)) and 
+
+βtxt  
+
+> i
+
+= Stxt  
+
+> b
+
+(ht(xi)) as the aggregation weights, which are then used to combine the fixed attribute bases into an attribute-aware embedding. 
+
+4.3. Stabilized and Generalized Aggregation 
+
+The scoring and residual modules in Sec. 4.2 are designed to aggregate and refine attribute-aligned evidence for each incoming task. However, a key challenge in CIL is that the scorer is optimized on a task-specific distribution. With-out proper regularization, it may exploit task-dependent shortcuts (Bassi et al., 2024) that are predictive only within the current task. This makes aggregation sensitive to input perturbations and gradually shifts the attribute evidence to-ward task-specific nuisances, inducing aggregation drift that interferes with previously learned classes. To make attribute aggregation both stable across tasks and generalizable to unseen data, we formulate the learning ob-jective using the variational information bottleneck principle. Our goal is to learn an aggregated attribute representation 
+
+Z that is maximally predictive of the label Y while being minimally redundant with the input X:
+
+min  
+
+> θ
+
+LVIB = −I(Z; Y )
+
+| {z }
+
+> Predictive
+
++β I (Z; X)
+
+| {z }
+
+> Compressive
+
+, (9) where I(·; ·) denotes mutual information. In practice, we in-stantiate Z as the attribute-evidence scores produced by the aggregation module. However, directly optimizing Eq. (9) is intractable because both mutual-information terms depend on unknown data distributions and require high-dimensional integration. Instead, we optimize two tractable surrogates that reflect the two desiderata in Eq. (9) : (i) valid predic-tion that discourages shortcut evidence, and (ii) invariant compression that suppresses view-sensitive noise. Maximizing I(Z; Y ) requires Z to encode reliable, label-relevant evidence. However, in continual learning, the scorer 4AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 
+
+may produce artificially strong evidence by exploiting task-specific artifacts. To discourage such spurious evidence, we introduce an intervention-based monotonicity constraint: when informative regions are partially corrupted, the at-tribute evidence should not spuriously increase. Concretely, we construct an intervened view ˜xi by randomly occluding a contiguous region of xi. We sample an occlu-sion ratio ρ ∼ Unif( ρmin , ρ max ) and an aspect ratio η to determine the block size, then generate a binary mask Mi.The intervened image is formed as: 
+
+˜xi = Mi ⊙ xi + (1 − Mi) ⊙ ϵi, (10) where ϵi is random noise. 1 Let the aggregated attribute evidence be: 
+
+s(x) = Svis 
+
+> b
+
+ gv (x) + Stxt 
+
+> b
+
+ ht(x). (11) We then enforce interventional monotonicity by penalizing evidence increases under occlusion: 
+
+Lint = max 
+
+
+
+0, s (˜ xi) − s(xi)
+
+
+
+> 1
+
+. (12) This one-sided constraint discourages spurious evidence that emerges from corrupted inputs, encouraging the scorer to rely on intrinsic and attribute-aligned cues. On the other hand, minimizing I(Z; X) encourages Z to discard input-specific details that are irrelevant to class iden-tity. However, such details often correspond to high-entropy nuisance factors that vary across tasks. We therefore enforce invariance of attribute evidence across different transforma-tions, so that Z retains only persistent attributes. For each sample xi, we generate M augmented views 
+
+{x(m) 
+
+> i
+
+}Mm=1 using standard transformations T . 2 Let svis 
+
+> i,m
+
+and stxt  
+
+> i,m
+
+denote the view-specific visual and textual scores, and let ¯svis  
+
+> i
+
+and ¯stxt  
+
+> i
+
+be their mean across views. We minimize the deviation from the view centroid: 
+
+Lcomp =
+
+> M
+
+X
+
+> m=1
+
+
+
+svis  
+
+> i,m
+
+− ¯svis   
+
+> i1
+
++ stxt  
+
+> i,m
+
+− ¯stxt  
+
+> i1
+
+
+
+. (13) By minimizing Lcomp , the aggregation becomes insensitive to view-dependent perturbations, effectively compressing Z
+
+to preserve only task-invariant attribute evidence. 
+
+Overall Objective. Combining the above regularizers, our stabilized aggregation objective is: 
+
+Lstab = λint Lint + λcomp Lcomp + Lcont , (14) 
+
+> 1We use i.i.d. Gaussian noise; implementation details are pro-vided in the Appendix.
+> 2We use random horizontal flipping and color jittering. Addi-tional augmentation settings are reported in the Appendix.
+
+where λint and λcomp control the regularization strength, and 
+
+Lcont is the standard contrastive loss. Together, Lint dis-courages shortcut evidence under intervention, while Lcomp 
+
+enforces view-invariant compression, improving stability and generalization throughout continual learning. 
+
+4.4. Inference with Optimal Transport 
+
+During inference, the model must route an input x to the most relevant task-specific scorer. Standard task selection often relies on point-to-point similarity, which can be brittle when incremental tasks form overlapping manifolds in the embedding space. Instead, we cast task routing as an Op-timal Transport (OT) problem (Peyr ´e & Cuturi, 2019) that matches the query to each task’s attribute manifold using a distributional transport cost. We represent the query embedding as a Dirac source mea-sure μx = δgv (x). For each task b, we model its anchored visual attribute manifold as an empirical target measure sup-ported on the basis vectors vj : νb = 1
+
+> Nb×K
+
+PNb×Kj=1 δvj ,where Nb is the number of classes in task b and each class contributes K basis vectors. We compute the entropic OT cost with cosine distance: 
+
+Cb 
+
+> 1,j
+
+= 1 − sim ( gv (x), vj ) , (15) and obtain the Sinkhorn distance by: 
+
+Wε(μx, ν b) = min 
+
+> π∈Π( μx,ν b)
+
+⟨π, Cb⟩ − εH (π), (16) where Π( μx, ν b) denotes admissible transport plans and 
+
+H(π) is the entropy. The resulting Wε provides a distribution-aware similarity between the query and task 
+
+b. We then convert transport costs into routing probabilities via a Boltzmann distribution: 
+
+p(b | x) = exp ( −W ε(μx, ν b)/τ )
+
+PBb′=1 exp ( −W ε(μx, ν b′ )/τ ) , (17) and aggregate predictions in a mixture-of-experts manner: 
+
+ˆy = arg max 
+
+> c∈Y ≤B
+> B
+
+X
+
+> b=1
+
+p(b | x) · sim  Ebv (x), Ebt (xc) , (18) where Y≤B is the union of class labels from all seen tasks. Through this way, we perform distribution-aware task selec-tion on attribute manifolds, yielding robust soft routing and reducing misrouting under overlapping task representations. 
+
+## 5. Theoretical Analysis 
+
+This section shows that the Sinkhorn routing score is Lips-chitz continuous with respect to input perturbations, ensur-ing that the induced task selection error is linearly bounded by the magnitude of extraction drift .5AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 
+
+Table 1. Average and last performance comparison on nine datasets with CLIP ViT-B/16 as the backbone. We report the results of all compared methods reproduced by their source code. The best and second-best results are highlighted in bold and underline , respectively.                                                                                                                                                                                                                                                                                                                      
+
+> Aircraft Cars CIFAR Methods B0 Inc10 B50 Inc10 B0 Inc10 B50 Inc10 B0 Inc10 B50 Inc10
+> ¯AAB¯AAB¯AAB¯AAB¯AAB¯AAB
+> ZS-CLIP (Radford et al., 2021) 26.66 17.22 21.70 17.22 82.60 76.37 78.32 76.37 81.81 71.38 76.49 71.38 L2P (Wang et al., 2022b) 47.19 28.29 44.07 32.13 76.63 61.82 76.37 65.64 82.74 73.03 81.14 73.61 DualPrompt (Wang et al., 2022a) 44.30 25.83 46.07 33.57 76.26 62.94 76.88 67.55 81.63 72.44 80.12 72.57 CODA-Prompt (Smith et al., 2023) 45.98 27.69 45.14 32.28 80.21 66.47 75.06 64.19 82.43 73.43 78.69 71.58 RAPF (Huang et al., 2024) 50.38 23.61 40.47 25.44 82.79 71.22 77.21 69.97 86.14 78.04 82.17 77.93 MG-CLIP (Huang et al., 2025) 48.33 32.34 26.28 13.02 88.21 79.73 84.58 79.62 89.74 82.78 85.62 81.26 AREA 71.03 61.78 66.64 63.10 97.77 96.17 97.06 96.05 89.24 83.69 85.98 83.42 Food UCF CUB Methods B0 In10 B50 Inc10 B0 In10 B50 Inc10 B0 Inc20 B100 Inc20
+> ¯AAB¯AAB¯AAB¯AAB¯AAB¯AAB
+> ZS-CLIP (Radford et al., 2021) 87.86 81.92 84.75 81.92 75.50 67.64 71.44 67.64 74.38 63.06 67.96 63.06 L2P (Wang et al., 2022b) 85.66 77.33 80.42 73.13 86.34 76.43 83.95 76.62 70.87 57.93 75.64 66.12 DualPrompt (Wang et al., 2022a) 84.92 77.29 80.00 72.75 85.21 75.82 84.31 76.35 69.89 57.46 74.40 64.84 CODA-Prompt (Smith et al., 2023) 86.18 78.78 80.98 74.13 87.76 80.14 83.04 75.03 73.12 62.98 73.95 62.21 RAPF (Huang et al., 2024) 88.57 81.15 85.53 81.17 92.28 80.33 90.31 81.55 79.09 62.77 72.82 62.93 MG-CLIP (Huang et al., 2025) 88.59 82.35 28.86 12.51 87.74 80.83 75.45 59.42 74.20 64.25 53.47 34.78 AREA 93.05 89.25 91.51 89.62 95.54 88.71 95.26 88.48 87.69 82.14 85.11 82.33 ImageNet-R ObjectNet SUN Methods B0 In20 B100 Inc20 B0 Inc20 B100 Inc20 B0 Inc30 B150 Inc30
+> ¯AAB¯AAB¯AAB¯AAB¯AAB¯AAB
+> ZS-CLIP (Radford et al., 2021) 83.37 77.17 79.57 77.17 38.43 26.43 31.12 26.43 79.42 72.11 74.95 72.11 L2P (Wang et al., 2022b) 75.97 66.52 72.82 66.77 51.40 39.39 48.91 42.83 82.82 74.54 79.57 73.10 DualPrompt (Wang et al., 2022a) 76.21 66.65 73.22 67.58 52.62 40.72 49.08 42.92 82.46 74.40 79.37 73.02 CODA-Prompt (Smith et al., 2023) 77.69 68.95 73.71 68.05 46.49 34.13 40.57 34.13 83.34 75.71 80.38 74.17 RAPF (Huang et al., 2024) 83.56 76.63 79.61 75.92 53.78 34.97 45.37 35.74 85.23 78.21 81.91 78.62 MG-CLIP (Huang et al., 2025) 83.18 77.20 50.47 35.37 51.41 40.90 25.00 12.39 53.71 41.62 26.58 12.64 AREA 86.36 81.15 82.83 81.03 61.02 49.20 54.15 49.73 86.36 80.26 83.91 80.98
+
+Let μx = δgv (x) be the source measure of the input and 
+
+νb be the target attribute measure for task b. The routing decision relies on the regularized transport cost Wε(μx, ν b).In CIL, extraction drift acts as a perturbation vector ∆,shifting the input from z to z′ = z + ∆. A robust infer-ence mechanism must ensure that such drift does not cause catastrophic fluctuations in the routing score. 
+
+Theorem 5.1 (Stability of Sinkhorn Routing) . Assume the cost function c(·, ·) is Lipschitz continuous on the bounded domain. Then, the Sinkhorn routing score Sb(x) = 
+
+−W ε(μx, ν b) is Lipschitz continuous with respect to the in-put embedding. That is, for any drift ∆:
+
+|S b(z) − S b(z + ∆)| ≤ L · ∥ ∆∥2, (19) 
+
+where L is a constant depending on the manifold curvature and regularization ε.
+
+Theorem 5.1 justifies OT-based routing: unlike hard deci-sion boundaries that can flip under infinitesimal noise, the OT score varies smoothly with the input. The selection error is strictly bounded by the physical magnitude of the drift. 
+
+Connection to Drift. Extraction drift is mathematically equivalent to the perturbation ∆. Theorem 5.1 guarantees that if we control extraction drift via anchored attributes, the routing stability is theoretically assured. Meanwhile, 
+
+aggregation drift affects the discriminability within the se-lected task. While OT secures the routing, our VIB-based objective minimizes the generalization error bound. Full proofs are deferred to Appendix A. 
+
+## 6. Experiments 
+
+In this section, we evaluate A REA on nine benchmark datasets and compare it with state-of-the-art methods. We re-port incremental learning curves to quantify forgetting over long class sequences, and perform ablations to disentangle the contributions of attribute extraction and aggregation, complemented by hyperparameter sensitivity analyses to assess robustness. We further visualize the learned embed-ding geometry and task-routing behavior to qualitatively illustrate how A REA stabilizes attribute extraction and ag-gregation under continual updates. Additional results and implementation details are deferred to the Appendix E. 
+
+6.1. Implementation Details Datasets. We follow (Zhou et al., 2025c;b) to evaluate the performance of A REA on nine benchmark datasets in CLIP-based CIL, i.e. , CIFAR100 (Krizhevsky, 2009), 6AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 20 40 60 80 100 
+
+> Number of Classes
+> 70
+> 80
+> 90
+> 100
+> Accuracy (%)  5.65
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(a) CIFAR B0 Inc10 100 200 300  
+
+> Number of Classes
+> 65
+> 70
+> 75
+> 80
+> 85
+> 90
+> 95
+> Accuracy (%)  4.55
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(b) SUN B0 Inc30 
+
+Figure 2. Performance curve of different methods under different settings. The relative improvement over the second-best method is annotated at the final incremental stage. 
+
+CUB200 (Wah et al., 2011), ObjectNet (Barbu et al., 2019), ImageNet-R (Hendrycks et al., 2021), FGVCAir-craft (Maji et al., 2013), StanfordCars (Krause et al., 2013), Food101 (Bossard et al., 2014), SUN397 (Xiao et al., 2010) and UCF101 (Soomro et al., 2012). 
+
+Dataset Split. Following (Rebuffi et al., 2017; Zhou et al., 2022), we use ‘B-m Inc-n’ to split the classes in CIL. m
+
+indicates the number of classes in the first stage, and n
+
+represents that of every following stage. The dataset split is adapted following Zhou et al. (2025c;b). We follow Rebuffi et al. (2017) to randomly shuffle the class order with random seed 1993 for all experiments. 
+
+Comparison Methods. We first compare to a variety of recent SOTA pre-trained model-based CIL algorithms, e.g. ,L2P (Wang et al., 2022b), DualPrompt (Wang et al., 2022a), CODA-Prompt (Smith et al., 2023), RAPF (Huang et al., 2024), and MG-CLIP (Huang et al., 2025). All methods are deployed with the same CLIP as initialization. 
+
+Training Details. All experiments are conducted on NVIDIA RTX 4090 GPUs using PyTorch (Paszke et al., 2019). We use C3Box (Sun & Zhou, 2026) to reproduce all compared methods. Following (Zhou et al., 2025c), we adopt CLIP with a ViT-B/16 backbone pre-trained on LAION-400M (Radford et al., 2021) across all methods to ensure a fair comparison. In A REA , we optimize the model with SGD using a batch size of 64 for 20 epochs. The learn-ing rate is initialized to 0.05 and decayed according to the prescribed schedule. We set λmask = 0 .1 and λcons = 0 .3
+
+for the masking and augmentation objectives, respectively. We employ GPT-5 (OpenAI, 2025) to generate captions describing fine-grained textual attributes. 
+
+6.2. Benchmark Comparison 
+
+We compare A REA against a broad set of state-of-the-art continual learning baselines on standard benchmarks, with quantitative results reported in Tab. 1 and performance curves illustrated in Fig. 2. AREA consistently achieves superior performance, outperforming most prior methods 25 50 75 100 
+
+> Number of Classes
+> 70
+> 80
+> 90
+> 100
+> Accuracy (%)
+> Baseline
+> w/ Attribute
+> w/ VIB Loss
+> w/ OT
+
+(a) Ablation study 0.5 0.8 1 1.3 1.5                      
+
+> int
+> 0.5 0.8 11.3 1.5  comp
+> 87.86 87.92 88.36 88.76 88.78
+> 88.11 88.98 88.93 88.82 88.73
+> 88.35 89.24 89.12 88.93 88.65
+> 88.84 88.91 88.80 88.62 88.56
+> 88.74 88.79 88.75 88.58 88.49
+
+(b) Parameter sensitivity 
+
+Figure 3. Ablation study and parameter sensitivity analysis. 
+
+by more than 5% in both average accuracy and last-task accuracy. Moreover, the performance curves indicate that our method exhibits a significantly smoother degradation trend compared to competing approaches. In particular, on the SUN Base0 Inc30 benchmark, A REA begins to surpass other methods by approximately 5% from Task 4 onward. This demonstrates that, as training progresses across tasks, the proposed Attribute Anchor effectively mitigates catas-trophic forgetting caused by updates from new-task data. In addition, our method shows clear advantages on more challenging datasets that are prone to severe inter-task con-fusion, such as ObjectNet and Aircraft. These results sug-gest that the introduced VIB Loss encourages the model to focus on key discriminative visual information, while the OT-based inference mechanism enables more accurate module selection, thereby further reducing task interference. 
+
+Ablation Study. We ablate each component on CIFAR100 B0 Inc10 setting in Fig. 3a. Baseline reports ZS-CLIP ac-curacy as classes accumulate and degrades sharply under the task-wise distribution shift. w/ Attribute adds our At-tribute Anchors and multi-modal aggregation, yielding a large gain by providing stable class references and learn-able aggregation. w/ VIB Loss further regularizes train-ing with Eq. (9) , encouraging label-relevant evidence and suppressing nuisance information, leading to additional im-provement. Finally, w/ OT equips inference with OT-based routing, reducing cross-task interference under overlapping representations and achieving the best overall performance. 
+
+6.3. Further Analysis Hyperparameter Robustness. We conduct a sensitivity study on CIFAR100 to evaluate the stability of A REA against key hyperparameters: the intervention loss weight λint and the compression loss weight λcomp . We sweep both weights across {0.5, 0.8, 1.0, 1.3, 1.5 }. Fig. 3b reports the final average accuracy. We observe that performance remains consistently high across a broad range of λint and λcomp ,peaking at λint = 0 .8, λ comp = 1 .0. These results indicate that A REA is robust to hyperparameter change. 
+
+Semantic Alignment of Attribute Anchoring. To validate 7AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 
+
+Table 2. Average and last performance comparison on three datasets with annotations generated by different MLLMs. We adopt LLaVA-v1.6-34b as the additional MLLM. The best results are highlighted in bold .                                                       
+
+> Aircraft B0 Inc10 CIFAR B0 Inc10 CUB B0 Inc20 Methods GPT5-Generated LLaVA-Generated GPT5-Generated LLaVA-Generated GPT5-Generated LLaVA-Generated
+> ¯AAB¯AAB¯AAB¯AAB¯AAB¯AAB
+> ZS-CLIP (Radford et al., 2021) 26.66 17.22 26.13 17.06 81.81 71.38 82.05 71.49 74.38 63.06 73.05 63.15 RAPF (Huang et al., 2024) 50.38 23.61 49.86 23.20 86.14 78.04 85.97 78.84 79.09 62.77 78.97 61.84 AREA 71.03 61.78 70.89 60.95 89.24 83.69 88.98 83.24 87.69 82.14 86.86 81.22
+
+Table 3. Top text tokens with the highest similarity to the anchors corresponding to the attributes, generated via PGA. 
+
+# PGA anchors (Similarity) 
+
+envelope red (0.24), inscription (0.22) hand mirror pavement (0.21), tan (0.18) jeans blueberries (0.28), bluejays (0.23) leaf tiles (0.26), emerald (0.22) banana yellow (0.29), carrot (0.24) box sandstone(0.25), tile(0.20) Color Pose Shape Texture Context   
+
+> Perspective of Description
+> 40
+> 60
+> 80
+> 100
+> 120
+> Similarity Compared with PGA(%)
+> Image SVD PGA
+
+(a) Similarity comparison. 5 10 20 50 75 100  
+
+> Percentage of Annotated Data (%)
+> 87.0
+> 87.5
+> 88.0
+> 88.5
+> 89.0
+> 89.5
+> Accuracy (%)
+> Accuracy w/ Std. Dev.
+
+(b) Annotation proportion. 
+
+Figure 4. Analysis of PGA and annotation. 
+
+the effectiveness of using PGA for extracting attribute an-chors, we first employ a large language model to generate five fine-grained descriptions for each category in Object-Net, focusing on attributes such as color and shape. We then compute the similarity between the text embeddings of these fine-grained descriptions and (1) the visual features of the original images, (2) anchors extracted via SVD, and (3) anchors transformed by PGA. The similarities are av-eraged within each category, and the results are shown in Fig. 4a. As can be observed, compared to the anchors ex-tracted by SVD, the PGA-based anchors are more effective at capturing intrinsic fine-grained attributes within each cat-egory. This capability enables the model to better preserve category-specific knowledge and effectively mitigates catas-trophic forgetting, thereby validating the rationality of the proposed PGA-based multi-modal attribute extraction. 
+
+Data Efficiency of MLLM Annotation. Since acquiring MLLM-generated captions for every image incurs compu-tational cost, we investigate the impact of partial textual supervision. We use 5 different seeds to randomly sample 
+
+{5%, 10%, 20%, 50%, 75%, 100% } of the training data to generate captions and use the extracted anchors to train AREA on CIFAR-100. As shown in Fig. 4b, the performance 0 200 400 600 800 1000 1200 
+
+Training Steps       
+
+> 0
+> 2
+> 4
+> 6
+> 8
+> Estimated VIB Loss
+> w/o VIB Loss (Baseline)
+> w/ VIB Loss (Ours)
+> 0200 400 600 800 1000
+> 0
+> 1
+> 2
+> 3
+> Zoom-in: w/ VIB Loss
+
+Figure 5. Estimated VIB Loss during the training on CIFAR100. 
+
+gap between using 100% and 20% annotation is negligible, with a drop of less than 1%. Even with only 5% MLLM cov-erage, A REA can achieve a competitive accuracy of 87.9%. This suggests that the Anchored Attribute Extraction module is highly data-efficient, capable of generalizing the learned textual subspace from a sparse set of enriched captions. 
+
+Robustness to Annotation Sources. Tab. 2 shows that AREA consistently achieves the best average and final accu-racy across all three datasets under both GPT-5 and LLaVA-generated annotations (Liu et al., 2023). The gains are espe-cially large on Aircraft and CUB, indicating stronger resis-tance to forgetting in harder settings. Performance remains nearly unchanged when switching the captioning MLLM, suggesting that A REA is robust to annotation sources. 
+
+Semantic Interpretation of Learned Anchors. Although we use the term “attributes” throughout this paper, we clar-ify that the learned components should not be interpreted as exact natural-language visual attributes of each class. In-stead, they are better viewed as abstract feature directions in the representation space, which may exhibit only coarse semantic alignment with human-interpretable concepts. To examine this property, we probe the learned anchors by re-trieving their nearest text tokens in the CLIP vocabulary. As shown in Tab. 3, the alignment with strict symbolic attributes is imperfect. For example, PGA retrieves loosely related concepts such as “red” and “inscription” for envelopes, re-flecting an abstract color- or text-related direction rather than a concrete structural attribute of the class. These observa-tions suggest that the PGA anchor subspace captures coarse semantic correlations at the representation level, rather than 8AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 100 200 300 
+
+> Number of Classes
+> 5
+> 10
+> 15
+> 20
+> Inference Latency (ms)
+> AREA w/o OT
+> Cosine Routing
+> AREA (Ours)
+
+(a) Inference latency. Task 2 Task 5 Task 10  
+
+> Incremental Stage
+> 80
+> 85
+> 90
+> 95
+> 100
+> Accuracy (%)
+> AREA w/ OT Acc.
+> AREA w/ Cosine Acc.
+> AREA w/ OT Latency
+> AREA w/ Cosine Latency
+> 8
+> 10
+> 12
+> 14
+> 16
+> 18
+> Latency (ms/sample)
+
+(b) Latency–accuracy trade-off. 
+
+Figure 6. Efficiency analysis of inference routing. 
+
+exact human-defined attributes. 
+
+Variational Information Bottleneck Optimization. 
+
+Eq. (9) encourages task-relevant evidence while suppress-ing noise. On CIFAR100, we estimate the VIB loss with a sampling-based approximation during training, and report the curves in Fig. 5. Compared to the baseline without the two indirect terms, A REA consistently achieves lower VIB loss, indicating that our objective better enforces the intended information bottleneck. We also observe a mild downward trend even without these terms, but the reduction is relatively smaller and less stable, motivating the VIB-based objective as an optimization target. 
+
+Inference Efficiency and Routing Trade-off. Since A REA 
+
+performs OT-based routing over previously learned tasks and aggregates predictions from task-specific experts during inference, we further analyze its test-time efficiency and the necessity of OT routing. We report end-to-end latency and peak VRAM overhead on CIFAR-100, CUB-200, and SUN-300 under a single RTX 4090 with batch size 1. As shown in Fig. 6a, the inference latency of A REA increases mildly from 16.4 ms/sample to 18.2 ms/sample when the number of classes grows from 100 to 300. This is because AREA conducts routing over compact task-level attribute manifolds with batched Sinkhorn iterations, rather than ex-haustive class-wise matching. These results suggest that the OT-based routing module introduces only a small constant overhead and does not become a practical bottleneck as the number of tasks or classes increases. To further disentangle the contribution of distributional OT routing from the added inference complexity, we compare AREA with a simpler cosine-based routing baseline under the same CIFAR100 b0-Inc10 setting. As shown in Fig. 6b, cosine routing is slightly faster, but its accuracy drops more significantly in later incremental stages. At the final 100-class stage, OT routing only introduces an additional 2.9 ms/sample compared with cosine routing, while improving the final accuracy by 3.39%. This indicates a favorable accuracy–efficiency trade-off. The advantage comes from the fact that cosine routing performs point-to-point matching and is therefore more sensitive to local feature drift, whereas OT routing compares the query against the entire task-level attribute manifold. Such distribution-aware matching better lock chamber 
+
+> lock chamber
+> canal
+> moat
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> canal
+> lock chamber
+> moat
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> lock chamber
+> dam
+> canal
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+
+Figure 7. Prediction stability analysis for A REA . Bars denote the predicted class probabilities for the top-ranked classes. 
+
+captures task-level semantic structure and reduces cross-task misrouting in long-horizon incremental learning. 
+
+Prediction Stability Analysis. Fig. 7 illustrates the effect of Attribute Anchors on an SUN example. The first panel shows the prediction after training only on the first task, where the model correctly predicts “lock chamber”. The second panel reports the prediction after training on all tasks without anchors, where confidence shifts to competing classes and the correct class drops in rank. In contrast, the third panel shows that with anchors enabled, “lock chamber” remains top-ranked, indicating improved stability. 
+
+## 7. Conclusion 
+
+This paper tackles catastrophic forgetting in CLIP-based CIL by focusing on the underlying mechanism of attribute utilization. We stabilize the learning process by explicitly anchoring attribute extraction via a PGA-based mechanism and refining aggregation through a lightweight, learnable scoring module. By introducing interventional and compres-sion terms to implicitly optimize the VIB loss, our approach effectively filters out redundancy, allowing the model to fo-cus on the most discriminative attributes. Additionally, we consider an OT-based selection strategy to regulate attribute isolation and collaboration across tasks, further enhancing incremental stability. Extensive experiments across multiple benchmarks verify the superiority of A REA .
+
+Limitations. Our study is limited to CLIP-based class-incremental learning with fixed pre-trained vision-language encoders. Its behavior under severe modality gaps, highly imbalanced data, or larger generative MLLMs remains un-derexplored and requires further study. 
+
+## Acknowledgments 
+
+This work was supported in part by the Basic Research Pro-gram of Jiangsu (BK20251251), NSFC (62506160), JSTJ-2025-147, Fundamental and Interdisciplinary Disciplines Breakthrough Plan of the Ministry of Education of China (No. JYB2025XDXM118), the 111 Center (No. B26023), and the Collaborative Innovation Center of Novel Software Technology and Industrialization. 9AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none of which we feel must be specifically highlighted here. 
+
+## References 
+
+Al Rahhal, M. M., Bazi, Y., and Zuair, M. Lora-clip: Effi-cient low-rank adaptation of large clip foundation model for scene classification. IEEE Geoscience and Remote Sensing Letters , 2025. Bai, J., Bai, S., Yang, S., Wang, S., Tan, S., Wang, P., Lin, J., Zhou, C., and Zhou, J. Qwen-vl: A versatile vision-language model for understanding, localization, text read-ing, and beyond. arXiv preprint arXiv:2308.12966 , 2023. Barbu, A., Mayo, D., Alverio, J., Luo, W., Wang, C., Gut-freund, D., Tenenbaum, J., and Katz, B. Objectnet: A large-scale bias-controlled dataset for pushing the limits of object recognition models. In NeurIPS , pp. 9448–9458, 2019. Bassi, P. R., Dertkigil, S. S., and Cavalli, A. Improving deep neural network generalization and robustness to background bias via layer-wise relevance propagation optimization. Nature Communications , 15(1):291, 2024. Bossard, L., Guillaumin, M., and Van Gool, L. Food-101– mining discriminative components with random forests. In ECCV , pp. 446–461, 2014. Cheng, Q., Yu, H., Zhou, D.-W., and Zhang, L. Hypcl: Adapting clip in hyperbolic space for continual learning. In ICML , 2026. De Lange, M., Aljundi, R., Masana, M., Parisot, S., Jia, X., Leonardis, A., Slabaugh, G., and Tuytelaars, T. A continual learning survey: Defying forgetting in classifi-cation tasks. IEEE Transactions on Pattern Analysis and Machine Intelligence , 44(7):3366–3385, 2021. Dosovitskiy, A., Beyer, L., Kolesnikov, A., Weissenborn, D., Zhai, X., Unterthiner, T., Dehghani, M., Minderer, M., Heigold, G., Gelly, S., Uszkoreit, J., and Houlsby, N. An image is worth 16x16 words: Transformers for image recognition at scale. In ICLR , 2021. Douillard, A., Ram ´e, A., Couairon, G., and Cord, M. Dytox: Transformers for continual learning with dynamic token expansion. In CVPR , pp. 9285–9295, 2022. Fletcher, P. T., Lu, C., Pizer, S. M., and Joshi, S. Principal geodesic analysis for the study of nonlinear statistics of shape. IEEE Transactions on Medical Imaging , 23(8): 995–1005, 2004. Hendrycks, D., Basart, S., Mu, N., Kadavath, S., Wang, F., Dorundo, E., Desai, R., Zhu, T., Parajuli, S., Guo, M., et al. The many faces of robustness: A critical analysis of out-of-distribution generalization. In ICCV , pp. 8340– 8349, 2021. Huang, L., Cao, X., Lu, H., and Liu, X. Class-incremental learning with clip: Adaptive representation adjustment and parameter fusion. In ECCV , pp. 214–231, 2024. Huang, L., Cao, X., Lu, H., Meng, Y., Yang, F., and Liu, X. Mind the gap: Preserving and compensating for the modality gap in clip-based continual learning. In ICCV ,pp. 3777–3786, 2025. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Des-jardins, G., Rusu, A. A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., et al. Overcoming catastrophic forgetting in neural networks. PNAS , 114(13):3521–3526, 2017. Krause, J., Stark, M., Deng, J., and Fei-Fei, L. 3d object representations for fine-grained categorization. In ICCV Workshop , pp. 554–561, 2013. Krizhevsky, A. Learning multiple layers of features from tiny images, 2009. Lai, G., Zhou, D.-W., Yang, X., and Ye, H.-J. The lie of the average: How class incremental learning evaluation deceives you? In ICLR , 2026. Li, J., Zhou, J., Zhan, B., Yang, Y., Pan, Q., Chen, S., Huai, T., Li, X., Chen, Q., and He, L. Lifealign: Lifelong align-ment for large language models with memory-augmented focalized preference optimization. In AAAI , pp. 31618– 31626, 2026a. Li, L., Hu, T., Zhou, D.-W., Yang, J.-Q., Ye, H.-J., and Zhan, D.-C. Bofa: Bridge-layer orthogonal low-rank fusion for clip-based class-incremental learning. In AAAI , pp. 22967–22975, 2026b. Liu, H., Li, C., Wu, Q., and Lee, Y. J. Visual instruction tuning. In NeurIPS , pp. 34892–34916, 2023. Liu, X. and Chang, X. Lora subtraction for drift-resistant space in exemplar-free continual learning. In CVPR , pp. 15308–15318, 2025. Liu, X., Wu, C., Menta, M., Herranz, L., Raducanu, B., Bagdanov, A. D., Jui, S., and de Weijer, J. v. Generative feature replay for class-incremental learning. In CVPR ,pp. 226–227, 2020. Lu, H., Zhang, X., Moore, K., Xue, J., Yao, L., Hengel, A. v. d., and Gong, D. Continual learning on clip via incremental prompt tuning with intrinsic textual anchors. 
+
+arXiv preprint arXiv:2505.20680 , 2025. 10 AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 
+
+Maji, S., Rahtu, E., Kannala, J., Blaschko, M., and Vedaldi, A. Fine-grained visual classification of aircraft. arXiv preprint arXiv:1306.5151 , 2013. Masana, M., Liu, X., Twardowski, B., Menta, M., Bagdanov, A. D., and Van De Weijer, J. Class-incremental learning: survey and performance evaluation on image classifica-tion. IEEE Transactions on Pattern Analysis and Machine Intelligence , 45(5):5513–5533, 2022. Ning, K.-P., Yang, S., Liu, Y., Yao, J.-Y., Liu, Z., Tian, Y., Song, Y., and Li, Y. Pico: Peer review in llms based on consistency optimization. In ICLR , 2025. OpenAI. Gpt-5 system card, 2025. Paszke, A., Gross, S., Massa, F., Lerer, A., Bradbury, J., Chanan, G., Killeen, T., Lin, Z., Gimelshein, N., Antiga, L., et al. Pytorch: An imperative style, high-performance deep learning library. In NeurIPS , pp. 8026–8037, 2019. Peyr ´e, G. and Cuturi, M. Computational optimal transport: With applications to data science . Now Foundations and Trends, 2019. Radford, A., Kim, J. W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al. Learning transferable visual models from natural language supervision. In ICML , pp. 8748–8763, 2021. Ramasesh, V. V., Lewkowycz, A., and Dyer, E. Effect of scale on catastrophic forgetting in neural networks. In 
+
+ICLR , 2021. Rebuffi, S.-A., Kolesnikov, A., Sperl, G., and Lampert, C. H. icarl: Incremental classifier and representation learning. In CVPR , pp. 2001–2010, 2017. Serra, J., Suris, D., Miron, M., and Karatzoglou, A. Over-coming catastrophic forgetting with hard attention to the task. In ICML , pp. 4548–4557, 2018. Shi, G., Chen, J., Zhang, W., Zhan, L.-M., and Wu, X.-M. Overcoming catastrophic forgetting in incremental few-shot learning by finding flat minima. NeurIPS , pp. 6747–6761, 2021. Shi, Y., Zhou, K., Liang, J., Jiang, Z., Feng, J., Torr, P., Bai, S., and Tan, V. Y. Mimicking the oracle: An initial phase decorrelation approach for class incremental learning. In 
+
+CVPR , pp. 16701–16710, 2022. Singha, M., Pal, H., Jha, A., and Banerjee, B. Ad-clip: Adapting domains in prompt space using clip. In CVPR ,pp. 4355–4364, 2023. Smith, J. S., Karlinsky, L., Gutta, V., Cascante-Bonilla, P., Kim, D., Arbelle, A., Panda, R., Feris, R., and Kira, Z. Coda-prompt: Continual decomposed attention-based prompting for rehearsal-free continual learning. In CVPR ,pp. 11909–11919, 2023. Soomro, K., Zamir, A. R., and Shah, M. Ucf101: A dataset of 101 human actions classes from videos in the wild. 
+
+arXiv preprint arXiv:1212.0402 , 2012. Sun, H. and Zhou, D.-W. C3box: A clip-based class-incremental learning toolbox. arXiv preprint arXiv:2601.20852 , 2026. Tan, Y., Zhou, Q., Xiang, X., Wang, K., Wu, Y., and Li, Y. Semantically-shifted incremental adapter-tuning is a continual vitransformer. In CVPR , pp. 23252–23262, 2024. Thengane, V., Khan, S., Hayat, M., and Khan, F. Clip model is an efficient continual learner. arXiv preprint arXiv:2210.03114 , 2022. Wah, C., Branson, S., Welinder, P., Perona, P., and Belongie, S. The Caltech-UCSD Birds-200-2011 Dataset. Tech-nical Report CNS-TR-2011-001, California Institute of Technology, 2011. Wang, F.-Y., Zhou, D.-W., Liu, L., Ye, H.-J., Bian, Y., Zhan, D.-C., and Zhao, P. Beef: Bi-compatible class-incremental learning via energy-based expansion and fu-sion. In ICLR , 2023. Wang, Z., Zhang, Z., Ebrahimi, S., Sun, R., Zhang, H., Lee, C., Ren, X., Su, G., Perot, V., Dy, J. G., and Pfister, T. Dualprompt: Complementary prompting for rehearsal-free continual learning. In ECCV , pp. 631–648, 2022a. Wang, Z., Zhang, Z., Lee, C.-Y., Zhang, H., Sun, R., Ren, X., Su, G., Perot, V., Dy, J., and Pfister, T. Learning to prompt for continual learning. In CVPR , pp. 139–149, 2022b. Wen, Z.-H., Wang, Y., Feng, J., Ye, H.-J., Zhan, D.-C., and Zhou, D.-W. Hierarchical representation matching for clip-based class-incremental learning. arXiv preprint arXiv:2509.22645 , 2025. Wu, Y., Chen, Y., Wang, L., Ye, Y., Liu, Z., Guo, Y., and Fu, Y. Large scale incremental learning. In CVPR , pp. 374–382, 2019. Xiao, J., Hays, J., Ehinger, K. A., Oliva, A., and Torralba, A. Sun database: Large-scale scene recognition from abbey to zoo. In CVPR , pp. 3485–3492, 2010. Xie, Z.-H., Tang, J.-T., Shi, Y.-C., Ye, H.-J., Zhan, D.-C., and Zhou, D.-W. Same: Stabilized mixture-of-experts for multimodal continual instruction tuning. arXiv preprint arXiv:2602.01990 , 2026a. 11 AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 
+
+Xie, Z.-H., Wang, Y., Sun, H., Ye, H.-J., Zhan, D.-C., and Zhou, D.-W. Cross-sample relational fusion: Unifying do-main generalization and class-incremental learning. arXiv preprint arXiv:2605.08839 , 2026b. Yan, S., Xie, J., and He, X. DER: dynamically expandable representation for class incremental learning. In CVPR ,pp. 3014–3023, 2021. Yu, J., Zhuge, Y., Zhang, L., Hu, P., Wang, D., Lu, H., and He, Y. Boosting continual learning of vision-language models via mixture-of-experts adapters. In CVPR , pp. 23219–23230, 2024. Zhang, Y., Gong, K., Zhang, K., Li, H., Qiao, Y., Ouyang, W., and Yue, X. Meta-transformer: A uni-fied framework for multimodal learning. arXiv preprint arXiv:2307.10802 , 2023. Zhang, Y.-K., Zhan, D.-C., and Ye, H.-J. Capability instruc-tion tuning. In AAAI , pp. 25958–25966, 2025. Zheng, B., Zhou, D.-W., Ye, H.-J., and Zhan, D.-C. Task-agnostic guided feature expansion for class-incremental learning. In CVPR , pp. 10099–10109, 2025. Zhou, D.-W., Sun, H.-L., Ning, J., Ye, H.-J., and Zhan, D.-C. Continual learning with pre-trained models: a survey. In 
+
+IJCAI , pp. 8363–8371, 2024a. Zhou, D.-W., Wang, Q.-W., Qi, Z.-H., Ye, H.-J., Zhan, D.-C., and Liu, Z. Class-incremental learning: A survey. 
+
+IEEE Transactions on Pattern Analysis and Machine In-telligence , 46(12):9851–9873, 2024b. Zhou, D.-W., Cai, Z.-W., Ye, H.-J., Zhan, D.-C., and Liu, Z. Revisiting class-incremental learning with pre-trained models: Generalizability and adaptivity are all you need. 
+
+International Journal of Computer Vision , 133:1012– 1032, 2025a. Zhou, D.-W., Li, K.-W., Ning, J., Ye, H.-J., Zhang, L., and Zhan, D.-C. External knowledge injection for clip-based class-incremental learning. In ICCV , pp. 3314–3325, 2025b. Zhou, D.-W., Zhang, Y., Wang, Y., Ning, J., Ye, H.-J., Zhan, D.-C., and Liu, Z. Learning without forgetting for vision-language models. IEEE Transactions on Pattern Analysis and Machine Intelligence , 47(6):4489–4504, 2025c. Zhou, K., Yang, J., Loy, C. C., and Liu, Z. Learning to prompt for vision-language models. International Jour-nal of Computer Vision , 130(9):2337–2348, 2022. 12 AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 
+
+## A. Proof of Stability (Theorem 5.1) 
+
+In this section, we provide the formal proof for Theorem 5.1, demonstrating the Lipschitz continuity of the Sinkhorn routing score with respect to the input visual embedding. This result theoretically guarantees that A REA is robust against extraction drift by bounding the routing error linearly with the magnitude of the drift. 
+
+A.1. Preliminaries and Problem Setup 
+
+Recall the definition of the Sinkhorn distance (entropic optimal transport) between the source measure μx = δz (where 
+
+z = gv (x) ∈ Sd−1) and the target task measure νb = PNb 
+
+> j=1
+
+wj δvj (where vj ∈ Sd−1 are fixed attribute atoms). The regularized transport cost is defined as: 
+
+Wε(μx, ν b) = min  
+
+> π∈Π( μx,ν b)
+
+⟨π, C(z)⟩ − εH (π)
+
+| {z }
+
+> L(π,z)
+
+, (20) where C(z) ∈ R1×Nb is the cost vector with elements Cj (z) = 1 − z⊤vj (Cosine distance). The coupling space Π( μx, ν b)
+
+is constrained by the marginals of μx and νb.Our goal is to bound the variation of the routing score Sb(z) = −W ε(μx, ν b) under a perturbation ∆ in z. This is equivalent to bounding the norm of the gradient ∥∇ zWε∥2.
+
+A.2. Derivation of Lipschitz Continuity 
+
+We proceed by utilizing the envelope theorem for optimization problems to compute the sensitivity of the Sinkhorn distance. 
+
+Lemma A.1 (Gradient via Danskin’s Theorem) . Let f (z) = min π∈Ω L(π, z) be the optimal value function of the Sinkhorn problem. Since the entropic regularization term −εH (π) is strictly convex with respect to π, there exists a unique optimal coupling π∗. By Danskin’s Theorem , the gradient of the value function with respect to the input parameter z is given by the gradient of the objective function evaluated at the unique minimizer: 
+
+∇zWε = ∇zL(π∗, z) = 
+
+> Nb
+
+X
+
+> j=1
+
+π∗ 
+
+> j
+
+∇zCj (z). (21) 
+
+Proof. The objective function L(π, z) is continuous and differentiable with respect to z. The feasible set Π is compact. The strict convexity ensures the uniqueness of π∗, satisfying the hypothesis for Danskin’s Theorem, allowing the interchange of the differentiation and minimization operators. 
+
+Lemma A.2 (Boundedness of Riemannian Gradient) . For any unit vectors z, v ∈ Sd−1, let the cost function be the cosine distance C(z, v) = 1 − z⊤v. The magnitude of the gradient of C with respect to z is bounded by 1. Proof. We consider the gradient in the ambient Euclidean space. The derivative is ∇z(1 − z⊤v) = −v. To be rigorous regarding the spherical constraint ∥z∥ = 1 , we project this gradient onto the tangent space TzSd−1 using the projection operator Pz = I − zz ⊤:
+
+∇Sd−1 C = Pz(−v) = −v + ( z⊤v)z. (22) We compute the squared norm of the Riemannian gradient: 
+
+∥∇ Sd−1 C∥22 = ∥ − v + cos θ · z∥22 (23) 
+
+= ∥v∥22 + cos 2 θ∥z∥22 − 2 cos θ(z⊤v) (24) 
+
+= 1 + cos 2 θ − 2 cos 2 θ (25) 
+
+= 1 − cos 2 θ = sin 2 θ ≤ 1. (26) Thus, the gradient norm is bounded by 1 everywhere on the manifold. 13 AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 
+
+Proof of Theorem 5.1. Combining Lemma A.1 and Lemma A.2, we bound the gradient of the Sinkhorn distance: 
+
+∥∇ zWε∥2 =
+
+> Nb
+
+X
+
+> j=1
+
+π∗ 
+
+> j
+
+∇zCj (z)
+
+> 2
+
+. (27) By applying the Triangle Inequality and substituting the bound from Lemma A.2: 
+
+∥∇ zWε∥2 ≤
+
+> Nb
+
+X
+
+> j=1
+
+|π∗ 
+
+> j
+
+| · ∥∇ zCj (z)∥2 ≤
+
+> Nb
+
+X
+
+> j=1
+
+π∗ 
+
+> j
+
+· 1. (28) Since π∗ is a valid transport plan, it must satisfy the marginal constraint for the source measure μx. Given that μx is a Dirac measure with unit mass, the total mass transported is conserved: PNb 
+
+> j=1
+
+π∗ 
+
+> j
+
+= 1 . Therefore: 
+
+∥∇ zWε∥2 ≤ 1. (29) Since the gradient norm is globally bounded by a constant L = 1 , by the Mean Value Theorem on Riemannian manifolds, the function Wε(·, ν b) is 1-Lipschitz continuous. Consequently, for any extraction drift ∆ such that ˜z = z + ∆:
+
+|S b(z) − S b(˜ z)| = |W ε(μz, ν b) − W ε(μ˜z, ν b)| ≤ 1 · ∥ ∆∥2. (30) This confirms that the routing error is linearly bounded by the drift magnitude, completing the proof. 
+
+## B. Detailed procedure of Sec. 4.1 
+
+This appendix provides the mathematical derivations and implementation specifics of the Principal Geodesic Analysis (PGA) introduced in Sec. 4.1. While standard Principal Component Analysis (PCA) assumes data resides in a Euclidean space, CLIP embeddings are normalized to the unit hypersphere Sd−1. Applying Euclidean statistics directly ignores the manifold’s curvature, leading to geometric distortion. To address this, we employ PGA to generalize PCA to Riemannian manifolds. The procedure consists of three sequential steps: (1) estimating the intrinsic mean (Fr ´echet Mean), (2) mapping data to the tangent space via the Logarithmic Map, and (3) performing eigendecomposition in the tangent space. 
+
+B.1. Step 1: Approximating the Fr´ echet Mean 
+
+The first step is to locate the center of the class distribution on the manifold. The Fr ´echet mean μc is defined as the point minimizing the sum of squared geodesic distances: 
+
+μvis  
+
+> c
+
+= argmin 
+
+> p∈Sd−1
+> nc
+
+X
+
+> i=1
+
+d2(p, xi; Sd−1). (31) Unlike in Euclidean space, there is no closed-form solution for the global minimum on a generic sphere. However, since the visual features within a specific semantic class are highly concentrated (i.e., contained within a small geodesic ball), the arithmetic mean provides an extremely close approximation when projected back onto the sphere. In our implementation, we compute the initialized prototype as: 
+
+μvis  
+
+> c
+
+≈
+
+Pnc 
+
+> i=1
+
+xi
+
+∥Pnc 
+
+> i=1
+
+xi∥2
+
+. (32) 
+
+B.2. Step 2: Riemannian Logarithmic Map 
+
+This step corresponds to Eq. (6) in the main text and is crucial for flattening the curved geometry. We map the data samples 
+
+xi ∈ Sd−1 to the tangent space Tμc Sd−1 at the mean. Geometrically, the tangent space is the hyperplane orthogonal to μc:
+
+Tμc Sd−1 = {v ∈ Rd | v⊤μc = 0 }. (33) The Riemannian Logarithmic map, denoted as Log μc (xi), maps a point xi on the sphere to a vector ui in the tangent plane. The vector ui preserves the distance from the mean, such that ∥ui∥2 = d(μc, xi).14 AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 
+
+Derivation. Let θi = arccos( μ⊤ 
+
+> c
+
+xi) be the geodesic distance (angle) between the mean and the sample. First, we compute the orthogonal projection of xi onto the tangent plane using the Gram-Schmidt process: 
+
+xi, ⊥ = xi − (μ⊤ 
+
+> c
+
+xi)μc. (34) The Euclidean length of this projection is ∥xi, ⊥∥2 = sin( θi) = p1 − (μ⊤ 
+
+> c
+
+xi)2. To obtain the correct tangent vector ui,we must normalize xi, ⊥ to unit length (giving the direction) and then scale it by the true geodesic distance θi (giving the magnitude): 
+
+ui = θi
+
+|{z} 
+
+> Magnitude
+
+· xi, ⊥
+
+∥xi, ⊥∥2
+
+| {z }
+
+> Direction
+
+. (35) Substituting the terms back, we obtain the formulation used in the main paper: 
+
+ui = arccos( μvis ⊤ 
+
+> c
+
+xi)sin(arccos( μvis ⊤ 
+
+> c
+
+xi)) 
+
+ xi − (μvis ⊤ 
+
+> c
+
+xi)μvis 
+
+> c
+
+
+
+= arccos( μvis ⊤ 
+
+> c
+
+xi)
+
+p1 − (μvis ⊤ 
+
+> c
+
+xi)2
+
+ xi − (μvis ⊤ 
+
+> c
+
+xi)μvis 
+
+> c
+
+ .
+
+(36) 
+
+Numerical Stability: When xi → μc, both the numerator and denominator approach zero. In practice, if 1 − (μ⊤ 
+
+> c
+
+xi)2 < ϵ ,we approximate the scaling factor θ  
+
+> sin θ
+
+→ 1 via Taylor expansion to avoid numerical instability. 
+
+B.3. Step 3: Tangent Covariance and Attribute Basis 
+
+Once the dataset is mapped to the tangent vectors U = {u1, . . . , unc }, the problem reduces to standard Euclidean statistics in Rd. The sample covariance matrix in the tangent space is: 
+
+Cvis  
+
+> c
+
+= 1
+
+ncncX
+
+> i=1
+
+uiu⊤ 
+
+> i
+
+. (37) We then perform Singular Value Decomposition (SVD) on Cvis  
+
+> c
+
+to obtain the eigenvectors U vis  
+
+> c
+
+and eigenvalues Σvis  
+
+> c
+
+. We select the top-K eigenvectors V vis  
+
+> c
+
+= U vis  
+
+> c
+
+[: , : K] to form the visual attribute basis. These vectors represent the principal geodesic directions that capture the maximum variance of the class distribution on the hypersphere. The same procedure is applied to the textual embeddings to obtain V txt  
+
+> c
+
+.
+
+## C. Pseudocode 
+
+We summarize the training and inference procedures of A REA in Alg. 1 and Alg. 2. Training proceeds sequentially over tasks. For each new task, we first construct and freeze multi-modal class anchors via PGA (Sec. 4.1), then learn a lightweight task expert with stabilized aggregation (Sec. 4.2–Sec. 4.3). At inference time, we perform OT-based soft routing over task manifolds and aggregate predictions in a mixture-of-experts manner (Sec. 4.4). 
+
+## D. Implementation Details for Stabilized Aggregation 
+
+In this section, we provide the specific implementation details regarding the intervention-based monotonicity constraint and the view-invariant compression objective introduced in Sec. 4.3. 
+
+D.1. Intervention and Occlusion Generation 
+
+To compute the intervention loss Lint (Eq. 12), we generate the intervened view ˜xi by corrupting a contiguous region of the input image with random noise. This process follows a randomized block-erasing strategy. For an input image of spatial dimensions H × W , the binary mask Mi and the noise tensor ϵi are generated as follows: 
+
+Geometric Parameters: We sample the occlusion area ratio ρ and the aspect ratio η from uniform distributions: 
+
+ρ ∼ Unif( ρmin , ρ max ), η ∼ Unif( ηmin , η max ). (38) 15 AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 
+
+Algorithm 1 Training A REA on Task b
+
+Require: Task dataset Db = {(xi, y i)}, frozen encoders gv , g t, MLLM captioner, previous anchors A<b 
+
+Require: Hyperparameters K, M, (ρmin , ρ max ), λ int , λ comp 
+
+Ensure: New anchors Ab, trained task expert Eb = {S vis  
+
+> b
+
+, Rvis  
+
+> b
+
+, Stxt  
+
+> b
+
+, Rtxt  
+
+> b
+
+} 
+
+> 1:
+
+Anchor multi-modal attributes (Sec. 4.1).  
+
+> 2:
+
+for each new class c ∈ Y b do  
+
+> 3:
+
+Extract normalized visual embeddings using gv for samples of class c 
+
+> 4:
+
+Compute visual anchors (μvis  
+
+> c
+
+, V vis  
+
+> c
+
+) via PGA (Eqs. (5)–(4))  
+
+> 5:
+
+Generate MLLM captions and form textual embeddings ht(·) 
+
+> 6:
+
+Compute textual anchors (μtxt  
+
+> c
+
+, V txt  
+
+> c
+
+) via the same PGA procedure  
+
+> 7:
+
+end for  
+
+> 8:
+
+Freeze and store anchors Ab = {(μvis  
+
+> c
+
+, V vis  
+
+> c
+
+, μtxt  
+
+> c
+
+, V txt  
+
+> c
+
+)}c∈Y b 
+
+> 9:
+
+Train stabilized aggregation expert (Sec. 4.2–Sec. 4.3).  
+
+> 10:
+
+Initialize task expert parameters Eb 
+
+> 11:
+
+repeat  
+
+> 12:
+
+Sample a mini-batch B ⊂ D b 
+
+> 13:
+
+for each (xi, y i) ∈ B do  
+
+> 14:
+
+Compute score-based and residual-refined embeddings using Eqs. (7)–(8)  
+
+> 15:
+
+Compute intervention-based monotonicity loss Lint (Eqs. (10)–(12))  
+
+> 16:
+
+Generate M augmented views and compute compression loss Lcomp (Eq. (13))  
+
+> 17:
+
+Compute contrastive loss Lcont (as defined in your training objective)  
+
+> 18:
+
+end for  
+
+> 19:
+
+Form total objective Lstab by Eq. (14)  
+
+> 20:
+
+Update task expert Eb by minimizing Lstab  
+
+> 21:
+
+until convergence  
+
+> 22:
+
+return Ab and Eb
+
+In our experiments, we set ρmin = 0 .02 , ρmax = 0 .4, ηmin = 0 .3, and ηmax = 3 .3. Based on these sampled values, the height he and width we of the occlusion block are calculated as he = √HW ρη and we = pHW ρ/η . The block is placed at a random coordinate (xe, y e) within the image such that the entire block lies inside the image boundaries. 
+
+Noise Distribution: The noise tensor ϵi is generated from a standard independent and identically distributed (i.i.d.) Gaussian distribution: 
+
+ϵi ∼ N (0, I), (39) where I denotes the identity matrix. The dimensions of ϵi match those of the input image xi. During the mixing process in Eq. 10, regions defined by the mask Mi are replaced by this Gaussian noise, serving as uninformative perturbations to test the scorer’s stability. 
+
+D.2. Augmentations for Invariant Compression 
+
+To optimize the compression objective Lcomp (Eq. 13), we generate M = 3 augmented views for each image. We employ a stochastic data augmentation pipeline T designed to alter nuisance factors (e.g., color, orientation, scale) while preserving semantic attributes. The specific transformations and their corresponding hyperparameters are listed in Tab. 4. For each view, transformations are applied sequentially with probability p.
+
+## E. Additional Experiment Results 
+
+E.1. Full Benchmark Comparisons 
+
+In this section, we provide a more comprehensive evaluation of different methods across a wide range of datasets and incremental settings. Specifically, we present the detailed performance curves for Aircraft, Cars, and CIFAR in Figure 8, CUB, Food, and ImageNet-R in Figure 9, and ObjectNet, SUN, and UCF101 in Figure 10. These results complement the 16 AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 
+
+Algorithm 2 Inference of A REA with OT-based Soft Routing 
+
+Require: Test image x, frozen encoders gv , g t, anchors {A b}Bb=1 , experts {E b}Bb=1 
+
+Require: OT parameters (ε, τ )
+
+Ensure: Predicted label ˆy 
+
+> 1:
+
+OT-based routing (Sec. 4.4).  
+
+> 2:
+
+Compute query embedding gv (x) and form the source measure (Eq. (15))  
+
+> 3:
+
+for each task b = 1 , . . . , B do  
+
+> 4:
+
+Construct the task attribute measure from anchored bases (as in Sec. 4.4)  
+
+> 5:
+
+Compute Sinkhorn distance Wε(μx, ν b) (Eq. (16))  
+
+> 6:
+
+end for  
+
+> 7:
+
+Convert transport costs to routing weights p(b | x) (Eq. (17))  
+
+> 8:
+
+Mixture-of-experts prediction (Sec. 4.4).  
+
+> 9:
+
+for each task b = 1 , . . . , B do  
+
+> 10:
+
+Compute task-specific embeddings using the corresponding expert Eb (Eqs. (7)–(8))  
+
+> 11:
+
+Compute task-wise similarity scores for all candidate classes  
+
+> 12:
+
+end for  
+
+> 13:
+
+Aggregate task-wise predictions with routing weights and output ˆy (Eq. (18))  
+
+> 14:
+
+return ˆy 
+
+> Table 4. Augmentation hyper-parameters used for Invariant Compression. The transformations are applied sequentially to generate diverse views.
+
+Transformation Prob. ( p) Parameters 
+
+Random Resized Crop 1.0 Scale ∈ [0 .2, 1.0] , Ratio ∈ [3 /4, 4/3] 
+
+Random Horizontal Flip 0.5 –Color Jitter 0.5 Brightness: 0.4, Contrast: 0.4, Saturation: 0.4, Hue: 0.1 Random Grayscale 0.2 –Gaussian Blur 0.2 Kernel size ∈ [0 .1, 2.0] 
+
+quantitative summaries provided in the main paper. As observed, A REA consistently outperforms other methods on different datasets and data splits (e.g., Base-0 vs. Base-50/100) by a substantial margin. We attribute this sustained performance to the synergistic design of our framework: 1) Geometry-Aware Anchoring : By employing Principal Geodesic Analysis ,we respect the intrinsic hyperspherical structure of CLIP embeddings, ensuring that class prototypes remain stable and drift-free; 2) Robust Evidence Aggregation : The Variational Information Bottleneck objective acts as a semantic filter, suppressing task-specific shortcuts and noise through interventional regularization; and 3) Distributional Task Routing :The Optimal Transport mechanism replaces brittle point-estimates with global distributional matching, allowing for accurate expert selection even when task boundaries are ambiguous or overlapping. 
+
+E.2. Robustness to Different Random Seeds 
+
+In Class-Incremental Learning (CIL), stochastic factors—such as the ordering of incoming classes—can significantly impact model performance. To evaluate the stability of our method, we conducted experiments using five distinct random seeds in CIFAR-100 B0 Inc10. The results with the average accuracy and standard deviation, presented in Fig. 11a, demonstrate that AREA consistently delivers high performance across different random initializations with minimal standard deviation. This confirms the strong robustness of A REA against stochastic variations inherent in the incremental learning process. 
+
+E.3. Runtime Consumption 
+
+In this section, we present a detailed running time comparison of our method, AREA, against DualPrompt and RAPF across the CIFAR, Aircraft, ImageNet-R, and ObjectNet datasets. All experiments were conducted on a single NVIDIA 4090 GPU. As illustrated in Fig. 11b, AREA exhibits a marginal increase in training duration compared to the baselines. This 17 AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 20 40 60 80 100 
+
+Number of Classes 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Accuracy (%)
+
+13.69 
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> RAPF
+> SimpleCIL
+> AREA
+
+(a) Aircraft Base0 Inc10 60 80 100 
+
+Number of Classes 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+> Accuracy (%)
+
+15.01  
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(b) Aircraft Base50 Inc10 20 40 60 80 100 
+
+Number of Classes 
+
+50 
+
+60 
+
+70 
+
+80 
+
+90 
+
+100 
+
+> Accuracy (%)
+
+13.39  
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(c) Cars Base0 Inc10 60 80 100 
+
+Number of Classes 
+
+50 
+
+60 
+
+70 
+
+80 
+
+90 
+
+100 
+
+> Accuracy (%)
+
+12.09 
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(d) Cars Base50 Inc10 20 40 60 80 100 
+
+Number of Classes 
+
+70 
+
+80 
+
+90 
+
+100 
+
+> Accuracy (%)
+
+5.65  
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(e) CIFAR Base0 Inc10 60 80 100 
+
+Number of Classes 
+
+65 
+
+70 
+
+75 
+
+80 
+
+85 
+
+90 
+
+95 
+
+> Accuracy (%)
+
+5.49  
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(f) CIFAR Base50 Inc10 
+
+Figure 8. Incremental performance of different methods. We report the performance gap on Aircraft, Cars, and CIFAR datasets (Base0 and Base50 settings) after the last incremental stage of A REA and the runner-up method. All methods utilize the same pre-trained weights. 50 100 150 200 
+
+Number of Classes 
+
+50 
+
+60 
+
+70 
+
+80 
+
+90 
+
+100 
+
+> Accuracy (%)
+
+5.93 
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(a) CUB Base0 Inc20 100 125 150 175 200 
+
+Number of Classes 
+
+60 
+
+70 
+
+80 
+
+90 
+
+> Accuracy (%)
+
+7.61  
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(b) CUB Base100 Inc20 20 40 60 80 100 
+
+Number of Classes 
+
+70 
+
+75 
+
+80 
+
+85 
+
+90 
+
+95 
+
+100 
+
+> Accuracy (%)
+
+7.33  
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(c) Food Base0 Inc10 60 80 100 
+
+Number of Classes 
+
+65 
+
+70 
+
+75 
+
+80 
+
+85 
+
+90 
+
+95 
+
+> Accuracy (%)
+
+7.7 
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(d) Food Base50 Inc10 50 100 150 200 
+
+Number of Classes 
+
+60 
+
+70 
+
+80 
+
+90 
+
+100 
+
+> Accuracy (%)
+
+3.98  
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(e) ImageNet-R Base0 Inc20 100 125 150 175 200 
+
+Number of Classes 
+
+60 
+
+65 
+
+70 
+
+75 
+
+80 
+
+85 
+
+> Accuracy (%)
+
+3.86  
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(f) ImageNet-R Base100 Inc20 
+
+Figure 9. Incremental performance of different methods on CUB, Food-101, and ImageNet-R. We compare different base initialization settings (Base0 vs. Base100/50). 
+
+18 AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 50 100 150 200 
+
+Number of Classes 
+
+20 
+
+40 
+
+60 
+
+80 
+
+> Accuracy (%)
+
+8.48 
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(a) ObjectNet Base0 Inc20 100 125 150 175 200 
+
+Number of Classes 
+
+20 
+
+30 
+
+40 
+
+50 
+
+60 
+
+> Accuracy (%)
+
+6.81  
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(b) ObjectNet Base100 Inc20 100 200 300 
+
+Number of Classes 
+
+65 
+
+70 
+
+75 
+
+80 
+
+85 
+
+90 
+
+95 
+
+> Accuracy (%)
+
+4.55  
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(c) SUN Base0 Inc30 150 200 250 300 
+
+Number of Classes 
+
+65 
+
+70 
+
+75 
+
+80 
+
+85 
+
+90 
+
+> Accuracy (%)
+
+5.4 
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(d) SUN Base150 Inc30 20 40 60 80 100 
+
+Number of Classes 
+
+70 
+
+75 
+
+80 
+
+85 
+
+90 
+
+95 
+
+100 
+
+> Accuracy (%)
+
+3.03  
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(e) UCF101 Base0 Inc10 60 80 100 
+
+Number of Classes 
+
+70 
+
+75 
+
+80 
+
+85 
+
+90 
+
+95 
+
+100 
+
+> Accuracy (%)
+
+2.8  
+
+> L2P
+> DualPrompt
+> CODA-Prompt
+> SimpleCIL
+> RAPF
+> AREA
+
+(f) UCF101 Base50 Inc10 
+
+Figure 10. Incremental performance on ObjectNet, SUN397, and UCF101. The figures illustrate the effectiveness of A REA across various domain shifts and task lengths. 20 40 60 80 100 
+
+> Number of Classes
+> 60
+> 70
+> 80
+> 90
+> 100
+> Accuracy (%)
+
+0.65 
+
+> ZS-CLIP
+> SimpleCIL
+> L2P
+> DualPrompt
+> CoDA-Prompt
+> RaPF
+> MG-CLIP
+> AREA
+
+(a) Seed consistency. CIFAR Aircraft IN-R ObjectNet    
+
+> 0
+> 5000
+> 10000
+> 15000
+> 20000
+> Time (s)
+> DualPrompt RAPF AREA
+
+(b) Runtime consumption. 
+
+Figure 11. Additional analysis of AREA. Left: performance consistency across five random seeds on CIFAR-100 B0 Inc10, where the shaded area denotes the standard deviation. Right: runtime comparison across different settings. 
+
+slight overhead is primarily attributed to the additional computations required for PGA-based Attribute Extraction and the optimization process in OT-based Task Selection. However, considering the significant performance improvements achieved by these components, we argue that this modest increase in computational cost is well-justified. AREA maintains a favorable trade-off between efficiency and accuracy, remaining practically applicable for real-world incremental learning scenarios. 
+
+E.4. Trainable Parameters 
+
+In this section, we further report the number of trainable parameters in each compared methods in Tab. 5. As can be inferred from the results, A REA ’s trainable parameter quantity has the same scale as other compared methods, while A REA can achieve a better performance. 
+
+## F. Dependence on MLLM Annotation 
+
+We further analyze whether A REA strongly depends on powerful MLLMs and whether the noisy generated descriptions may affect performance. In addition to using GPT-5 captions, we evaluate a weaker open-source captioner, LLaVA-7B, and vary the proportion of captioned training samples. The comparison is reported in Tab. 6. 19 AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning          
+
+> Table 5. Number of trainable parameters on CIFAR100 B0 Inc10 setting.
+> Methods Trainable Parameters
+> L2P (Wang et al., 2022b) 0.16 M DualPrompt (Wang et al., 2022a) 0.33 M CODA-Prompt (Smith et al., 2023) 3.92 M RAPF (Huang et al., 2024) 0.26 M MG-CLIP (Huang et al., 2025) 0.58 M
+> AREA 0.52 M
+> Table 6. Effect of caption source and caption coverage on final accuracy.
+
+Caption source / coverage CIFAR-100 CUB-200 Template only 78.40 73.20 LLaVA-7B, 20% samples captioned 81.36 80.84 LLaVA-7B, 100% samples captioned 82.84 81.21 GPT-5, 100% samples captioned 83.69 82.14 MG-CLIP 82.78 64.25 
+
+As shown in Tab. 6, stronger MLLMs provide the best performance, but A REA is not overly dependent on a specific powerful captioner. Replacing GPT-5 with LLaVA-7B only leads to a small accuracy drop, and using LLaVA-7B captions for only 20% of the training samples still yields competitive results. Compared with template-only textual supervision, generated descriptions consistently improve performance, especially on fine-grained datasets such as CUB-200. This robustness comes from the way A REA uses generated descriptions. Captions are not directly used as hard labels or final decision rules; instead, they are used to construct a textual attribute subspace. The final prediction is still based on coupled visual-textual aggregation and OT-based routing. Therefore, occasional caption noise can be absorbed by the attribute-level representation and has limited influence on the final classifier. These results indicate that A REA is both annotation-efficient and robust to moderate caption noise. 
+
+## G. Sensitivity to the Number of Attributes 
+
+We also study how the number of selected attributes affects performance. In practice, we use a shared moderate value of K
+
+across datasets, selected by validation. Tab. 7 reports the sensitivity analysis on CIFAR-100 and ObjectNet. As shown in Tab. 7, performance improves when K increases from a small value to a moderate one, and then quickly saturates. On CIFAR-100, increasing K from 8 to 16 brings only a marginal improvement, while on ObjectNet the performance slightly decreases when using K = 16 . This suggests that too few attributes may be insufficient to describe class-level semantics, whereas too many attributes can introduce redundant or noisy directions. Based on this trend, we use 
+
+K = 8 by default, which provides a good trade-off between expressivity and efficiency across datasets with different levels of granularity. Adaptive selection of K is a promising future direction. For example, one could allocate more attributes to visually diverse or fine-grained classes and fewer attributes to simpler classes. We leave this adaptive attribute allocation strategy for future work. 
+
+Limitations. Compared with replay-based class-incremental learning methods, A REA is more privacy-friendly because it is fully compatible with the exemplar-free setting and does not store old samples. Some strong prior methods, such as PROOF, require preserving exemplars from previous tasks, which may expose sensitive user data in real applications. In contrast, A REA avoids this issue by learning without retaining past samples. For more specialized settings such as long-tail, few-shot, or class-imbalanced continual learning, we do not include dedicated experiments in this work since they are beyond the main scope of this paper. Nevertheless, as A REA improves representation learning and decision robustness through occlusion-based intervention and multi-view augmentation, it has the potential to remain effective under these challenging scenarios. A more thorough study of these settings is left as future work. 20 AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning              
+
+> Table 7. Sensitivity analysis of the number of attributes K.
+> KCIFAR-100 ObjectNet 278.13 46.09 481.81 48.66 883.69 49.73 16 83.72 48.86
+> Table 8. Ablation study on PGA and OT-weighted mixture prediction.
+
+Variant Aircraft attr.-text sim. CIFAR-100 final acc. PCA + full inference 0.019 80.96 PGA + sim only 0.026 81.51 PGA + single-task only 0.026 82.24 AREA full 0.026 83.69 
+
+## H. Necessity of PGA and OT-weighted Mixture Prediction 
+
+We further ablate two key components of A REA : the geometry-aware PGA attribute construction and the OT-weighted mixture prediction in Eq. (18) . These two components are complementary. PGA constructs stable class-level anchors on the hyperspherical CLIP embedding space, while the OT-weighted mixture prediction improves inference robustness when task manifolds partially overlap. Replacing PGA with Euclidean PCA ignores the intrinsic spherical geometry of normalized CLIP features. Similarly, replacing the soft mixture with a single-task or unweighted prediction rule makes inference more brittle near task boundaries. Following this motivation, we evaluate several variants using two metrics: the semantic similarity between learned anchors and ground-truth attribute descriptions on Aircraft, and the final accuracy on CIFAR-100. The results are shown in Tab. 8. As shown in Tab. 8, replacing PGA with PCA reduces both semantic alignment and final continual learning accuracy, demonstrating the importance of respecting the hyperspherical geometry of CLIP representations. The two simplified inference variants also underperform the full model. Using similarity-only prediction removes the routing confidence provided by OT, while single-task prediction discards useful collaboration among task-specific experts. In contrast, the full Eq. (18) leverages soft task weights to aggregate predictions across experts, which is especially beneficial when the test sample lies near overlapping task manifolds. These results confirm that both PGA and the OT-weighted mixture prediction are necessary for the final performance of A REA .
+
+## I. Additional Discussion on Future Directions 
+
+Although A REA is currently instantiated for CLIP-based CIL, it may be extended in several directions. For tasks with larger modality gaps, future work could combine A REA with unified multimodal encoders such as Meta-Transformer (Zhang et al., 2023). For long-tailed, few-shot, or imbalanced continual learning, the masking and augmentation strategies may need to be adapted to avoid overfitting scarce classes. Finally, the ideas of attribute extraction, aggregation, and OT-based routing could be explored in larger MLLM continual learning frameworks, such as Mixture-of-LoRA-Experts. 
+
+## J. A Comprehensive Study on PTM-based Methods 
+
+This section summarizes the PTM-based Continual Learning approaches compared in our main paper. For a fair evaluation, all methods are implemented on top of the same frozen pre-trained backbone, and differ only in how they adapt or condition the model across tasks. The compared approaches are briefly described below: • L2P (Wang et al., 2022b): This method proposes a prompt-pool mechanism for continual learning with a fixed backbone. For each incoming task, the model retrieves a small set of prompts via instance-wise querying, and uses these prompts to modulate the backbone while keeping its parameters unchanged. It operates without rehearsal and does not assume task identity at test time, making it effective in task-agnostic incremental scenarios. • DualPrompt (Wang et al., 2022a): This method extends prompt pooling by disentangling prompts into shared (task-21 AREA : Attribute Extraction and Aggregation for CLIP-Based Class-Incremental Learning 
+
+invariant) prompts and task-specific prompts. The two prompt types provide complementary conditioning signals, enabling rehearsal-free adaptation while preserving prior knowledge, and yielding strong performance in class-incremental settings. • CODA-Prompt (Smith et al., 2023): This method introduces a decomposed, attention-driven prompt construction strategy. Instead of selecting fixed prompts, it learns prompt components and composes them dynamically per input, improving adaptability to new classes while maintaining stability for previously learned classes. • SimpleCIL (Zhou et al., 2025a): This method re-examines class-incremental learning with large pre-trained models, emphasizing generalization and adaptation as key factors. It provides simplified yet competitive baselines that serve as strong reference points in the PTM regime. • ZS-CLIP (Radford et al., 2021): Although originally designed for zero-shot recognition, ZS-CLIP is included as a robust reference for incremental evaluation. It exploits CLIP’s vision-language alignment to recognize novel classes without additional training. • RAPF (Huang et al., 2024): This method presents a CLIP-based class-adaptive prompt fusion scheme, where prompts for new classes are adapted and fused with existing prompts to accommodate sequential class acquisition. • MG-CLIP (Huang et al., 2025): This method develops a multi-granularity incremental framework for CLIP that jointly models class-level and instance-level changes, and mitigates modality mismatch when classes are introduced over time. 22

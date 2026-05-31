@@ -1,0 +1,557 @@
+Title: TIMEGATE: Sustainable Time-Boxed Promotion Gates for Continual ML Adaptation Under Resource Constraints
+
+URL Source: https://arxiv.org/pdf/2605.29183v1
+
+Published Time: Fri, 29 May 2026 00:22:21 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# TIME GATE : Sustainable Time-Boxed Promotion Gates for Continual ML Adaptation Under Resource Constraints 
+
+Abhijit Chakraborty 1 Suddhasvatta Das 1 Kevin A. Gary 1 Yash Shah 1
+
+## Abstract 
+
+As machine learning(ML) systems evolve to con-tinual adaptation , each re-training cycle uses compute, annotation, and energy. We introduce TIME GATE , a policy layer managing adaptation by budgeting time, labeling, training, and eval-uation. TIME GATE emits a metric-availability signal M for partial vs. full-evaluation deci-sions. We validate: (i) labeling outperforms train-ing by 2.3× on Adult tabular; (ii) it transfers to LLaMA-3.1-8B + QLoRA on SST-2 (accuracy 
+
+0.80 → 0.96 ; M =1 in 35/36 runs); (iii) M is informative, 28-cell sensitivity shows M drops to 0.81 at tight thresholds; (iv) 100-cycle simu-lation achieves 66% evaluation-compute savings with no silent mis-promotions; (v) 10% -slice eval-uation on LLaMA uses 89% less wall-clock and energy on a single H200 (ratios agree to 0.2% ). The mechanism is model-agnostic, validated on XGBoost/Adult and LLaMA-3.1-8B/SST-2; ex-tensions are discussed in the appendix. 
+
+## 1. Introduction 
+
+Modern ML systems are continually adapted as data distri-butions shift and labels arrive (Amershi et al., 2019; Scul-ley et al., 2015). Each cycle involves labeling, training, and evaluation, consuming compute, energy, and human ef-fort. At scale, these costs dominate production ML; training compute has grown roughly 10 × every two years, with re-evaluation on large held-out sets for every candidate build. The focus is on how much resource to spend per cycle and when a partial check suffices. Current machine learning operations (MLOps) tooling automates adaptation (Berberi et al., 2025; Shah et al., 2024), but the promotion decision is heuristic. Teams often guess the worth of more epochs, la-beling, or evaluations, leading to inefficiencies. We propose 
+
+> 1
+
+Department of Computer Science, Arizona State Univer-sity, Tempe, USA. Correspondence to: Abhijit Chakraborty 
+
+<achakr40@asu.edu >.Presented at the ICML 2026 Workshop “Continual Adaptation at Scale: Towards Sustainable AI”. Copyright 2026 by the author(s). 
+
+a quantitative, time-box-aware policy layer above MLOps infrastructure to (i) budget time across processes, (ii) decide promotion with auditable gates, and (iii) calibrate when par-tial evaluations suffice. We present T IME GATE for this pur-pose. It formalizes each cycle via a decision window ∆τ and scope functions mapping time to achievable work. Promo-tion uses time-bounded gates , quality thresholds considered only when the feasible activity set under ∆τ is non-empty. TIME GATE emits a metric-availability signal M ∈ { 0, 1}
+
+that is 1 when a partial-evaluation decision matches the full-evaluation decision. M is a calibration and audit statis-tic : after calibration cycles establish M =1 reliably, teams run partial-only steady-state with periodic sentinel audits. TIME GATE 1 is not a replacement for MLflow (MLf), Kube-flow (Kub) or SageMaker (Ama), it is a thin policy layer that consumes the timing, throughput and metric logs those systems already emit and produces per cycle: a feasibil-ity check Fi(∆ τ ), a gate decision and the M certificate. Teams configure per-stage budgets and thresholds in YAML; the CI pipeline calls a single T IME GATE hook that returns 
+
+(promote, M) . No changes to model code or infrastruc-ture are required. We contribute the following: (1) We introduce a model-agnostic framework for the continual adaptation of machine learning systems, structured as time-boxed resource allocation incorporating scope functions and time-constrained promotion gates (Section 2); (2) We present M as a calibration/audit statistic, accompanied by a four-phase operational protocol (calibration → partial-only steady state → periodic sentinel audits → boundary fallback) (Section 2); (3)We provide empirical validation across five key claims: the effectiveness of labeling-first Pareto approaches in both tabular and LLaMA-3.1-8B set-tings, the strong informativeness of M under rigorous cri-teria, a practical protocol that delivers substantial resource savings without silent mis-promotions in our simulated tra-jectory and significant reductions in both wall-clock time and energy consumption on an H200 (Sections 3 and 4); (4) We delineate a pathway for portability to large language model fine-tuning, active learning and agentic adaptation 
+
+> 1
+
+Code, configurations, seeds, per-run metrics and analysis scripts are publicly available at https://github.com/ Abhijit85/mlops-timegates-experiments/blob/ main/README.md .
+
+1
+
+> arXiv:2605.29183v1 [cs.LG] 27 May 2026
+
+TimeGate: Sustainable Time-Boxed Promotion Gates 
+
+(Section 5). 
+
+## 2. The T IME GATE Model 
+
+Builds and cycles. We index continual-adaptation cycles by i ∈ { 1, 2, . . . }. Each cycle produces a build Bi =
+
+⟨Mi, D i, E i⟩, where Mi is the ML system (weights and architecture), Di is the dataset snapshot used in this cycle, and Ei = {(m, τ mi )} is the set of quality metrics m (e.g., 
+
+F1, accuracy) paired with their promotion thresholds τ mi
+
+(e.g., F1 ≥ 0.80 ). The decision window ∆τ > 0 is the total wall-clock time allocated to cycle i, inside which labeling, training and evaluation must all complete. 
+
+Pipeline steps and their cost. Each cycle runs a set of 
+
+steps Ui (e.g., data ingestion, labeling batch, training epoch, validation pass). For any individual step u ∈ Ui, the cost function c(u) = usetup + uexec sums one-time setup time 
+
+usetup (loading models, warm-up) and execution time uexec 
+
+(the actual work). Some steps are mandatory (e.g., model loading); we write these as U req  
+
+> i
+
+⊆ Ui. The feasible set is every subset of steps that both (a) includes all mandatory steps and (b) fits within the budget: 
+
+Fi(∆ τ ) = V ⊆ Ui | U req  
+
+> i
+
+⊆ V, P 
+
+> u∈V
+
+c(u) ≤ ∆τ . (1) 
+
+If Fi(∆ τ ) = ∅, the cycle cannot run at all within its budget. 
+
+Scope functions. How much work each stage can do in a given amount of time is captured by monotone scope functions f (τ ) that map time τ to capacity. We use three: 
+
+flabel (τ ) returns expected labels obtained in time τ , ftrain (τ )
+
+returns training iterations completed, and feval (τ ) returns the validation-set fraction evaluated. In practice these are estimated from prior-cycle throughput logs (e.g., annotator rate, training steps/sec, evaluation examples/sec). 
+
+Time-bounded promotion gates. A standard promotion gate Gate abs/rel (Bi, B i+1 ) asks whether the candidate build 
+
+Bi+1 improves on the incumbent Bi by an absolute (abs) or relative (rel) margin against the thresholds in Ei. We tie this to feasibility: the promotion only fires if both the quality gate passes and the cycle’s step set is feasible under the budget. Writing ⊮[·] for the indicator function: 
+
+Gate ∆τ
+
+> abs/rel
+
+(Bi, B i+1 ) = ⊮Fi(∆ τ )̸ = ∅ ∧ Gate abs/rel (Bi, B i+1 ).
+
+(2) 
+
+Metric-availability signal M . A cycle’s evaluation step can be run at full coverage ( feval = entire validation set) or at partial coverage for only τeval time units. Let decide full ∈{promote, hold } be the promote/hold decision the gate makes under full evaluation, and decide partial (τeval ) the deci-sion under partial evaluation. The metric-availability signal 
+
+is the agreement indicator: 
+
+M (τeval ) = ⊮decide partial (τeval ) = decide full 
+
+. (3) 
+
+M (τeval ) = 1 means partial evaluation would have reached the same promote/hold verdict as full evaluation; 
+
+M (τeval ) = 0 means the two disagree. Because M refer-ences decide full , it is by construction a calibration and audit TIMEGATE: Time-Boxed Continual Adaptation Policy            
+
+> time budget
+> Labeling
+> flabel ()
+> Training
+> ftrain ()
+> Evaluation
+> feval ()
+> Quality
+> (e.g., F1)
+> Cost
+> (compute/time)
+> Gate abs/rel
+> +M(partial vs. full)
+> Budget scope functions quality/cost gate +M
+
+Figure 1. TIME GATE : ∆τ is split among labeling, training, evalu-ation; scope functions map time to capacity; time-bounded gates combined with the calibration/audit signal M govern promotion. 
+
+signal, not a same-cycle certificate that bypasses full evalua-tion. Compute savings come from the operational protocol below. 
+
+Operational protocol. We deploy M in four phases, con-trolled by parameters: calibration length K (cycles of dual-evaluation bootstrap), sentinel period N (cycles between safety audits), partial-slice size α ∈ (0 , 1] (fraction of vali-dation set for partial evaluation, e.g., α=0 .10 means 10% ), and boundary margin ϵ (proximity of partial-eval score to threshold before full evaluation). (1) Calibration phase: 
+
+for K cycles, run full and partial evaluation and record 
+
+M . (2) Promotion to partial-only: once empirical agree-ment rate bP (M =1) exceeds a target (e.g., 0.98 ), use partial evaluation as the main gate. (3) Sentinel audits: every N cy-cles, rerun full evaluation to update the agreement estimate. (4) Boundary fallback: when partial-eval score mpartial is within ϵ of threshold τ mi (i.e., |mpartial − τ mi | < ϵ ), conduct a full evaluation. Let Cfull eval denote the compute cost of one full evaluation. The steady-state per-cycle evaluation cost is 
+
+α·Cfull eval +(1 /N )·Cfull eval : the first term is the partial evaluation every cycle, the second amortizes one sentinel full evalu-ation over N cycles. For α=0 .10 and N =10 , this results in 0.20 · Cfull eval , an 80% reduction; the 66% headline reduc-tion in Section 3 is the realized 100-cycle savings including calibration overhead and boundary-fallback cycles. M is asymmetric: a false-negative ( M =0 under agreement) trig-gers an unnecessary full evaluation, a conservative response, while a false-positive ( M =1 masking a real disagreement) is a silent mis-promotion. The boundary-fallback parameter 
+
+ϵ reduces this risk near the decision boundary; calibration cycles measure residual risk. A risk-sensitive extension weighting M by disagreement cost is left for future work. 
+
+Behavior under distribution shift. Calibrated bP (M =1) 
+
+can stale after shift; the protocol bounds the risk via sen-tinel audits (worst-case detection latency N ), boundary fall-back at the threshold, and rolling recalibration when trailing agreement dips. The fixed-distribution pool characterizes mechanics, not shift detection; controlled-shift validation is the headline follow-up (Section I). 2TimeGate: Sustainable Time-Boxed Promotion Gates 
+
+## 3. Experiments 
+
+We validate T IME GATE across three pipelines: (i) Adult tabular with XGBoost (XGB), (ii) LLaMA-3.1-8B (Tou-vron et al., 2023) with QLoRA (Dettmers et al., 2023) fine-tuning on SST-2 (Pecher et al., 2024), (iii) a 100-cycle continual-adaptation simulation. The sensitivity sweep and real-compute measurements reuse these runs post-hoc. 
+
+Setup (tabular). Adult (OpenML) with XGBoost involves sweeping all valid (τlabel , τ train , τ eval ) allocations within 
+
+∆τ ∈ { 0.5, 1.0, 2.0}h, resulting in 246 runs (41 splits × 2slice schedules × 3 seeds) and 738 partial-to-full compar-isons. In our setup, Adult is not pristine: we introduce label flips ( ϵtrain ∈ [0 , 0.15] ), feature corruption and stochastic an-notation latency, which is more pronounced during training than validation (see Section C). The thresholds are set at an absolute F1≥0.50 and a relative ∆F1≥0.02 . Labeling reveals pre-existing labels at rate λ, so 2.3× is samples-vs-epochs at fixed compute, not an annotation-vs-training swap within a cycle (see Section I). 
+
+Setup (LLaMA). LLaMA-3.1-8B-Instruct with QLoRA (r=16 , α=32 , 4-bit NF4) was tested by varying 
+
+τlabel ∈ {0.05 , 0.10 , 0.20 , 0.50 , 1.00 }h and τtrain ∈{0.50 , 1.00 , 1.50 }h under ∆τ =2 h, using seeds {7, 8, 9}
+
+on 4 × NVIDIA H200 GPUs. This involved 45 runs, of which 36 were trained. The threshold was set at an absolute 
+
+F1≥0.80 .We formalizes our findings in various research questions (RQ): 
+
+RQ1: Labeling dominates training (tabular). The best 
+
+F1 scores across windows are 0.521 → 0.544 → 0.573 ,nearing the full-budget score of 0.607 but with dimin-ishing returns. For each ∆τ , the optimal configuration achieves F1≥0.50 , whereas individual low-label configura-tions ( τlabel =0 ) do not. The marginal quality gain per unit of labeling time is 2.3× greater than that of training, formaliz-ing the data-centric finding under fixed time constraints. 
+
+RQ2: Partial evaluations match full (tabular). In all 738 partial-to-full comparisons, M =1 consistently across ∆τ
+
+(Section D). This serves as the calibration evidence that justifies the use of partial-only steady state in this pipeline. 
+
+RQ3: Mechanism transfers to foundation models. On LLaMA-3.1-8B (Figure 2(b), Table 1), accuracy increases from 0.8028 (60 docs) to 0.9553 (1200 docs). The Pareto direction is replicated; LLaMA reaches saturation faster (76% of gain by τlabel =0 .20 h) than XGBoost, aligning with LLaMA’s stronger pre-training prior. M =1 was main-tained in 35 out of 36 trained runs ( 97 .2% ). The sin-gle instance of M =0 occurred in run tl0.05 tt0.5 s7 :full-eval accuracy was 0.8027 , just 0.001 shy of the 0.80 
+
+threshold, with slice decisions [1 , 0, 1, 1] across fractions 
+
+{0.10 , 0.30 , 0.60 , 1.00 }. The disagreement arose at the 0.30 
+
+slice, not the smallest 0.10 slice, indicating that M flags are influenced by proximity to model boundaries rather than sample size alone. The protocol’s response, reverting to full evaluation, is the correct course of action.                     
+
+> Table 1. LLaMA-3.1-8B + QLoRA Pareto on SST-2 ( ∆τ=2 h, 3 seeds, 36 trained runs).
+> τLABEL BEST ACC MEAN ACC GAIN
+> 0.05 H0.8028 0.7022 BASE
+> 0.10 H0.9071 0.8761 68% 0.20 H0.9266 0.9193 81% 0.50 H0.9530 0.9346 98% 1.00 H0.9553 0.9457 100%
+
+RQ4: Is M =1 informative or trivial: A valid concern from reviewers is that conservative thresholds ( F1≥0.50 )might render M =1 trivial. We counter this empirically (Figure 3) through a post-hoc sensitivity analysis on 36 LLaMA runs, recalculating M across absolute thresholds 
+
+{0.50 , 0.60 , 0.70 , 0.80 , 0.85 , 0.90 , 0.95 } and slice fractions 
+
+{0.10 , 0.20 , 0.30 , 0.50 }, 28 cells in total, without retraining. At a threshold of 0.50 , M =1 .00 universally. As thresholds become stricter, M predictably declines: at a threshold of 
+
+0.95 with a 10% slice, M =0.81 , indicating a 19% disagree-ment rate. Across all 28 cells, M ranges from 0.81 to 1.00 ,with a mean of 0.96 ; in 17 out of 28 cells, M < 1. The overall degradation trend confirms M is an informative sig-nal whose value scales with gate tightness, not a trivial invariant ; the cell-by-cell pattern is not strictly monotone (some tighter rows show higher M than nearby looser rows, reflecting where individual runs sit relative to each tested threshold). 
+
+RQ5: Is the protocol deployable: We simulate a 100-cycle continual-adaptation trajectory by drawing from the LLaMA run pool, a replay-based stress test that charac-terizes protocol mechanics under the observed agreement distribution rather than independent-drift validation; mis-promotions are necessarily zero given a near-fully-agreeing pool, so the value here is in protocol behavior rather than novel evidence. With K=10 , N =10 , ϵ=0 .02 , and 10% par-tial slices, the protocol realizes 66% evaluation-compute savings (34 vs. 100 normalized units), triggers 5 boundary fallbacks and 9 sentinel audits, and records zero silent mis-promotions in this simulated trajectory (see Figure 4). Across N ∈ { 5, 10 , 20 , 50 , 100 }, savings range 57%75% 
+
+(detailed in Section F). 
+
+## 4. Sustainability: Measured Compute & Energy 
+
+We instrumented LLaMA evaluation with nvidia-smi 
+
+power logging on 1×H200 (Section H). Table 2 summarizes: 
+
+10% -slice evaluation uses 89% less wall-clock and 89% 
+
+3TimeGate: Sustainable Time-Boxed Promotion Gates 0.00 0.05 0.10 0.20 0.30    
+
+> Label budget τlabel (h)
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> Best F₁ by label budget
+> 0.31
+> 0.36
+> 0.42
+> 0.47
+> 0.52
+> Label-budget Pareto chart (Δτ = 0.5h)
+> Best F₁ by label budget
+> Cumulative % of runs
+> 0
+> 25
+> 50
+> 75
+> 100
+> Cumulative % of runs 29%
+> 56%
+> 78%
+> 93% 100%
+
+(a) Tabular: label-budget Pareto ( ∆τ =0 .5h). 0.05h 0.1h 0.2h 0.5h 1.0h   
+
+> Labeling budget τlabel
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> SST-2 accuracy
+> LLaMA-3.1-8B + QLoRA: Labeling-first Pareto (Delta tau=2h)
+> Best accuracy
+> Mean accuracy
+
+(b) LLaMA-3.1-8B + QLoRA: SST-2 Pareto ( ∆τ =2 h). 
+
+Figure 2. Labeling-first Pareto transfers from tabular XGBoost to foundation models. (a) Adult: F1 rises monotonically with labeling budget. (b) LLaMA-3.1-8B: accuracy rises from 0.80 at 60 docs to 0.96 at 1200 docs, with 76% of the gain realized by 
+
+τlabel =0 .20 h—LLaMA saturates faster than XGBoost, consistent with stronger pre-training prior. 0.10 0.20 0.30 0.50 
+
+Slice fraction                      
+
+> 0.50
+> 0.60
+> 0.70
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> Absolute threshold
+> 1.00 1.00 1.00 1.00
+> 0.94 0.94 0.94 1.00
+> 1.00 0.97 0.97 0.94
+> 1.00 0.97 0.97 1.00
+> 0.92 1.00 1.00 1.00
+> 0.97 0.97 0.97 0.97
+> 0.81 0.83 0.83 0.94
+
+llm_cls: M=1 rate 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> M=1 rate
+
+Sensitivity of M across thresholds and slice fractions 
+
+Figure 3. Sensitivity of M on LLaMA-3.1-8B across (absolute threshold, slice fraction). M drops from 1.00 at conservative thresholds to 0.81 at tight thresholds ( θ=0 .95 , slice =0 .10 ), refut-ing the triviality concern. 
+
+less energy than full evaluation, with the two ratios agree-ing to 0.2% —confirming evaluation is compute-bound and measurement is consistent. Per single-candidate evaluation cycle, this corresponds to ≈ 6.4 seconds and ≈ 0.41 Wh saved; the absolute aggregate impact at production scale de-pends on candidates-per-cycle and total adaptation through-put, which we discuss further in Section H. Savings are eval-stage; reallocation to labeling/training is a deployment configuration left outside the policy layer (Section I). 
+
+## 5. Generality & Extensions 
+
+TIME GATE ’s mechanism ports to any pipeline with (a) periodic promote/hold decisions against quality thresh-olds and (b) measurable per-stage time costs (Section B). 10 1 10 2           
+
+> Sentinel audit period N(cycles)
+> 55
+> 60
+> 65
+> 70
+> 75
+> 80
+> Evaluation compute saved (%)  (a) Protocol savings vs. sentinel period
+> 57%
+> 66%
+> 71%
+> 74% 75%
+> N=5 N=10 N=20 N=50 N=100
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> Boundary-fallback cycles
+> (b) Boundary fallbacks (zero silent mis-promotions)
+> 55555
+> Sentinel-audit protocol demo (100-cycle trajectory)
+
+Figure 4. 100-cycle continual-adaptation simulation under the operational protocol. Savings rise from 57% (N =5 ) to 75% 
+
+(N =100 ); headline: N =10 , 66% . Every configuration has 5
+
+boundary-fallback cycles— zero silent mis-promotions in this simulated trajectory .
+
+Table 2. Measured evaluation compute on LLaMA-3.1-8B (SST-2 validation, 1×H200, summed over 36 runs). 
+
+FULL EVAL 10% SLICE RATIO WALL -CLOCK (S) 260 .4 28 .4 0.109 
+
+ENERGY (W H) 16 .67 1.78 0.107 
+
+LLM fine-tuning is validated directly (Section 3). Ac-tive learning: labeling → annotator throughput, eval-uation → validation sampling; M makes the standard small-subset-validation practice auditable. Agentic adapta-tion: trajectory-annotation throughput, policy-update steps, evaluation-episode coverage; long-tail failures are exactly the regime where M =0 surfaces as a safety signal. Multi-metric gates (F1∧ demographic-parity-diff on Adult): un-der conservative thresholds, single-metric and multi-metric 
+
+M both hold at 1.00 ; under tight thresholds, both drop to 
+
+0.80 , confirming M extends to bundled gates without loss of reliability (Section G). Composability with adaptive-subset selection. Adaptive selectors (Xu et al., 2024; Lee et al., 2025; Perlitz et al., 2024) can substitute for the random slice with the M machinery unchanged — compositional, 4TimeGate: Sustainable Time-Boxed Promotion Gates 
+
+not competing (Section A). Joy Maa Baglamukhi 
+
+## 6. Conclusion 
+
+TIME GATE is a model-agnostic policy layer for continual ML adaptation, validated across five claims , labeling first Pareto (tabular and LLaMA), M informativeness under tight thresholds, protocol deployability, and 89% wall-clock and energy reduction on an H200, we establish T IME GATE as a principled, auditable mechanism for evaluation-efficient continual adaptation. Spanning applications in LLM fine-tuning, active learning and agentic adaptation. Multi-metric gates and sequential-testing-based boundary detection are our next steps. 
+
+## Impact Statement 
+
+This paper develops a policy layer for governing contin-ual ML adaptation under jointly budgeted time, labeling, training, and evaluation resources. We discuss the broader impacts we judge most relevant. 
+
+Sustainability and energy. Continual adaptation pipelines are a recurring source of compute and energy expenditure across deployed ML systems. The mechanism we describe reduces evaluation compute and energy substantially per cycle on the workloads we measure ( ∼89% reduction in wall-clock and energy on a single H200 for the LLaMA-3.1-8B configuration). To the extent partial-evaluation calibra-tion generalizes to other production pipelines, the aggregate effect on data-center energy demand and associated carbon footprint of continual ML systems is positive, though the ab-solute magnitude depends strongly on deployment scale and hardware mix, which we do not measure here. Conversely, savings that lower the marginal cost of continual adaptation could induce more adaptation cycles per system (a Jevons-paradox concern stated in Luccioni et al. (2025)), partially offsetting per-cycle gains; we believe this is a worthwhile trade given that more frequent adaptation also enables better drift response and distributional fairness over time, but it warrants attention in production deployments. 
+
+Reliability and silent failure. The metric-availability sig-nal M is designed to make partial-evaluation deployment auditable: calibration cycles surface when partial decisions disagree with full decisions, and a boundary-fallback mech-anism forces full evaluation near decision boundaries. We are explicit in the paper that M is asymmetric (false pos-itives are costlier than false negatives) and that our zero-mis-promotion result is measured in a simulated trajectory drawn from observed agreement distributions, not under independent drift. Production teams adopting this protocol should treat the calibration phase as load-bearing and should not deploy partial-only steady state without first establishing a domain-specific empirical agreement rate. 
+
+Fairness and multi-metric decisions. Promotion gates in production typically bundle quality, fairness, and cost criteria. Our multi-metric demonstration on Adult ( F1∧
+
+demographic-parity-diff) shows the mechanism extends to bundled gates without loss of reliability under our setup, but reliable fairness gating in real deployments requires per-metric threshold calibration, attention to subgroup rep-resentation in the partial slice, and evaluation of how slicing interacts with rare protected groups. We have not character-ized this interaction systematically and view it as essential follow-up work. 
+
+Human labor. The paper treats labeling time as a budgeted resource. Our experimental simulations assume idealized annotator throughput; deployments involving human annota-tors should consider working conditions, fair compensation, and the well-documented downstream effects of annotation pipelines on labor practices. Our framework is neutral to these choices but does not address them. 
+
+Misuse and dual use. The mechanism we describe is a release-gate policy layer; it does not generate new model capabilities and we do not foresee specific dual-use risks beyond those already inherent to the underlying continually-adapted models, which the user community is actively study-ing. 
+
+## References 
+
+Amazon SageMaker Python SDK sagemaker 2.256.0 documentation. URL https://sagemaker. readthedocs.io/en/v2/ .Kubeflow. URL https://www.kubeflow.org/ .MLflow - Open Source AI Platform for Agents, LLMs & Models. URL https://mlflow.org .XGBoost for the Adult Dataset | XGBoost-ing. URL https://xgboosting.com/ xgboost-for-the-adult-dataset/ .Alves, G., Amblard, M., Bernier, F., Couceiro, M., and Napoli, A. Reducing Unintended Bias of ML Models on Tabular and Textual Data, August 2021. URL http:// arxiv.org/abs/2108.02662 . arXiv:2108.02662 [cs]. Amershi, S., Begel, A., Bird, C., DeLine, R., Gall, H., Ka-mar, E., Nagappan, N., Nushi, B., and Zimmermann, T. Software engineering for machine learning: a case study. In Proceedings of the 41st International Conference on Software Engineering: Software Engineering in Prac-tice , ICSE-SEIP ’19, pp. 291–300, Montreal, Quebec, Canada, May 2019. IEEE Press. doi: 10.1109/ICSE-SEIP. 2019.00042. URL https://dl.acm.org/doi/10. 1109/ICSE-SEIP.2019.00042 .5TimeGate: Sustainable Time-Boxed Promotion Gates 
+
+Berberi, L., Kozlov, V., Nguyen, G., Sinz-Pardo Daz, J., Calatrava, A., Molt, G., Tran, V., and Lpez Garca, . Ma-chine learning operations landscape: platforms and tools. 
+
+Artificial Intelligence Review , 58(6):167, March 2025. ISSN 1573-7462. doi: 10.1007/s10462-025-11164-3. URL https://link.springer.com/article/ 10.1007/s10462-025-11164-3 .Breck, E., Cai, S., Nielsen, E., Salib, M., and Sculley, D. The ML test score: A rubric for ML produc-tion readiness and technical debt reduction. In 2017 IEEE International Conference on Big Data (Big Data) ,pp. 1123–1132, Boston, MA, December 2017. IEEE. ISBN 978-1-5386-2715-0. doi: 10.1109/BigData.2017. 8258038. URL http://ieeexplore.ieee.org/ document/8258038/ .Chakraborty, A., Das, S., and Gary, K. Machine Learning Operations: A Mapping Study. In Arabnia, H. R. and Deligiannidis, L. (eds.), Software Engineering Research and Practice and e-Learning, e-Business, Enterprise In-formation Systems, and e-Government , pp. 3–21, Cham, 2025. Springer Nature Switzerland. ISBN 978-3-031-86644-9. doi: 10.1007/978-3-031-86644-9 1. Dettmers, T., Pagnoni, A., Holtzman, A., and Zettlemoyer, L. QLoRA: Efficient Finetuning of Quantized LLMs, May 2023. URL http://arxiv.org/abs/2305. 14314 . arXiv:2305.14314 [cs]. Falkner, S., Klein, A., and Hutter, F. BOHB: Robust and Efficient Hyperparameter Optimization at Scale, July 2018. URL http://arxiv.org/abs/1807. 01774 . arXiv:1807.01774 [cs]. Lee, H., Hwang, D., Kim, D., Kim, H., Tai, J. J., Subramanian, K., Wurman, P. R., Choo, J., Stone, P., and Seno, T. SimBa: Simplicity Bias for Scal-ing Up Parameters in Deep Reinforcement Learning, May 2025. URL http://arxiv.org/abs/2410. 09754 . arXiv:2410.09754 [cs]. Li, L., Jamieson, K., DeSalvo, G., Rostamizadeh, A., and Talwalkar, A. Hyperband: A Novel Bandit-Based Approach to Hyperparameter Optimization, June 2018. URL http://arxiv.org/abs/1603. 06560 . arXiv:1603.06560 [cs]. Luccioni, A. S., Strubell, E., and Crawford, K. From Effi-ciency Gains to Rebound Effects: The Problem of Jevons’ Paradox in AI’s Polarized Environmental Debate. In 
+
+Proceedings of the 2025 ACM Conference on Fairness, Accountability, and Transparency , pp. 76–88, June 2025. doi: 10.1145/3715275.3732007. URL http://arxiv. org/abs/2501.16548 . arXiv:2501.16548 [cs]. Mahadevan, A. and Mathioudakis, M. Cost-Effective Retraining of Machine Learning Models, October 2023. URL http://arxiv.org/abs/2310. 04216 . arXiv:2310.04216 [cs]. Pecher, B., Srba, I., and Bielikova, M. Fine-Tuning, Prompting, In-Context Learning and Instruction-Tuning: How Many Labelled Samples Do We Need?, Febru-ary 2024. URL http://arxiv.org/abs/2402. 12819 . arXiv:2402.12819 [cs] version: 1. Perlitz, Y., Bandel, E., Gera, A., Arviv, O., Ein-Dor, L., Shnarch, E., Slonim, N., Shmueli-Scheuer, M., and Choshen, L. Efficient Benchmarking of Language Mod-els, April 2024. URL http://arxiv.org/abs/ 2308.11696 . arXiv:2308.11696 [cs]. Poenaru-Olaru, L., Sallou, J., Cruz, L., Rellermeyer, J., and Deursen, A. v. Sustainable Machine Learning Retrain-ing: Optimizing Energy Efficiency Without Compromis-ing Accuracy, June 2025. URL http://arxiv.org/ abs/2506.13838 . arXiv:2506.13838 [cs]. Ratner, A., Bach, S. H., Ehrenberg, H., Fries, J., Wu, S., and R, C. Snorkel: Rapid Training Data Creation with Weak Supervision. Proceedings of the VLDB Endowment , 11 (3):269–282, November 2017. ISSN 2150-8097. doi: 10. 14778/3157794.3157797. URL http://arxiv.org/ abs/1711.10160 . arXiv:1711.10160 [cs]. Sculley, D., Holt, G., Golovin, D., Davydov, E., Phillips, T., Ebner, D., Chaudhary, V., Young, M., and Dennison, D. Hidden Technical Debt in Machine Learning Systems. 
+
+NIPS , pp. 2494–2502, January 2015. Shah, P. S. U., Ahmad, N., and Beg, M. O. Towards MLOps: A DevOps Tools Recommender System for Ma-chine Learning System, February 2024. URL http:// arxiv.org/abs/2402.12867 . arXiv:2402.12867 [cs]. Tan, M., Chen, B., Pang, R., Vasudevan, V., San-dler, M., Howard, A., and Le, Q. V. MnasNet: Platform-Aware Neural Architecture Search for Mobile, May 2019. URL http://arxiv.org/abs/1807. 11626 . arXiv:1807.11626 [cs]. Touvron, H., Lavril, T., Izacard, G., Martinet, X., Lachaux, M.-A., Lacroix, T., Rozire, B., Goyal, N., Hambro, E., Azhar, F., Rodriguez, A., Joulin, A., Grave, E., and Lam-ple, G. LLaMA: Open and Efficient Foundation Language Models, February 2023. URL http://arxiv.org/ abs/2302.13971 . arXiv:2302.13971 [cs]. Xu, C., Saranathan, G., Alam, M. P., Shah, A., Lim, J., Wong, S. Y., Martin, F., and Bhattacharya, S. Data Efficient Evaluation of Large Language Mod-els and Text-to-Image Models via Adaptive Sampling, 6TimeGate: Sustainable Time-Boxed Promotion Gates 
+
+June 2024. URL http://arxiv.org/abs/2406. 15527 . arXiv:2406.15527 [cs]. Zhang, D. AgentDevel: Reframing Self-Evolving LLM Agents as Release Engineering, January 2026. URL http://arxiv.org/abs/2601.04620 .arXiv:2601.04620 [cs]. 7TimeGate: Sustainable Time-Boxed Promotion Gates 
+
+## A. Related Work 
+
+MLOps and production ML. ML production readiness has been characterized by technical-debt analyses (Sculley et al., 2015; Breck et al., 2017) and surveys (Berberi et al., 2025; Shah et al., 2024; Chakraborty et al., 2025). These describe what 
+
+to validate and which tools to use, but do not formalize time budgets within a release window nor certify when truncated evaluations preserve decisions. T IME GATE is a complementary policy layer. 
+
+Resource-adaptive training. Hyperband (Li et al., 2018), BOHB (Falkner et al., 2018), and platform-aware NAS (Tan et al., 2019) allocate resources across candidate configurations . T IME GATE is orthogonal: it allocates time across pipeline stages within a cycle and governs the subsequent promote/hold decision. The two are composable. 
+
+Data-centric ML and PEFT. Weak supervision (Ratner et al., 2017; Alves et al., 2021) shows adding labels often beats adding training compute; QLoRA (Dettmers et al., 2023) enables cheap FM fine-tuning. T IME GATE ’s contribution is not these observations but the budget-aware, auditable mechanism that makes the labeling-first rule deployable under fixed timeboxes and across model classes. 
+
+Reproducibility at release gates. Community reproducibility efforts focus on experiments, not release gates. M closes this gap by providing per-cycle calibration evidence and an audit log. 
+
+Relation to evaluation-efficiency and release-engineering prior art. Several concurrent threads are directly adjacent to TIME GATE . SubLIME (Xu et al., 2024) and SimBA (Lee et al., 2025) develop adaptive and representative subset-selection methods for efficient LLM benchmarking, and Perlitz et al. (2024) study task and sample selection for compressed language-model benchmarks. These methods focus on which subset to use; T IME GATE instead uses fixed random slices and introduces an explicit agreement signal M as a calibration-and-audit primitive. Our choice of fixed random slicing is deliberate : it makes M interpretable as a property of partial-eval coverage alone, independent of any subset-selection policy — so the agreement signal isolates the question “does the slice size suffice to recover the decision?” from “did selection pick a representative subset?” Adaptive selection and T IME GATE are therefore composable rather than competing: substituting an adaptive subset for the random slice leaves the M machinery intact, and M then audits that subset’s agreement with full evaluation. A head-to-head empirical comparison along this composed axis is the natural next step; we did not include it in this submission because the fixed-slice baseline is what isolates M ’s informativeness from selection-policy quality, and we discuss this further in Section I. Cost-aware retraining (Mahadevan & Mathioudakis, 2023) decides when to retrain; T IME GATE decides how to evaluate within each retraining cycle, the two are composable. Release-engineering frameworks for self-evolving LLM agents (Zhang, 2026) introduce flip-centered regression-aware gates; this is conceptually complementary to T IME GATE ’s time-budgeted evaluation gates, and integrating both is a promising follow-up. Energy-aware retraining policies (Poenaru-Olaru et al., 2025) have shown that drift-triggered rather than scheduled retraining saves energy; TIME GATE operates within a retraining cycle, making the contributions cumulative rather than competing. 
+
+## B. Generality: Concrete Mappings 
+
+LLM fine-tuning. flabel (τ ): curated prompt-response pairs per unit time (human-in-loop or filtered synthetic data); ftrain (τ ):LoRA/QLoRA adapter update steps per unit time; feval (τ ): benchmark items scored per unit time (MMLU, HELM subsets). Thresholds are task-specific scores. M =1 certifies that a sampled benchmark subset gives the same promote/hold decision as the full suite—directly saving the dominant cost in LLM fine-tuning pipelines. Empirically validated in Section 3 on LLaMA-3.1-8B. 
+
+Active-learning loops. Labeling → annotator throughput, training → retrain cost, evaluation → validation-set sampling. 
+
+M audits the already-common practice of small-subset validation decisions. The 2.3× labeling-first result applies directly, since active learning’s premise is that labels dominate compute. 
+
+Agentic adaptation. flabel (τ ): annotated trajectory throughput; ftrain (τ ): policy-update steps; feval (τ ): evaluation-episode coverage. M certifies truncated-suite decisions. Agents’ long-tail failure modes are precisely the rare-event regime where 
+
+M =0 should surface—a safety feature rather than a limitation. 
+
+What porting requires. (i) Per-stage throughput estimates (from existing telemetry); (ii) quality thresholds Ei; (iii) decision window ∆τ . The T IME GATE hook is unchanged; only the scope functions differ. 8TimeGate: Sustainable Time-Boxed Promotion Gates 
+
+## C. Experimental Setup (Extended) 
+
+Tabular. Adult (OpenML), XGBoost (100 trees, depth 6, lr 0.1). Train/val/test 70/15/15. Noise: train label-flip rate 
+
+∈ [0 , 0.15] , 5% random missingness + Gaussian feature noise, annotation-rate multiplier ∼ Unif(0 .5, 1.5) . Validation perturbations are weaker (factor ∼ 0.3). Sweep: all 41 valid (τlabel , τ train , τ eval ) within ∆τ ∈ { 0.5, 1.0, 2.0}h, two slice schedules {5, 20 , 50 , 100 }% and {8, 30 , 60 , 100 }%, seeds {7, 8, 9}.
+
+LLaMA. LLaMA-3.1-8B-Instruct, 4-bit NF4 quantization + QLoRA ( r=16 , α=32 , dropout 0.05 , target modules 
+
+{q, k, v, o }proj ). Training: bf16 compute, paged adamw 8bit , lr 2e −4, warmup 20% , cosine schedule, gradient check-pointing, effective batch 16 ( 8 × 2 accumulation), max 10 epochs. Annotation simulation: λ=1200 items/hr, noise rate 0.03 .Budget grid: τlabel ∈ { 0.05 , 0.10 , 0.20 , 0.50 , 1.00 }h, τtrain ∈ { 0.50 , 1.00 , 1.50 }h, τeval =0 .10 h, ∆τ =2 h. Seeds {7, 8, 9}.Evaluation slices {0.10 , 0.30 , 0.60 , 1.00 } on SST-2 validation (872 examples). 4 ×H200 GPUs, parallel shards. 
+
+Promotion thresholds. Tabular: F1 ≥ 0.50 , ∆F1 ≥ 0.02 . LLaMA: accuracy ≥ 0.80 .
+
+Artifact. Code, configs, seeds, per-run metrics.json , and analysis scripts at https://anonymous.4open. science/r/mlops-timegates-F1A6/README.md .
+
+## D. Structural Stability of Budget Grids 
+
+The feasible (τlabel , τ train ) grid at ∆τ ∈ { 0.5, 1, 2}h is identical for ∆τ ∈ { 1, 2}h; the ∆τ =0 .5h grid is clipped in its high-cost corner (large τlabel + large τtrain become infeasible). Lengthening the cycle from 1h to 2h alone does not create new allocation options, teams must explicitly broaden per-stage ranges. The stability of the non-clipped portion also confirms that the M =1 result is not confounded by shifting evaluation capacity. 
+
+## E. Sensitivity Sweep: Full Numerical Results 
+
+We recomputed M post-hoc on the 36 LLaMA runs across 7 absolute thresholds and 4 slice fractions. Table 3 summarizes; Figure 3 in main body visualizes.                                         
+
+> Table 3. M=1 rate across (absolute threshold, slice fraction) on 36 LLaMA runs. Asterisk ( ∗) marks M < 1cells.
+> THR \SLICE 0.10 0.20 0.30 0.50 0.50 1.00 1.00 1.00 1.00 0.60 0.94 ∗0.94 ∗0.94 ∗1.00 0.70 1.00 0.97 ∗0.97 ∗0.94 ∗
+> 0.80 1.00 0.97 ∗0.97 ∗1.00 0.85 0.92 ∗1.00 1.00 1.00 0.90 0.97 ∗0.97 ∗0.97 ∗0.97 ∗
+> 0.95 0.81 ∗0.83 ∗0.83 ∗0.94 ∗
+
+Summary: 28 cells total, 17 show M < 1, range [0 .81 , 1.00] , mean 0.96 . Minimum at (θ=0 .95 , slice =0 .10) , the most aggressive cell tested, at 0.81 . This monotone degradation rules out the “ M =1 is trivial” concern empirically rather than rhetorically. 
+
+## F. Sentinel Protocol: Full Trajectory Results 
+
+100-cycle continual-adaptation simulation, drawing from the LLaMA run pool, with K=10 calibration cycles, ϵ=0 .02 ,partial slice 10% :Calibration M =1 rate: 1.00 across all K=10 cycles (consistent with the 35 /36 LLaMA result). Silent mis-promotions: 0
+
+across all configurations. The constant 5 boundary fallbacks reflect the same near-threshold runs catching the protocol’s 
+
+ϵ-margin check, exactly the intended behavior. 
+
+Reading these numbers under distribution shift. The pool is drawn from a fixed SST-2 distribution, so silent mis-promotions are zero by construction of the pool rather than by guarantee of the protocol. To interpret the table for shift-prone deployments: read the sentinel period N as the worst-case detection lag (cycles between a shift-induced disagreement and 9TimeGate: Sustainable Time-Boxed Promotion Gates 
+
+Table 4. Protocol savings vs. sentinel audit period N (100 cycles, threshold 0.80 ). 
+
+N COMPUTE (TG) COMPUTE (NAIVE ) SAVINGS FALLBACKS 
+
+5 43 .0 100 57% 510 34 .0 100 66 % 520 29 .0 100 71% 550 26 .0 100 74% 5100 25 .0 100 75% 5
+
+its observation), and the boundary-fallback count as the protocol’s intra-cycle safety margin. Smaller N shortens detection latency at the cost of savings (the N =5 row gives the lower bound on savings in our trajectory at 57% ); rolling recalibration that reverts to dual evaluation when the trailing agreement rate slips below target is the principled extension and the subject of follow-up work (Section I). 
+
+## G. Multi-Metric Gates (Adult + Fairness) 
+
+We extend M to a joint gate Gmulti = ( F1 ≥ τF1 ) ∧ (DP-diff ≤ τDP ) on Adult with sex as protected attribute. XGBoost, 5 seeds {7, 8, 9, 42 , 123 }.
+
+Table 5. Multi-metric M on Adult. Seed=123 sits at the F1 boundary and triggers fallback under both gates.  
+
+> SETTING
+
+τF1 τDP SINGLE -M MULTI -M 
+
+> CONSERVATIVE
+
+0.50 0.30 1.00 1.00  
+
+> TIGHT
+
+0.70 0.15 0.80 0.80 
+
+Under conservative thresholds both gates hold at M =1 ; under tight thresholds both drop to 0.80 . The single failing seed ( seed=123 , full-eval F1=0 .716 , DP-diff = 0 .189 ) sits at the F1 boundary and fails both gate types identically. 
+
+Interpretation : M extends to multi-metric gates without loss of reliability; the combined gate does not artificially inflate 
+
+M =1 , and it correctly triggers fallback when the model sits near the joint threshold surface. conservative tight 
+
+> Threshold setting
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> M=1 rate
+> 1.00
+> 0.80
+> 1.00
+> 0.80
+
+Single vs multi-metric gates on Adult 
+
+> Single metric (F1)
+> Multi-metric (F1 and DP-diff)
+
+Figure 5. Multi-metric gate extension on Adult. Both single-metric and multi-metric M drop from 1.00 to 0.80 as thresholds tighten. 
+
+10 TimeGate: Sustainable Time-Boxed Promotion Gates 
+
+## H. Measured Compute & Energy (Extended) 
+
+Per-run instrumentation: nvidia-smi --query-gpu=power.draw sampled at eval start and end; integrated with wall-clock elapsed. 1×H200 (CUDA VISIBLE DEVICES isolated per shard). Full eval 10% partial    
+
+> 0
+> 50
+> 100
+> 150
+> 200
+> 250
+> Seconds (summed over 36 runs)
+> (a) Wall-clock: 28s vs 260s (10.9%)
+> Full eval 10% partial
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> 16
+> Wh (summed over 36 runs)
+> (b) Energy: 1.78 vs 16.67 (10.7%)
+> Measured eval compute on LLaMA-3.1-8B (1xH200)
+
+Figure 6. Measured evaluation compute on LLaMA-3.1-8B (1 ×H200). Summed over 36 trained runs: 10% slice evaluation uses 
+
+10 .9% of full-eval wall-clock and 10 .7% of full-eval energy—a 89% reduction in both, with ratios agreeing to 0.2% .
+
+Per-cycle cost. Full cycle: Cnaive cycle = Clabel + Ctrain + Cfull eval . Under the protocol at steady state: CTG cycle = Clabel + Ctrain + ( α +1/N ) · Cfull eval . For α=0 .10 , N =10 : CTG eval = 0 .20 · Cfull eval , an 80% evaluation-stage saving (consistent with the 66% trajectory figure, which includes calibration overhead). 
+
+Annualized scale. Per single-candidate evaluation cycle, the savings are ≈ 6.4 seconds wall-clock and ≈ 0.41 Wh energy (Table 2 aggregates summed over 36 runs and divided to per-run units). At daily cadence ( 365 cycles/year) on 10 model families with one candidate per cycle, this extrapolates to ≈ 6.5 GPU-hours/year and ≈ 1.5 kWh/year per model family, small in absolute terms but representative of the per-candidate efficiency gain. At 36 -candidate batch cadence (matching our experimental sweep cadence), the same arithmetic yields ≈ 235 GPU-hours/year and ≈ 54 kWh/year. 
+
+Caveats. H100/H200 figures are specific to our hardware; relative savings ( 89% ) transfer more robustly than absolute numbers. I/O-bound evaluations (e.g., large video retrieval) will show smaller ratios; our compute-bound regime is representative of standard classification benchmarks. 
+
+## I. Limitations and Future Work 
+
+Scope. We tested two model classes (XGBoost, LLaMA-3.1-8B) and one domain each. Extension to vision, multimodal, and agentic settings is ongoing; the mechanism does not require retraining to extend. 
+
+Threshold sensitivity. Our sensitivity sweep establishes M is informative at tight thresholds, but in new domains calibration data is required to set α, N, ϵ . A minimum K≥5 calibration cycles is recommended before deploying partial-only steady state. 
+
+Multi-metric calibration. The Adult demonstration shows M extends to multi-metric gates; scaling to production bundles (quality ∧ fairness ∧ latency ∧ cost) requires per-metric threshold calibration we leave to future work. Sequential-testing-based boundary detection is a natural refinement of the ϵ-margin rule. 
+
+Cost model. c(u) assumes homogeneous hardware. Heterogeneous clusters require per-node-class estimation; integrating production telemetry is planned. 
+
+Dynamics over many cycles. We conducted simulations for up to 100 cycles. Long-horizon dynamics, such as whether label-first remains optimal as models evolve and when the Pareto shift occurs, necessitate longitudinal studies. 
+
+Distribution shift. The most consequential limitation is that all of our empirical pool is drawn under SST-2’s fixed distribution (and Adult’s), so the 100-cycle simulation characterizes protocol mechanics (calibration → partial-only →
+
+sentinel → boundary fallback) rather than shift detection . Concretely: if a shift occurs shortly after the calibration phase and 11 TimeGate: Sustainable Time-Boxed Promotion Gates 
+
+causes partial-eval decisions to silently diverge from full-eval decisions, the protocol’s worst-case detection latency is one sentinel period N . The boundary-fallback margin ϵ partially mitigates this by forcing full evaluation at exactly the cycles where shift is most likely to flip a decision (those near threshold). For shift-sensitive deployments we recommend: (i) small 
+
+N (we report N =5 in Section F at 57% savings as the lower bound on savings in our trajectory); (ii) wider ϵ to widen the safety band around the threshold; (iii) rolling recalibration — maintain a trailing estimate bP (M =1) on the most recent 
+
+W cycles and revert to dual evaluation whenever the estimate falls below target. We do not validate (iii) empirically here; characterizing M under controlled covariate shift (e.g., GLUE-X, WILDS-style shift benchmarks, or synthetic drift overlaid on SST-2) is the most important follow-up for production adoption. 
+
+Dataset representativeness. SST-2 is a relatively saturated benchmark for LLaMA-3.1-8B, which contributes to the high 
+
+M =1 rate (35/36) at the conservative 0.80 threshold. On more heterogeneous tasks — where full-eval scores land closer to the threshold, or where class imbalance interacts with random slicing — we expect the M rate to be lower at conservative thresholds, and we expect adaptive (non-random) subset selection to help. The sensitivity sweep in Section E simulates this regime by tightening the threshold rather than changing the dataset; a multi-dataset characterization (e.g., GLUE, HELM subsets, BIG-Bench-Lite) is required to estimate the cross-task M distribution and is part of our planned follow-up. 
+
+What the 2.3× labeling-vs-training ratio is and is not. The 2.3× marginal-gain figure is computed under a fixed-budget allocation sweep in which “labeling” reveals pre-existing labels at simulated rate λ and “training” is additional epochs on the resulting larger labeled pool. It is therefore best read as the marginal value of an additional labeled sample versus an additional training epoch, holding total cycle compute constant. It is not a claim that an annotation workflow and a training workflow can be freely swapped within one short cycle: real annotation pipelines involve upstream procurement, quality control, and human-in-loop latency that we do not model, and that typically operate on a longer horizon than a single cycle. The result is a useful guide to budget allocation across stages a team can already flex (e.g., which queued labels to release, how many epochs to schedule), not to upstream annotation planning. 
+
+Eval-stage scope of empirical savings. Although the framework formally budgets labeling, training, and evaluation jointly, the compute savings we measure are concentrated in evaluation. Reallocating saved evaluation wall-clock toward labeling or training within the same cycle is a deployment-time choice that depends on cluster scheduling and pipeline topology, and we intentionally do not specify it inside T IME GATE — separating measurement (which the policy layer provides) from reallocation (which depends on production constraints) keeps the layer thin. The corollary is that “ 66% savings” should be read as “ 66% of the evaluation stage” rather than “ 66% of the cycle”; cycle-level savings depend on the ratio Cfull eval /C naive cycle ,which is workload-specific. 
+
+Future Scope of work. Several avenues extend beyond the scope of this paper and form the basis of our primary follow-up work: (i) conducting a systematic comparison with sequential-testing and confidence-interval baselines, as well as a composed comparison with adaptive-subset selection methods such as SubLIME (Xu et al., 2024) and SimBA (Lee et al., 2025) (substituting their selectors for the random slice and re-auditing through M ); (ii) expanding to multi-task foundation-model benchmarks, including MMLU and HELM subsets, and incorporating at least one additional open FM family; (iii) performing longitudinal studies on 500+ cycle drift-aware benchmarks with controlled covariate shift, and validating the rolling-recalibration extension introduced above; (iv) conducting ablations on calibration length K, sentinel period N , boundary margin ϵ, and slice size α under realistic drift conditions; and (v) extending energy/time measurements across various hardware types and workloads to confirm that the ∼89% savings ratio is applicable beyond single-H200 classification. We consider these as natural progressions rather than essential for establishing the workshop-scoped claims of the current paper. 12
