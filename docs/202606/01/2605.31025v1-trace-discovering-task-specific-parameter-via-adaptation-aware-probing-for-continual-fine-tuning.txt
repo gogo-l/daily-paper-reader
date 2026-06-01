@@ -1,0 +1,829 @@
+Title: TRACE: Discovering Task-Specific Parameter via Adaptation-Aware Probing for Continual Fine-Tuning
+
+URL Source: https://arxiv.org/pdf/2605.31025v1
+
+Published Time: Mon, 01 Jun 2026 01:06:08 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# TRACE: Discovering Task-Specific Parameter via Adaptation-Aware Probing for Continual Fine-Tuning 
+
+## Xiaosong Han ∗
+
+College of Computer Science and Technology, Jilin University Changchun, China hanxiaosong@jlu.edu.cn 
+
+## Ke Chen ∗
+
+College of Software, Jilin University Changchun, China chenke24@mails.jlu.edu.cn 
+
+## Xindi Dai ∗
+
+College of Computer Science and Technology, Jilin University Changchun, China daixd24@mails.jlu.edu.cn 
+
+## Di Liang Minlong Peng 
+
+Fudan University Shanghai, China {liangd17,mlpeng16}@fudan.edu.cn 
+
+## Wei Pang 
+
+School of Mathematical and Computer Sciences, Heriot-Watt University Edinburgh, Scotland w.pang@hw.ac.uk 
+
+## Fausto Giunchiglia 
+
+Department of Information Engineering and Computer Science, University of Trento Trento, Italy fausto.giunchiglia@unitn.it 
+
+## Xiaoyue Feng ∗† 
+
+College of Computer Science and Technology, Jilin University Changchun, China fengxy@jlu.edu.cn 
+
+## Yonghao Liu ∗† 
+
+College of Computer Science and Technology, Jilin University Changchun, China yonghao20@mails.jlu.edu.cn 
+
+## Renchu Guan ∗† 
+
+College of Computer Science and Technology, Jilin University Changchun, China guanrenchu@jlu.edu.cn 
+
+Abstract 
+
+In real-world deployment, LLMs are often adapted continually 
+
+across tasks to keep LLMs up-to-date in production, where new fine-tuning should preserve previously learned skills. However, in-discriminately mixing tasks can dilute task specialization, while sequential fine-tuning (full-parameter or low rank adaptation) of-ten causes catastrophic forgetting due to destructive overwrit-ing. Replay-based continual tuning and maintaining separate task-specific adapters can mitigate forgetting, but introduce additional compute, storage, and management overhead. Recognizing the redundancy of LLM parameters for any single task, we reframe continual task adaptation as task-specific parameter discovery via adaptation-aware probing: a short warm-start probe exposes a task’s adaptation trace, enabling us to identify and isolate the small subset of parameters essential for each task to mitigate catastrophic forgetting. Building on this view, we introduce TRACE , a novel approach for discovering Task-specific pa Rameters via Adaptation-aware probing for Continual fin E-tuning. We perform a short warm-start fine-tune to derive task-specific core parameters by comparing the warm-started and pre-trained models. Core parameters are iden-tified via two strategies: importance scoring (L 2 norm and Fisher Information) and specificity analysis (cosine similarity of parameter updates). In continual fine-tuning settings, only the active task’s  
+
+> ∗Key Laboratory of Symbolic Computation and Knowledge Engineering of the Ministry of Education
+> †Corresponding author
+> This work is licensed under a Creative Commons Attribution 4.0 International License.
+> KDD 2026, Jeju Island, Republic of Korea.
+> ©2026 Copyright held by the owner/author(s). ACM ISBN 979-8-4007-2259-2/2026/08 https://doi.org/10.1145/3770855.3817801
+
+core parameters are updated while others remain frozen, preserving prior knowledge. We conduct extensive experiments across multi-ple standard benchmarks to demonstrate the superior performance of our proposed method. Additionally, we validate the generaliza-tion of our method through a cross-model and scale transferability study, demonstrating a “small-to-large” paradigm that guides the fine-tuning of large-scale models under resource constraints. Our public code can be found here. 
+
+CCS Concepts 
+
+• Computing methodologies → Natural language processing ;
+
+Knowledge representation and reasoning ; Natural language generation .
+
+Keywords 
+
+Large Language Model, Continual Fine-Tuning 
+
+ACM Reference Format: 
+
+Xiaosong Han, Ke Chen, Xindi Dai, Di Liang, Minlong Peng, Wei Pang, Fausto Giunchiglia, Xiaoyue Feng, Yonghao Liu, and Renchu Guan. 2026. TRACE: Discovering Task-Specific Parameter via Adaptation-Aware Prob-ing for Continual Fine-Tuning. In Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2 (KDD 2026), August 9–13, 2026, Jeju Island, Republic of Korea. ACM, New York, NY, USA, 12 pages. https://doi.org/10.1145/3770855.3817801 
+
+1 Introduction 
+
+Large Language Models (LLMs) have demonstrated impressive gen-eralization capabilities across a wide range of tasks [ 23 , 25 , 26 , 28 ,35 ]. A key enabler of this versatility is Supervised Fine-Tuning (SFT), which allows general-purpose models to be specialized for high-stakes tasks such as mathematical reasoning, medical ques-tion answering, and complex programming tasks [ 27 , 30 , 50 ]. This  
+
+> arXiv:2605.31025v1 [cs.CL] 29 May 2026 KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. Xiaosong Han et al.
+
+capability is crucial for real-world applications, where fine-tuning transforms a general-purpose model into a competent task-specific assistant. However, most existing SFT approaches focus on a single-task setting, neglecting the practical need for continual fine-tuning, where tasks arrive over time in production. In contrast, proprietary models such as GPT-5 [ 34 ] demonstrate remarkable versatility, sug-gesting that public LLMs need to learn to handle multiple special-ized tasks over time. However, the conventional SFT paradigm harbors a fundamental flaw: it inherently operates as a destructive update mechanism. When an LLM is continually fine-tuned on multiple tasks, new knowledge often comes at the expense of pre-viously acquired skills. For example, fine-tuning a model initially LLM Parameter Space        
+
+> Traditional SFT
+> Task1 Task4 Task2 Task3 Knowledge
+> Dilution
+> TRACE Task1 Task4 Task2 Task3
+> LLM Parameter Space
+
+Figure 1: A parameter-space view of continual fine-tuning. Traditional SFT dilutes task knowledge over time, while TRACE discovers task-specific core parameters and selec-tively activates them to preserve prior skills. 
+
+trained on code generation with medical question answering data may overwrite its internal representations of programming logic. The resulting model often exhibits degraded performance on earlier tasks, effectively becoming a hybrid expert that is neither proficient in code nor accurate in medicine. This phenomenon, known as catastrophic forgetting [ 9, 31 , 42 ], underscores a core limitation of current fine-tuning strategies: the absence of mechanisms for isolating task-specific knowledge. Existing approaches to this problem—such as experience re-play [ 11 ], which incurs substantial computational and memory overhead; parameter-efficient adapter-based adaptation[ 17 ], which reduces the number of trainable parameters per task but still faces trade-offs between forgetting (when reusing a shared adapter) and storage complexity (when maintaining task-specific adapters); mix-ing all tasks into a joint SFT process [ 1], which is often imprac-tical in continual fine-tuning since it requires persistent access to historical data and may still suffer from task interference; and regularization-based methods [ 24 , 39 ], which treat the model as a monolithic entity and impose global constraints to mitigate for-getting. However, they fail to address the root cause of the issue: the unregulated overwriting of task-specific internal parameters in continual fine-tuning settings. In essence, these methods remain committed to the destructive paradigm, offering only incremental safeguards without explicitly identifying and isolating the parame-ters responsible for new-task adaptation. Consequently, a natural question arises: Can we design a task-specific fine-tuning mechanism that enables an LLM to acquire new capabilities while preserving its previously learned knowledge? As illustrated in Fig. 1, conventional sequential SFT broadly updates shared parameters, progressively diluting earlier task knowledge and causing catastrophic forgetting. Our method instead identifies task-specific core parameters and selectively updates them, enabling continual adaptation without losing previously learned capabilities. In neuroscience, it is well established that different regions of the brain are specialized for distinct functions [ 20 ]—for example, the temporal lobe is responsible for processing auditory signals, whereas the occipital lobe is involved in perceiving and processing basic visual features. Drawing an analogy to this mechanism, prior studies have made an important observation: different layers and modules within LLMs contribute unequally across tasks, with cer-tain layers playing dominant roles in specific domains while others remain relatively inactive [ 4 , 10 , 13 ]. This structural specialization suggests a promising direction—selectively tuning task-relevant layers while freezing others preserves prior knowledge and reduces interference. Motivated by this insight, we reframe continual fine-tuning as task-specific parameter discovery via adaptation-aware probing . Accordingly, we introduce TRACE, a novel framework that enables LLMs to acquire new capabilities while preserving previously learned knowledge with low training overhead, TRACE performs the following: 
+
+• Task-Specific Core Parameter Discovery : For each task in the continual stream, TRACE performs adaptation-aware prob-ing via a brief warm-start fine-tune, and compute the parameter update vectors. To identify task-specific core parameters, we adopt two complementary strategies: a magnitude-based ap-proach that combines L 2 norm changes and Fisher Information to evaluate parameter importance, and a direction-based ap-proach that analyzes the cosine similarity of update vectors across tasks to capture task-specificity. 
+
+• Selective Parameter Activation : During continual fine-tuning, we only activate the core parameters relevant to the current task while keeping all others frozen. This protects prior knowl-edge and minimizes destructive updates. Futhermore, we perform a cross-model transferability study, show-ing that core parameters identified by TRACE on a small model (LLaMA3-8B) can be transferred to guide the fine-tuning of larger, architecturally different models ( e.g. , Qwen2.5-14B). This validates that TRACE uncovers a task-centric “functional blueprint” rather than a model-specific artifact, and offers a “small-to-large” transfer paradigm, where knowledge from a computationally inexpensive 8B model is successfully mapped to guide the fine-tuning of 14B models. Finally, extensive experiments across various foundational LLMs show that TRACE consistently outperforms sequential full fine-tuning and other baselines on downstream tasks. 
+
+2 Related Work 2.1 Catastrophic Forgetting in SFT of LLMs 
+
+SFT is a key step in adapting LLMs to downstream tasks, where the model is optimized on curated instruction-response pairs to en-hance its task-specific performance [ 11 , 37 ]. While single-task SFT has achieved impressive results in specialized domains, real-world TRACE: Discovering Task-Specific Parameter via Adaptation-Aware Probing for Continual Fine-Tuning KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. 
+
+applications increasingly demand multi-task SFT—adapting LLMs to multiple domains such as mathematical reasoning, code gener-ation, and medical question answering. This setting introduces a fundamental challenge: models fine-tuned on one task often for-get previously acquired knowledge when adapted to new tasks, a phenomenon known as catastrophic forgetting [ 24 , 31 ]. Prior work has explored various strategies to alleviate catastrophic for-getting. Regularization-based methods constrain parameter drift during fine-tuning but fail to account for task-specific relevance[ 36 ]. Weight-based approaches ( e.g. , Wise-FT [ 44 ], V-SoftMask [ 21 ]) in-terpolate between model states or scale gradients by importance scores, yet often lack sufficient granularity to avoid inter-task inter-ference. Architecture-based methods such as LoRA [ 17 ] or adapters freeze the backbone and introduce task-specific modules to isolate knowledge, but increase memory cost and may underutilize shared capacity. Recent studies point out that LLMs contain substantial parameter redundancy, and different tasks tend to activate distinct functional subspaces [ 13 , 32 ]. This suggests that preserving task performance does not require tuning all parameters; instead, up-dating a small task-specific subset may suffice. Inspired by this, our work investigates core parameter identification and selective activation to mitigate forgetting in multi-task SFT. 
+
+2.2 Insights into Transformer Module Specialization 
+
+Recent interpretability studies reveal that Transformer-based LLMs exhibit significant modular specialization: different components contribute unequally across tasks, and many parameters are under-utilized. For instance, feed-forward networks and attention heads display strong task-dependent activation patterns, with certain heads or neurons being consistently active only under specific task conditions [ 13 , 33 ]. Complementary empirical analyses demon-strate widespread redundancy in deep models: over 80% of neurons in pretrained LLMs can often be pruned with minimal impact on performance, suggesting that full-parameter tuning is both compu-tationally inefficient and prone to unnecessary interference [ 8, 40 ]. Similarly, layer-wise Shapley value analysis reveals that certain “cor-nerstone” layers dominate error reduction, while omitting others has negligible effects—highlighting the uneven importance distri-bution across layers [ 49 ]. These insights have motivated techniques for selective tuning of high-impact components, often guided by empirical analysis [ 3 , 32 ]. Building on these insights, our work pro-poses a task-specific core parameter identification strategy tailored for multi-task SFT. By isolating and preserving the task-specific parameters learned in earlier stages, we enable subsequent tasks to fine-tune only their own relevant subspaces. 
+
+3 Method 
+
+We formalize catastrophic forgetting in continual SFT and then present TRACE, which consists of task-specific core parameter dis-covery and selective parameter activation . An overview of the work-flow is shown in Fig. 2. 
+
+3.1 Problem Definition 
+
+LLMs aligned with human preferences exhibit strong general capa-bilities, but task-specific applications ( e.g. , code, math) typically still require fine-tuning on supervised datasets. In continual fine-tuning, adapting to a new task often degrades performance on earlier tasks, 
+
+i.e. , catastrophic forgetting. Formally, let 𝜃 0 denote the parameters of the initial aligned LLM. Given a sequence of K tasks 𝑇 = {𝑇 1,𝑇 2, . . . ,𝑇 𝐾 }, the goal of contin-ual SFT is to update the model parameters through multiple stages of task-specific training: 
+
+𝜃 𝑘 = arg min  
+
+> 𝜃
+
+LSFT (𝜃 ;𝑇 𝑘 ), with 𝜃 ← 𝜃 𝑘 −1, (1) where LSFT (𝜃 ;𝑇 𝑘 ) denotes the fine-tuning loss on task 𝑇 𝑘 , and 𝜃 𝑘 
+
+represents the model parameters after training on the k-th task. The objective is to obtain a single model 𝜃 𝐾 that performs well on all tasks {𝑇 1,𝑇 2, . . . ,𝑇 𝐾 }. However, full-parameter fine-tuning often leads to a significant drop in performance on previously learned tasks: Performance (𝜃 𝑘 ;𝑇 <𝑘 ) ≪ Performance (𝜃 𝑘 −1;𝑇 <𝑘 ). (2) This inequality reflects the destructive nature of standard sequential fine-tuning, where learning a new task often comes at the cost of forgetting earlier ones. To address this challenge, we leverage the architectural char-acteristics of Transformer-based LLMs ( e.g. , LLaMA [ 41 ], Qwen [ 46 ]), which consist of a stack of decoder layers, each composed of a multi-head attention module and a feed-forward network. Prior work suggests that different modules and layers contribute differ-ently to task specialization and generalization. This motivates us to identify and selectively update task-relevant parameters in order to preserve knowledge from earlier tasks. 
+
+3.2 Discovering Task-Specific Parameter and Selective Parameter Activation 
+
+We now describe the two main components of TRACE. 
+
+Step 1: Task-Specific Core Parameter Discovery. We propose two independent strategies for identifying task-specific core parameters. Both methods aim to select a subset of parameters that are most crucial for a given task, but they do so from distinct perspectives: one based on magnitude and sensitivity, and the other based on task-specificity in update direction. 
+
+• L2-Fisher-Based Importance Scoring : The first strategy eval-uates how significantly each parameter contributes to a task, by combining the magnitude of change and the sensitivity of the loss function. Given the base model parameters 𝜃 0 and the task-specific fine-tuned parameters 𝜃 ∗ 
+
+> 𝑘
+
+. It is crucial to note that instead of a costly multi-epoch training process, our approach only requires a short warm-start fine-tune for each task (a single epoch). The objective of this step is not to achieve optimal task performance, but to effi-ciently generate a strong signal indicating which parameters are most important and specific to a given domain. We compute the L 2
+
+norm difference of parameter 𝜃 (𝑖 ) as: L2 (𝑖 ) = ∥𝜃 ∗( 𝑖 ) 
+
+> 𝑘
+
+− 𝜃 (𝑖 ) 
+
+> 0
+
+∥2. (3) KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. Xiaosong Han et al. Task-Specific Brain Regions in LLM 
+
+> SFT
+> Pre-trained LLM
+> Detect Core Parameters
+> Task-Specific
+> Core Parameters
+> Selective Parameter
+> Fine-Tuning
+
+TRACE: Task-Specific Continual Fine-Tuning Pipeline 
+
+Math Brain Region 
+
+Medical Brain Region 
+
+Brain Regions to LLM Layers 
+
+# k            
+
+> Embedding
+> ...
+> Layer 1
+> Layer N
+> LM Head
+> Activation
+> Layer 2
+> L2 norm Fisheries
+> Cosine
+> Similarity
+> High Sensitivity
+> to Math Knowledge
+> Norm
+> MHA
+> Norm
+> Up Proj
+> Down Proj
+> Linear
+> Warm-started LLM
+> ��
+> ��=��,�−��,��
+> Fisheries �=��∼��(��(�;�)
+> ���
+> )�
+> CosSim �
+> ��,��
+> =��
+> (��)·��
+> (��)
+> ‖��
+> (��)‖·‖ ��
+> (��)‖
+
+Figure 2: The framework of TRACE. The top part illustrates the core intuition behind TRACE: we conceptualize the LLM as a brain, where different regions are activated by different task-specific tasks. The bottom left visualizes how this brain-like activation mechanism maps to the LLM’s Transformer architecture. The bottom right illustrates the TRACE pipeline: a pre-trained LLM is first fine-tuned on task-specific data. Core parameters are then identified by comparing the original and fine-tuned models using L 2 distance, Fisher information, and cosine similarity. These parameters are selectively activated for continual fine-tuning, while others are frozen to retain prior knowledge. 
+
+This reflects how much the parameter changed during task-specific tuning. To further assess importance, we compute the Fisher infor-mation of each parameter: Fisher (𝑖 ) = E𝑥 ∼D 𝑘 
+
+
+
+𝜕 LSFT (𝑥 ; 𝜃 (𝑖 ) 
+
+> 𝑘
+
+)
+
+𝜕𝜃 (𝑖 )
+
+!2
+
+. (4) This captures how sensitive the task loss is to perturbations in parameter 𝜃 (𝑖 ) . We normalize both metrics and compute a combined score. We set 𝛼 = 𝛽 = 0.5 by default, which is validated by the sensitivity analysis in Sec. 5.6.3: score (𝑖 ) = 𝛼 · L2  
+
+> (𝑖 )
+
++ 𝛽 · Fisher (𝑖 ) . (5) Parameters are then ranked by score (𝑖 ) , and the top 𝑟 % are selected as the task’s core parameters; the choice of 𝑟 is analyzed in Sec. 5.6.1. 
+
+• Cosine Similarity-Based Specificity Scoring : The second strat-egy identifies core parameters based on how uniquely each param-eter is updated for a given task compared to others. The intuition is that if a parameter’s update direction is very different from that of other tasks, then it likely encodes task-specific knowledge. We first compute the parameter difference vector: 
+
+Δ(𝑖 ) 
+
+> 𝑘
+
+= 𝜃 ∗( 𝑖 ) 
+
+> 𝑘
+
+− 𝜃 (𝑖 ) 
+
+> 0
+
+. (6) Then, for each parameter and pair of tasks (𝑇 𝑘 ,𝑇 𝑗 ), we compute the cosine similarity of their updates: Sim (𝑖 ) 
+
+> 𝑘,𝑗
+
+= ⟨Δ(𝑖 ) 
+
+> 𝑘
+
+, Δ(𝑖 ) 
+
+> 𝑗
+
+⟩∥Δ(𝑖 ) 
+
+> 𝑘
+
+∥2 · ∥ Δ(𝑖 ) 
+
+> 𝑗
+
+∥2
+
+. (7) Finally, we define a specificity score for task 𝑇 𝑘 as: Spec (𝑖 ) 
+
+> 𝑘
+
+= 1 − 1
+
+𝐾 − 1
+
+> 𝐾
+
+∑︁ 
+
+> 𝑗 =1, 𝑗 ≠𝑘
+
+Sim (𝑖 ) 
+
+> 𝑘,𝑗
+
+. (8) A high specificity score indicates that the parameter is adjusted in a task-unique way. We rank parameters by Spec (𝑖 ) 
+
+> 𝑘
+
+and select the top 𝑟 % as the core parameters set C𝑘 for task 𝑇 𝑘 .
+
+Step 2: Selective Parameter Activation . After identifying task-specific core parameters for each task, we perform continual fine-tuning in a way that only updates the parameters most relevant to the current task, while minimizing interference with parameters important to previous tasks. TRACE: Discovering Task-Specific Parameter via Adaptation-Aware Probing for Continual Fine-Tuning KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. 
+
+For each task 𝑇 𝑘 , we define a core parameter set C𝑘 , selected using one of the two strategies described in Step 1. During training on 𝑇 𝑘 ,only parameters in C𝑘 are activated and allowed to update, while all other parameters remain frozen. Importantly, we allow parameter reuse across tasks. That is, if a parameter is shared between multiple tasks’ core sets, it can be updated again when it reappears in the current task’s core set. We do not enforce strict freezing of all previous core parameters, only those that are irrelevant to the current task. Formally, the parameter update rule at step k becomes: 
+
+𝜃 𝑘 ← 𝜃 𝑘 −1 − 𝜂 · ∇ 𝜃 (𝑖 ) ∈ C 𝑘 LSFT (𝜃 ;𝑇 𝑘 ), (9) where 𝜂 is the learning rate, and C𝑘 denotes the task-specific core parameter set. Parameters not in C𝑘 (i.e. , 𝜃 (𝑖 ) ∉ C𝑘 ) are excluded from gradient updates. This selective activation mechanism ensures that only task-relevant parameters are adjusted at each stage, preserving previ-ously learned knowledge and minimizing destructive interference across tasks. To facilitate the understanding, we detail the specific training process of our method in Algorithm 1. 
+
+4 Experiments 4.1 SFT Datasets 
+
+We consider three task-specific SFT datasets: Code Alpaca [5 ] for code generation, GSM8K-RFT [47 ] for mathematical reasoning, and MedQA [19 ] for medical question answering. These tasks represent distinct domains with potentially conflicting optimization directions. Detailed descriptions of these SFT datasets are available in Appendix A.1. 
+
+4.2 Foundation Models 
+
+To validate the generality of our approach, We evaluate TRACE on diverse open-source LLM backbones and scales, including LLaMA2 
+
+(7B)[ 41 ], LLaMA3 (8B) [ 12 ], Qwen2.5 (14B) [ 46 ], Qwen3 (32B) [ 45 ], and the distilled DeepSeek-R1 (1.5B) [ 15 ]. This diverse selection shows that TRACE’s gains generalize beyond any single backbone. Model details are in Appendix A.2. 
+
+4.3 Baselines 
+
+To validate the benefits of TRACE, we compare it with a diverse set of representative fine-tuning strategies that reflect common approaches to continual adaptation. Joint Fine-tuning [ 48 ] di-rectly mixes all SFT data for joint fine-tuning, while the Sequential Fine-tuning [ 18 ] applies sequential full-parameter updates on each task without explicit preservation of prior knowledge. Sequential LoRA [17 ] serves as a parameter-efficient alternative, performing sequential adaptation with low-rank adapters. DMT [11] incorpo-rates a two-stage design: it first conducts full-parameter multi-task tuning on multi-domain SFT dataset, followed by a second stage where a small proportion of the multi-task data is replayed to miti-gate forgetting. 
+
+Evaluation Benchmarks. Evaluation is conducted using domain-specific benchmarks corresponding to each SFT task. For code gen-eration, we report pass@1 on HumanEval [6]; for mathematical reasoning, we report accuracy on GSM8K [43 ]; and for medical question answering, we evaluate accuracy on the MedQA [ 19 ] test Algorithm 1: TRACE: Discovering Task-Specific Parameter and Selective Parameter Activation 
+
+Require: Initial LLM parameters 𝜃 0, sequence of tasks 𝑇 =
+
+{𝑇 1,𝑇 2, . . . ,𝑇 𝐾 }, core parameter ratio 𝑟 
+
+Ensure: Final model parameters 𝜃 𝐾  
+
+> 1:
+
+# Step 1: Core Parameter Identification (Performed Offline)  
+
+> 2:
+
+# First, generate all warm-started models and parameter deltas  
+
+> 3:
+
+for each task 𝑇 𝑘 ∈ 𝑇 do  
+
+> 4:
+
+Perform a short warm-start fine-tune: 𝜃 ∗ 
+
+> 𝑘
+
+←
+
+WarmStart (𝜃 0,𝑇 𝑘 ) 
+
+> 5:
+
+Store parameter deltas: Δ𝑘 ← 𝜃 ∗ 
+
+> 𝑘
+
+− 𝜃 0 
+
+> 6:
+
+end for  
+
+> 7:
+
+# Then, select core parameters using one of the two strategies below  
+
+> 8:
+
+Strategy A: L 2-Fisher Importance Scoring  
+
+> 9:
+
+for each task 𝑇 𝑘 ∈ 𝑇 do  
+
+> 10:
+
+Compute L 2 norm of deltas: L 2,𝑘 ← || Δ𝑘 || 2 
+
+> 11:
+
+Compute Fisher Information on task 𝑇 𝑘 : Fisher 𝑘 ←
+
+ComputeFisher (𝜃 0,𝑇 𝑘 ) 
+
+> 12:
+
+Combine scores: Score 𝑘 ← 𝛼 · L2,𝑘 + 𝛽 · Fisher 𝑘  
+
+> 13:
+
+Select top-𝑟 % core parameters C𝑘 based on Score 𝑘  
+
+> 14:
+
+end for  
+
+> 15:
+
+Strategy B: Cosine Similarity Specificity Scoring  
+
+> 16:
+
+for each task 𝑇 𝑘 ∈ 𝑇 do  
+
+> 17:
+
+Compute average similarity with all other tasks: 
+
+𝐴𝑣𝑔𝑆𝑖𝑚 𝑘 ← 1 
+
+> 𝐾 −1
+
+Í𝑗 ≠𝑘 CosineSimilarity (Δ𝑘 , Δ𝑗 ) 
+
+> 18:
+
+Compute specificity score: 𝑆𝑝𝑒𝑐 𝑘 ← 1 − 𝐴𝑣𝑔𝑆𝑖𝑚 𝑘  
+
+> 19:
+
+Select top-𝑟 % core parameters C𝑘 based on 𝑆𝑝𝑒𝑐 𝑘  
+
+> 20:
+
+end for  
+
+> 21:
+
+# Step 2: Sequential Selective Fine-tuning  
+
+> 22:
+
+Initialize 𝜃 ← 𝜃 0 
+
+> 23:
+
+for 𝑘 = 1 to 𝐾 do  
+
+> 24:
+
+Activate parameters in the chosen core set C𝑘 and freeze all others  
+
+> 25:
+
+Fine-tune on 𝑇 𝑘 with gradients only on C𝑘 :
+
+𝜃 ← 𝜃 − 𝜂 · ∇ 𝜃 (𝑖 ) ∈ C 𝑘 LSFT (𝜃 ;𝑇 𝑘 ) 
+
+> 26:
+
+end for  
+
+> 27:
+
+return 𝜃 𝐾 ← 𝜃 
+
+set. In our setup, each task is fine-tuned individually and sequen-tially, after which the model is evaluated on the aforementioned benchmarks. Details of benchmarks and implementation details are available in Appendix A.3 and A.4. 
+
+5 Results 5.1 Overall Performance 
+
+We conduct extensive experiments to evaluate the effectiveness of our proposed TRACE framework in mitigating catastrophic forgetting and improving continual generalization. In our experi-ments, the sequential fine-tuning is randomly arranged in an order: math →medical →code. Here, TRACE-LF and TRACE-CS denote our model that performs task-specific core parameters identification using the L 2-Fisher importance and the cosine similarity, respec-tively. KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. Xiaosong Han et al. 
+
+As shown in Table 1, TRACE consistently outperforms all base-lines across different model sizes and tasks. We attribute this phe-nomenon to our proposed strategy, which performs selective pa-rameter activation for task-specific fine-tuning. It can effectively identify the core parameters relevant to each task and selectively ac-tivates them, thereby preventing these parameters from being over-written during subsequent training. This mechanism substantially mitigates the catastrophic forgetting issue commonly observed in sequential fine-tuning scenarios. Notably, TRACE achieves superior performance on the GSM8K benchmark compared to other baselines. A plausible explanation is that, in the sequential multi-task setting, the mathematical task is positioned as the first stage in the fine-tuning pipeline, mak-ing its parameter representations particularly susceptible to being overwritten during subsequent task updates. In contrast, TRACE effectively mitigates this issue by identifying and preserving task-specific core parameters, thus maintaining early task proficiency while adapting to new tasks. Moreover, the effectiveness of TRACE is observed across diverse architectures (DeepSeek, LLaMA, Qwen) and a wide range of model sizes—from the compact 1.5B DeepSeek-R1 to the large-scale 32B Qwen3—demonstrating the scalability, robustness, and generality of our method for real-world multi-task fine-tuning scenarios. 
+
+Table 1: Performance of different training strategies across various LLMs. The underlined values indicate the best base-line. ↑ and ↓ represent the absolute improvement and degra-dation compared to the best baseline.                                                                                                                                                                       
+
+> LLM Methods Evaluated Benchmark ↑
+> GSM8K HumanEval MedQA Average DeepseekR1-1.5B Joint Fine-tuning 48.14 39.00 27.34 38.16 Sequential Fine-tuning 47.31 40.20 27.73 38.41 Sequential LoRA 51.78 43.40 26.94 40.71 DMT 49.58 42.70 26.76 39.68
+> TRACE-LF 63.46 ↑11.68 43.90 ↑0.50 29.93 ↑2.20 45.76 ↑5.05
+> TRACE-CS 61.56 ↑9.78 44.50 ↑1.10 30.40 ↑2.67 45.49 ↑4.78 LLaMA2-7B Joint Fine-tuning 29.88 14.63 43.05 29.19 Sequential Fine-tuning 23.43 14.02 41.56 26.34 Sequential LoRA 23.20 14.02 27.42 21.55 DMT 44.12 12.20 41.71 32.68
+> TRACE-LF 44.43 ↑0.31 15.85 ↑1.22 45.40 ↑2.35 35.23 ↑2.55
+> TRACE-CS 48.82 ↑4.70 17.07 ↑2.44 43.99 ↑0.94 36.63 ↑3.95 LLaMA3-8B Joint Fine-tuning 23.28 28.05 57.66 36.33 Sequential Fine-tuning 12.59 23.17 46.66 27.47 Sequential LoRA 41.17 43.29 54.52 46.33 DMT 49.89 27.44 55.30 44.21
+> TRACE-LF 58.00 ↑8.11 57.90 ↑14.61 58.37 ↑0.71 58.09 ↑11.76
+> TRACE-CS 66.03 ↑16.14 61.60 ↑18.31 62.21 ↑4.55 63.28 ↑16.95 Qwen2.5-14B Joint Fine-tuning 37.98 34.76 67.71 46.82 Sequential Fine-tuning 26.00 32.93 65.75 41.56 Sequential LoRA 74.91 45.73 66.38 62.34 DMT 27.98 35.98 66.69 43.55
+> TRACE-LF 84.99 ↑10.08 73.20 ↑27.47 67.64 ↓0.07 75.28 ↑12.94
+> TRACE-CS 81.27 ↑6.36 75.60 ↑29.87 69.29 ↑1.58 75.39 ↑13.05 Qwen3-32B Joint Fine-tuning 57.06 73.80 73.37 68.08 Sequential Fine-tuning 50.64 75.00 67.40 64.35 Sequential LoRA 62.40 75.00 49.80 62.40 DMT 31.31 68.90 75.96 58.72
+> TRACE-LF 69.52 ↑7.12 90.90 ↑15.90 76.83 ↑0.87 79.08 ↑11.00
+> TRACE-CS 72.81 ↑10.41 81.10 ↑6.10 76.28 ↑0.32 76.73 ↑8.65
+
+5.2 Visual Comparison of Fine-Tuning Strategies on Task-Specific Representations 
+
+To better understand the representational behaviors of different fine-tuning strategies, we visualize the last-layer embeddings of Qwen2.5-14B using t-SNE across three domains (Fig. 3). The visu-alizations for Joint Fine-tuning and Sequential Fine-tuning show closely gathered and overlapping clusters, quantitatively reflected in their low Silhouette scores (0.214 and 0.215, respectively). The severe entanglement of the Math and Medical clusters in the Sequen-tial Fine-tuning case provides a clear visual representation of cata-strophic forgetting. In stark contrast, our TRACE approach yields three distinct, well-separated clusters, achieving a significantly higher Silhouette score of 0.394 and a much larger inter-centroid distance (S = 122.562). This demonstrates a substantial improvement in representational separation, with the Math-Medical and Code-Math gaps increasing by 103.4% and 64.8% respectively, over the average of the other strategies. TRACE successfully learns robust, clearly delineated representations for each domain. Its ability to maintain this high degree of overall separation, a feat not achieved by the baseline methods where entire clusters collapse, underscores the effectiveness of its selective activation strategy. 
+
+5.3 Task Order Sensitivity 
+
+To explore the impact of task ordering on the performance of the TRACE framework, we conduct a sensitivity analysis by varying the fine-tuning sequence of the three tasks. As summarized in Table 2, we evaluate six different task permutations using the LLaMA3-8B model under TRACE. Overall, TRACE remains robust across permu-tations: the averaged score over the three benchmarks is 56 .54 ±3.80 
+
+(min/max: 53.04/62.27), indicating no single ordering is required to obtain competitive multi-task performance. Moreover, all task orders consistently outperform the baseline method, demonstrating that the gains of TRACE are not tied to any particular permutation. Importantly, every permutation yields strong results on all three benchmarks (all averages ≥ 53 .04 ), and multiple orders achieve similarly high overall performance (e.g., 58.09 and 58.90). These results suggest that TRACE does not hinge on a hand-picked task sequence; instead, its core-parameter-based isolation mitigates de-structive interference and preserves reasonable performance under diverse task arrangements, aligning with realistic continual settings where the task stream is dictated by data arrival. 
+
+Table 2: Performance comparison across different task per-mutation orders under TRACE. 
+
+Task Order Evaluated Benchmark ↑
+
+GSM8K HumanEval MedQA Average Math-Medical-Code 58.00 57.90 58.37 58.09 Math-Code-Medical 47.38 52.44 60.88 53.57 Medical-Math-Code 46.85 51.22 61.98 53.35 Medical-Code-Math 63.84 61.00 61.98 62.27 Code-Math-Medical 49.28 48.17 61.67 53.04 Code-Medical-Math 61.11 53.70 61.90 58.90 TRACE: Discovering Task-Specific Parameter via Adaptation-Aware Probing for Continual Fine-Tuning KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. Joint Fine-tuning Silhouette = 0.214 ( )S = 78.062 ( )Sequential Fine-tuning Silhouette = 0.215 ( )S = 75.125 ( )TRACE Silhouette = 0.394 ( )S = 122.562 ( )
+
+Figure 3: Visualization of Qwen2.5-14B’s last-layer embeddings under three fine-tuning strategies on three domains—code generation, mathematical reasoning, and medical QA. Points are shown in a unified t-SNE space; colored dots and 95% covariance ellipses denote clusters, with gray dots indicating the other two models for reference. Subtitles report Silhouette and the mean inter-centroid distance S ( ↑ better). TRACE yields the strongest separation (Silhouette = 0.394; S= 122.562), with Math–Medical and Code–Math gaps increased by 103.4% and 64.8% over the average of the other strategies. 
+
+5.4 Scalability to Long Task Sequences 
+
+A practical continual fine-tuning pipeline often involves more than a few tasks, and new tasks may be either highly heterogeneous or closely related to previously seen domains. To examine TRACE under a longer and more realistic task stream, we extend the original three-task sequence by adding two additional tasks: ( i) an in-domain math task (MATH [ 16 ]) that is closely related to GSM8K, creating a high-overlap setting, and ( ii ) a lawyer-domain task Lawyer-Instruct [ 2] evaluated on LegalBench [ 14 ], introducing a new domain. All methods follow the same continual fine-tuning setting. 
+
+Table 3: Performance comparison on the extended long task stream (LLaMA3-8B).                                               
+
+> Methods Evaluated Benchmark ↑
+> GSM8K MedQA HumanEval LegalBench Average Joint Fine-tuning 17.89 53.10 18.30 48.59 34.47 Sequential Fine-tuning 27.29 30.95 12.20 50.70 30.28 Sequential LoRA 56.63 56.25 47.00 56.66 54.66 DMT 32.37 49.73 14.00 51.42 36.88
+> TRACE-LF 66.03 ↑9.40 58.37 ↑2.12 53.70 ↑6.70 59.26 ↑2.60 58.81 ↑4.15
+> TRACE-CS 66.72 ↑10.09 58.92 ↑2.67 61.00 ↑14.00 59.26 ↑2.60 61.48 ↑6.82
+
+Table 3 shows that TRACE remains robust as the task stream grows. TRACE-CS achieves the best overall average score, outper-forming the strongest baseline Sequential LoRA by +6.82 points. Beyond the aggregate gains, this setting also clarifies how the capacity upper bound behaves in long streams. A common concern is that, as the number of tasks increases, the union of task-critical parameter sets may expand and eventually approach a large fraction of the model, diminishing the benefit of selective updates. However, such growth is largely driven by task diversity rather than task count . When tasks are highly related ( e.g. , GSM8K and MATH), their task-critical parameter sets are expected to exhibit substantial overlap, and the additional training acts more like rehearsal over shared subspaces than allocating new capacity. This aligns with TRACE’s design that allows parameter reuse across tasks: shared core parameters can be re-activated and refined when a related task reappears, while task-irrelevant parameters remain protected. As a result, adding an in-domain task does not degrade performance; instead, it further strengthens the corresponding capability, while maintaining strong performance on the introduced legal domain. 
+
+5.5 Generalization and Transferability of Task-Specific Core Parameters 
+
+TRACE’s success raises a compelling scientific question: does it identify a model-specific artifact or a more fundamental, model-agnostic “functional blueprint” of a task? To investigate this, we propose and evaluate a “small-to-large” transfer paradigm. We hy-pothesize that core parameters identified on a smaller source model can be effectively transferred to guide the adaptation of larger, ar-chitecturally different target models. If successful, this approach would not only validate the “functional blueprint” theory but also unlock a highly resource-efficient pathway for model adaptation, decoupling the cost of analysis from the scale of deployment. To validate this, we introduce the TRACE-Transfer methodol-ogy, a two-step process designed to map core parameters across disparate architectures. The entire process is illustrated in Fig. 4. First, for Layer Mapping , we identify functionally equivalent layers between the source (LLaMA3-8B) and target (Qwen series) models. This is achieved by comparing their layer activations on a small, rep-resentative probe dataset using Centered Kernel Alignment (CKA) [ 22 ], a robust metric adept at measuring the similarity of neural KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. Xiaosong Han et al. 
+
+representations even when their dimensions differ. For each source layer, we select the target layer with the highest CKA similarity as its functional counterpart. Second, for Parameter Name Mapping , we apply a set of architectural rules to translate the parameter names within the mapped layers. This rule-based approach is crucial for handling structural variations, such as the addition of q_norm and 
+
+k_norm layers in the Qwen3-32B model, by expanding the mapping to cover the entire functional component. LLaMA3-8B 
+
+> Embedding
+> LayerNorm
+> LayerNorm
+> Gate_Proj
+> Up_Proj
+> Down_Proj
+> LM Head
+> Qwen3-32B
+> Embedding
+> LayerNorm
+> Q_Proj
+> K_Proj
+> V_Proj
+> O_Proj
+> LayerNorm
+> Gate_Proj
+> Up_Proj
+> Down_Proj
+> LM Head
+> Q_Proj
+> K_Proj
+> V_Proj
+> O_Proj
+> K_Norm
+> Q_Norm
+> Structurally-Adaptive Transfer
+
+Figure 4: Illustration of our Structurally-Adaptive Transfer from a LLaMA3-8B layer to a Qwen3-32B layer. 
+
+The results of our transfer experiment, where core parameters for the task are identified on LLaMA3-8B and transferred to Qwen2.5-14B and Qwen3-32B, are summarized in Table 4. the Transfer-LF/CS methods achieve performance that is highly comparable to the stan-dard TRACE-LF/CS methods, which necessitate a full identification process on the target model. Furthermore, the average performance of the transfer models exceeds that of all baseline methods on both the Qwen2.5-14B and Qwen3-32B benchmarks. This finding sug-gests that the transferred core parameters can serve as an effective foundation for multi-task adaptation, yielding stronger results than the compared baseline techniques. 
+
+5.6 Hyperparameter Sensitivity 
+
+5.6.1 Sensitivity to Core Parameter Retention Ratio. Recall that we update only a small subset of parameters selected by the impor-tance ranking, and denote the filtering ratio 𝑟 as the percentage of parameters kept trainable, while the remaining parameters are frozen. To verify that our default choice is not arbitrary, we sweep 
+
+𝑟 ∈ { 1, 5, 10 , 15 , 20 , 30 , 40 , 50 , 60 , 70 , 80 , 90 , 100 }, keeping all other settings fixed. Fig. 5 reports the resulting performance trends, and additionally overlays the best baseline average score as a dashed line for direct comparison. We observe that the average score peaks at 𝑟 = 5 and remains consistently above the baseline within a small retention 
+
+Table 4: Performance comparison of the transfer effective-ness across various LLMs.                                                                                                       
+
+> LLM Methods Evaluated Benchmark ↑
+> GSM8K HumanEval MedQA Average Qwen2.5-14B Joint Fine-tuning 37.98 34.76 67.71 46.82 Sequential Fine-tuning 26.00 32.93 65.75 41.56 Sequential LoRA 74.91 45.73 66.38 62.34 DMT 27.98 35.98 66.69 43.55
+> TRACE-LF 84.99 ↑10.08 73.20 ↑27.47 67.64 ↓0.07 75.28 ↑12.94
+> TRACE-CS 81.27 ↑6.36 75.60 ↑29.87 69.29 ↑1.58 75.39 ↑13.05
+> Transfer-LF 82.03 ↑7.12 79.90 ↑34.17 67.01 ↓0.70 76.31 ↑13.97
+> Transfer-CS 83.40 ↑8.49 69.50 ↑23.77 65.75 ↓1.96 72.88 ↑10.54 Qwen3-32B Joint Fine-tuning 57.06 73.80 73.37 68.08 Sequential Fine-tuning 50.64 75.00 67.40 64.35 Sequential LoRA 62.40 75.00 49.80 62.40 DMT 31.31 68.90 75.96 58.72
+> TRACE-LF 69.52 ↑7.12 90.90 ↑15.90 76.83 ↑0.55 79.08 ↑11.00
+> TRACE-CS 72.81 ↑10.41 81.10 ↑6.10 76.28 ↑0.32 76.73 ↑8.65
+> Transfer-LF 68.23 ↑5.83 90.20 ↑7.12 77.77 ↑1.49 76.31 ↑8.23
+> Transfer-CS 68.99 ↑6.59 88.40 ↑13.40 75.26 ↓0.70 73.23 ↑5.15
+
+range ( 𝑟 ∈ [ 1, 30 ]), indicating that the method is not overly sensi-tive in the practical regime and that a fixed default is reasonable. In contrast, once 𝑟 becomes large, performance degrades sharply, and the average falls below the baseline when 𝑟 ≥ 40 , suggesting that updating a substantial number of low-importance parameters introduces strong interference. Therefore, we set 𝑟 = 5 by default, and report the full sweep in Appendix A.5. 1 5 10 15 20 30 40 50 60 70 80 90 100   
+
+> r%
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> Score
+> best Avg@ r= 5
+> (58.09)
+> GSM8K
+> HumanEval
+> MedQA
+> Avg
+> Best Baseline (Avg=46.33)
+
+Figure 5: Scores with varying ratios of top 𝑟 % parameters. 
+
+5.6.2 Sensitivity to Warm-Start Epochs. Our warm-start stage is designed to probe task-sensitive parameters by inducing a small amount of task-specific updates, rather than to optimize the task loss to convergence. A natural question is how the warm-start length affects the identified core parameters and the final sequential adaptation performance. To this end, we vary the warm-start epochs 
+
+𝐸 ws ∈ { 1, 2, 3} for the three task on LLaMA3-8B while keeping all other settings fixed, re-identify the core set under each setting, and evaluate the resulting pipeline on GSM8K, HumanEval, and MedQA. Fig. 6 visualizes the code task’s layer-wise importance distribu-tion (projection modules on the left and LayerNorm modules on the right) computed after each warm-start length. With 𝐸 ws = 1, the importance pattern remains relatively structured and sparse : a sub-set of modules/layers exhibit clearly higher scores, yielding a core set that is more discriminative for the probed task. As 𝐸 ws increases to 2 and 3, the importance distribution becomes progressively more TRACE: Discovering Task-Specific Parameter via Adaptation-Aware Probing for Continual Fine-Tuning KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. 
+
+diffuse across layers and modules. This “spreading” effect indicates that longer warm-start tends to activate broader parameter updates, making many parameters appear important and thereby reducing the separability between truly task-critical parameters and gen-erally plastic parameters. In other words, overly long warm-start can dilute the identification signal by mixing early task-specific sensitivity with later-stage, more global adaptation dynamics. The quantitative results in Table 5 confirm this trend for both strategies. For TRACE-LF, 𝐸 ws = 1 yields the best average. TRACE-CS shows the same pattern: the best average is achieved at 𝐸 ws = 1
+
+and decreases as 𝐸 ws increases. This matches Fig. 6: as importance becomes more saturated across layers/modules (notably at 𝐸 ws = 3), the core set becomes less task-discriminative and more interference-prone, hurting generalization. Heatmaps for the math and medical 
+
+tasks are provided in Appendix A.6. M-D 
+
+> M-G
+> M-U
+> A-K
+> A-O
+> A-Q
+> A-V
+> Layer
+> E1
+> LN-In
+> LN-PA
+> M-D
+> M-G
+> M-U
+> A-K
+> A-O
+> A-Q
+> A-V
+> E2
+> LN-In
+> LN-PA
+> M-D
+> M-G
+> M-U
+> A-K
+> A-O
+> A-Q
+> A-V
+> E3
+> LN-In
+> LN-PA
+> 0.20
+> 0.21
+> 0.22
+> 0.23
+> Combined Score
+> Layer-wise Parameter Importance
+
+Figure 6: Layer-wise parameter importance across three train-ing epochs. Each column shows one epoch with projection parameters (left) and LayerNorm parameters (right). Module abbreviations: A-Q/K/V/O (attention q/k/v/o projections), M-D/G/U (MLP down/gate/up), LN-In/PA (input/post-attention layernorm). Color intensity is the combined importance scores. 
+
+5.6.3 Sensitivity to 𝛼 ( L2–Fisher Trade-off). Recall that we rank parameters by the combined importance score 𝑠 𝑖 = 𝛼 · L2,𝑖 + ( 1 −𝛼 ) · 
+
+Fisher 𝑖 . To verify that our default choice is not arbitrary, we sweep 
+
+𝛼 ∈ { 0, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0} (with 𝛽 = 1 − 𝛼 ), while keeping all other settings fixed. Fig. 7 shows that the average score peaks at 𝛼 =
+
+0.5 and remains stable for 𝛼 ∈ [ 0.5, 0.8], indicating that the method is not overly sensitive to this hyperparameter. Notably, using only Fisher ( 𝛼 = 0) or only L 2 (𝛼 = 1) yields worse average performance, suggesting that the two signals provide complementary information. Therefore, we use 𝛼 = 𝛽 = 0.5 in all experiments; full results are reported in Appendix A.7. 
+
+Table 5: Effect of warm-start epochs 𝐸 ws on the benchmarks (LLaMA3-8B). 
+
+Methods 𝐸 ws 
+
+Evaluated Benchmark ↑ Average ↑
+
+GSM8K HumanEval MedQA TRACE-LF 1 58.00 57.90 58.37 58.09 
+
+2 56.86 51.80 59.15 55.94 3 49.96 49.40 59.31 52.89 TRACE-CS 1 66.03 61.60 62.21 63.28 
+
+2 62.17 61.00 59.15 60.77 3 59.14 56.10 59.94 58.71 0.0 0.2 0.4 0.6 0.8 1.0             
+
+> 0.0 0.2 0.4 0.5 0.6 0.8 1.0
+> (with = 1 )
+> 52
+> 54
+> 56
+> 58
+> 60
+> 62
+> Score
+> best Avg @ =0.5
+> (58.09)
+> GSM8K HumanEval MedQA Avg
+
+Figure 7: Sensitivity to the trade-off coefficient 𝛼 (with 𝛽 =
+
+1 − 𝛼 ) on GSM8K, HumanEval, and MedQA. 
+
+6 Conclusion 
+
+In this paper, we propose an effective framework, named TRACE, to alleviate catastrophic forgetting in continual fine-tuning of LLMs. TRACE identifies and activates only a small subset of task-specific core parameters at each stage, improving continual adaptation performance while reducing computational cost. Specifically, we present two strategies to select core parameters via adaptation-aware probing: TRACE-LF is task-local : it estimates per-task pa-rameter salience by combining update magnitude (L 2 ) and loss sen-sitivity (Fisher), requiring no cross-task comparisons. In contrast, TRACE-CS is task-contrastive : it measures parameter specificity by comparing update directions across tasks (cosine similarity), explicitly favoring parameters whose updates are unique to the current task. This independence makes the framework robust to different task regimes. 
+
+Acknowledgments 
+
+Our work is supported by the National Natural Science Foundation of China (No. 62372209 and No. 62372494). Fausto Giunchiglia’s work is funded by European Union’s Horizon 2020 FET Proactive Project (No. 823783). 
+
+References 
+
+[1] Alon Albalak, Yanai Elazar, Sang Michael Xie, Shayne Longpre, Nathan Lambert, Xinyi Wang, Niklas Muennighoff, Bairu Hou, Liangming Pan, Haewon Jeong, Douwe Kiela, Thomas Wolf, and Alexander M. Rush. 2024. A Survey on Data Selection for Language Models. TMLR (2024). [2] Alignment-Lab-AI. 2024. Lawyer-Instruct. Hugging Face dataset. https:// huggingface.co/datasets/Alignment-Lab-AI/Lawyer-Instruct Reformatted from the original LawyerChat dataset. [3] Zeyuan Allen-Zhu and Yuanzhi Li. 2024. Physics of language models: part 3.1, knowledge storage and extraction. In ICML . 1067–1077. KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. Xiaosong Han et al. 
+
+[4] Hritik Bansal, Karthik Gopalakrishnan, Saket Dingliwal, Sravan Bodapati, Katrin Kirchhoff, and Dan Roth. 2023. Rethinking the Role of Scale for In-Context Learning: An Interpretability-based Case Study at 66 Billion Scale. In ACL . 11833– 11856. [5] Sahil Chaudhary. 2023. Code Alpaca: An Instruction-following LLaMA model for code generation. https://github.com/sahil280114/codealpaca. [6] Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Ponde De Oliveira Pinto, Jared Kaplan, Harri Edwards, Yuri Burda, Nicholas Joseph, Greg Brockman, et al . 2021. Evaluating large language models trained on code. 
+
+arXiv preprint arXiv:2107.03374 (2021). [7] Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser, Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al . 2021. Training verifiers to solve math word problems. arXiv preprint arXiv:2110.14168 (2021). [8] Fahim Dalvi, Hassan Sajjad, Nadir Durrani, and Yonatan Belinkov. 2020. Analyz-ing Redundancy in Pretrained Transformer Models. In EMNLP . 4908–4926. [9] Matthias De Lange, Rahaf Aljundi, Marc Masana, Sarah Parisot, Xu Jia, Aleš Leonardis, Gregory Slabaugh, and Tinne Tuytelaars. 2021. A continual learning survey: Defying forgetting in classification tasks. IEEE TPAMI 44, 7 (2021), 3366– 3385. [10] Ning Ding, Yujia Qin, Guang Yang, Fuchao Wei, Zonghan Yang, Yusheng Su, Shengding Hu, Yulin Chen, Chi-Min Chan, Weize Chen, et al . 2023. Parameter-efficient fine-tuning of large-scale pre-trained language models. Nature Machine Intelligence 5, 3 (2023), 220–235. [11] Guanting Dong, Hongyi Yuan, Keming Lu, Chengpeng Li, Mingfeng Xue, Dayi-heng Liu, Wei Wang, Zheng Yuan, Chang Zhou, and Jingren Zhou. 2024. How abilities in large language models are affected by supervised fine-tuning data composition. In ACL . 177–198. [12] Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. 2024. The llama 3 herd of models. arXiv preprint arXiv:2407.21783 (2024). [13] Mor Geva, Roei Schuster, Jonathan Berant, and Omer Levy. 2021. Transformer Feed-Forward Layers Are Key-Value Memories. In EMNLP . 5484–5495. [14] Neel Guha, Julian Nyarko, Daniel Ho, Christopher Ré, Adam Chilton, Alex Chohlas-Wood, Austin Peters, Brandon Waldon, Daniel Rockmore, Diego Zam-brano, et al . 2023. Legalbench: A collaboratively built benchmark for measuring legal reasoning in large language models. In NeurIPS . 44123–44279. [15] Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Peiyi Wang, Qihao Zhu, Runxin Xu, Ruoyu Zhang, Shirong Ma, Xiao Bi, et al . 2025. DeepSeek-R1 in-centivizes reasoning in LLMs through reinforcement learning. Nature 645, 8081 (2025), 633–638. [16] Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn Xiaodong Song, and Jacob Steinhardt. 2021. Measuring Mathematical Problem Solving With the MATH Dataset. In NeurIPS . 5325–5337. [17] Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, Weizhu Chen, et al . 2022. Lora: Low-rank adaptation of large language models.. In ICLR .[18] Hanxu Hu, Simon Yu, Pinzhen Chen, and Edoardo Ponti. 2025. Fine-Tuning Large Language Models with Sequential Instructions. In NAACL . 5589–5610. [19] Di Jin, Eileen Pan, Nassim Oufattole, Wei-Hung Weng, Hanyi Fang, and Peter Szolovits. 2021. What disease does this patient have? a large-scale open domain question answering dataset from medical exams. Applied Sciences 11, 14 (2021), 6421. [20] Mark H Johnson. 2001. Functional brain development in humans. Nature Reviews Neuroscience 2, 7 (2001), 475–483. [21] Zixuan Ke, Yijia Shao, Haowei Lin, Tatsuya Konishi, Gyuhak Kim, and Bing Liu. 2023. Continual pre-training of language models. In ICLR .[22] Simon Kornblith, Mohammad Norouzi, Honglak Lee, and Geoffrey E. Hinton. 2019. Similarity of Neural Network Representations Revisited. In ICML . 3519– 3529. [23] Mengyu Li, Yonghao Liu, Fausto Giunchiglia, Ximing Li, Xiaoyue Feng, and Renchu Guan. 2026. Simple-sampling and hard-mixup with prototypes to rebal-ance contrastive learning for text classification. In WWW . 3698–3708. [24] Yong Lin, Hangyu Lin, Wei Xiong, Shizhe Diao, Jianmeng Liu, Jipeng Zhang, Rui Pan, Haoxiang Wang, Wenbin Hu, Hanning Zhang, et al . 2024. Mitigating the alignment tax of rlhf. In EMNLP . 580–606. [25] Yonghao Liu, Renchu Guan, Fausto Giunchiglia, Yanchun Liang, and Xiaoyue Feng. 2021. Deep attention diffusion graph neural networks for text classification. In EMNLP . 8142–8152. [26] Yonghao Liu, Mengyu Li, Wei Pang, Fausto Giunchiglia, Lan Huang, Xiaoyue Feng, and Renchu Guan. 2025. Boosting short text classification with multi-source information exploration and dual-level contrastive learning. In AAAI .24696–24704. [27] Yonghao Liu, Di Liang, Mengyu Li, Fausto Giunchiglia, Ximing Li, Sirui Wang, Wei Wu, Lan Huang, Xiaoyue Feng, and Renchu Guan. 2023. Local and Global: Temporal Question Answering via Information Fusion.. In IJCAI . 5141–5149. [28] Yonghao Liu, Chuyao Wang, Zhikang Wang, Liang Chen, Zhi Li, Jiangning Song, Qi Zou, Rui Gao, Binzhi Qian, Xiaoyue Feng, et al . 2026. High-Parameter Spatial Multi-Omics through Histology-Anchored Integration. Nature Methods 23, 2 (2026), 373–386. [29] Ilya Loshchilov and Frank Hutter. 2019. Decoupled Weight Decay Regularization. In ICLR .[30] Jinghui Lu, Dongsheng Zhu, Weidong Han, Rui Zhao, Brian Mac Namee, and Fei Tan. 2023. What Makes Pre-trained Language Models Better Zero-shot Learners?. In ACL . 2288–2303. [31] Yun Luo, Zhen Yang, Fandong Meng, Yafu Li, Jie Zhou, and Yue Zhang. 2025. An empirical study of catastrophic forgetting in large language models during continual fine-tuning. IEEE TASLP 33 (2025), 3776–3786. [32] Kevin Meng, David Bau, Alex Andonian, and Yonatan Belinkov. 2022. Locating and editing factual associations in gpt. In NeurIPS . 17359–17372. [33] Paul Michel, Omer Levy, and Graham Neubig. 2019. Are sixteen heads really better than one?. In NeurIPS . 14037–14047. [34] OpenAI. 2025. Introducing GPT-5. https://openai.com/index/introducing-gpt-5/. [35] Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al . 2022. Training language models to follow instructions with human feedback. In NeurIPS .27730–27744. [36] Abhishek Panigrahi, Nikunj Saunshi, Haoyu Zhao, and Sanjeev Arora. 2023. Task-specific skill localization in fine-tuned language models. In ICML . 27011–27033. [37] Aldo Pareja, Nikhil Shivakumar Nayak, Hao Wang, Krishnateja Killamsetty, Shivchander Sudalairaj, Wenlong Zhao, Seungwook Han, Abhishek Bhandwaldar, Guangxuan Xu, Kai Xu, et al . 2025. Unveiling the secret recipe: A guide for supervised fine-tuning small llms. In ICLR .[38] Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, and Yuxiong He. 2020. ZeRO: memory optimizations toward training trillion parameter models. In SC . 1–16. [39] James Seale Smith, Yen-Chang Hsu, Lingyu Zhang, Ting Hua, Zsolt Kira, Yilin Shen, and Hongxia Jin. 2023. Continual diffusion: Continual customization of text-to-image diffusion with c-lora. TMLR (2023). [40] Mingjie Sun, Zhuang Liu, Anna Bair, and J Zico Kolter. 2024. A simple and effective pruning approach for large language models. In ICLR .[41] Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yas-mine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhos-ale, et al . 2023. Llama 2: Open foundation and fine-tuned chat models. arXiv preprint arXiv:2307.09288 (2023). [42] Xiao Wang, Yuansen Zhang, Tianze Chen, Songyang Gao, Senjie Jin, Xianjun Yang, Zhiheng Xi, Rui Zheng, Yicheng Zou, Tao Gui, et al . 2023. Trace: A com-prehensive benchmark for continual learning in large language models. arXiv preprint arXiv:2310.06762 (2023). [43] Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny Zhou, et al . 2022. Chain-of-thought prompting elicits reasoning in large language models. In NeurIPS . 24824–24837. [44] Mitchell Wortsman, Gabriel Ilharco, Jong Wook Kim, Mike Li, Simon Korn-blith, Rebecca Roelofs, Raphael Gontijo Lopes, Hannaneh Hajishirzi, Ali Farhadi, Hongseok Namkoong, et al . 2022. Robust fine-tuning of zero-shot models. In 
+
+CVPR . 7959–7971. [45] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, et al . 2025. Qwen3 technical report. arXiv preprint arXiv:2505.09388 (2025). [46] An Yang, Bowen Yu, Chengyuan Li, Dayiheng Liu, Fei Huang, Haoyan Huang, Jiandong Jiang, Jianhong Tu, Jianwei Zhang, Jingren Zhou, et al . 2025. Qwen2. 5-1m technical report. arXiv preprint arXiv:2501.15383 (2025). [47] Zheng Yuan, Hongyi Yuan, Chengpeng Li, Guanting Dong, Keming Lu, Chuanqi Tan, Chang Zhou, and Jingren Zhou. 2023. Scaling Relationship on Learning Mathematical Reasoning with Large Language Models. arXiv preprint 2308.01825 
+
+(2023). [48] Zaifu Zhan and Rui Zhang. 2025. Towards better multi-task learning: A frame-work for optimizing dataset combinations in large language models. In NAACL .5373–5386. [49] Yang Zhang, Yanfei Dong, and Kenji Kawaguchi. 2024. Investigating Layer Importance in Large Language Models. In Proceedings of the 7th BlackboxNLP Workshop: Analyzing and Interpreting Neural Networks for NLP . 469–479. [50] Wayne Xin Zhao, Kun Zhou, Junyi Li, Tianyi Tang, Xiaolei Wang, Yupeng Hou, Yingqian Min, Beichen Zhang, Junjie Zhang, Zican Dong, et al . 2023. A survey of large language models. arXiv preprint arXiv:2303.18223 (2023). 
+
+A Appendix A.1 Details of SFT Datasets 
+
+GSM8K RFT [47 ] extends the original GSM8K benchmark [ 7 ] by incorporating multiple reasoning trajectories via a rejection sam-pling procedure. This augmentation yields a training set comprising 7.5K questions paired with 110K annotated responses. The dataset TRACE: Discovering Task-Specific Parameter via Adaptation-Aware Probing for Continual Fine-Tuning KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. 
+
+has been made publicly available to support further research in mathematical reasoning. 
+
+Code Alpaca [ 5] is a code generation dataset designed to train instruction-following LLaMA models. It is fully derived from Stan-ford Alpaca and includes 20K instances tailored for fine-tuning. The dataset has been publicly released for open access and research use. 
+
+MedQA [ 19 ] is a free-form multiple-choice question answering dataset focused on medical problem solving, constructed from pro-fessional medical board examinations. It supports three languages— English, Simplified Chinese, and Traditional Chinese—with 12,723, 34,251, and 14,123 questions, respectively. In addition to the ques-tion set, a large-scale corpus extracted from medical textbooks is provided to facilitate knowledge-intensive reading comprehension. The MedQA dataset has been open-sourced for academic use. 
+
+A.2 Details of Foundation Models 
+
+In this section, we provide descriptions of the foundation language models used in our experiments to better contextualize the position of our proposed method. 
+
+DeepSeek-R1 [ 15 ]: This model is a distilled version of the DeepSeek R1 reasoning model, derived from Qwen2.5-Math-1.5B. It is opti-mized for mathematical problem solving and demonstrates strong performance on reasoning benchmarks. Notably, it achieves 83.9% Pass@1 on MATH500 and 28.9% Pass@1 on AIME 2024, outperform-ing several much larger models including GPT-4o and Claude 3.5, despite having only 1.5 billion parameters. Its compact size and high efficiency make it suitable for resource-constrained environments and reasoning-intensive tasks. 
+
+LLaMA2-7B [41 ]: LLaMA2 is an open-source large language model series released by Meta AI, featuring improved training datasets and optimization techniques over the original LLaMA. The 7B variant, used in our experiments, supports a wide range of tasks such as text generation, summarization, and instruction following. LLaMA2 places emphasis on safety and bias mitigation, making it well-suited for both academic and industrial research. 
+
+LLaMA3-8B [12 ]: LLaMA3 represents the latest generation in Meta’s LLaMA family, incorporating architectural enhancements, improved tokenization, and extended training on high-quality datasets. The 8B model delivers notable improvements in reasoning and gen-eralization compared to LLaMA2, and it serves as a strong baseline for multi-task supervised fine-tuning in our study. 
+
+Qwen2.5-14B [ 46 ]: Qwen2.5 is a bilingual (Chinese-English) open-source LLM series developed by Alibaba DAMO Academy. The 14B model is instruction-tuned and pre-trained on a diverse mixture of natural language and code data. It adopts group-query atten-tion and supports long-context modeling. Qwen2.5-14B achieves competitive performance in both zero-shot and supervised settings across a variety of benchmarks. 
+
+Qwen3-32B [45 ]: Qwen3 is the latest open-source LLM series re-leased by Alibaba in April 2025, covering dense and Mixture-of-Experts (MoE) models ranging from 0.5B to 235B parameters. The 32B dense model employed in our experiments supports multi-lingual, reasoning, and domain-specific tasks. It introduces a hybrid inference paradigm with “thinking” and “non-thinking” modes, adaptive reasoning budget control, and exhibits state-of-the-art performance among open-source models on multiple benchmarks. 
+
+A.3 Details of Evaluation Benchmarks 
+
+We evaluate model performance across three distinct benchmarks, each targeting a specific domain: mathematical reasoning, code gen-eration and medical question answering. The selected benchmarks include GSM8K, HumanEval and MedQA. 
+
+GSM8K [ 47 ] is a widely adopted benchmark for evaluating arith-metic reasoning abilities. It comprises grade-school-level math word problems that require multi-step numerical reasoning. Our eval-uation follows the standard protocol on the test set, using 8-shot chain-of-thought prompting to elicit detailed intermediate steps. This setup emphasizes a model’s ability to reason through complex arithmetic rather than relying on surface-level pattern recognition. 
+
+HumanEval [6] is a code generation benchmark introduced to assess functional correctness in Python programming tasks. The dataset includes 164 problems, each specified with a function sig-nature and an accompanying docstring. Model outputs are evalu-ated based on their ability to pass unit tests that verify semantic equivalence with reference implementations. We adopt the official evaluation script for consistent and reproducible measurement of functional correctness. 
+
+MedQA [ 19 ] is a multiple-choice question answering dataset con-structed from real-world medical licensing examinations. It targets clinical knowledge and diagnostic reasoning across a wide range of medical subfields. The dataset is divided into a training set and a test set, enabling both supervised fine-tuning and evaluation. In our study, we exclusively use the English-language test set for evaluation purposes, measuring the model’s ability to generalize to medical questions without additional in-domain supervision. This benchmark poses significant challenges due to its domain specificity, factual rigor, and the need for multi-hop reasoning. 
+
+A.4 Implementation Details 
+
+We conduct extensive fine-tuning experiments across three classic SFT datasets—Code Alpaca, GSM8K-RFT, and MedQA—using five LLM backbones of varying scales: DeepSeekR1-1.5B, LLaMA2-7B, LLaMA3-8B, Qwen2.5-14B, and Qwen3-32B. For all full-parameter fine-tuning experiments, we adopt the AdamW optimizer [ 29 ] with a cosine learning rate schedule, a maximum sequence length of 1,024, and BFloat16 mixed precision. All training is performed for 3 epochs with a global batch size of 256. Full-parameter training is implemented with DeepSpeed ZeRO Stage 3 [ 38 ] to ensure mem-ory and computation efficiency in large-scale settings. For LoRA-sequential, we set the rank 𝑟 = 8, scaling factor 𝛼 = 16 , and insert adapters into all Transformer layers. The learning rate for LoRA tuning is 2.0 × 10 −5. All experiments are conducted on 8 NVIDIA A800-SXM GPUs with 80GB memory each. 
+
+A.5 Details of Sensitivity to Filtering Ratio 
+
+Table A.1 reports the full results of sweeping the filtering ratio 
+
+𝑟 ∈ { 1, 5, 10 , 15 , 20 , 30 , 40 , 50 , 60 , 70 , 80 , 90 , 100 }.
+
+A.6 Details of Sensitivity to Warm-Start Epochs 
+
+For completeness, we report the layer-wise parameter-importance heatmaps for the math and medical tasks under different warm-start epochs 𝐸 ws ∈ { 1, 2, 3}. The visualization protocol is identical to that used in the main paper (Fig. 6): each column corresponds KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. Xiaosong Han et al. M-D 
+
+> M-G
+> M-U
+> A-K
+> A-O
+> A-Q
+> A-V
+> Layer
+> E1
+> LN-In
+> LN-PA
+> M-D
+> M-G
+> M-U
+> A-K
+> A-O
+> A-Q
+> A-V
+> E2
+> LN-In
+> LN-PA
+> M-D
+> M-G
+> M-U
+> A-K
+> A-O
+> A-Q
+> A-V
+> E3
+> LN-In
+> LN-PA
+> 0.32
+> 0.34
+> 0.36
+> 0.38
+> 0.40
+> 0.42
+> 0.44
+> Combined Score
+> Layer-wise Parameter Importance
+
+Figure A.2: Layer-wise parameter importance across warm-start epochs on the medical task. The qualitative trend is consistent with the math and code tasks: a short warm-start yields a more structured importance pattern, whereas longer warm-start (E3) results in a more diffuse distribution across layers/modules. Table A.1: Effect of the filtering ratio 𝑟 (percentage of train-able parameters) on downstream benchmarks. 
+
+𝑟 Evaluated Benchmark ↑ Average ↑
+
+GSM8K HumanEval MedQA Best baseline 41.17 43.29 54.52 46.33 1% 55.34 53.70 56.56 55.20 5% 58.00 57.90 58.37 58.09 
+
+10% 52.46 56.10 56.87 55.14 15% 52.31 61.00 58.84 57.38 20% 46.02 50.60 59.07 51.90 30% 44.73 45.70 59.39 49.94 40% 28.51 37.20 55.85 40.52 50% 8.72 35.40 53.81 32.64 60% 20.17 28.70 53.73 34.20 70% 17.13 23.80 50.20 30.38 80% 13.50 23.80 51.69 29.66 90% 18.80 22.60 50.27 30.56 100% 12.59 23.17 46.66 27.47 to one warm-start length (E1/E2/E3), with projection parameters shown on the left panel and LayerNorm parameters shown on the right panel. Module abbreviations follow the same convention: A-Q/K/V/O denote attention q/k/v/o projections, M-D/G/U denote MLP down/gate/up projections, and LN-In/PA denote input/post-attention layernorm. M-D 
+
+> M-G
+> M-U
+> A-K
+> A-O
+> A-Q
+> A-V
+> Layer
+> E1
+> LN-In
+> LN-PA
+> M-D
+> M-G
+> M-U
+> A-K
+> A-O
+> A-Q
+> A-V
+> E2
+> LN-In
+> LN-PA
+> M-D
+> M-G
+> M-U
+> A-K
+> A-O
+> A-Q
+> A-V
+> E3
+> LN-In
+> LN-PA
+> 0.28
+> 0.29
+> 0.30
+> 0.31
+> 0.32
+> 0.33
+> 0.34
+> 0.35
+> 0.36
+> Combined Score
+> Layer-wise Parameter Importance
+
+Figure A.1: Layer-wise parameter importance across warm-start epochs on the math task. Increasing 𝐸 ws makes the im-portance distribution less sparse and more widespread across layers/modules, indicating that longer warm-start tends to dilute the task-discriminative signal for core-parameter iden-tification. Discussion. Across both tasks, we observe a consistent qualita-tive trend with the main-paper findings on the code task: 𝐸 ws = 1
+
+produces a relatively structured (more discriminative) importance pattern, while longer warm-start epochs progressively spread high-importance scores across broader layers and modules. This supports our design choice of using a single-epoch warm-start as a light-weight yet effective probe for identifying core parameters, while keeping the identification overhead minimal. 
+
+A.7 Details of Sensitivity to 𝛼 , 𝛽 
+
+Table A.2 reports the full results of sweeping 𝛼 ∈ { 0, 0.2, 0.4, 0.5, 0.6,
+
+0.8, 1.0} with 𝛽 = 1 − 𝛼 .
+
+Table A.2: Effect of the trade-off coefficient 𝛼 (with 𝛽 = 1 − 𝛼 )on downstream benchmarks. 
+
+𝛼 Evaluated Benchmark ↑ Average ↑
+
+GSM8K HumanEval MedQA 0.0 55.88 54.30 58.29 56.16 0.2 56.40 56.00 59.15 57.18 0.4 57.47 55.50 58.13 57.03 0.5 58.00 57.90 58.37 58.09 
+
+0.6 57.85 57.90 57.97 57.91 0.8 56.63 57.30 59.94 57.96 1.0 56.79 56.00 57.34 56.71
