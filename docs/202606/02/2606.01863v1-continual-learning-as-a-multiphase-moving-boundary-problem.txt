@@ -1,0 +1,578 @@
+Title: Continual Learning as a Multiphase Moving-Boundary Problem
+
+URL Source: https://arxiv.org/pdf/2606.01863v1
+
+Published Time: Tue, 02 Jun 2026 02:17:38 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# Continual Learning as a Multiphase Moving-Boundary Problem 
+
+Snigdha Chandan Khilar 
+
+Independent Researcher 
+
+snkhilar@gmail.com 
+
+Abstract 
+
+Continual learning is haunted by the stability–plasticity dilemma : a network must protect consolidated knowledge (stability) while remaining free to absorb new tasks (plasticity). We pro-pose Stefan-CL , which recasts this dilemma as a classical moving-boundary (Stefan) problem from the physics of melting and solidification. Consolidated knowledge is treated as a “solid” region and unused capacity as a “liquid” region of representation space, separated by a knowl-edge frontier represented implicitly as the zero level-set of a learned signed-distance field ϕ(x). Learning a new task advects this frontier outward according to a level-set evolution equation driven by a data-derived velocity, and a smooth phase mask built from the error function freezes the consolidated interior while leaving the exterior plastic. The cost of advancing the frontier is governed by a single physical parameter—the latent heat L—which we show acts as a calibrated stability–plasticity dial. On a family of analytically-grounded toy benchmarks whose ground-truth frontier follows the Frank-sphere growth law Rk = R0
+
+√k, Stefan-CL reduces forgetting from 0 .60 ±0.01 to 0 .020 ±0.003 over 10 seeds, recovers the analytic growth law from data alone to within 0 .03 radius error, and decisively outperforms the regularization baselines EWC (0 .72) and SI (0 .70) while matching experience replay (0 .94) without storing any raw data . We give a precise algorithm, full experimental settings, and an honest characterization of the method’s current scope: topology-changing frontiers are shown to be representable by the field but not yet trainable from data , isolating the data-driven advection velocity on non-convex fronts as the central open problem for future work. 
+
+# 1 Introduction 
+
+A neural network trained on a sequence of tasks tends to overwrite earlier knowledge when learning later tasks— catastrophic forgetting [McCloskey and Cohen, 1989, French, 1999]. The core tension is the stability–plasticity dilemma : weights that are too rigid cannot learn new tasks, while weights that are too plastic destroy old ones. The dominant families of remedies are (i) regularization methods such as Elastic Weight Consolidation (EWC) [Kirkpatrick et al., 2017] and Synaptic Intelligence (SI) [Zenke et al., 2017], which penalize movement of parameters deemed important to past tasks, and (ii) rehearsal methods that store and replay past examples [Rebuffi et al., 2017, Rolnick et al., 2019]. We observe that the stability–plasticity dilemma has an almost exact analogue in physics: the 
+
+Stefan problem [Stefan, 1891], which models melting and solidification. There, a material is divided into a solid phase and a liquid phase by a moving interface; the interface advances as the liquid freezes, at a rate controlled by the latent heat of fusion—the energy that must be removed to convert liquid into solid. The mapping we propose is direct: consolidated knowledge is solid, unused capacity is liquid, and learning a task freezes a region of capacity by advancing the interface. The cost of that 1
+
+> arXiv:2606.01863v1 [cs.LG] 1 Jun 2026
+
+freezing—how much “energy” it takes to consolidate—is the latent heat, and we show it becomes a single, physically-meaningful knob trading stability against plasticity. This analogy is not merely decorative. The Stefan problem comes with a mature numeri-cal toolkit—the level-set method [Osher and Sethian, 1988]—for representing and evolving mov-ing interfaces of arbitrary shape, including ones that change topology. Recent work has shown that compact neural fields can solve Stefan-type problems by enforcing the governing equations as physics-informed residuals [Pande et al., 2026]. We transplant this machinery from solving a heat-transfer PDE to driving a continual-learning mechanism .
+
+# 2 Related Work 
+
+Our method sits at the intersection of three literatures that have so far developed largely independently: continual learning, the physics of moving-boundary (Stefan) problems and their neural solvers, and implicit geometric representations. We review each, organising the discussion by proximity to our actual mechanism rather than by chronology, and we are explicit about which neighbouring methods are the natural points of comparison. 
+
+2.1 Continual learning: regularization, rehearsal, and isolation 
+
+The taxonomy we adopt follows van de Ven et al. [2022]: methods divide broadly into regu-larization, rehearsal, and parameter-isolation families. Regularization methods penalise movement of parameters deemed important to past tasks—Elastic Weight Consolidation [Kirkpatrick et al., 2017] weights this penalty by the diagonal of the Fisher information, while Synaptic Intelligence [Zenke et al., 2017] accumulates importance online from a path integral of the gradients. Rehearsal methods store and replay past exemplars [Rebuffi et al., 2017, Rolnick et al., 2019] or use stored gradients to constrain updates [Lopez-Paz and Ranzato, 2017]. Parameter-isolation methods in-stead dedicate disjoint capacity to each task, growing the network as needed [Rusu et al., 2016]. A recurring structural limitation of the regularization family, and the one our method is designed to address, is that importance is expressed isotropically in parameter space and is blind to the input-space region a task actually occupied; when tasks carry spatial or semantic locality, that locality is discarded. Our mechanism can be read as a regularizer whose importance is instead organised geometrically in input space by a moving boundary. 
+
+2.2 Functional regularization and the choice of anchor points 
+
+The component of our method most directly anticipated by prior work is the functional anchor of Eq. (8), which constrains the model’s function rather than its parameters. Function-space continual learning was introduced by Titsias et al. [2020], who memorise an approximate posterior over the task-specific function using inducing points within a Gaussian-process view of the network’s last layer. Pan et al. [2020] (FROMP) regularise the network outputs at a small set of memorable past examples, exploiting function-space correlations through a GP formulation; this is arguably the closest published method to our anchoring term. The essential difference is where the anchor is applied: FROMP and related methods select anchor inputs by a memorability or uncertainty criterion, whereas our solid mask Hs(ϕψ) selects them geometrically, as the consolidated interior of a learned frontier, and weights the anchor by the normalised consolidated mass. Related output- and feature-matching schemes include projected functional regularization [Gomez-Villa et al., 2022], which inserts a projection network to retain plasticity under feature distillation, and subspace distillation [Roy et al., 2023], which preserves the low-dimensional structure of the latent space. 2Relative to all of these, our contribution is not the functional penalty itself but the geometric rule that determines its support and its spatial weighting. 
+
+2.3 Geometrically and functionally localized protection 
+
+A second thread localises protection in activation or input space rather than in weight space, and is the natural neighbour of our phase-mask mechanism. Krukowski et al. [2025] (InTAct) enforce functional invariance at the neuron level by identifying activation intervals occupied by previous tasks and constraining updates within them while leaving the rest plastic— the same “freeze where the old task lived, stay plastic elsewhere” principle we implement, but defined on activation intervals rather than as a moving boundary in input space. Masana et al. [2021] apply ternary masks to features rather than weights for zero-forgetting task-incremental learning. Lan and Mahmood [2023] show that activation functions inducing sparse representations and sparse gradients (their “elephant” functions) confine the effect of an update to inputs near the updated point, a localized-update property closely related in spirit to a spatially confined frontier. Orthogonal and null-space weight-modification methods organise protection by input-space subspaces. What distinguishes our approach within this thread is that the protected region is an explicit, evolving geometric object with a calibrated metric (the signed-distance frontier), whose growth is governed by a single physical parameter rather than by a fixed per-neuron or per-feature allocation. 
+
+2.4 Physics-based analyses of continual learning 
+
+Continual learning has been studied through statistical physics, but—as we emphasise—predominantly as description rather than as a trainable mechanism. Shan et al. [2024] develop a statistical-mechanics theory of continual learning in wide deep networks, deriving order parameters that pre-dict forgetting from task and architecture relations and identifying a phase transition in performance as tasks become dissimilar. Li et al. [2023] cast variational continual learning as a Franz–Parisi thermodynamic-potential computation, analysing learning performance through mean-field order parameters. Mori et al. [2024] go further toward prescription, combining exact statistical-physics equations for the training dynamics with optimal control to derive task-selection protocols that trade off forgetting against performance. Our use of physics is constructive in a different sense: rather than analysing the dynamics of a fixed learner, we import a physical mechanism—the Stefan condition and the level-set method—as the consolidation rule itself, so that the stability–plasticity trade-off emerges from a governing equation with a physically meaningful parameter (the latent heat) rather than being measured after the fact. 
+
+2.5 Neural solvers for Stefan and free-boundary problems 
+
+The numerical machinery we repurpose comes from neural solvers for free-boundary problems. Wang and Perdikaris [2021] solve forward and inverse Stefan problems with physics-informed neural networks, representing the temperature field and the moving boundary by separate networks; deep level-set variants instead represent the solid–liquid interface by a network-parameterised level-set function. Chang et al. [2025] introduce a cusp-capturing formulation that resolves the gradient dis-continuity across the interface and recovers unstable (Mullins–Sekerka-type) interface evolution— directly relevant to our open problem, since the instability we encounter on non-convex fronts is of the same character. Our work builds most directly on Pande et al. [2026], who couple a com-pact (Kolmogorov–Arnold) network with a level-set formulation and enforce the heat equations, the interface equilibrium condition, the Stefan condition, the advection equation, and the Eikonal constraint as physics-informed residuals. We adopt their smooth error-function phase masks, their 3Eikonal regularization, and their closest-point velocity extension, but replace the heat-flux jump that drives the interface with a data-derived consolidation demand. To our knowledge, none of these solvers has previously been turned from solving a heat-transfer PDE into driving a learning mechanism. 
+
+2.6 Signed-distance fields and neural implicit representations 
+
+The frontier itself is a learned signed-distance field, a representation now standard for implicit shape modelling since DeepSDF [Park et al., 2019], with the Eikonal property encouraged as a soft penalty under automatic differentiation [Gropp et al., 2020]; the underlying level-set method and its reinitialization and extension-velocity machinery are classical [Osher and Sethian, 1988]. We stress an important directional distinction from a body of work that, at first glance, appears to overlap with ours. In continual neural mapping [Yan et al., 2021], iSDF [Ortiz et al., 2022], LGSDF [Yue et al., 2024], and continual learning of biomedical neural fields [van Harten et al., 2025], the signed-distance field (or neural field) is the signal being learned , and continual-learning techniques such as replay or distillation are applied to keep it from being forgotten. Our setup is the inverse: the signed-distance field is not the object of learning but the control mechanism 
+
+that drives consolidation of a separate predictor. The two uses are complementary and, to our knowledge, have not previously been connected. 
+
+2.7 Biological memory consolidation 
+
+Finally, the vocabulary of “consolidation” and the “stability–plasticity dilemma” originates in neuroscience, where systems consolidation is itself understood as the brain’s resolution of the tension between capacity for new memories and the overwriting of old ones. While our mechanism is not intended as a biological model, this lineage motivates the framing, and a growing body of brain-inspired continual-learning work pursues the same balance through synaptic consolidation, metaplasticity, or hippocampal replay. We engage this literature only at the level of motivation; our contribution is mechanistic and geometric. 
+
+2.8 Positioning 
+
+In summary, every ingredient of Stefan-CL has an independent prior literature: function-space anchoring, input-space localization of protection, physics-based theory of forgetting, neural Ste-fan solvers, and neural signed-distance fields. What is new is the synthesis—a mapping in which consolidated and plastic capacity are the solid and liquid phases of a Stefan problem, a learned signed-distance frontier is the active mechanism that advances under a data-driven velocity, and the latent heat serves as a single calibrated stability–plasticity dial. The two closest method-ological neighbours, against which future quantitative comparison would be most informative, are the functional-regularization line exemplified by FROMP [Pan et al., 2020] and the activation-localization line exemplified by InTAct [Krukowski et al., 2025]. 
+
+# 3 Background and Theory 
+
+This section provides the formal grounding for both halves of the analogy. We assume a reader familiar with one side (machine learning or computational physics) but not necessarily the other, and develop each from first principles. 43.1 Continual learning and the stability–plasticity dilemma 
+
+Let fθ : X → Y be a model with parameters θ, trained on a sequence of tasks {1, . . . , T } pre-sented one at a time. Task k defines a data distribution pk(x, y ) and a loss Lk(θ) = Epk [ℓ(fθ(x), y )]. In the ideal ( offline or joint ) setting one would minimize the average 1
+
+> T
+
+P 
+
+> k
+
+Lk(θ), but in continual learning the data for task j < k is no longer available when training task k. Minimizing Lk alone drives θ along directions that may sharply increase Lj ; the resulting degradation on past tasks is 
+
+catastrophic forgetting [McCloskey and Cohen, 1989, French, 1999]. The phenomenon is a direct consequence of representation sharing. If the tasks were served by disjoint parameters there would be no interference; forgetting arises precisely because the capacity used by task j is overwritten when it is repurposed for task k. This produces the stability–plasticity dilemma : a learning system must be plastic enough to acquire new tasks yet stable enough to retain old ones, and these requirements pull on the same shared weights in opposite directions. Two principal families address this. Regularization methods constrain parameter movement: they add a penalty P 
+
+> n
+
+ωn(θn − θ⋆n)2 that discourages changes to parameters n deemed important (importance ωn) to previous tasks, where θ⋆ is a past parameter snapshot. EWC [Kirkpatrick et al., 2017] sets ωn to the diagonal of the Fisher information; SI [Zenke et al., 2017] accumulates 
+
+ωn online from the path integral of gradients during training. Rehearsal methods instead store a subset of past examples and replay them while training new tasks [Rebuffi et al., 2017, Rolnick et al., 2019]. A common figure of merit, which we adopt, is forgetting : for tasks j < T , the drop from the best accuracy ever achieved on task j to its accuracy at the end of training. A structural limitation of standard regularization is that the importance weights ωn live in 
+
+parameter space and are agnostic to the input-space region a task occupied. When tasks have spatial or semantic locality, this is information left on the table. The method we propose is, in effect, a regularizer whose importance is organized geometrically in input space by a moving boundary. 
+
+3.2 Implicit interfaces and the level-set method 
+
+We now turn to the geometric machinery. Consider a region Ω s(t) ⊂ Rd with a moving, possibly shape-changing boundary Γ( t) = ∂Ωs(t). The level-set method [Osher and Sethian, 1988, Sethian, 1999] represents Γ implicitly as the zero level-set of an auxiliary scalar field ϕ : Rd × R → R,Γ( t) = { x : ϕ(x, t ) = 0 }, Ωs(t) = { x : ϕ(x, t ) < 0 }, Ωℓ(t) = { x : ϕ(x, t ) > 0 }. (1) The decisive advantage over an explicit parameterization of Γ (e.g. tracking marker points) is that 
+
+topological changes —splitting of one region into two, or merging of two into one—require no special handling: they correspond to the zero level-set of a smooth ϕ passing through a saddle, with ϕ
+
+itself remaining single-valued and smooth. This is exactly the property we will need for multiphase consolidation. If the boundary moves with normal velocity Vn, differentiating ϕ(x(t), t ) = 0 along an interface point and using that the outward unit normal is n = ∇ϕ/ ∥∇ϕ∥ yields the level-set evolution equation 
+
+ϕt + F ∥∇ϕ∥ = 0 , (2) where F is a velocity field defined on all of space that agrees with Vn on Γ (an extension of Vn). Equation (2) is a Hamilton–Jacobi PDE; its solutions can develop kinks, and the relevant weak solution is the viscosity solution [Crandall and Lions, 1983]. 53.3 Signed-distance functions and the Eikonal equation 
+
+Among all fields sharing a given zero level-set, the signed-distance function (SDF) is canonical: 
+
+ϕ(x) = ± dist( x, Γ), negative inside Ω s and positive outside. An SDF is characterized by the 
+
+Eikonal equation 
+
+∥∇ϕ∥ = 1 , (3) which states that moving a unit length in space changes the distance-to-boundary by one unit. The SDF is the geometrically natural representation for three reasons we exploit: (i) its sign is a clean region indicator; (ii) its magnitude is a calibrated distance, which lets a fixed-width mask correspond to a fixed metric band around Γ; and (iii) it makes the closest-point projection exact— for any x, the nearest boundary point is 
+
+xΓ = x − ϕ(x) ∇ϕ(x)
+
+∥∇ϕ(x)∥ , (4) which we use to extend an interface-only velocity to all of space along normals. During evolution, the advection in Eq. (2) does not preserve the Eikonal property, so ϕ drifts away from being a true SDF. Classical schemes restore it by periodic reinitialization —solving 
+
+ϕτ + sign( ϕ)( ∥∇ϕ∥ − 1) = 0 to steady state, or recomputing the distance transform [Sussman et al., 1994]. In neural realizations the Eikonal property can instead be encouraged as a soft penalty (∥∇ϕ∥ − 1) 2 evaluated with automatic differentiation [Gropp et al., 2020, Pande et al., 2026]; we use both a soft penalty during advection and explicit reinitialization between tasks. 
+
+3.4 The Stefan problem 
+
+The classical Stefan problem [Stefan, 1891, Gupta, 2003] models a substance undergoing a phase change, such as the freezing of water into ice. The domain is split into a solid phase Ω s and a liquid phase Ω ℓ separated by the interface Γ. Heat diffuses within each phase, 
+
+∂tui = αi∇2ui, i ∈ { s, ℓ }, (5) with u the temperature and αi the thermal diffusivity. The phase change occurs at the melting temperature, so the interface satisfies the equilibrium condition u = Tm on Γ. The defining feature of the problem is the Stefan condition , an energy balance that sets the speed of the interface: converting a unit volume of liquid into solid releases an amount of energy equal to the latent heat of fusion L, and this energy must be carried away by conduction. Equating the released latent heat to the jump in heat flux across the interface gives 
+
+ρ L V n =  ks ∇us − kℓ ∇uℓ
+
+ · n, (6) where ρ is density, ki the conductivities, and Vn the normal interface velocity. Equation (6) is the crux for our purposes: the latent heat L sits in the denominator of the interface speed . A large 
+
+L means each unit of advance costs a lot of energy, so the interface moves slowly; a small L lets it sweep forward rapidly. The Stefan problem is a free-boundary problem—the interface location is unknown and must be solved for jointly with the temperature field—and the level-set method (§ 3.2–3) is the standard tool for tracking it [Gibou et al., 2018], including in the radially-symmetric 
+
+Frank-sphere solution where a solidifying seed of radius R(t) = R0
+
+√t grows into an undercooled melt. 63.5 Neural fields for moving-boundary problems 
+
+Physics-informed neural networks [Raissi et al., 2019] represent the unknown fields of a PDE as neural networks trained to minimize the PDE residual, boundary, and initial conditions as a com-posite loss. For free-boundary problems this has recently been combined with the level-set method: Pande et al. [2026] represent the temperature fields and the level-set field ϕ as compact neural networks and enforce the heat equations, the interface equilibrium condition, the Stefan condition, the advection equation, and the Eikonal constraint as physics-informed residuals—introducing the smooth error-function phase masks and the closest-point velocity extension that we adopt below. Our work repurposes this apparatus: where they solve a heat-transfer PDE , we use the same objects to drive a continual-learning mechanism , with the temperature-flux jump of Eq. (6) replaced by a data-driven consolidation demand. 
+
+# 4 The Physics-to-ML Mapping 
+
+We first explain the three physical ideas we borrow, each in plain terms, then formalize them in Section 5. 
+
+4.1 Implicit interfaces via a signed-distance field 
+
+Suppose we want to track a region Ω s of space (the “solid”) whose boundary moves and may change shape. Rather than parameterize the boundary curve explicitly, the level-set method stores a scalar field ϕ(x) whose value at each point is the signed distance to the boundary: negative inside the region, positive outside, and exactly zero on the boundary. The boundary is then the zero level-set {x : ϕ(x) = 0 }. The advantage for ML: a single smooth function—which a small neural network can represent—encodes an arbitrarily-shaped, even multi-component region, and we can read off “which side am I on” just from the sign of ϕ.
+
+4.2 The Eikonal equation: making distance mean distance 
+
+For ϕ to be a true distance function, it must satisfy the Eikonal equation ∥∇ϕ∥ = 1: moving one unit in space changes the distance-to-boundary by one unit. This is the geometric backbone of the method. In ML terms it is a simple regularizer, ( ∥∇ϕ∥ − 1) 2, computed with automatic differentiation; enforcing it means the field’s magnitude is a calibrated “how far am I from the frontier,” which is exactly the quantity the phase mask needs. 
+
+4.3 The Stefan condition: how fast the frontier moves 
+
+In melting/solidification, the interface advances at a normal velocity Vn set by the balance of heat flux across it: ρ L V n = (net flux), where ρ is density and L is the latent heat. Read as ML: the frontier between learned and unlearned regions advances at a speed proportional to the “demand” to consolidate new data, divided by the latent heat L. A large L means consolidation is expensive, so the frontier moves slowly and little new territory is protected (plastic, forgetful); a small L means consolidation is cheap, the frontier sweeps out to engulf all available data (stable, rigid). This single parameter is our stability–plasticity dial. 7Vnconsolidated 
+
+# (solid, < 0) 
+
+# plastic (liquid, > 0) Figure 1: The Stefan-CL mapping. Consolidated knowledge is the “solid” region {ϕ < 0}; unused capacity is “liquid” {ϕ > 0}. The knowledge frontier Γ = {ϕ = 0 } advects outward at normal velocity Vn as new tasks are consolidated. 
+
+# 5 Methodology 
+
+5.1 Setup 
+
+A model fθ : X → Y is trained on a sequence of tasks 1 , . . . , T . Task k supplies data supported on a region Dk ⊂ X . We maintain a second network ϕψ : X → R, the frontier field , whose zero level-set Γ = {x : ϕψ(x) = 0 } separates the consolidated region Ω s = {ϕψ < 0} from the plastic region Ω ℓ = {ϕψ > 0}.
+
+5.2 Selective freezing via phase masks 
+
+Following the smooth phase indicators of Pande et al. [2026], we define solid and liquid masks from the error function with band width ϵ:
+
+Hs(ϕ) = 12
+
+ 1 − erf  ϕ/ϵ  , Hℓ(ϕ) = 12
+
+ 1 + erf  ϕ/ϵ  . (7) 
+
+Hs ≈ 1 deep inside the consolidated region and ≈ 0 outside, with a smooth transition of width ϵ
+
+across the frontier. We protect old knowledge by anchoring the model’s function (not its parame-8ters) to a snapshot f¯θ taken after the previous task, weighted by the solid mask: 
+
+Lanchor (θ) = 
+
+Z
+
+> X
+
+Hs
+
+ ϕψ(x) fθ(x) − f¯θ(x) 2 dx
+
+Z
+
+> X
+
+Hs
+
+ ϕψ(x) dx
+
+. (8) The denominator normalizes by the consolidated “mass” so that the anchor scale is independent of how much has been consolidated ; this makes the anchor weight λ a clean dial rather than a quantity that drifts as the solid region grows. The total training loss for task k is L = Ltask + λ Lanchor ,where the scalar λ > 0 sets the anchor strength. 
+
+5.3 Frontier evolution: the level-set dynamics 
+
+After training on task k, the frontier must advance to engulf the region just consolidated. We evolve ϕψ by the level-set advection equation 
+
+ϕt + F (x) ∥∇ϕ∥ = 0 , (9) where F is an extension of the normal interface velocity Vn off the frontier. The velocity itself is the Stefan-condition analogue: a frontier point advances if there is task data “ahead” of it (outside the current solid region) demanding consolidation, 
+
+Vn(x) = 1
+
+L dem( x), (10) where the consolidation demand dem( x) ∈ [0 , 1] measures the local density of as-yet-unconsolidated task data near x, and L is the latent heat. Because the velocity is naturally defined only near the frontier, we extend it to all of space along normals using the closest-point construction [Pande et al., 2026]: with unit normal n = ∇ϕ/ ∥∇ϕ∥, each point projects to its nearest frontier point xΓ =
+
+x − ϕ(x) n(x), and F (x) = Vn(xΓ), which is constant along normals by construction. Throughout, we enforce the Eikonal constraint 
+
+Leik =  ∥∇ϕ∥ − 12 (11) so that ϕ remains a signed-distance function and the projection xΓ is valid. 
+
+5.4 Latent heat as the stability–plasticity dial 
+
+Equation (10) makes the role of L explicit. Under a fixed adaptation budget (a fixed number of evolution steps per task), the frontier advances a distance ∝ 1/L . Small L: the frontier reaches the outer envelope of the task data, the consolidated region is large, forgetting is low but the network is rigid. Large L: the frontier lags, little is protected, the network stays plastic but forgets the unprotected remainder. The Stefan identity ρ L V n = dem holds by construction at every step; we verify it numerically to machine precision. 96 Algorithm 
+
+Algorithm 1 Stefan-CL: one task increment 
+
+Require: model fθ, frontier field ϕψ, snapshot f¯θ (or ∅), task data Dk, anchor weight λ, latent heat L, band ϵ 
+
+> 1:
+
+// Phase 1: train classifier with masked functional anchoring  
+
+> 2:
+
+for e = 1 to E do  
+
+> 3:
+
+L ← L task (fθ; Dk) 
+
+> 4:
+
+if f¯θ̸ = ∅ then  
+
+> 5:
+
+sample collocation points X over X 
+
+> 6:
+
+w ← Hs(ϕψ(X)) ▷ solid mask, Eq. (7)  
+
+> 7:
+
+L ← L + λ
+
+P 
+
+> x
+
+w ∥fθ(x) − f¯θ(x)∥2
+
+P 
+
+> x
+
+w ▷ Eq. (8)  
+
+> 8:
+
+θ ← θ − η ∇θ L 
+
+> 9:
+
+// Phase 2: advect the frontier to consolidate task k 
+
+> 10:
+
+for s = 1 to Nsteps do  
+
+> 11:
+
+sample evaluation points X; compute ϕψ(X), ∇ϕψ(X) 
+
+> 12:
+
+n ← ∇ϕψ/∥∇ϕψ∥; xΓ ← X − ϕψ(X) n ▷ closest-point projection  
+
+> 13:
+
+Vn ← dem( xΓ; Dk)/L ▷ Stefan velocity, Eq. (10)  
+
+> 14:
+
+target ← ϕψ(X) − ∆t V n ∥∇ϕψ(X)∥ ▷ Eq. (9)  
+
+> 15:
+
+update ψ to fit target + Leik ▷ Eq. (11)  
+
+> 16:
+
+periodically reinitialize ϕψ to a signed-distance function  
+
+> 17:
+
+// Phase 3: snapshot for the next task  
+
+> 18:
+
+f¯θ ← stopgrad( fθ) 
+
+> 19:
+
+return fθ, ϕ ψ, f ¯θ
+
+The reinitialization step keeps ϕψ a clean signed-distance function as it evolves. For radially-symmetric frontiers this admits a clean closed-form target (a circle of the measured radius); we discuss the general case in Section 9. 
+
+# 7 Experimental Setup 
+
+7.1 Benchmark 
+
+We design a continual-learning family that is a direct analogue of the 2D radial Stefan problem and whose ground-truth frontier is analytic , enabling exact verification of every claim. Tasks are concentric annuli following the Frank-sphere growth law: task k draws inputs uniformly (in area) from the ring r ∈ [Rk−1, R k) with Rk = R0
+
+√k, R0 = 1. Labels follow a quadrant/XOR rule y = sign(sin( ωz 1) sin( ωz 2)) with ω = 1, where z is the input rotated by a per-task angle 
+
+θk = ( k−1) · π/ 2  
+
+> T−1
+
+. The per-task rotation makes the rings impose conflicting input–output rules, so fitting one ring actively overwrites another—inducing genuine catastrophic forgetting—while each ring remains individually easy to learn. We use T = 5 tasks, 2000 train / 4000 test points per task. 10 7.2 Models 
+
+The classifier fθ is a 2-hidden-layer ReLU MLP of width 128; the frontier field ϕψ is a 3-hidden-layer tanh MLP of width 64. Optimizer: Adam, learning rate 10 −3, 250 epochs per task. Mechanism hyperparameters: band ϵ = 0 .10, anchor weight λ = 0 .1, advection step ∆ t = 0 .04, 
+
+Nsteps = 25. 
+
+7.3 Metrics 
+
+We report average final accuracy across all tasks, and forgetting , defined as the mean over tasks 
+
+j < T of max i Aij − AT j , where Aij is the accuracy on task j after training task i. All results are mean ± standard deviation over 10 seeds; each seed varies network initialization, data sampling, and all stochastic components together. 
+
+7.4 Baselines 
+
+Naive sequential training; EWC [Kirkpatrick et al., 2017] with a Fisher diagonal recomputed per task; SI [Zenke et al., 2017] with the online path-integral importance; and experience replay with a per-task buffer. Each baseline’s key hyperparameter is swept and reported at its best operating point (EWC λ=300, SI λ=50, replay buffer 200/task) to ensure a fair comparison. A joint-training oracle (all tasks at once) gives the learnability upper bound. 
+
+7.5 Reproducibility 
+
+All experiments are CPU-only, seeded, and reproduced by the accompanying code repository; every quantitative claim has a verification script. The code is available at https://github.com/ nssprogrammer/stefan-cl .
+
+# 8 Results 
+
+8.1 The mechanism eliminates forgetting 
+
+Figure 2 contrasts the per-task accuracy matrices. Naive sequential training collapses on every earlier task as later tasks are learned (off-diagonal decay). Stefan-CL preserves the earlier columns: knowledge consolidated inside the frontier is held in place. Over 10 seeds, Stefan-CL achieves average accuracy 0 .924 ±0.004 and forgetting 0 .020 ±0.003, versus naive 0 .514 ±0.006 / 0 .603 ±0.008 and a joint oracle of 0 .95—closing ∼95% of the gap to the oracle. The separation in accuracy exceeds 40 standard deviations. 11 T1 T2 T3 T4 T5 
+
+after T1 
+
+after T2 
+
+after T3 
+
+after T4 
+
+after T5                     
+
+> 0.99 0.74 0.49 0.25 0.01
+> 0.79 0.99 0.75 0.50 0.26
+> 0.61 0.78 0.99 0.76 0.50
+> 0.43 0.56 0.77 0.99 0.75
+> 0.42 0.31 0.49 0.75 1.00
+
+Naive sequential 
+
+T1 T2 T3 T4 T5 
+
+after T1 
+
+after T2 
+
+after T3 
+
+after T4 
+
+after T5                     
+
+> 0.99 0.74 0.50 0.25 0.01
+> 0.94 0.91 0.69 0.45 0.20
+> 0.95 0.93 0.89 0.72 0.50
+> 0.94 0.91 0.91 0.92 0.76
+> 0.94 0.92 0.90 0.90 0.96
+
+Stefan-CL 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> test accuracy
+
+Figure 2: Per-task accuracy matrices Aij (accuracy on task j after training task i). Naive training (left) forgets earlier tasks (columns decay down the rows); Stefan-CL (right) preserves them. 
+
+8.2 The frontier discovers the growth law from data 
+
+A central claim is that the frontier is self-driven : it is never told where the consolidation boundary lies, yet must find it. Figure 3 shows the radius of the learned, advected frontier after each task against the analytic Frank-sphere law Rk = R0
+
+√k. The data-driven frontier recovers the law to a maximum radius error of 0 .030 ± 0.008 across seeds, never having been given the radii. Crucially, replacing the analytic frontier with the learned, advected field costs essentially nothing: average accuracy 0 .924 vs 0 .925 and forgetting 0 .020 vs 0 .021. 1 2 3 4 5 
+
+> task k
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> 1.8
+> 2.0
+> 2.2
+> frontier radius  Rk
+
+Self-advected frontier recovers the growth law     
+
+> Frank-sphere law Rk=R0k
+> discovered frontier (data-driven)
+
+Figure 3: The self-advected frontier recovers the analytic growth law Rk = R0
+
+√k from data alone (max radius error 0 .03), never having been given the radii. 12 Task k 1 2 3 4 5Analytic Rk = R0
+
+√k 1.000 1.414 1.732 2.000 2.236 Discovered (data-driven) 1.052 1.448 1.755 2.028 2.243 Absolute error 0.052 0.034 0.023 0.028 0.007 Table 1: Frontier tracking. Discovered frontier radius after each task (mean over seeds) versus the analytic Frank-sphere law Rk = R0
+
+√k, which is never provided to the model. 
+
+8.3 Latent heat is a stability–plasticity dial 
+
+Figure 4 sweeps the latent heat L. As predicted by Eq. (10), increasing L monotonically (i) shrinks the protected fraction of each task’s envelope (the frontier lags within the fixed budget), (ii) increases forgetting (0 .019 → 0.206), and (iii) increases plasticity (rigidity falls). The error bars (∼0.005) are tiny relative to the trend’s range ( ∼0.19), so the dial spans roughly 40 standard devia-tions. Notably the protected fraction has near-zero variance : the frontier position is a deterministic consequence of the consolidation ODE, so where the frontier stops is seed-independent even though downstream accuracy is not. 10 0   
+
+> latent heat L(consolidation cost)
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> metric
+> Latent heat as a stability--plasticity dial
+> forgetting
+> rigidity (1 plasticity)
+> protected fraction
+
+Figure 4: Sweeping the latent heat L traces a monotone stability–plasticity trade-off that emerges as a consequence of the Stefan velocity, not as a tuned regularizer. Error bars are ±1 s.d. over 10 seeds. Latent heat L Protected fraction Forgetting ↓ Plasticity ↑
+
+0.5 1.013 ± 0.001 0.019 ± 0.003 0.934 ± 0.003 1.0 1.003 ± 0.000 0.020 ± 0.003 0.935 ± 0.004 2.0 0.997 ± 0.000 0.020 ± 0.004 0.939 ± 0.004 4.0 0.742 ± 0.000 0.086 ± 0.005 0.982 ± 0.001 8.0 0.533 ± 0.000 0.206 ± 0.006 0.988 ± 0.001 Table 2: Latent-heat sweep (mean ± s.d. over 10 seeds). Increasing L monotonically shrinks the protected fraction, raises forgetting, and raises plasticity—the stability–plasticity dial. 13 8.4 Comparison with baselines 
+
+Figure 5 compares all methods at their best settings. Stefan-CL (0 .923 ±0.004) decisively beats the regularization methods EWC (0 .716 ±0.027) and SI (0 .701 ±0.022)—by over 0 .20 accuracy and with far smaller variance—and matches experience replay (0 .940 ±0.004) while forgetting less (0 .021 vs 0 .056) and storing no raw data . Table 3 collects the numbers. The reason for the margin over EWC/SI is structural: their importance weights are isotropic in parameter space and carry no notion of where in input space a task lived, whereas Stefan-CL’s mask is spatially localized by the level-set, protecting exactly the consolidated region. On a benchmark with explicit spatial task structure, the geometry-aware method should win—and it does. Naive SI 
+
+> EWC
+> Stefan-CL
+> Replay
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> avg accuracy
+
+Average accuracy (higher better)  
+
+> Naive SI
+> EWC
+> Stefan-CL
+> Replay
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> forgetting
+
+Forgetting (lower better) 
+
+Figure 5: Baseline comparison at each method’s best operating point, 10 seeds. Stefan-CL beats regularization methods (EWC, SI) and matches replay without storing data. Method Avg. accuracy ↑ Forgetting ↓ Stores raw data? Naive sequential 0.514 ± 0.006 0.603 ± 0.008 no SI ( λ=50) 0.701 ± 0.022 0.241 ± 0.051 no EWC ( λ=300) 0.716 ± 0.027 0.287 ± 0.045 no 
+
+Stefan-CL 0.923 ± 0.004 0.021 ± 0.003 no 
+
+Replay (200/task) 0.940 ± 0.004 0.056 ± 0.006 yes Joint oracle 0.95 — —Table 3: Main results (mean ± s.d. over 10 seeds). Each baseline at its best setting. 
+
+8.5 Topology change: representable but not yet trainable 
+
+The signature capability of a level-set representation—over an explicit boundary parameterization— is handling frontiers that change topology , e.g. two separate consolidated regions that grow and merge. We test this with a two-seed benchmark where the consolidated region is a union of two 14 disks that merge when their radii exceed half the center separation. Figure 6 and Table 4 report two findings. 
+
+Result A (positive): representation. The frontier field can represent the topology change: fitting ϕψ to the union region yields correct connected-component counts on both sides of the merge (two before, one after), region sign-accuracy 0 .98–0 .99, and a satisfied Eikonal constraint. Exact grid-based signed-distance reinitialization is available and verified area-exact. 
+
+Result B (negative): data-driven tracking. The advection cannot yet grow and track this frontier through the merge: starting from two correct seeds, the advected region erodes to near-zero area within one stage (Table 4, right). 0.6 0.8 1.0 1.2 1.4 1.6 
+
+> union radius
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> 0.98
+> 1.00
+> accuracy
+
+Result A: field REPRESENTS the merge     
+
+> region sign accuracy
+> merge ( = 1.2)
+> =0.7 =1.0 =1.4 =1.6
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> region area fraction
+
+Result B: advection FAILS to track 
+
+> true region area
+> advected (eroded)
+
+Figure 6: Non-circular frontier. Left (Result A): the field correctly represents the two-to-one topology change. Right (Result B): data-driven advection fails to track it—the region erodes. The obstacle is the advection velocity on non-convex fronts, not the field’s representational capacity. Result A: representation Result B: advection 
+
+ρ components sign acc. stage ρ area (true) area (advected) 0.6 2 ( ✓) 0.99 0.7 0.097 0.000 0.9 2 ( ✓) 0.99 1.0 0.198 0.000 1.3 1 ( ✓) 0.98 1.4 0.375 0.000 1.6 1 ( ✓) 0.99 1.6 0.469 0.000 Table 4: Topology-change study. Left: the field represents the merge correctly (Result A). Right: 
+
+data-driven advection erodes the region rather than tracking it (Result B). The merge occurs at union radius ρ = 1 .2. 
+
+# 9 Scope and the Open Problem 
+
+The topology-change study in Section 8.5 delineates exactly what the present method does and does not achieve, and we discuss its implications here. 15 The positive result (representation) and the negative result (data-driven tracking) together localize the obstacle precisely. The failure in Result B is not a representational limitation—the field comfortably encodes both topologies—but a failure of the velocity construction of Eqs. (10)– (9): the closest-point normal n = ∇ϕ/ ∥∇ϕ∥ is unstable near the medial axis between the two components, so the extended velocity becomes ill-defined in the concave region and the front either erodes or spuriously bridges. This is the same construction that succeeds on a single convex (radial) front, where reinitialization has a clean closed-form target. We therefore scope the present (v1) claims to frontiers admitting a clean reinitialization target— radially symmetric or single convex components—and identify medial-axis-stable velocity ex-tension as the central problem for future work. Promising directions: per-component velocities; PDE-based extension velocities solved on a grid rather than via closest-point projection; or nor-mals estimated by local smoothing rather than by ∇ϕ/ ∥∇ϕ∥. We regard the precise localization of this obstacle—representation and reinitialization are solved; the velocity on non-convex fronts is not—as a useful contribution in its own right. 
+
+# 10 Conclusion 
+
+Stefan-CL recasts the stability–plasticity dilemma as a moving-boundary problem: a learned signed-distance frontier separates consolidated from plastic capacity, phase masks freeze the in-terior, and a Stefan-condition velocity advects the frontier to consolidate new tasks, with latent heat serving as a single calibrated stability–plasticity dial. On analytically-grounded benchmarks the mechanism reduces forgetting 30 ×, recovers the ground-truth growth law from data, beats regularization baselines, and matches replay without stored data—all with tight error bars over 10 seeds. We have been explicit about scope: topology-changing frontiers are representable but not yet trainable, and the open problem is a medial-axis-stable advection velocity. We hope the physics–ML mapping proves generative beyond this first instantiation. 
+
+# 11 Future Work 
+
+The present results open several concrete research directions, ordered roughly from the most immediate (resolving the identified open problem) to the most speculative (extending the physics analogy). 
+
+11.1 Medial-axis-stable velocity extension 
+
+The central open problem (Section 9) is that the closest-point velocity extension destabilizes near the medial axis of non-convex fronts, preventing topology-changing consolidation. Three avenues appear promising. First, per-component velocities : detect connected components of the consoli-dated region and extend a separate velocity field within each, avoiding the ambiguous projection across the gap between components. Second, PDE-based extension velocities [Adalsteinsson and Sethian, 1999] solved on a background grid, which propagate the interface velocity along normals by a transport equation rather than the algebraic closest-point formula and are numerically stable in concave regions. Third, smoothed normal estimation , replacing n = ∇ϕ/ ∥∇ϕ∥ with a locally averaged or learned normal field that degrades gracefully where ∇ϕ is ill-conditioned. Pairing any of these with the fast-marching reinitialization [Sethian, 1996] already validated here would directly test whether the full multiphase mechanism becomes trainable. 16 11.2 Higher-dimensional and learned frontiers 
+
+Our benchmarks place the frontier in the 2D input space, where it can be visualized and checked against analytic ground truth. The natural next step is to carry the frontier into a learned latent space : run a feature extractor, let ϕ live on its representation, and advect there. This raises questions our toy setting cannot answer—how the Eikonal constraint behaves in high di-mension, and whether the frontier remains a meaningful object once the representation itself drifts during training—and connects to representation-level continual learning [Javed and White, 2019]. Curvature-dependent interface speeds [Osher and Sethian, 1988] could additionally regularize fron-tier geometry in high dimension. 
+
+11.3 Task-free and online operation 
+
+Stefan-CL currently consolidates at discrete task boundaries. Because the advection velocity is driven purely by local data demand, the formulation is in principle task-agnostic : the frontier could advance continuously as data arrives, with no explicit task signal. Realizing this would place Stefan-CL among task-free continual-learning methods [Aljundi et al., 2019] and remove a strong assumption shared with EWC and SI. 
+
+11.4 Theory of the consolidation dynamics 
+
+We observed empirically that the frontier radius is a near-deterministic function of the latent heat under a fixed adaptation budget, and that it recovers the Frank-sphere law. A theoretical account—deriving the protected-region growth rate from the data-demand velocity, and bounding forgetting in terms of the protected fraction—would turn the latent-heat dial from a measured rela-tionship into a predictive one, and connect to statistical-physics analyses of learning dynamics [Shan et al., 2024, Li et al., 2023]. 
+
+11.5 Scaling and real benchmarks 
+
+Finally, the mechanism must be validated beyond toy data on standard class- and domain-incremental benchmarks [van de Ven et al., 2022], against stronger replay and parameter-isolation baselines, and at the scale of modern architectures. The compactness of the frontier field (a small auxiliary network) is encouraging for scaling, but the interaction between a moving frontier and a high-capacity backbone is untested. 
+
+# References 
+
+David Adalsteinsson and James A. Sethian. The fast construction of extension velocities in level set methods. Journal of Computational Physics , 148(1):2–22, 1999. Rahaf Aljundi, Klaas Kelchtermans, and Tinne Tuytelaars. Task-free continual learning. In IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , pages 11254–11263, 2019. Che-Chia Chang, Te-Sheng Lin, and Ming-Chih Lai. Physics-informed machine learning for two-phase moving-interface and Stefan problems. arXiv preprint arXiv:2512.14010 , 2025. Michael G. Crandall and Pierre-Louis Lions. Viscosity solutions of hamilton–jacobi equations. 
+
+Transactions of the American Mathematical Society , 277(1):1–42, 1983. 17 Robert M. French. Catastrophic forgetting in connectionist networks. Trends in Cognitive Sciences ,3(4):128–135, 1999. Frederic Gibou, Ronald Fedkiw, and Stanley Osher. A review of level-set methods and some recent applications. Journal of Computational Physics , 353:82–109, 2018. Alex Gomez-Villa, Bartlomiej Twardowski, Lu Yu, Andrew D. Bagdanov, and Joost van de Weijer. Continually learning self-supervised representations with projected functional regularization. In 
+
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Workshops , 2022. Amos Gropp, Lior Yariv, Niv Haim, Matan Atzmon, and Yaron Lipman. Implicit geometric regu-larization for learning shapes. In International Conference on Machine Learning (ICML) , 2020. S. C. Gupta. The Classical Stefan Problem: Basic Concepts, Modelling and Analysis . Elsevier, 2003. Khurram Javed and Martha White. Meta-learning representations for continual learning. In Ad-vances in Neural Information Processing Systems (NeurIPS) , 2019. James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, An-drei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the National Academy of Sciences , 114(13):3521–3526, 2017. Patryk Krukowski, Jan Miksa, Piotr Helm, Jacek Tabor, Pawel Wawrzy´ nski, and Przemyslaw Spurek. InTAct: Interval-based task activation consolidation for continual learning. arXiv preprint arXiv:2511.17439 , 2025. Qingfeng Lan and A. Rupam Mahmood. Elephant neural networks: Born to be a continual learner. 
+
+arXiv preprint arXiv:2310.01365 , 2023. Chan Li, Zhenye Huang, Wenxuan Zou, and Haiping Huang. Statistical mechanics of continual learning: Variational principle and mean-field potential. Physical Review E , 108(1):014309, 2023. David Lopez-Paz and Marc’Aurelio Ranzato. Gradient episodic memory for continual learning. In 
+
+Advances in Neural Information Processing Systems (NeurIPS) , 2017. Marc Masana, Tinne Tuytelaars, and Joost van de Weijer. Ternary feature masks: Zero-forgetting for task-incremental learning. In IEEE/CVF Conference on Computer Vision and Pattern Recog-nition (CVPR) Workshops , 2021. Michael McCloskey and Neal J. Cohen. Catastrophic interference in connectionist networks: The sequential learning problem. Psychology of Learning and Motivation , 24:109–165, 1989. Francesco Mori, Stefano Sarao Mannelli, and Francesca Mignacco. Optimal protocols for continual learning via statistical physics and control theory. arXiv preprint arXiv:2409.18061 , 2024. Joseph Ortiz, Alexander Clegg, Jing Dong, Edgar Sucar, David Novotny, Michael Zollh¨ ofer, and Mustafa Mukadam. iSDF: Real-time neural signed distance fields for robot perception. In 
+
+Robotics: Science and Systems (RSS) , 2022. Stanley Osher and James A. Sethian. Fronts propagating with curvature-dependent speed: Algo-rithms based on hamilton–jacobi formulations. Journal of Computational Physics , 79(1):12–49, 1988. 18 Pingbo Pan, Siddharth Swaroop, Alexander Immer, Runa Eschenhagen, Richard E. Turner, and Mohammad Emtiyaz Khan. Continual deep learning by functional regularisation of memorable past. In Advances in Neural Information Processing Systems (NeurIPS) , 2020. Tarus Pande, V M S K Minnikanti, and Shyamprasad Karagadde. A coupled kolmogorov–arnold network and level-set framework for evolving interfaces. arXiv preprint arXiv:2601.09818 , 2026. Jeong Joon Park, Peter Florence, Julian Straub, Richard Newcombe, and Steven Lovegrove. Deepsdf: Learning continuous signed distance functions for shape representation. IEEE Confer-ence on Computer Vision and Pattern Recognition (CVPR) , 2019. Maziar Raissi, Paris Perdikaris, and George Em Karniadakis. Physics-informed neural networks: A deep learning framework for solving forward and inverse problems involving nonlinear partial differential equations. Journal of Computational Physics , 378:686–707, 2019. Sylvestre-Alvise Rebuffi, Alexander Kolesnikov, Georg Sperl, and Christoph H. Lampert. icarl: Incremental classifier and representation learning. In IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , pages 2001–2010, 2017. David Rolnick, Arun Ahuja, Jonathan Schwarz, Timothy Lillicrap, and Gregory Wayne. Experience replay for continual learning. In Advances in Neural Information Processing Systems (NeurIPS) ,2019. Kaushik Roy, Christian Simon, Peyman Moghadam, and Mehrtash Harandi. Subspace distillation for continual learning. Neural Networks , 167:65–79, 2023. Andrei A. Rusu, Neil C. Rabinowitz, Guillaume Desjardins, Hubert Soyer, James Kirkpatrick, Koray Kavukcuoglu, Razvan Pascanu, and Raia Hadsell. Progressive neural networks. In arXiv preprint arXiv:1606.04671 , 2016. James A. Sethian. A fast marching level set method for monotonically advancing fronts. Proceedings of the National Academy of Sciences , 93(4):1591–1595, 1996. James A. Sethian. Level Set Methods and Fast Marching Methods . Cambridge University Press, 2nd edition, 1999. Haozhe Shan, Qianyi Li, and Haim Sompolinsky. Order parameters and phase transitions of con-tinual learning in deep neural networks. arXiv preprint arXiv:2407.10315 , 2024. Josef Stefan. ¨Uber die theorie der eisbildung, insbesondere ¨ uber die eisbildung im polarmeere. 
+
+Annalen der Physik , 278(2):269–286, 1891. Mark Sussman, Peter Smereka, and Stanley Osher. A level set approach for computing solutions to incompressible two-phase flow. Journal of Computational Physics , 114(1):146–159, 1994. Michalis K. Titsias, Jonathan Schwarz, Alexander G. de G. Matthews, Razvan Pascanu, and Yee Whye Teh. Functional regularisation for continual learning with Gaussian processes. In 
+
+International Conference on Learning Representations (ICLR) , 2020. Gido M. van de Ven, Tinne Tuytelaars, and Andreas S. Tolias. Three types of incremental learning. 
+
+Nature Machine Intelligence , 4(12):1185–1197, 2022. Louis van Harten et al. Knowledge distillation for continual learning of biomedical neural fields. 
+
+arXiv preprint arXiv:2511.21409 , 2025. 19 Sifan Wang and Paris Perdikaris. Deep learning of free boundary and Stefan problems. Journal of Computational Physics , 428:109914, 2021. Zike Yan, Yuxin Tian, Xuesong Shi, Ping Guo, Peng Wang, and Hongbin Zha. Continual neural mapping: Learning an implicit scene representation from sequential observations. In IEEE/CVF International Conference on Computer Vision (ICCV) , 2021. Yufeng Yue et al. LGSDF: Continual global learning of signed distance fields aided by local updat-ing. arXiv preprint arXiv:2404.05187 , 2024. Friedemann Zenke, Ben Poole, and Surya Ganguli. Continual learning through synaptic intelligence. In International Conference on Machine Learning (ICML) , pages 3987–3995, 2017. 20

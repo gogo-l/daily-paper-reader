@@ -1,0 +1,1752 @@
+Title: Foundation-Preserving Adaptation via Generalized Rayleigh-Quotient Optimization
+
+URL Source: https://arxiv.org/pdf/2606.00132v1
+
+Published Time: Tue, 02 Jun 2026 00:12:28 GMT
+
+Number of Pages: 31
+
+Markdown Content:
+# Foundation-Preserving Adaptation via Generalized Rayleigh-Quotient Optimization 
+
+Dongjun Kim 1, Adrian de Wynter 2, Huancheng Chen 3, Heasung Kim 4, Haris Vikalo 11The University of Texas at Austin, 2Microsoft, 3Microsoft AI, 4Meta While fine-tuning effectively adapts foundation models to specialized downstream tasks, it can degrade non-target capabilities acquired during pretraining. Existing forgetting-aware methods typically seek safer updates through specialized initialization or fixed constraints, but do not regulate the adaptation–preservation trade-off during training. We propose Foundation-Preserving LoRA (FoLoRA), a forgetting-aware optimization framework. Guided by a first-order preservation condition, FoLoRA defines a forgetting penalty over pretraining-proxy activations and a task utility over downstream-task activations. It then scores update directions by task utility per unit forgetting penalty via a generalized Rayleigh quotient. The resulting spectral coordinate system enables direction-wise gated Adam updates, attenuating low utility-to-penalty directions during training. To estimate the forgetting penalty, FoLoRA constructs pretraining-proxy calibration data by sampling from the pretrained model rather than relying on a single proxy dataset. Experiments on math, code, and instruction-following adaptation show that FoLoRA achieves the strongest preservation–adaptation balance over baselines, improving target-task performance with best aggregate preservation of non-target capabilities.  
+
+> Date:
+
+June 2, 2026  
+
+> Correspondence:
+
+Dongjun Kim at dongjungim20@utexas.edu 
+
+## 1 Introduction 
+
+Fine-tuning has become a standard way of adapting large language models (LLMs) Brown et al. (2020); Ouyang et al. (2022) to specialized tasks such as instruction following Ziegler et al. (2019), commonsense reasoning Bosselut et al. (2019), question answering Radford & Narasimhan (2018), and preference alignment Rafailov et al. (2023). However, target-task adaptation can degrade non-target capabilities acquired during pretraining, a phenomenon known as catastrophic forgetting Biderman et al. (2024); Mai et al. (2024); Qi et al. (2023); Kumar et al. (2022). For foundation models, this degradation is especially problematic: pretrained knowledge not only supports broad non-target capabilities across domains, but also serves as the substrate for adapting to target tasks. Effective adaptation should therefore improve the target task without disrupting pretrained behavior that supports generalization and reuse. Low-Rank Adaptation (LoRA) provides an attractive setting for this trade-off because adaptation is expressed through a compact low-rank update Biderman et al. (2024). Recent forgetting-aware fine-tuning methods suggest that the geometry of these directions is crucial. Initialization-based methods such as MiLoRA Wang et al. (2024), CorDA Yang et al. (2024), and LoRA-Null Tang et al. (2025) initialize adapters in safer subspaces using minor directions derived from pretrained weights or activation statistics, while OPLoRA Xiong & Xie (2025) restricts updates away from dominant pretrained directions. These approaches have advanced foundation-preserving fine-tuning but they typically encode preservation through a one-time initialization, a fixed subspace choice, or a hard projection constraint. Consequently, they do not directly ask, during optimization, whether an update direction is useful enough for the downstream task to justify its preservation cost. This motivates our central question: 1
+
+> arXiv:2606.00132v1 [cs.LG] 28 May 2026
+
+Can LoRA fine-tuning regulate update directions according to their downstream utility per unit pretrained-behavior drift? 
+
+Recent evidence from low-perplexity fine-tuning Wu et al. (2025) further suggests that forgetting is tied not only to the chosen initial subspace, but also by the dynamics of the fine-tuning signal: filtering high-perplexity tokens reduces non-target degradation and is associated with lower-loss, less disruptive updates. This motivates an optimizer-level mechanism that explicitly balances task-side utility and preservation cost through direction-wise modulation of low-rank updates during training process. In this paper, we propose Foundation-Preserving LoRA (FoLoRA), a forgetting-aware optimization framework for low-rank adaptation. Starting from a first-order condition for preserving the pretrained behavior of a nonlinear block, FoLoRA defines two activation-induced quantities: a forgetting penalty over pretraining-proxy activations and a task utility over downstream-task data. Rather than selecting directions using either quantity alone, FoLoRA scores candidate update directions by the ratio between task utility and forgetting penalty, expressed as a generalized Rayleigh quotient. Optimizing this quotient leads to a generalized eigenvalue problem whose solution defines a spectral coordinate system in which each direction receives an explicit utility-to-penalty ratio/score. FoLoRA then performs Adam-style updates in this coordinate system with direction-wise spectral gating, attenuating directions whose task utility is small relative to their forgetting penalty. This differs from prior initialization- or projection-based methods by regulating update directions throughout training rather than only constraining the initial or admissible subspace. FoLoRA also addresses a practical limitation of activation-based preservation methods: the need for calibration data that reflects the pretraining distribution. Existing methods often use a single benchmark dataset, such as NQ Open Yang et al. (2024); Tang et al. (2025), as a proxy for pretraining data. Such proxies can be narrow and may emphasize only a limited subset of pretrained capabilities. FoLoRA instead constructs pretrain-proxy data from model-generated sample without requiring the original pretraining corpus. Our main contributions are: (1) We formulate foundation-preserving adaptation as a generalized Rayleigh quotient optimization problem that compares downstream task utility with forgetting penalty; (2) We construct a generalized-eigenbasis for LoRA update directions from the activation-induced task utility and forgetting penalty, and introduce spectral-gated Adam (SAdam) optimizer for direction-wise control of updates throughout training; (3) We propose model-generated calibration, a procedure to construct pretraining-proxy data from sequences generated by the pretrained model, avoiding reliance on an external benchmark; (4) We evaluate FoLoRA across diverse tasks and benchmarks, showing a superior preservation-adaptation balance compared with existing baselines. 
+
+## 2 Related Work  
+
+> Forgetting-Aware Fine-Tuning.
+
+A growing line of work studies how fine-tuning can adapt pretrained language models to target tasks while limiting degradation of non-target capabilities. Prior work Biderman et al. (2024) showed that LoRA can mitigate catastrophic forgetting relative to full-weight fine-tuning, although restricting adaptation to low-rank updates may reduce target-task performance. Building on this observation, several methods seek safe LoRA initialization that are less likely to interfere with pretrained behavior. MiLoRA Wang et al. (2024) decomposes pretrained weight matrices by SVD and initializes LoRA adapters using minor singular components, with the goal of updating directions that are less dominant in the pretrained model. CorDA Yang et al. (2024) and LoRA-Null Tang et al. (2025) make this selection context-aware by estimating activation covariance matrices from pretraining-proxy calibration data and initializing adapters along directions with lower variation under that proxy. These methods show that the geometry of initialized low-rank space is important for foundation preservation, but their preservation mechanisms are fixed before or at the start of fine-tuning. Once fine-tuning begins, the optimizer is not explicitly guided by a direction-wise comparison between task utility and forgetting penalty. Moreover, for activation-based methods such as CorDA and LoRA-Null, the chosen initialization directions depend on the calibration data used to estimate the activation covariances; if this data is narrow, the resulting adapter initialization may be overly specific to that proxy. 2𝑏 ! 𝑏 " 𝑏 # 𝑏 $!" 𝑣 ! 𝑣 " 𝑣 # 𝑣 $!" 
+
+(a) (b) (c) (d) (e)  
+
+> Task utility
+> Forgetting risk
+> Task utility
+> Forgetting risk Figure 1
+
+Illustration of the generalized spectral basis (Layer-15 MLP downproj). (a) U ⊤
+
+> pre
+
+Ctask Upre is not diagonal, indicating misalignment between pretraining and task covariance structures. (b) Example basis configuration. In the original Euclidean basis, task utility and forgetting penalty need not be aligned. (c) The generalized basis whitens the forgetting penalty, V ⊤HV = I. (d) The same basis diagonalizes task utility, V ⊤Ctask V = Γ . (e) The resulting H-orthogonal coordinate system ranks directions by utility-to-penalty ratio. 
+
+A related class of methods imposes explicit constraints during training. OPLoRA Xiong & Xie (2025), for example, applies orthogonal projections to restrict LoRA updates away from directions associated with principal components of pretrained weights. Such constraints can reduce interference with pretrained behavior, but hard projections may also suppress directions useful for the target task, thereby limiting downstream adaptation. FoLoRA differs from both initialization-based and hard-projection approaches by making the optimization process itself jointly adaptation- and preservation-aware. It defines activation-induced forgetting penalties and task utilities, assigns each update direction a utility-to-penalty ratio, and applies soft spectral gating throughout training, rather than relying on a single preservation metric through favorable initialization or fixed projection constraints. 
+
+## 3 Method 
+
+We first derive a first-order condition for preserving the pretrained behavior of a nonlinear block in Sec. 3.1. Sec. 3.2 uses this condition to define a forgetting penalty and task utility, compared through a generalized Rayleigh quotient. Optimizing this quotient yields generalized eigenvectors that form the spectral coordinate system used by FoLoRA. Sec. 3.3 introduces spectral-gated Adam (SAdam), which applies direction-wise gating to Adam updates in this coordinate system. Finally, Sec. 3.4 describes model-generated calibration, where sequences generated by the pretrained model serve as pretrain-proxy calibration data for estimating the activation statistics for forgetting penalty. 
+
+3.1 First-Order Condition for Preserving Pretrained Behavior 
+
+Let Xpre = [ x1, . . . , x T ] ∈ Rdin ×T denote the block-input activations collected from pretraining data, where each column corresponds to one token position and T is the token-sequence length. Consider a non-linear block, fW0 (Xpre ) = σ(W0Xpre + b), where W0 ∈ Rdout ×din , b ∈ Rdout ×T , and σ is element-wise non-linear mapping. Define Z0 = W0Xpre + b ∈ Rdout ×T . For a small weight perturbation ∆W , we have 
+
+fW0+∆ W (Xpre ) = σ (W0 + ∆ W )Xpre + b = σ(Z0 + ∆ W X pre ). (1) A first-order Taylor expansion of σ around Z0 results in 
+
+fW0+∆ W (Xpre ) ≈ fW0 (Xpre ) + Jσ (Z0)[∆ W X pre ], (2) where Jσ (Z0) denotes the Jacobian of σ at Z0. Therefore, the first-order output drift on activations from the pretraining distribution is controlled by ∆W X pre , and preserving pretrained behavior can be encouraged by penalizing the magnitude of this perturbation. Under the LoRA parameterization, W = W0 + BA , we have A = A0 + ∆ A and B = B0 + ∆ B, where 
+
+A0, B 0 denote the initial LoRA factors and ∆A, ∆B are their updates. Assuming the initial adapter does 3not perturb the pretrained model (e.g., B0A0 = 0 ), the weight perturbation satisfies 
+
+∆W X pre = (∆ BA 0)Xpre + ( B0 + ∆ B)∆ AX pre . (3) If A0 is initialized in the null space of Xpre , then A0Xpre = 0 , and hence (∆ BA 0)Xpre = 0 . The perturbation on pretraining-proxy activations therefore reduces to (B0 + ∆ B)∆ AX pre . Since 
+
+∥(B0 + ∆ B)∆ AX pre ∥F ≤ ∥ B0 + ∆ B∥2 ∥∆AX pre ∥F , (4) we can limit this drift by controlling ∥∆AX pre ∥2 
+
+> F
+
+. This motivates the forgetting penalty 
+
+Rpre (∆ A) := ∥∆AX pre ∥2 
+
+> F
+
+= Tr(∆ AC pre ∆A⊤), Cpre := Xpre X⊤
+
+> pre
+
+. (5) For numerical stability, we use a ridge-regularized form, which makes H strictly positive definite: 
+
+Rτ
+
+> pre
+
+(∆ A) := Tr(∆ AH ∆A⊤), H := Cpre + τ I din ≻ 0, τ > 0. (6) Under the same first-order view, an update that is useful for downstream task adaptation should induce a large response on target-task activations. This motivates the task utility 
+
+Utask (∆ A) := ∥∆AX task ∥2 
+
+> F
+
+= Tr(∆ AC task ∆A⊤), Ctask := Xtask X⊤
+
+> task
+
+. (7) Here, Ctask measures how strongly an update direction affects target-task activations, while H quantifies the forgetting penalty induced by the same direction. To expose this trade-off at the level of individual directions, consider a rank-one perturbation of A,
+
+∆A = uv ⊤, u ∈ Rr , v ∈ Rdin . (8) Then the task utility and forgetting penalty become 
+
+Utask (u, v ) = ∥u∥22 v⊤Ctask v, Rτ
+
+> pre
+
+(u, v ) = ∥u∥22 v⊤Hv. (9) Since the common scale factor ∥u∥22 cancels, the best input-side direction under this rank-one view maximizes task utility per unit forgetting penalty, leading to the generalized Rayleigh quotient Li (2014); guang Sun (1991) 
+
+ρ(v) := Utask (u, v )
+
+Rτ
+
+> pre
+
+(u, v ) = v⊤Ctask vv⊤Hv . (10) This rank-one reduction connects the first-order preservation condition to the spectral construction below. In Sec. 3.2, optimizing the associated Rayleigh quotient leads to generalized eigenvectors that form a basis whose directions are ranked by ρ(v), i.e., task utility per unit forgetting penalty. 
+
+3.2 Generalized Eigenbasis for Forgetting-Aware Optimization 
+
+We estimate Cpre and Ctask by collecting block-input activations from pretraining-proxy calibration data Dpre and target-task data Dtask , respectively, using the pretrained model. Since these activation distributions differ, the corresponding covariances need not share eigenvectors. To diagnose this, we express Ctask in the eigenbasis Upre of Cpre . The off-diagonal mass in Fig. 1(a) indicates mixing of pretraining modes by target-task variation. Therefore, the Cpre eigenbasis diagonalizes the forgetting penalty but leaves task utility coupled, while the Ctask eigenbasis does the opposite. Optimizing in either single-covariance basis cannot capture this entangled geometry. As illustrated in Fig. 1(b), a direction with high task utility alone need not be optimal once forgetting penalty is considered. We therefore search for directions that directly maximize ρ(v), the task utility per unit forgetting penalty. Because ρ(αv ) = ρ(v) for any α̸ = 0 , scale-invariant problem becomes the constraint optimization 
+
+max 
+
+> v∈Rdin
+
+v⊤Ctask v s.t. v⊤Hv = 1 . (11) 4Since H ≻ 0, the feasible set {v : v⊤Hv = 1 } is compact, so the maximum can be attained. The corresponding Lagrangian of Eq. 11 is 
+
+L(v, μ ) = v⊤Ctask v − μ v⊤Hv − 1. (12) Taking the derivative of the Lagrangian with respect to v and setting it to zero gives 
+
+∇v L(v, μ ) = 2 Ctask v − 2μHv = 0 , (13) which yields the generalized eigenvalue equation 
+
+Ctask v = μHv. (14) Thus, every stationary point of the constrained maximization is a generalized eigenvector of the pair 
+
+(Ctask , H ). Moreover, left-multiplying by v⊤ and using the normalization v⊤Hv = 1 yields 
+
+μ = v⊤Ctask v = ρ(v), (15) so the generalized eigenvalue is equal to the achieved ratio of task utility and forgetting penalty. Therefore, any vector in the generalized eigenspace associated with the largest generalized eigenvalue maximizes Eq. 11, and the maximum value is that eigenvalue. Equivalently, setting v = H−1/2r gives the whitened eigenproblem 
+
+H−1/2Ctask H−1/2 = RΓR⊤, Γ = diag( γ1, . . . , γ din ), R = [ r1, . . . , r din ] (16) where eigenvalues are ordered as γ1 ≥ · · · ≥ γdin . The corresponding generalized eigenvectors are 
+
+V = H−1/2R = [ v1, . . . , v din ], V ⊤HV = I. (17) Here, γi is the task utility per unit forgetting penalty achieved by direction vi. Large γi values indicate directions that lead to high target task utility while incurring a low forgetting penalty, whereas small γi
+
+values indicate directions with limited task utility relative to the penalty they incur. In the resulting coordinates, the forgetting penalty is whitened and the task utility is diagonalized, i.e., V ⊤HV = I
+
+and V ⊤Ctask V = Γ . The adaptation-forgetting trade-off therefore decomposes into scalar direction scores indexed by the generalized eigenvalues. Fig. 1(c)-(e) illustrate the whitened forgetting penalty, diagonalized task utility, and the resulting H-orthogonal coordinate system. 
+
+3.3 Spectral-Gated Adam in the Generalized Eigenbasis 
+
+Using the generalized eigenbasis from Sec. 3.2, we track Adam’s first- and second-moment statistics in the corresponding H-orthogonal coordinate system, where the forgetting penalty is normalized and the adaptation-forgetting trade-off is comparable direction by direction. Under this change of coordinates, 
+
+A is represented as ¯A = AH 1/2R, A = ¯AR ⊤H−1/2. Let Gt = ∇AL(At) be the gradient of the training objective with respect to the LoRA down-projection matrix A in the original Euclidean coordinates. By the definition of the gradient for a matrix-valued variable, 
+
+dL = ⟨Gt, dA ⟩F = ⟨Gt, d ¯A R ⊤H−1/2⟩F = ⟨GtH−1/2R, d ¯A⟩F . (18) Hence, the gradient in the transformed H-orthogonal coordinate system is 
+
+¯Gt = ∇ ¯AL = GtH−1/2R. (19) We then compute Adam Kingma & Ba (2015) moment estimates in the transformed coordinates, 
+
+¯mt = β1 ¯mt−1 + (1 − β1) ¯Gt, ¯vt = β2 ¯vt−1 + (1 − β2) ¯G⊙2 
+
+> t
+
+, (20) followed by the standard bias corrections 
+
+ˆ¯mt = ¯mt
+
+1 − βt
+
+> 1
+
+, ˆ¯vt = ¯vt
+
+1 − βt
+
+> 2
+
+. (21) 5Direction-wise gating by generalized eigenvalues. The generalized eigenvalues {γi} provide scalar scores for modulating each transformed direction. We therefore define the monotone gate 
+
+si = ψ(γi) = γi
+
+γi + λ ∈ [0 , 1) , λ > 0. (22) This gate assigns larger weights to directions with high utility-to-penalty ratios and smaller weights to directions with low ratios. Importantly, we apply the gate to the preconditioned Adam step rather than to the raw gradient. Let ˜si = max {si, s min } and ˜s = (˜ s1, . . . , ˜sdin ). The transformed update is 
+
+∆ ¯At = −η ˆ¯mt
+
+pˆ¯vt + ϵ
+
+!
+
+diag(˜ s), (23) where smin is a hyperparameter that sets the minimum gate value. Thus, each transformed column receives its own additional multiplicative factor ˜si after Adam preconditioning. Finally, we map the update from the generalized coordinates back to the original parameterization and update the down-projection matrix according to 
+
+∆At = ∆ ¯AtR⊤H−1/2, At+1 = At + ∆ At. (24) 
+
+3.4 Model-Generated Pretraining-Proxy Calibration 
+
+We next describe how FoLoRA constructs the pretraining-proxy calibration dataset Dpre used to estimate 
+
+Cpre . Existing methods such as CorDA Yang et al. (2024) and LoRA-Null Tang et al. (2025) use a fixed benchmark dataset, such as NQ Open Kwiatkowski et al. (2019), as a proxy for the pretraining distribution. However, a single dataset provides a narrow and biased view of the diverse distribution encountered during pretraining, resulting in limited coverage of foundation knowledge and consequently weaker preservation for behaviors not well represented in that dataset. In contrast, FoLoRA constructs Dpre using model-generated calibration: it samples calibration sequences from the autoregressive distribution induced by the pretrained model. This yields a model-derived proxy that is not tied to a single fixed benchmark, enabling more robust estimation of the pretraining-proxy activation statistics used in the forgetting penalty, and consequently providing broader protection coverage and stronger foundation preservation. Let V be a finite vocabulary with M := |V| , and let Pdata ∈ ∆( VT ) denote the pretrain distribution over token sequences X = ( X1, . . . , X T ) ∈ V T , where T < ∞. Define the data-supported prefix set 
+
+Psupp  
+
+> T
+
+:= (t, h ) : t ∈ [T ], h ∈ V t−1, P data (X<t = h) > 0 .
+
+For (t, h ) ∈ P supp  
+
+> T
+
+, define the true next-token conditional 
+
+qt(v | h) := Pdata (Xt = v | X<t = h), v ∈ V .
+
+For unsupported prefixes, qt(· | h) may be defined arbitrarily, since such prefixes do not affect the KL divergence below. For α ∈ (0 , 1) , define the smoothed conditional and its logit map by 
+
+qt,α (v | h) = (1 − α)qt(v | h) + αM , Uα(t, h ) =  log qt,α (v | h) 
+
+> v∈V
+
+∈ RM .
+
+Given the model logit vector bℓt,θ (h) ∈ RM , the autoregressive model distribution is 
+
+Pθ (x1: T ) = 
+
+> T
+
+Y
+
+> t=1
+
+rt,θ (xt | x<t ), rt,θ (· | h) = softmax  bℓt,θ (h).
+
+Theorem 3.1 (KL control under uniform logit approximation) . Fix α ∈ (0 , 1) and η > 0. Suppose there exists a parameter θ such that 
+
+max 
+
+> (t,h )∈P supp
+> T
+
+max 
+
+> v∈V
+
+bℓvt,θ (h) − log qt,α (v | h) ≤ η. (25) 6Then the autoregressive model Pθ satisfies 
+
+DKL (Pdata ∥ Pθ ) ≤ T (− log(1 − α) + 2 η) . (26) 
+
+Consequently, if α and η are such that T (− log(1 − α) + 2 η) ≤ ϵKL , then DKL (Pdata ∥Pθ ) ≤ ϵKL .
+
+The uniform approximation premise in Theorem 3.1 is motivated by the universal approximation property of Transformer architectures Yu et al. (2025); Yun et al. (2019); Jiang & Li (2024). In particular, sufficiently expressive Transformer classes can approximate the smoothed target logit map Hα uniformly on data-supported prefixes, which in turn implies KL control between the induced autoregressive distribution and the pretraining distribution. The proof of Theorem 3.1 is provided in Appendix E.3. Motivated by Theorem 3.1, we construct Dpre through model-generated calibration. Given prompts 
+
+ρ1, . . . , ρ N , we sample calibration sequences independently from the pretrained model, 
+
+ci ∼ pθ0 (x1: ℓ | ρi), i = 1 , . . . , N, (27) where θ0 denotes the pretrained model and ℓ is the generation length. Unless otherwise specified, we set ρi to the BOS token for unconditional generation. This yields the model-generated calibration set 
+
+SMG ≜ {ci}Ni=1 , which serves as the pretraining-proxy dataset Dpre . We estimate Cpre by running a forward pass on SMG and collecting the corresponding block-input activations. 
+
+## 4 Experiments  
+
+> Models and Datasets.
+
+Following prior work Tang et al. (2025); Yang et al. (2024); Wang et al. (2024), we fine-tune pretrained LLaMA2-7B Touvron et al. (2023) on three downstream adaptation tasks: math, code, and instruction following. To evaluate preservation of pretrained capabilities, we use as benchmarks TriviaQA Joshi et al. (2017), NQ Open Kwiatkowski et al. (2019), and WebQS Berant et al. (2013). For math adaptation, models are trained on MetaMathQA Yu et al. (2023) and evaluated on GSM8K Cobbe et al. (2021) and MATH Hendrycks et al. (2021b). For code adaptation, models are trained on CodeFeedback Zheng et al. (2024) and evaluated on HumanEval Chen et al. (2021) and MBPP Austin et al. (2021). For instruction following, models are trained on WizardLM-Evol-Instruct Xu et al. (2023) and evaluated on IFEVAL Zhou et al. (2023). We report exact-match scores on the preservation benchmarks; we also report Avg1, the arithmetic mean of the three preservation scores, and Avg1(%), the preservation ratio relative to the original pretrained model. For downstream adaptation, we report task-specific score, as well as the average of those scores, Avg2. To jointly evaluate task adaptation and preservation, we report GM, the geometric mean of Avg1 and Avg2.  
+
+> Baselines.
+
+We compare FoLoRA with several forgetting-aware fine-tuning methods, including LoRA Hu et al. (2022), MiLoRA Wang et al. (2024), CorDA Yang et al. (2024), LoRA-Null Tang et al. (2025), and OPLoRA Xiong & Xie (2025). All methods are implemented under the same training and evaluation protocol. We also report performance of the original LLaMA2-7B Touvron et al. (2023) for reference. Further training details are provided in Appendix B. 
+
+4.1 Main Results 
+
+Across the three fine-tuning settings on LLaMA-2-7B, FoLoRA achieves the best overall preservation-adaptation balance among the evaluated methods, as shown in Tables 1a, 1b, and 1c. On math adaptation with MetaMathQA, FoLoRA obtains the highest preservation scores, with Avg1 = 26.06 and Avg1(%) = 103.84, while also achieving the best downstream aggregate, with Avg2 = 26.34 and GM = 26.20. On code adaptation with CodeFeedback, FoLoRA again yields the strongest preservation, with Avg1 = 25.63 and Avg1(%) = 102.12, and achieves the best aggregate performance, with Avg2 = 22.24 and GM = 23.87. On instruction following with WizardLM-Evol-Instruct, FoLoRA obtains the highest preservation score, with Avg1 = 23.71 and Avg1(%) = 94.44, and the best combined score, GM = 29.26. Overall, FoLoRA is the only method that exceeds the pretrained model’s average preservation score in both math and 7(a) LLaMA-2-7B finetuned on math (MetaMathQA)  
+
+> Foundation-Preservation Adaptation
+
+Method #Param Trivia QA NQ Open WebQS Avg1 Avg1(%) GSM8K Math Avg2 GM LLaMA-2-7B - 52.51 16.91 5.88 25.10 100.00 - - - -LoRA Hu et al. (2022) 320M 45.06 1.535 6.64 17.74 70.69 42.92 6.09 24.50 20.85 MiLoRA Wang et al. (2024) 320M 48.28 3.91 6.30 19.5 77.68 40.51 5.44 22.97 21.16 CorDA Yang et al. (2024) 320M 47.77 5.91 6.49 20.05 79.91 40.26 5.65 22.95 21.45 LoRA-Null Tang et al. (2025) 320M 49.93 7.14 6.58 21.22 84.55 43.89 6.36 25.12 23.08 OPLoRA Xiong & Xie (2025) 320M 49.14 2.67 7.48 19.76 78.73 31.53 4.32 17.92 18.82 FoLoRA (ours) 320M 49.16 17.09 11.95 26.06 103.84 46.09 6.60 26.34 26.20                                                                                   
+
+> (b) LLaMA-2-7B finetuned on code (CodeFeedback)
+> Method #Param Trivia QA NQ Open WebQS Avg1 Avg1(%) HumanEval MBPP Avg2 GM LLaMA-2-7B -52.51 16.91 5.88 25.10 100.00 ----LoRA Hu et al. (2022) 320M 51.36 10.77 8.56 23.57 93.87 16.99 21.40 19.19 21.26 MiLoRA Wang et al. (2024) 320M 49.28 11.80 7.10 22.72 90.54 17.49 20.22 18.86 20.70 CorDA Yang et al. (2024) 320M 49.32 12.72 6.72 22.92 91.33 17.45 20.48 18.97 20.85 LoRA-Null Tang et al. (2025) 320M 49.09 13.78 6.61 23.16 92.27 17.63 24.04 20.83 21.97 OPLoRA Xiong & Xie (2025) 320M 44.32 9.07 6.10 19.83 79.00 15.24 25.20 20.22 20.02 FoLoRA (ours) 320M 51.31 14.78 10.82 25.63 102.12 17.68 26.80 22.24 23.87
+> (c) LLaMA-2-7B finetuned on instruction-following (WizardLM-Evol-Instruct)
+
+Method #Param Trivia QA NQ Open WebQS Avg1 Avg1(%) IFEVAL GM LLaMA-2-7B - 52.51 16.91 5.88 25.10 100.00 - -LoRA Hu et al. (2022) 320M 42.76 7.72 6.34 18.94 75.45 32.49 24.80 MiLoRA Wang et al. (2024) 320M 45.98 11.94 6.74 21.55 85.86 32.21 26.34 CorDA Yang et al. (2024) 320M 45.34 14.50 7.28 22.37 89.13 34.45 27.76 LoRA-Null Tang et al. (2025) 320M 47.63 14.68 6.88 23.06 91.87 32.61 27.42 OPLoRA Xiong & Xie (2025) 320M 46.90 10.19 7.08 21.39 85.21 28.65 24.75 FoLoRA (ours) 320M 49.14 14.01 7.97 23.71 94.44 36.13 29.26 Table 1 Main results on LLaMA2-7B-Base . Avg1 averages preservation scores over TriviaQA, NQ Open, and WebQS; Avg1(%) reports its percentage relative to the pretrained model. Avg2 averages downstream scores, while IFEVAL is used directly for instruction following. GM is the geometric mean of Avg1 and Avg2. Bold indicates the best result and underlining the runner-up. Results are averaged over three random seeds. 
+
+code adaptation while also achieving the strongest downstream performance, indicating that it improves adaptation without sacrificing pretrained knowledge. 
+
+Ablation on Spectral-gated Adam. 
+
+Fig. 2(a) visualizes the distribution of generalized eigenvalues γi and the corresponding gating values si
+
+under different choices of λ. We observe that a small number of leading eigenvalues account for most of the spectral mass, indicating large variation in utility-to-penalty ratios across the generalized H-orthogonal directions. Directions with high task utility per unit forgetting penalty have large Rayleigh quotients and therefore large γi, for which the gating values si approach 1, allowing nearly full Adam updates along these directions. In contrast, directions with low utility-to-penalty ratios are characterized by small 
+
+γi and assigned smaller gating values, which effectively suppresses updates that are less favorable for preservation-aware adaptation. The gating profile is controlled by two hyperparameters, λ and smin : smin 
+
+sets the minimum gating values, while λ controls how sharply the gate separates high-ratio and low-ratio directions. A smaller smin or larger λ makes the update more conservative by more strongly attenuating low-ratio directions, whereas a larger smin or smaller λ allow a more exploratory adaptation strategy. 80 2000 4000 6000 8000 10000                    
+
+> Coordinate index (sorted by i)
+> 10 11
+> 10 9
+> 10 7
+> 10 5
+> 10 3
+> 10 1
+> 10 1
+> 10 3
+> i (log scale)
+> (a)
+> i
+> si(= 0.5)
+> si(= 1.0)
+> si(= 2.0)
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Gate  si0.0 0.5 1.0 1.5 2.0 2.5 3.0
+> 18
+> 20
+> 22
+> 24
+> 26
+> 28
+> Accuracy
+
+(b)      
+
+> Avg1 (World Knowledge)
+> Avg2 (Target Task)
+> 0.0 0.1 0.2 0.3 0.4 0.5
+> smin
+> 20
+> 22
+> 24
+> 26
+> Accuracy
+
+(c)     
+
+> Avg1 (World Knowledge)
+> Avg2 (Target Task) 18 20 22 24 26
+> Avg2: Adaptation
+> 70
+> 75
+> 80
+> 85
+> 90
+> 95
+> 100
+> Avg1 (%): Preservation
+> FoLoRA (1, 0.1)
+> FoLoRA (1, 0.2)
+> FoLoRA (1, 0.3)
+> FoLoRA (1, 0.4)
+> FoLoRA (2, 0.1)
+> FoLoRA (3, 0.1)
+> FoLoRA (2, 0.25)
+> LoRA
+> MiLoRA
+> CorDA
+> LoRA-Null
+> OPLoRA
+> LLAMA2-7B-BASE
+
+(d) Figure 2 Ablation of spectral-gated Adam on LLaMA-2-7B fine-tuned on MetaMathQA. (a) Distribution of generalized eigenvalues {γi} and corresponding gate values {si} for different λ (Layer-15 MLP downproj). (b) Preservation score Avg1 and downstream adaptation score Avg2 as λ varies. (c) Avg1 and Avg2 as smin varies. (d) Preservation-adaptation trade-off of FoLoRA across operating points (λ, s min ), compared with baselines. Method IFEVAL TruthfulQA SQuAD TriviaQA NQopen MMLU BLong LBench GPQA Avg1 Math GM Qwen3-1.7B 20.51 48.76 27.19 28.78 8.81 60.61 64.54 29.42 31.31 35.54 - -LoRA 19.59 47.93 25.79 29.62 6.06 60.12 65.74 29.22 27.77 34.64 42.74 38.48 MiLoRA 23.10 48.06 23.07 29.69 5.40 59.90 65.98 28.03 29.79 34.78 43.98 39.11 OPLoRA 19.77 48.06 25.52 29.59 7.97 59.94 65.23 29.02 29.29 34.93 43.02 38.76 CorDA 18.66 48.30 23.93 16.58 5.73 56.84 65.57 27.83 29.79 32.58 42.64 37.27 LoRA-Null 23.29 48.40 23.53 30.53 5.37 59.96 66.07 28.03 27.77 34.77 43.86 39.05 CorDA (4B) 19.03 48.35 23.76 19.85 7.50 57.11 66.06 27.83 27.27 32.97 42.74 37.54 LoRA-Null (4B) 21.96 48.16 25.84 30.58 7.45 60.07 65.52 29.42 28.78 35.30 43.12 39.01 FoLoRA (NQ) 23.29 48.32 27.56 32.41 7.73 60.11 66.34 29.02 31.81 36.28 44.28 40.08 FoLoRA (0.6B) 23.10 48.22 25.53 32.18 6.34 59.86 66.09 28.03 31.31 35.62 43.62 39.42 FoLoRA (1.7B) 22.50 48.36 27.98 32.46 7.00 59.97 66.50 28.82 30.30 35.98 43.52 39.57 FoLoRA (4B,ours) 23.84 48.46 27.07 32.07 7.25 60.06 66.17 29.62 34.34 36.54 44.02 40.10 
+
+Table 2 Results on Qwen3-1.7B-Base after fine-tuning on MetaMathQA, evaluated on preservation benchmarks and a downstream math task. We also report CorDA and LoRA-Null using the model-generated pretraining-proxy calibration set, and FoLoRA calibrated on NQ Open. Bold denotes the best result, the runner-up is underlined. 
+
+Fig. 2(b) reports Avg1, which measures knowledge preservation, and Avg2, which measures downstream-task performance, as a function of λ. As λ increases, Avg1 rises consistently, whereas Avg2 decreases gradually. This trend indicates that larger λ makes the update rule more conservative by focusing optimization on directions with the largest utility-to-penalty ratios, thus improving preservation at the cost of reduced adaptation capacity. Fig. 2(c) shows the effect of varying smin . As smin increases, Avg2 modestly improves, since a larger minimum gate allows more update magnitude along directions that would otherwise be strongly suppressed. Avg1, however, follows a non-monotonic pattern. A moderate increase in smin can be beneficial for preservation, suggesting that overly aggressive suppression of low γi
+
+directions may restrict optimization too strongly. However, once smin becomes too permissive, aggressive updates along directions with larger forgetting penalties start to degrade pretrained knowledge. Fig. 2(d) jointly illustrates the preservation-adaptation performance on various operating points obtained by varying 
+
+(λ, s min ), together with the baseline methods. FoLoRA traces a favorable set of preservation-adaptation operating points, indicating that spectral gating can adjust the balance between downstream adaptation and preservation of non-target capabilities. 
+
+Evaluation on Broader Preservation Benchmarks. Beyond factual retrieval benchmarks such as Trivi-aQA Joshi et al. (2017), we further evaluate FoLoRA on a broader set of preservation benchmarks, as shown in Table 2. Specifically, we consider instruction following (IFEVAL Zhou et al. (2023)), halluci-nation robustness (TruthfulQA Lin et al. (2022)), reading comprehension (SQuAD-v2 Rajpurkar et al. (2016)), multitask knowledge and reasoning (MMLU Hendrycks et al. (2021a)), long-context modeling (BABILong Kuratov et al. (2024), LongBench-v2 Bai et al. (2025)), and scientific reasoning (GPQA Rein et al. (2023)). All experiments are conducted on Qwen3-1.7B with MetaMathQA fine-tuning Yu et al. (2023). When comparing the base model with its LoRA-fine-tuned counterpart, We observe more severe degradation on tasks that require factual retrieval, particularly NQ Open, GPQA, and MMLU. Instruction-90.10 0.15 0.20 0.25 0.30 0.35 0.40 0.45 0.50           
+
+> smin
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> Normalized Accuracy
+> (a)
+> Trivia QA (NQ open)
+> NQ open (NQ open)
+> WebQS (NQ open)
+> Trivia QA (Proxy(4B))
+> NQ open (Proxy(4B))
+> WebQS (Proxy(4B)) 0.4 0.2 0.0 0.2 0.4 0.6
+> dim 1
+> 0.6
+> 0.4
+> 0.2
+> 0.0
+> 0.2
+> 0.4
+> dim 2
+> Proxy (0.6B)
+> Proxy (1.7B)
+> Proxy (4B)
+> NQ open
+> (b) 0
+> 500
+> 1000
+> 1500
+> 2000
+> 2500
+> 3000
+> 3500
+> 4000
+> Time [sec]  2739 2785
+> 3581
+> Time Memory
+> LoRA
+> FoLoRA
+> OPLoRA
+> 1000
+> 1500
+> 2000
+> 2500
+> 3000
+> 3500
+> 2785
+> 1146
+> Training time
+> SS construction
+> Cpre construction
+> Eigen solver
+> 0
+> 100
+> 200
+> 300
+> 241
+> 28
+> 0
+> 10000
+> 20000
+> 30000
+> 40000
+> 50000
+> 60000
+> Memory [MB]
+> 49490
+> 56858
+> 50770
+> (c) (d)
+> Time [sec]
+
+Figure 3 (a) Normalized accuracy on preservation benchmarks as a function of smin (LLaMA-2-7B, math adaptation); (b) PCA visualization of NQ Open queries and model-generated calibration sets produced by Qwen3-0.6B, 1.7B, and 4B; (c) training time and peak VRAM usage (Qwen3-1.7B, math adaptation); (d) non-training overhead components of FoLoRA, including model-generated calibration construction, Cpre construction, and generalized eigensolver cost (Qwen3-1.7B, math adaptation; Qwen3-4B used for calibration generation). 
+
+following and hallucination robustness degrade only mildly, as reflected by IFEVAL and TruthfulQA; Interestingly, long-context performance, evaluated on LongBench-v2 and BABILong, remains largely preserved. These results indicate that fine-tuning does not affect all non-target capabilities uniformly, making broad preservation evaluation important. FoLoRA, with the default model-generated calibration setting denoted FoLoRA (4B), achieves the strongest overall preservation across these benchmarks while maintaining competitive downstream performance. 
+
+Overhead Analysis. FoLoRA adds modest overhead: in the Qwen3-1.7B math-adaptation setting, fine-tuning time increases by 1.6% and peak VRAM by 14.8% over LoRA which serves as a lower-bound (Fig. 3(c)). In addition, the one-time preprocessing costs for calibration generation, covariance construction, and generalized eigendecomposition remain lightweight, as shown in Fig. 3(d). 
+
+4.2 Effectiveness of Model-generated Calibration Set 
+
+In Table 2, we evaluate the effect of the calibration source by reporting performance of CorDA and LoRA-Null with our model-generated calibration set SMG , and FoLoRA with NQ Open as the calibration set. We construct SMG using generators of varying sizes; e.g., FoLoRA (4B) and CorDA (4B) use Qwen3-4B generations. The results show that replacing NQ Open with SMG improves the preservation performance of CorDA and LoRA-Null, suggesting that model-generated calibration provides activation statistics that cover a broader range of pretrained behaviors than a single dataset. Conversely, when FoLoRA uses NQ Open as the calibration set, its preservation effect is concentrated on factual-retrieval benchmarks such as TriviaQA and NQ Open, while performance on several other domains is lower than with SMG . These results show that the calibration source matters: model-generated calibration improves preservation across domains without sacrificing adaptation. Using larger Qwen3 models to generate SMG generally improves FoLoRA’s aggregate preservation. Since these models are trained on the same pretraining corpus Team (2025), the improvement suggests that larger models generate calibration data whose induced activation statistics better reflect the pretraining distribution. The trend is consistent with the approximation-rate discussion in Appendix E.4, where increased model capacity reduces the approximation gap under suitable assumptions. To further analyze calibration coverage, we vary FoLoRA’s minimum spectral gate smin , which controls forgetting pressure, and report normalized accuracy (relative to smin = 0 .1) on TriviaQA, NQ Open, and WebQS on Fig. 3(a). As smin increases, FoLoRA calibrated on NQ Open primarily preserves performance on NQ Open, while other benchmarks degrade. In contrast, SMG calibration preserves performance more consistently across all three benchmarks, even under stronger forgetting pressure. These results indicate that a single calibration benchmark can bias preservation, whereas model-generated calibration provides broader protection coverage. Figure 3(b) visualizes the distributional coverage of NQ Open and the model-generated calibration sets generated from Qwen3 0.6B, 1.7B, and 4B using principal component 10 analysis (PCA) Jolliffe (2003). The model-generated proxies exhibit broader coverage and encompass much of the distributional support of NQ Open. 
+
+## 5 Conclusion, Limitations, and Future Directions 
+
+We propose FoLoRA, a forgetting-aware optimizer that balances adaptation and retention. FoLoRA uses a generalized Rayleigh quotient to score update directions by task utility per unit forgetting penalty, estimated using a model-generated calibration set, and then applies direction-wise gated Adam updates. Experiments show improved preservation–adaptation trade-offs across tasks and benchmarks. Although instantiated with LoRA Hu et al. (2022), FoLoRA is architecture-agnostic and can be extended to full-weight fine-tuning, as discussed in Appendix D. We leave a comprehensive empirical evaluation of this extension to future work. A remaining limitation is the additional VRAM cost during training. While modest, investigating memory efficiency of FoLoRA would be valuable. 
+
+## 6 Acknowledgments 
+
+The authors acknowledge the computing resources made available by the Vista GPU Cluster, operated through the Center for Generative AI (CGAI) and the Texas Advanced Computing Center (TACC) at the University of Texas at Austin, which supported this research. 
+
+## References 
+
+Jacob Austin, Augustus Odena, Maxwell Nye, Maarten Bosma, Henryk Michalewski, David Dohan, Ellen Jiang, Carrie Cai, Michael Terry, Quoc Le, et al. Program synthesis with large language models. arXiv preprint arXiv:2108.07732 , 2021. 7 Yushi Bai, Shangqing Tu, Jiajie Zhang, Hao Peng, Xiaozhi Wang, Xin Lv, Shulin Cao, Jiazheng Xu, Lei Hou, Yuxiao Dong, et al. Longbench v2: Towards deeper understanding and reasoning on realistic long-context multitasks. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pp. 3639–3664, 2025. 9 Jonathan Berant, Andrew Chou, Roy Frostig, and Percy Liang. Semantic parsing on freebase from question-answer pairs. In Proceedings of the 2013 Conference on Empirical Methods in Natural Language Processing, EMNLP 2013, 18-21 October 2013, Grand Hyatt Seattle, Seattle, Washington, USA, A meeting of SIGDAT, a Special Interest Group of the ACL , pp. 1533–1544. ACL, 2013. doi: 10.18653/V1/D13-1160. URL https: //doi.org/10.18653/v1/d13-1160 . 7 Dan Biderman, Jacob P. Portes, Jose Javier Gonzalez Ortiz, Mansheej Paul, Philip Greengard, Connor Jennings, Daniel King, Sam Havens, Vitaliy Chiley, Jonathan Frankle, Cody Blakeney, and John Patrick Cunningham. Lora learns less and forgets less. Trans. Mach. Learn. Res. , 2024, 2024. URL https://openreview.net/forum?id= aloEru2qCG . 1, 2, 19 Antoine Bosselut, Hannah Rashkin, Maarten Sap, Chaitanya Malaviya, Asli Celikyilmaz, and Yejin Choi. Comet: Commonsense transformers for automatic knowledge graph construction. In Annual Meeting of the Association for Computational Linguistics , 2019. URL https://api.semanticscholar.org/CorpusID:189762527 . 1 Tom B. Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, Sandhini Agarwal, Ariel Herbert-Voss, Gretchen Krueger, Thomas Henighan, Rewon Child, Aditya Ramesh, Daniel M. Ziegler, Jeff Wu, Clemens Winter, Christopher Hesse, Mark Chen, Eric Sigler, Ma teusz Litwin, Scott Gray, Benjamin Chess, Jack Clark, Christopher Berner, Sam McCandlish, Alec Radford, Ilya Sutskever, and Dario Amodei. Language models are few-shot learners. ArXiv , abs/2005.14165, 2020. URL https://api.semanticscholar.org/CorpusID:218971783 . 1 Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Pondé, Jared Kaplan, Harrison Edwards, Yura Burda, Nicholas Joseph, Greg Brockman, Alex Ray, Raul Puri, Gretchen Krueger, Michael Petrov, Heidy Khlaaf, Girish Sastry, Pamela Mishkin, Brooke Chan, Scott Gray, Nick Ryder, Mikhail Pavlov, Alethea Power, Lukasz Kaiser, Mo Bavarian, Clemens Winter, Phil Tillet, Felipe Petroski Such, David W. Cummings, Matthias 
+
+11 Plappert, Fotios Chantzis, Elizabeth Barnes, Ariel Herbert-Voss, William H. Guss, Alex Nichol, Igor Babuschkin, Suchir Balaji, Shantanu Jain, Andrew Carr, Jan Leike, Josh Achiam, Vedant Misra, Evan Morikawa, Alec Radford, Matthew M. Knight, Miles Brundage, Mira Murati, Katie Mayer, Peter Welinder, Bob McGrew, Dario Amodei, Sam McCandlish, Ilya Sutskever, and Wojciech Zaremba. Evaluating large language models trained on code. ArXiv , abs/2107.03374, 2021. URL https://api.semanticscholar.org/CorpusID:235755472 . 7 Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser, Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, Christopher Hesse, and John Schulman. Training verifiers to solve math word problems. CoRR , abs/2110.14168, 2021. URL https://arxiv.org/abs/2110.14168 . 7 Ji guang Sun. Eigenvalues of rayleigh quotient matrices. Numerische Mathematik , 59:603–614, 1991. URL 
+
+> https://api.semanticscholar.org/CorpusID:121711088
+
+. 4 Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob Stein-hardt. Measuring massive multitask language understanding. In 9th International Conference on Learn-ing Representations, ICLR 2021, Virtual Event, Austria, May 3-7, 2021 . OpenReview.net, 2021a. URL 
+
+> https://openreview.net/forum?id=d7KBjmI3GmQ
+
+. 9 Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn Song, and Jacob Steinhardt. Measuring mathematical problem solving with the math dataset. arXiv preprint arXiv:2103.03874 ,2021b. 7 Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Liang Wang, Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. Iclr , 1(2):3, 2022. 7, 8, 11 Jianheng Huang, Leyang Cui, Ante Wang, Chengyi Yang, Xinting Liao, Linfeng Song, Junfeng Yao, and Jinsong Su. Mitigating catastrophic forgetting in large language models with self-synthesized rehearsal. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pp. 1416–1428, 2024. 19 Wei Huang, Anda Cheng, and Yinggui Wang. Mitigating catastrophic forgetting in large language models with forgetting-aware pruning. In Christos Christodoulopoulos, Tanmoy Chakraborty, Carolyn Rose, and Violet Peng (eds.), Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing, EMNLP 2025, Suzhou, China, November 4-9, 2025 , pp. 21842–21856. Association for Computational Linguistics, 2025. doi: 10.18653/V1/2025.EMNLP-MAIN.1108. URL https://doi.org/10.18653/v1/2025.emnlp-main.1108 . 19 Haotian Jiang and Qianxiao Li. Approximation rate of the transformer architecture for sequence modeling. In Amir Globersons, Lester Mackey, Danielle Belgrave, Angela Fan, Ulrich Paquet, Jakub M. Tomczak, and Cheng Zhang (eds.), Advances in Neural Information Processing Systems 38: Annual Conference on Neural Information Processing Systems 2024, NeurIPS 2024, Vancouver, BC, Canada, December 10 - 15, 2024 , 2024. URL http: //papers.nips.cc/paper_files/paper/2024/hash/7f64034009f4a5fa417a57e1a987c5cd-Abstract-Conference.html . 7, 28, 29 Xisen Jin and Xiang Ren. Demystifying language model forgetting with low-rank example associations. arXiv preprint arXiv:2406.14026 , 2024. 19 Ian T. Jolliffe. Principal component analysis. Technometrics , 45:276 – 276, 2003. URL https://api.semanticscholar. org/CorpusID:2534141 . 11 Mandar Joshi, Eunsol Choi, Daniel S. Weld, and Luke Zettlemoyer. Triviaqa: A large scale distantly supervised challenge dataset for reading comprehension. ArXiv , abs/1705.03551, 2017. URL https://api.semanticscholar. org/CorpusID:26501419 . 7, 9 Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In Yoshua Bengio and Yann LeCun (eds.), 3rd International Conference on Learning Representations, ICLR 2015, San Diego, CA, USA, May 7-9, 2015, Conference Track Proceedings , 2015. URL http://arxiv.org/abs/1412.6980 . 5 James Kirkpatrick, Razvan Pascanu, Neil C. Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, Demis Hassabis, Claudia Clopath, Dharshan Kumaran, and Raia Hadsell. Overcoming catastrophic forgetting in neural networks. CoRR ,abs/1612.00796, 2016. URL http://arxiv.org/abs/1612.00796 . 19 Ananya Kumar, Aditi Raghunathan, Robbie Matthew Jones, Tengyu Ma, and Percy Liang. Fine-tuning can distort pretrained features and underperform out-of-distribution. In The Tenth International Conference 
+
+12 on Learning Representations, ICLR 2022, Virtual Event, April 25-29, 2022 . OpenReview.net, 2022. URL 
+
+> https://openreview.net/forum?id=UYneFzXSJWh
+
+. 1 Yuri Kuratov, Aydar Bulatov, Petr Anokhin, Ivan Rodkin, Dmitry Sorokin, Artyom Sorokin, and Mikhail Burtsev. Babilong: Testing the limits of llms with long context reasoning-in-a-haystack. Advances in Neural Information Processing Systems , 37:106519–106554, 2024. 9 Tom Kwiatkowski, Jennimaria Palomaki, Olivia Redfield, Michael Collins, Ankur P. Parikh, Chris Alberti, Danielle Epstein, Illia Polosukhin, Jacob Devlin, Kenton Lee, Kristina Toutanova, Llion Jones, Matthew Kelcey, Ming-Wei Chang, Andrew M. Dai, Jakob Uszkoreit, Quoc V. Le, and Slav Petrov. Natural questions: Abenchmark for question answering research. Transactions of the Association for Computational Linguistics , 7: 453–466, 2019. URL https://api.semanticscholar.org/CorpusID:86611921 . 6, 7 Ren-Cang Li. Rayleigh quotient based optimization methods for eigenvalue problems. 2014. URL https: //api.semanticscholar.org/CorpusID:14329440 . 4 Stephanie Lin, Jacob Hilton, and Owain Evans. Truthfulqa: Measuring how models mimic human falsehoods. In 
+
+Proceedings of the 60th annual meeting of the association for computational linguistics (volume 1: long papers) ,pp. 3214–3252, 2022. 9 Zheda Mai, Arpita Chowdhury, Ping Zhang, Cheng-Hao Tu, Hong-You Chen, Vardaan Pahuja, Tanya Y. Berger-Wolf, Song Gao, Charles V. Stewart, Yu Su, and Wei-Lun Chao. Fine-tuning is fine, if calibrated. ArXiv ,abs/2409.16223, 2024. URL https://api.semanticscholar.org/CorpusID:272831906 . 1 Long Ouyang, Jeff Wu, Xu Jiang, Diogo Almeida, Carroll L. Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, John Schulman, Jacob Hilton, Fraser Kelton, Luke E. Miller, Maddie Simens, Amanda Askell, Peter Welinder, Paul Francis Christiano, Jan Leike, and Ryan J. Lowe. Training language models to follow instructions with human feedback. ArXiv , abs/2203.02155, 2022. URL 
+
+> https://api.semanticscholar.org/CorpusID:246426909
+
+. 1 Xiangyu Qi, Yi Zeng, Tinghao Xie, Pin-Yu Chen, Ruoxi Jia, Prateek Mittal, and Peter Henderson. Fine-tuning aligned language models compromises safety, even when users do not intend to! ArXiv , abs/2310.03693, 2023. URL https://api.semanticscholar.org/CorpusID:263671523 . 1 Alec Radford and Karthik Narasimhan. Improving language understanding by generative pre-training. 2018. URL 
+
+> https://api.semanticscholar.org/CorpusID:49313245
+
+. 1 Rafael Rafailov, Archit Sharma, Eric Mitchell, Christopher D. Manning, Stefano Ermon, and Chelsea Finn. Direct preference optimization: Your language model is secretly a reward model. In Alice Oh, Tristan Naumann, Amir Globerson, Kate Saenko, Moritz Hardt, and Sergey Levine (eds.), Advances in Neural Information Processing Systems 36: Annual Conference on Neural Information Processing Systems 2023, NeurIPS 2023, New Orleans, LA, USA, December 10 - 16, 2023 , 2023. URL http://papers.nips.cc/paper_files/paper/2023/hash/ a85b405ed65c6477a4fe8302b5e06ce7-Abstract-Conference.html . 1 Pranav Rajpurkar, Jian Zhang, Konstantin Lopyrev, and Percy Liang. Squad: 100,000+ questions for machine comprehension of text. In Proceedings of the 2016 conference on empirical methods in natural language processing ,pp. 2383–2392, 2016. 9 David Rein, Betty Li Hou, Asa Cooper Stickland, Jackson Petty, Richard Yuanzhe Pang, Julien Dirani, Julian Michael, and Samuel R. Bowman. GPQA: A graduate-level google-proof q&a benchmark. CoRR , abs/2311.12022, 2023. doi: 10.48550/ARXIV.2311.12022. URL https://doi.org/10.48550/arXiv.2311.12022 . 9 Sunny Sanyal, Hayden Prairie, Rudrajit Das, Ali Kavis, and Sujay Sanghavi. Upweighting easy samples in fine-tuning mitigates forgetting. In Aarti Singh, Maryam Fazel, Daniel Hsu, Simon Lacoste-Julien, Felix Berkenkamp, Tegan Maharaj, Kiri Wagstaff, and Jerry Zhu (eds.), Forty-second International Conference on Machine Learning, ICML 2025, Vancouver, BC, Canada, July 13-19, 2025 , Proceedings of Machine Learning Research. PMLR / OpenReview.net, 2025. URL https://proceedings.mlr.press/v267/sanyal25a.html . 19 Thomas Scialom, Tuhin Chakrabarty, and Smaranda Muresan. Fine-tuned language models are continual learners. In Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing , pp. 6107–6122, 2022. 18 Joanna Sliwa, Frank Schneider, Philipp Hennig, and José Miguel Hernández-Lobato. Mitigating forgetting in low rank adaptation. arXiv preprint arXiv:2512.17720 , 2025. 19 
+
+13 Pengwei Tang, Xiaolin Hu, Yong Liu, Lizhong Ding, Dongjie Zhang, Xing Wu, and Debing Zhang. Put the space of lora initialization to the extreme to preserve pre-trained knowledge. In AAAI Conference on Artificial Intelligence , 2025. URL https://api.semanticscholar.org/CorpusID:276768395 . 1, 2, 6, 7, 8, 16, 19 Qwen Team. Qwen3 technical report. CoRR , abs/2505.09388, 2025. doi: 10.48550/ARXIV.2505.09388. URL 
+
+> https://doi.org/10.48550/arXiv.2505.09388
+
+. 10 Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. 
+
+arXiv preprint arXiv:2307.09288 , 2023. 7 Hanqing Wang, Zeguan Xiao, Yixia Li, Shuo Wang, Guanhua Chen, and Yun Chen. Milora: Harnessing minor singular components for parameter-efficient llm finetuning. In North American Chapter of the Association for Computational Linguistics , 2024. URL https://api.semanticscholar.org/CorpusID:270440848 . 1, 2, 7, 8, 19 Chao-Chung Wu, Zhi Rui Tam, Chieh-Yen Lin, Hung yi Lee, and Yun-Nung Chen. Mitigating forgetting in llm fine-tuning via low-perplexity token learning. 2025. URL https://api.semanticscholar.org/CorpusID:275906908 . 2, 19 Yifeng Xiong and Xiaohui Xie. Oplora: Orthogonal projection lora prevents catastrophic forgetting dur-ing parameter-efficient fine-tuning. In AAAI Conference on Artificial Intelligence , 2025. URL https: //api.semanticscholar.org/CorpusID:282102731 . 1, 3, 7, 8, 16, 19 Can Xu, Qingfeng Sun, Kai Zheng, Xiubo Geng, Pu Zhao, Jiazhan Feng, Chongyang Tao, and Daxin Jiang. Wizardlm: Empowering large pre-trained language models to follow complex instructions. In International Conference on Learning Representations , 2023. URL https://api.semanticscholar.org/CorpusID:258298159 . 7 Yibo Yang, Xiaojie Li, Zhongzhu Zhou, Shuaiwen Leon Song, Jianlong Wu, Liqiang Nie, and Bernard Ghanem. Corda: Context-oriented decomposition adaptation of large language models. ArXiv , abs/2406.05223, 2024. URL https://api.semanticscholar.org/CorpusID:270370784 . 1, 2, 6, 7, 8, 16, 19 Longhui Yu, Weisen Jiang, Han Shi, Jincheng Yu, Zhengying Liu, Yu Zhang, James T Kwok, Zhenguo Li, Adrian Weller, and Weiyang Liu. Metamath: Bootstrap your own mathematical questions for large language models. 
+
+arXiv preprint arXiv:2309.12284 , 2023. 7, 9 Penghao Yu, Haotian Jiang, Zeyu Bao, Ruoxi Yu, and Qianxiao Li. The effect of attention head count on transformer approximation. CoRR , abs/2510.06662, 2025. doi: 10.48550/ARXIV.2510.06662. URL https: //doi.org/10.48550/arXiv.2510.06662 . 7, 23, 24 Chulhee Yun, Srinadh Bhojanapalli, Ankit Singh Rawat, Sashank J. Reddi, and Sanjiv Kumar. Are transformers universal approximators of sequence-to-sequence functions? ArXiv , abs/1912.10077, 2019. URL https: //api.semanticscholar.org/CorpusID:209444410 . 7 Tianyu Zheng, Ge Zhang, Tianhao Shen, Xueling Liu, Bill Yuchen Lin, Jie Fu, Wenhu Chen, and Xiang Yue. Opencodeinterpreter: Integrating code generation with execution and refinement. In Findings of the Association for Computational Linguistics: ACL 2024 , pp. 12834–12859, 2024. 7 Jeffrey Zhou, Tianjian Lu, Swaroop Mishra, Siddhartha Brahma, Sujoy Basu, Yi Luan, Denny Zhou, and Le Hou. Instruction-following evaluation for large language models. arXiv preprint arXiv:2311.07911 , 2023. 7, 9 Daniel M. Ziegler, Nisan Stiennon, Jeff Wu, Tom B. Brown, Alec Radford, Dario Amodei, Paul Christiano, and Geoffrey Irving. Fine-tuning language models from human preferences. ArXiv , abs/1909.08593, 2019. URL 
+
+> https://api.semanticscholar.org/CorpusID:202660943
+
+. 1 
+
+14 Appendix Contents 
+
+A Broader Impacts. 16 B Experimental Details 16 
+
+B.1 Training Details and Hyperparameters . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 B.2 Covariance Matrix Construction From Block Input . . . . . . . . . . . . . . . . . . . . . . 16 B.3 FoLoRA Initialization and Optimizer Assignment . . . . . . . . . . . . . . . . . . . . . . . 17 B.4 Detailed Configuration of Model-generated Calibration Dataset . . . . . . . . . . . . . . . 17 B.5 Benchmark Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18 
+
+C Additional Relevant Literature 18 D Extensions to Full-Weight Fine-Tuning 19 E Additional Proofs 21 
+
+E.1 Proof of Theorem E.1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21 E.2 Proof of Corollary E.2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22 E.3 KL-bound via Universal Approximation Theorem. . . . . . . . . . . . . . . . . . . . . . . 23 E.4 Approximation Rate for the Autoregressive KL . . . . . . . . . . . . . . . . . . . . . . . . 28 15 A Broader Impacts. 
+
+FoLoRA supports more reliable and efficient adaptation of foundation models by helping fine-tuned models retain broad pretrained capabilities while learning specialized downstream tasks. By improving the preservation–adaptation balance, the method can make pretrained models more reusable across domains, reduce the need for repeated large-scale training, and support more capable task-specific systems that continue to benefit from general knowledge, instruction-following ability, factual reasoning, and long-context understanding. The model-generated calibration procedure further improves practicality by enabling preservation-aware fine-tuning without requiring access to the original pretraining corpus. Overall, FoLoRA contributes to scalable and resource-efficient foundation-model adaptation by providing an optimizer-level mechanism for maintaining useful pretrained behavior during specialization, while also noting that retaining broad pretrained capabilities may preserve undesirable or unsafe behaviors if applied without safety evaluation. 
+
+## B Experimental Details 
+
+B.1 Training Details and Hyperparameters 
+
+For a fair comparison, we follow the same optimization protocol across all methods. Specifically, we use the AdamW optimizer with a batch size of 128 and a learning rate of 2 × 10 −5. We adopt a cosine annealing schedule with a warm-up ratio of 0.03. β1, β 2, ϵ values in the AdamW optimizer are set to 0.9, 0.999, and 1 × 10 −8, respectively. Training is performed for one epoch on the first 100,000 conversations of each target dataset, and the loss is computed on the response tokens. The maximum training sequence length is 512; the maximum gradient norm is set to 1. Throughout the training, we use bf16 precision; weight decay and dropout are not applied. Our experiments are conducted on a single NVIDIA GH200 120GB GPU. We set per-device training batch size to 16, and the gradient accumulation steps to 8. Since training runs on a single GPU, each optimizer update uses an effective batch size of 128 samples. The LoRA rank is set to 128 for FoLoRA and all LoRA-based baselines. For the OPLoRA Xiong & Xie (2025) baseline, we use a projection rank of k = 128 , which is best-operating point according to the original paper. For FoLoRA, we consistently use the hyperparameters λ = 1 and smin = 0 .3, unless otherwise specified. As shown in Fig. 2(d), these hyperparameters can be efficiently tuned through a modest one-dimensional search along each axis. The fine-tuning prompt is as follows: 
+
+> PROMPT = ( "Below is an instruction that describes a task. " "Write a response that appropriately completes the request.\n\n" "### Instruction:\n{instruction}\n\n### Response:" )
+
+The above setup is applied consistently across all baseline experiments. 
+
+B.2 Covariance Matrix Construction From Block Input 
+
+CorDA Yang et al. (2024), LoRA-Null Tang et al. (2025), and FoLoRA (ours) methods need to construct the covariance matrices ( Cpre , C task ) using each layer’s input representations. For constructing the model-sampled proxy set used to estimate Cpre , we sample 2,000 unconditionally generated outputs from the model. When constructing the covariance matrix from a single dataset (e.g., baseline approach, or 
+
+Ctask construction of FoLoRA), we use 256 query samples from the dataset. Visualized layer statistics (e.g., Fig. 1 and Fig. 2(a)) are extracted from MLP down-projection matrix of 15-th transformer block. 16 B.3 FoLoRA Initialization and Optimizer Assignment 
+
+FoLoRA uses a null-space preserving initialization for each adapted projection matrix. Let 
+
+W0 ∈ Rdout ×din 
+
+denote the pretrained weight of the projection being adapted. We parameterize the adapted weight as 
+
+W = Wres + κBA, A ∈ Rr×din , B ∈ Rdout ×r ,
+
+where Wres is frozen, A and B are trainable, and κ denotes the LoRA scaling factor. In our notation, 
+
+κ = 1 if no explicit LoRA scaling is used. Let Xpre ∈ Rdin ×T be the pretraining-proxy block-input activations used to construct the forgetting covariance 
+
+Cpre = Xpre X⊤ 
+
+> pre
+
+= U Λ′U ⊤, Λ′ = diag( λ′
+
+> 1
+
+, . . . , λ ′ 
+
+> din
+
+),
+
+with eigenvalues sorted as 
+
+λ′ 
+
+> 1
+
+≥ λ′ 
+
+> 2
+
+≥ · · · ≥ λ′ 
+
+> din
+
+≥ 0.
+
+Let 
+
+U⊥ = [ udin −r+1 , . . . , u din ] ∈ Rdin ×r
+
+be the matrix of the bottom-r eigenvectors of Cpre . We initialize 
+
+A0 = U ⊤⊥ , B0 = κ−1W0U⊥, Wres = W0 − κB 0A0. = W0 − W0U⊥U ⊤⊥
+
+Therefore, 
+
+Wres + κB 0A0 = W0,
+
+so the adapted layer exactly matches the pretrained layer at initialization as described in the main paper, yielding the Eq. 3. This initialization places the input-side LoRA factor in the empirical null, or near-null, space of the pretraining-proxy activations. Indeed, 
+
+A0Xpre = U ⊤⊥ Xpre ,
+
+and hence 
+
+∥A0Xpre ∥2 
+
+> F
+
+= Tr  U ⊤⊥ Cpre U⊥
+
+ =
+
+> din
+
+X
+
+> i=din −r+1
+
+λi.
+
+Thus, if the selected bottom-r eigenvalues are zero, then A0Xpre = 0 exactly, yielding Eq. 4. When they are small but nonzero, A0 lies in an empirical low-pretraining-variance subspace, so A0Xpre is small. As described in the main paper, drift of pretrain behavior is primarily carried by A (Eq. 4), FoLoRA applies spectral-gated Adam (SAdam) to the input-side factor A, equivalently to the update ∆A = A − A0,while the output-side factor B is trained with standard AdamW in the original coordinates. Thus, the training trajectory of down-projection A is guided by SAdam optimizer, while up-projection B is optimized without explicit constraint. 
+
+B.4 Detailed Configuration of Model-generated Calibration Dataset 
+
+We sample N = 2 ,000 unconditional generations from the base model in float16 on a single GPU with single random seed. Each generation is conditioned on a single BOS and produced by ancestral sampling with ℓmin = 128 and ℓmax = 512 new tokens ( eos permitted only after ℓmin ). To balance fidelity to pθ
+
+with coverage, the decoding hyperparameters for each sample are drawn from a fixed three-component mixture: (i) with probability 0.70 , T = 1 .0, top-p = 1 .0, top-k = 0 (closest to pθ ); (ii) with probability 
+
+0.20 , T = 1 .0, top-p = 0 .95 , top-k = 0 (mild truncation for stability); (iii) with probability 0.10 , T = 1 .2,top-p = 0 .98 , top-k = 50 (broader exploration). After generation, samples are filtered by (a) exact-text deduplication (SHA-1) and (b) a degeneracy screen that rejects sequences shorter than 32 tokens, with a run of ≥ 20 identical consecutive tokens, unique-token ratio below 0.12 at length ≥ 128 , or unique-4-gram ratio below 0.25 at length ≥ 256 . Sampling is repeated until 2,000 samples pass both filters. 17 B.5 Benchmark Details 
+
+We evaluate each method along two axes: downstream adaptation and foundation preservation. Down-stream adaptation benchmarks measure how well the fine-tuned model learns the target task, whereas preservation benchmarks measure whether non-target capabilities acquired during pretraining are retained after fine-tuning. All scores are reported as percentages, and higher values indicate better performance.  
+
+> Downstream adaptation benchmarks.
+
+For math adaptation, we fine-tune on MetaMathQA and evaluate on GSM8K and MATH. GSM8K consists of grade-school math word problems that require multi-step arithmetic reasoning, while MATH contains more challenging competition-style mathematical problems. For code adaptation, we fine-tune on CodeFeedback and evaluate on HumanEval and MBPP. HumanEval evaluates functional correctness on Python programming problems, and MBPP evaluates the ability to synthesize short programs from natural language descriptions. For instruction-following adaptation, we fine-tune on WizardLM-Evol-Instruct and evaluate on IFEVAL, which tests whether a model follows verifiable natural-language instructions. For each adaptation setting, we report the task-specific benchmark scores and use their arithmetic mean as Avg2 when multiple downstream benchmarks are used.  
+
+> Foundation-preservation benchmarks.
+
+To measure preservation of pretrained capabilities, our main evaluation uses TriviaQA, NQ Open, and WebQS. These benchmarks test open-domain factual question answering and therefore provide a direct measure of whether fine-tuning preserves world knowledge and retrieval-style reasoning. We report exact-match scores on each benchmark. We also report Avg1, the arithmetic mean of the three preservation scores, and Avg1(%), the ratio of Avg1 to the corresponding score of the original pretrained model. Avg1(%) therefore measures how much of the pretrained model’s non-target performance is retained after adaptation.  
+
+> Broader preservation benchmarks.
+
+In addition to the main factual-retrieval benchmarks, we evaluate preservation on a broader benchmark suite in the Qwen3 experiments. Since the Qwen3 experiments fine-tune on MetaMathQA, all benchmarks in this suite are treated as non-target preservation benchmarks, while the math score is reported separately as the downstream adaptation metric. The broader suite covers several complementary capabilities. IFEVAL evaluates instruction following by testing whether model outputs satisfy explicit and verifiable constraints in the prompt. In particular, we report the Prompt-Level Strict Accuracy of IFEVAL, where forgetting behavior is more clearly manifested. TruthfulQA measures truthfulness and hallucination robustness by asking questions that often elicit common misconceptions or false answers. SQuAD-v2 evaluates reading comprehension, where the model must answer questions using evidence from a provided passage. Specifically, we report HasAns Exact 
+
+of SquAD-v2, which is exact match score on the answerable data subset. TriviaQA and NQ Open measure open-domain factual question answering and retrieval-style world knowledge. MMLU evaluates broad multitask knowledge and reasoning across diverse academic and professional domains. BABILong and LongBench-v2 evaluate long-context understanding, including the ability to locate, integrate, and reason over information distributed across long inputs. GPQA evaluates difficult graduate-level scientific reasoning, providing a high-level test of whether fine-tuning preserves specialized reasoning ability beyond the target math adaptation task. For this broader evaluation, we report each benchmark score individually and compute Avg1 as the arithmetic mean over all preservation benchmarks in the suite. This aggregate score summarizes overall foundation preservation across heterogeneous capabilities, while the separate benchmark scores reveal which capabilities are most affected by finetuning-induced forgetting . This is important because forgetting is not uniform across domains: a method may preserve factual retrieval while degrading instruction following, long-context reasoning, or scientific knowledge. The broader suite therefore provides a more comprehensive view of the preservation–adaptation trade-off than factual QA alone. 
+
+## C Additional Relevant Literature 
+
+Replay-based methods preserve prior behavior by mixing examples from previous tasks or pretraining-like data into the current fine-tuning stage. Continual-T0 Scialom et al. (2022) shows that language models can continually learn new instruction tasks with a small rehearsal buffer, while Self-Synthesized Rehearsal 18 (SSR) Huang et al. (2024) reduces dependence on stored previous data by generating synthetic rehearsal examples. More recent targeted replay methods predict which upstream examples are likely to be forgotten, for example by modeling task–example forgetting associations with low-rank matrix completion Jin & Ren (2024). These approaches are effective and model-agnostic, but operate at the data level, requiring access to stored, generated, or replayed examples. In large language model fine-tuning, such replay-based strategies are often impractical due to the additional replay batches required during training, which substantially increase computational cost. As a result, most practical forgetting-aware LLM fine-tuning methods avoid replay-based mechanisms, except in a few experimental continual-learning settings. 
+
+Regularization-based methods constrain fine-tuning by penalizing deviations from pretrained parameters or by restricting updates to parameters estimated to be important for preserving source-domain behavior. Classical continual-learning approaches such as EWC Kirkpatrick et al. (2016) use parameter-importance estimates to regularize updates, while recent LoRA-based methods such as LaLoRA Sliwa et al. (2025) estimate parameter uncertainty through a Laplace approximation and penalize changes to adapter parameters associated with low uncertainty. These methods make fine-tuning more preservation-aware by modifying the training objective, but the regularization is still applied in the original parameter coordinates and does not explicitly compare the downstream utility of an update direction against its preservation cost, typically leading to suboptimal performance on downstream task. 
+
+Data- and loss-centric methods reduce forgetting by changing which examples or tokens dominate the fine-tuning signal. Low-perplexity token learning, implemented through Selective Token Masking (STM) Wu et al. (2025), observes that high-perplexity tokens can induce larger disruptive updates and masks them to reduce non-target degradation. FLOW Sanyal et al. (2025) takes a sample-weighting perspective in the data-oblivious setting, upweighting target examples on which the pretrained model has low loss so that fine-tuning gradients remain more aligned with the pretrained model. They regulate the data or loss contribution directly rather than the geometry of parameter updates: hard but task-informative tokens or examples can be completely ruled out, and the optimizer is not given an explicit direction-wise preservation criterion. 
+
+Update editing and pruning methods aim to remove components of the learned task update that are likely to cause forgetting. FAPM Huang et al. (2025) prunes the task vector using both magnitude and the ratio between task-vector values and pretrained parameters, thereby retaining components important for target performance while suppressing components more likely to induce catastrophic forgetting. This approach is attractive because it does not require additional data, architecture changes, or modifications to the original training process. However, it is primarily a post-hoc (post-training) process, and therefore cannot directly optimize the retention-adaptation tradeoff. Finally, Subspace-based forgetting-aware methods are the closest to our setting and are discussed in the main paper. Existing approaches improve preservation through safer initialization subspaces, activation-aware adapter construction, regularization, or hard projection constraints Biderman et al. (2024); Wang et al. (2024); Yang et al. (2024); Tang et al. (2025); Xiong & Xie (2025). FoLoRA is complementary to this line of work, from which it differs in the optimization-time mechanism: rather than relying only on a static initialization, fixed admissible subspace, or hard constraint, it continuously gates LoRA update directions according to their downstream utility per unit preservation cost. 
+
+## D Extensions to Full-Weight Fine-Tuning 
+
+Consider a pretrained linear map 
+
+y = W0x, W0 ∈ Rdout ×din ,
+
+inside a nonlinear block, and let W = W0 + ∆ W denote a dense full-parameter update. As discussed in Section 3.1, the first-order change of the block output on pretraining-proxy activations is governed by 
+
+∆W X pre . Therefore, the same retention and task-utility metrics used for LoRA can be defined directly on the dense perturbation: 
+
+Rτ
+
+> pre
+
+(∆ W ) := ∥∆W X pre ∥2 
+
+> F
+
++ τ ∥∆W ∥2 
+
+> F
+
+= Tr(∆ W H ∆W ⊤), H := Cpre + τ I, 
+
+19 and 
+
+Utask (∆ W ) := ∥∆W X task ∥2 
+
+> F
+
+= Tr(∆ W C task ∆W ⊤),
+
+where 
+
+Cpre = Xpre X⊤
+
+> pre
+
+, Ctask = Xtask X⊤
+
+> task
+
+.
+
+For a rank-one dense perturbation ∆W = uv ⊤, with u ∈ Rdout and v ∈ Rdin , we obtain 
+
+Rτ
+
+> pre
+
+(u, v ) = ∥u∥22v⊤Hv, Utask (u, v ) = ∥u∥22v⊤Ctask v. 
+
+The output-side scale ∥u∥22 cancels in the utility-to-risk ratio, yielding the same generalized Rayleigh quotient as in the LoRA case: 
+
+ρ(v) = v⊤Ctask vv⊤Hv .
+
+Thus, dense full-parameter fine-tuning induces the same generalized eigenvalue problem 
+
+Ctask v = γHv. 
+
+Let 
+
+H−1/2Ctask H−1/2 = RΓR⊤, Γ = diag( γ1, . . . , γ din ),
+
+and define 
+
+T := H−1/2R. 
+
+Then 
+
+T ⊤HT = I, T ⊤Ctask T = Γ .
+
+Therefore, if a dense perturbation is represented in the generalized coordinate system as 
+
+∆W = ∆ ¯W T ⊤,
+
+then the preservation and utility metrics diagonalize: 
+
+Rτ
+
+> pre
+
+(∆ W ) = ∥∆ ¯W ∥2 
+
+> F
+
+, Utask (∆ W ) = Tr(∆ ¯W Γ∆ ¯W ⊤) = 
+
+> din
+
+X
+
+> i=1
+
+γi∥∆ ¯W:i∥22.
+
+Consequently, the generalized eigenvalue γi provides a direction-wise utility-to-risk score for the i-th spectral coordinate even when the update is dense. The full-parameter version of FoLoRA can therefore be implemented by applying SAdam to dense weight updates in the transformed coordinate system. Let 
+
+Gt := ∇W L(Wt)
+
+be the ordinary dense gradient at step t. The gradient in the generalized coordinate system is 
+
+¯Gt = GtT = GtH−1/2R. 
+
+We maintain Adam moments in this coordinate system, i.e., 
+
+¯mt = β1 ¯mt−1 + (1 − β1) ¯Gt, ¯vt = β2 ¯vt−1 + (1 − β2) ¯G⊙2 
+
+> t
+
+,
+
+with bias-corrected moments 
+
+ˆ¯mt = ¯mt
+
+1 − βt
+
+> 1
+
+, ˆ¯vt = ¯vt
+
+1 − βt
+
+> 2
+
+.
+
+Using the same spectral gate as in the main method, 
+
+si = ψ(γi) = γi
+
+γi + λ , λ > 0,
+
+20 the transformed dense update is 
+
+∆ ¯Wt = −η ˆ¯mt
+
+pˆ¯vt + ϵ ⊙ max( s, s min )
+
+!
+
+,
+
+where s ∈ Rdin is broadcasted across the output dimension. Finally, the update is mapped back to the original parameter space: 
+
+∆Wt = ∆ ¯WtT ⊤ = ∆ ¯WtR⊤H−1/2, Wt+1 = Wt + ∆ Wt.
+
+This gives a dense, full-parameter analogue of FoLoRA: instead of restricting the update to a low-rank subspace, the optimizer performs full-rank updates but attenuates each input-side spectral direction according to its task utility per unit preservation risk. In practice, this extension can be applied independently to each adapted attention or MLP projection matrix. Parameters that do not admit a natural input-activation covariance, such as biases or normalization scalars, can either be frozen or updated with the base optimizer. For memory efficiency, one may also use a truncated generalized basis Tk = H−1/2Rk, where Rk contains the top k generalized eigendirections, and apply the gated update only within this subspace. 
+
+## E Additional Proofs  
+
+> Roadmap.
+
+This appendix formalizes the connection between next-token prediction, forward KL minimiza-tion, and Transformer approximation theory. We first show that the population next-token prediction objective is exactly the forward KL divergence from the data distribution to the model distribution, up to the constant entropy of the data distribution. This converts population pretraining into a forward KL minimization problem. We then derive an immediate ε-optimality corollary, which separates the error into an optimization term and a model-class misspecification term. The remaining subsections control this misspecification term for Transformer models: first qualitatively using a universal approximation argument for smoothed next-token logits, and then quantitatively using a Jackson-type Transformer approximation rate. 
+
+E.1 Proof of Theorem E.1 
+
+Theorem E.1 (Next-token prediction as forward KL minimization) . Let X = VT be the discrete space of token sequences of length T over a finite vocabulary V. Let P = Pdata ∈ ∆( X ) denote the data distribution. Consider an autoregressive model family {Qθ : θ ∈ Θ} with 
+
+Qθ (x) = 
+
+> T
+
+Y
+
+> t=1
+
+qθ (xt | x<t ), x = ( x1, . . . , x T ).
+
+Assume Qθ (x) > 0 whenever P (x) > 0. Define the population next-token prediction loss 
+
+L(θ) := EX∼P
+
+"
+
+−
+
+> T
+
+X
+
+> t=1
+
+log qθ (Xt | X<t )
+
+#
+
+.
+
+Then 
+
+L(θ) = H(P ) + DKL (P ∥Qθ )
+
+where 
+
+H(P ) := − X
+
+> x∈X
+
+P (x) log P (x), DKL (P ∥Qθ ) := X
+
+> x∈X
+
+P (x) log P (x)
+
+Qθ (x) .
+
+H is independent of θ, optimization on next-token prediction directly minimize forward KL divergence: 
+
+arg min  
+
+> θ∈Θ
+
+L(θ) = arg min  
+
+> θ∈Θ
+
+DKL (P ∥Qθ ).
+
+21 Proof. By the autoregressive factorization, 
+
+> T
+
+X
+
+> t=1
+
+log qθ (xt | x<t ) = log Qθ (x).
+
+Hence 
+
+L(θ) = EX∼P [− log Qθ (X)] = − X
+
+> x∈X
+
+P (x) log Qθ (x).
+
+Expanding the KL divergence gives 
+
+DKL (P ∥Qθ ) = X
+
+> x∈X
+
+P (x) log P (x)
+
+Qθ (x)= X
+
+> x∈X
+
+P (x) log p(x) − X
+
+> x∈X
+
+P (x) log Qθ (x)= −H (P ) + L(θ).
+
+Therefore, 
+
+L(θ) = H(P ) + DKL (P ∥Qθ ).
+
+Since H(P ) is independent of θ, minimizing L(θ) is equivalent to minimizing DKL (P ∥Qθ ). 
+
+> From the loss identity to optimization error.
+
+Theorem E.1 shows that minimizing the population next-token loss is equivalent to minimizing DKL (Pdata ∥Qθ ), since the entropy H(Pdata ) does not depend on θ.Therefore, any suboptimality in the population loss transfers directly to suboptimality in forward KL. This yields the following corollary, which separates the learned model’s KL error into an optimization error and the best achievable KL within the model class. 
+
+E.2 Proof of Corollary E.2 
+
+Corollary E.2. If ˆθ is an ε-optimal solution for the population next-token loss, i.e., 
+
+L(ˆθ) ≤ inf  
+
+> θ∈Θ
+
+L(θ) + ε, 
+
+then 
+
+DKL 
+
+ Pdata ∥Qˆθ
+
+ ≤ inf  
+
+> θ∈Θ
+
+DKL (P ∥Qθ ) + ε. (28) 
+
+Here, ϵ captures optimization error, which depends on the optimization landscape and the optimizer. The term 
+
+inf  
+
+> θ∈Θ
+
+DKL (Pdata ∥Qθ )
+
+is the model-class misspecification gap, governed by the expressive power of the model class. Proof. Using the same identity, 
+
+inf  
+
+> θ∈Θ
+
+L(θ) = H(P ) + inf  
+
+> θ∈Θ
+
+DKL (P ∥Qθ ) = H(p) + D∗.
+
+Thus, if L(ˆθ) ≤ inf θ L(θ) + ε, then 
+
+DKL (P ∥Qˆθ ) = L(ˆθ) − H (P )
+
+≤ inf  
+
+> θ
+
+L(θ) + ε − H (P )= D∗ + ε. 
+
+Substituting P = Pdata and Qˆθ = Pˆθ completes the proof. The next subsection shows that, for a sufficiently expressive Transformer logit class, this misspecification gap can be made arbitrarily small by applying universal approximation to the smoothed true next-token logit map. 22 E.3 KL-bound via Universal Approximation Theorem. 
+
+The preceding corollary reduces the statistical approximation question to bounding the model-class misspecification gap 
+
+inf  
+
+> θ∈Θ
+
+DKL (Pdata ∥Pθ ).
+
+We now show that this gap vanishes for a sufficiently expressive Transformer logit class. The proof applies universal approximation to the target next-token logit map rather than directly to probabilities. Since the true conditionals may assign zero probability to some tokens, we first smooth them; this makes the target logits finite and compatible with the softmax model, which always assigns positive probability to every vocabulary element. Let V be a finite vocabulary with M = |V| , and let Pdata ∈ ∆( VT ) be the pretraining distribution over length-T token sequences X = ( X1, . . . , X T ). For t ∈ [T ], write X<t = ( X1, . . . , X t−1). For each data-supported prefix h ∈ V t−1, define the true next-token conditional 
+
+qt(v | h) := Pdata (Xt = v | X<t = h), v ∈ V . (29) For unsupported prefixes, qt(· | h) may be defined arbitrarily, since such prefixes have zero probability under Pdata .The model is autoregressive: 
+
+Pθ (x1: T ) = 
+
+> T
+
+Y
+
+> t=1
+
+rt,θ (xt | x<t ), rt,θ (· | h) = softmax  bℓt,θ (h), (30) where bℓt,θ (h) ∈ RM denotes the model logit vector. Let 
+
+Psupp  
+
+> T
+
+:= {(t, h ) : t ∈ [T ], h ∈ V t−1, P data (X<t = h) > 0}
+
+denote the set of data-supported prefixes. For α ∈ (0 , 1) , define the smoothed conditional and its logit map by 
+
+qt,α (v | h) := (1 − α)qt(v | h) + αM , Uα(t, h ) :=  log qt,α (v | h) 
+
+> v∈V
+
+∈ RM . (31) Since qt,α (v | h) ≥ α/M , the target logits Uα(t, h ) are finite for all v ∈ V . 
+
+> Finite-prefix logit approximation.
+
+For fixed vocabulary size M and sequence length T , the set of data-supported prefixes Psupp  
+
+> T
+
+is finite. After token and positional embeddings, the smoothed target logit map 
+
+Uα is therefore a finite table of bounded vectors in RM . By extending this finite table to a continuous function on a compact neighborhood, the Transformer universal approximation theorem with positional encodings motivates the uniform finite-prefix logit approximation assumption used below. 
+
+Lemma E.3 (Uniform sequence-to-vector Transformer approximation) . Let d, T, m < ∞ and let 
+
+K = [0 , 1] d×T .
+
+Under the sequence-to-vector Transformer approximation framework of Yu et al. (2025), for every continuous target F ∈ C(K; Rm) and every ε > 0, there exists a sequence-to-vector Transformer map 
+
+Gθ : K → Rm
+
+with sufficiently large parameter budget such that 
+
+sup 
+
+> X∈K
+
+∥Gθ (X) − F (X)∥∞ < ε. 
+
+23 Proof. The proof is a direct consequence of the approximation results of Yu et al. (2025). Their Definition 1 uses the uniform approximation criterion 
+
+sup  
+
+> XT∈X T
+
+∥ bH(XT ) − F (XT )∥∞ < ε. 
+
+Their Theorem 1 proves that the generalized D-retrieval target family is dense in the space of continuous sequence-to-vector functions. Hence, for any coordinate function Fj of F and any ε > 0, there exists a generalized retrieval target FD,j such that 
+
+sup 
+
+> X∈K
+
+|Fj (X) − FD,j (X)| < ε
+
+2 .
+
+The vector-valued case is handled coordinate-wise, by stacking the coordinate approximants into a vector-valued generalized retrieval target FD satisfying 
+
+sup 
+
+> X∈K
+
+∥F (X) − FD (X)∥∞ < ε
+
+2 .
+
+Their Transformer approximation theorem then gives a sequence-to-vector Transformer Gθ with sufficiently large parameter budget such that 
+
+sup 
+
+> X∈K
+
+∥Gθ (X) − FD (X)∥∞ < ε
+
+2 .
+
+By the triangle inequality, 
+
+sup 
+
+> X∈K
+
+∥Gθ (X) − F (X)∥∞ < ε. 
+
+This proves the claim. 
+
+Proposition E.4 (Uniform approximation of smoothed finite-prefix logits) . Assume that the autoregressive Transformer logit class contains, or can simulate, the sequence-to-vector Transformer class in Lemma E.3 on padded prefix inputs. Then, for every fixed α ∈ (0 , 1) and every η > 0, there exists a Transformer logit map ℓt,θ (h) ∈ RM such that 
+
+max 
+
+> (t,h )∈P supp
+> T
+
+max  
+
+> v∈V
+
+ℓvt,θ (h) − log qt,α (v | h) < η. (32) 
+
+Proof. Because V and T are finite, the supported-prefix set Psupp  
+
+> T
+
+is finite. Thus Uα is a bounded finite table on Psupp  
+
+> T
+
+.We now encode each prefix as a fixed-length sequence in a compact Euclidean domain. Let ⊥ /∈ V be a padding symbol, and choose an injective one-hot embedding 
+
+e : V ∪ {⊥} → { 0, 1}M +1 ⊂ [0 , 1] M +1 .
+
+For a supported prefix (t, h ) ∈ P supp  
+
+> T
+
+, with h = ( h1, . . . , h t−1), define the padded prefix encoding 
+
+ι(t, h ) := ( x1, . . . , x T ) ∈ [0 , 1] (M +1) ×T
+
+by 
+
+xj =
+
+(
+
+e(hj ), j < t, e(⊥), j ≥ t. 
+
+The map ι is injective: the first padding position identifies t, and the preceding non-padding entries identify h.Define 
+
+K := [0 , 1] (M +1) ×T , Z := {ι(t, h ) : ( t, h ) ∈ P supp  
+
+> T
+
+}.
+
+24 Then Z is a finite subset of the compact domain K. Define a finite target table on Z by 
+
+Y (ι(t, h )) := Uα(t, h ).
+
+We next extend this finite table to a continuous function on K. Write Z = {z1, . . . , z N } and yi := Y (zi).If N ≥ 2, choose 
+
+0 < ρ < 12 min  
+
+> i̸=j
+
+∥zi − zj ∥∞.
+
+If N = 1 , choose any ρ > 0. For each i ∈ [N ], define the continuous bump function 
+
+φi(x) := max 
+
+
+
+0, 1 − ∥x − zi∥∞
+
+ρ
+
+
+
+, x ∈ K .
+
+Then 
+
+φi(zi) = 1 , φi(zj ) = 0 for j̸ = i. 
+
+Now define 
+
+eUα(x) := 
+
+> N
+
+X
+
+> i=1
+
+yi φi(x), x ∈ K .
+
+Then eUα ∈ C(K; RM )
+
+and, for every supported prefix (t, h ) ∈ P supp  
+
+> T
+
+,
+
+eUα(ι(t, h )) = Uα(t, h ).
+
+By Lemma E.3, applied with d = M + 1 and output dimension m = M , there exists a sequence-to-vector Transformer 
+
+Gθ : K → RM
+
+such that 
+
+sup 
+
+> x∈K
+
+∥Gθ (x) − eUα(x)∥∞ < η. 
+
+Define the autoregressive next-token logit map by evaluating this Transformer on the padded prefix: 
+
+ℓt,θ (h) := Gθ (ι(t, h )) .
+
+Then, for every (t, h ) ∈ P supp  
+
+> T
+
+,
+
+max  
+
+> v∈V
+
+ℓvt,θ (h) − log qt,α (v | h) = ∥Gθ (ι(t, h )) − Uα(t, h )∥∞
+
+= Gθ (ι(t, h )) − eUα(ι(t, h )) ∞
+
+< η. 
+
+Taking the maximum over all supported prefixes gives Eq. (32). 
+
+Theorem E.5 (KL control from universal logit approximation) . Let 
+
+rt,θ (· | h) := softmax( ℓt,θ (h)) 
+
+and define the autoregressive model 
+
+Pθ (x1: T ) = 
+
+> T
+
+Y
+
+> t=1
+
+rt,θ (xt | x<t ).
+
+25 Assume that the uniform logit approximation in Eq. (32) holds; that is, 
+
+max 
+
+> (t,h )∈P supp
+> T
+
+max  
+
+> v∈V
+
+ℓvt,θ (h) − log qt,α (v | h) ≤ η. 
+
+Then 
+
+DKL (Pdata ∥Pθ ) ≤ T [− log(1 − α) + 2 η] .
+
+Consequently, for every εKL > 0, choosing 
+
+α = 1 − exp 
+
+
+
+− εKL 
+
+2T
+
+
+
+, η = εKL 
+
+4T
+
+gives 
+
+DKL (Pdata ∥Pθ ) ≤ εKL .
+
+Proof. Fix t ∈ [T ] and a data-supported prefix h ∈ V t−1. To simplify notation, write 
+
+q(v) := qt(v | h), qα(v) := qt,α (v | h), r(v) := rt,θ (v | h).
+
+Let 
+
+ℓvα := log qα(v), bℓv := bℓvt,θ (h).
+
+By the uniform logit approximation assumption, 
+
+bℓv = ℓvα + ∆ v , |∆v | ≤ η for all v ∈ V .
+
+Since qα = softmax( ℓα), the model distribution can be written as 
+
+r(v) = exp( bℓv )
+
+P 
+
+> u∈V
+
+exp( bℓu)= qα(v) exp(∆ v )
+
+P 
+
+> u∈V
+
+qα(u) exp(∆ u) . (33) Define 
+
+Z∆ := X
+
+> u∈V
+
+qα(u) exp(∆ u).
+
+Then 
+
+r(v) = qα(v) exp(∆ v )
+
+Z∆
+
+.
+
+We first bound the conditional KL at the fixed prefix h:
+
+DKL (q∥r) = X
+
+> v∈V
+
+q(v) log q(v)
+
+r(v)= X
+
+> v∈V
+
+q(v) log q(v)
+
+qα(v) + X
+
+> v∈V
+
+q(v) log qα(v)
+
+r(v)= DKL (q∥qα) + X
+
+> v∈V
+
+q(v) log qα(v)
+
+r(v) . (34) We bound the two terms separately. For the smoothing term, observe that 
+
+qα(v) = (1 − α)q(v) + αM ≥ (1 − α)q(v).
+
+Therefore, whenever q(v) > 0,
+
+q(v)
+
+qα(v) ≤ 11 − α .
+
+26 Hence 
+
+DKL (q∥qα) ≤ − log(1 − α). (35) For the second term in (34), using (33), 
+
+log qα(v)
+
+r(v) = −∆v + log Z∆.
+
+Thus 
+
+X
+
+> v∈V
+
+q(v) log qα(v)
+
+r(v) = − X
+
+> v∈V
+
+q(v)∆ v + log Z∆. (36) Since |∆v | ≤ η, we have 
+
+− X
+
+> v∈V
+
+q(v)∆ v ≤ η. 
+
+Also, 
+
+Z∆ = X
+
+> u∈V
+
+qα(u) exp(∆ u) ≤ X
+
+> u∈V
+
+qα(u)eη = eη ,
+
+so 
+
+log Z∆ ≤ η. 
+
+Substituting these two inequalities into (36) gives 
+
+X
+
+> v∈V
+
+q(v) log qα(v)
+
+r(v) ≤ 2η. (37) Combining (35) and (37), we obtain, for every data-supported prefix h,
+
+DKL (qt(· | h) ∥ rt,θ (· | h)) ≤ − log(1 − α) + 2 η. (38) Now apply the KL chain rule for autoregressive distributions: 
+
+DKL (Pdata ∥ Pθ ) = 
+
+> T
+
+X
+
+> t=1
+
+EX∼Pdata [DKL (qt(· | X<t ) ∥ rt,θ (· | X<t ))] 
+
+≤
+
+> T
+
+X
+
+> t=1
+
+(− log(1 − α) + 2 η)= T (− log(1 − α) + 2 η) . (39) This proves (26). Finally, choose 
+
+α = 1 − exp 
+
+
+
+− εKL 
+
+2T
+
+
+
+, η = εKL 
+
+4T .
+
+Then 
+
+− log(1 − α) = εKL 
+
+2T , 2η = εKL 
+
+2T .
+
+Therefore, 
+
+DKL (Pdata ∥ Pθ ) ≤ T
+
+ εKL 
+
+2T + εKL 
+
+2T
+
+
+
+= εKL .
+
+This completes the proof. 27 Why universal approximation gives the logit approximation. The prefix set Psupp  
+
+> T
+
+is finite. After embedding tokens and positions into a Euclidean space, the target map Uα is a finite table of bounded vectors in 
+
+RM . Since finite-domain functions can be extended to continuous functions on compact neighborhoods, the transformer universal approximation theorem can be applied to this continuous extension. Therefore, for any η > 0, there exists a transformer with a vocabulary logit head satisfying (32) . Theorem 3.1 then implies that the induced autoregressive model can make 
+
+DKL (Pdata ∥ Pθ )
+
+arbitrarily small.  
+
+> Full-support special case.
+
+If every true conditional has full support, i.e., qt(v | h) > 0 for all data-supported prefixes h and all v ∈ V , then smoothing is unnecessary. One may set 
+
+H(t, h ) = (log qt(v | h)) v∈V .
+
+If the transformer approximates this unsmoothed logit map with error η, then the same proof with α = 0 
+
+gives 
+
+DKL (Pdata ∥ Pθ ) ≤ 2T η. 
+
+Thus choosing η = εKL /(2 T ) yields 
+
+DKL (Pdata ∥ Pθ ) ≤ εKL . 
+
+> Remark on the approximation mode.
+
+The KL argument above requires the uniform logit approximation (32) on all data-supported prefixes. If one invokes a universal approximation theorem stated only in an 
+
+Lp metric over a continuous domain, that statement alone does not control pointwise errors on individual token prefixes. In that case, one should either use a uniform approximation version, or explicitly extend the finite prefix table to small positive-measure neighborhoods and approximate uniformly on those neighborhoods.  
+
+> From qualitative approximation to rates.
+
+The previous theorem is qualitative: it shows that the pretraining KL can be made arbitrarily small whenever the Transformer logit class can approximate the smoothed target logits uniformly on supported prefixes. It does not quantify how large the architecture must be to achieve a prescribed KL error. We next refine this statement by replacing the abstract logit error η with an explicit Transformer approximation rate. This yields a rate for the autoregressive KL in terms of the attention approximation budget and the feed-forward approximation budget. 
+
+E.4 Approximation Rate for the Autoregressive KL 
+
+We now refine Theorem 3.1 by incorporating a Jackson-type approximation rate for Transformers. The approximation-rate result of Jiang & Li (2024) shows that, for targets with suitable Transformer-adapted complexity, the approximation error decomposes into an attention low-rank term and a feed-forward approximation term. To avoid notational conflict with the smoothing parameter, we use a > 1/2 for the decay exponent of the temporal coupling component, and b > 0 for the feed-forward approximation exponent. For α ∈ (0 , 1) , define the smoothed true conditional 
+
+qt,α (v | h) := (1 − α)qt(v | h) + αM , v ∈ V . (40) The corresponding smoothed target logit map is 
+
+U vα(t, h ) := log qt,α (v | h), v ∈ V . (41)  
+
+> Jackson-type logit approximation assumption.
+
+For each vocabulary coordinate v ∈ V , assume that the scalar sequence-to-sequence target 
+
+U vα = {Hvα,t }Tt=1 
+
+28 belongs to the Transformer approximation space C(a,b ) of Jiang & Li (2024). Let mh denote the hidden dimension of the attention mechanism, and let mFF denote the approximation budget of the feed-forward networks. Following the Jackson-type rate, define 
+
+Rvα(mh, m FF ) := T 2Cv
+
+> 0,α
+
+Cv
+
+> 1,α
+
+m2a−1
+
+> h
+
++ Cv
+
+> 2,α
+
+(mh)mb+1 
+
+> h
+
+mb
+
+> FF
+
+!
+
+, (42) where Cv
+
+> 0,α
+
+, Cv
+
+> 1,α
+
+, and Cv
+
+> 2,α
+
+(mh) are the corresponding complexity measures of the target logit coordinate 
+
+U vα. Define the worst-coordinate rate 
+
+Rα(mh, m FF ) := max  
+
+> v∈V
+
+Rvα(mh, m FF ). (43) Since our KL objective is defined on discrete token prefixes, we assume the Transformer logit class realizes the above Jackson rate uniformly on data-supported prefixes: 
+
+max 
+
+> (t,h )∈P supp
+> T
+
+max 
+
+> v∈V
+
+bℓvt,θ (h) − U vα(t, h ) ≤ R α(mh, m FF ). (44) 
+
+Theorem E.6 (Jackson-type approximation rate for autoregressive KL) . Suppose that the smoothed target logit map Uα satisfies the uniform Jackson-type logit approximation rate (44) . Then the autoregressive model Pθ satisfies 
+
+DKL (Pdata ∥ Pθ ) ≤ T (− log(1 − α) + 2 Rα(mh, m FF )) . (45) 
+
+Equivalently, 
+
+DKL (Pdata ∥ Pθ ) ≤ T
+
+"
+
+− log(1 − α) + 2 max  
+
+> v∈V
+
+T 2Cv
+
+> 0,α
+
+Cv
+
+> 1,α
+
+m2a−1
+
+> h
+
++ Cv
+
+> 2,α
+
+(mh)mb+1 
+
+> h
+
+mb
+
+> FF
+
+!# 
+
+. (46) 
+
+Proof. Fix a time t ∈ [T ] and a data-supported prefix h ∈ V t−1. Write 
+
+q(v) := qt(v | h), qα(v) := qt,α (v | h), r(v) := rt,θ (v | h).
+
+Let 
+
+ℓvα := log qα(v), bℓv := bℓvt,θ (h).
+
+By (44), there exist errors ∆v such that 
+
+bℓv = ℓvα + ∆ v , |∆v | ≤ R α(mh, m FF ) ∀v ∈ V .
+
+Since qα = softmax( ℓα), the model distribution can be written as 
+
+r(v) = qα(v) exp(∆ v )
+
+P 
+
+> u∈V
+
+qα(u) exp(∆ u) . (47) Define 
+
+Z∆ := X
+
+> u∈V
+
+qα(u) exp(∆ u).
+
+Then 
+
+r(v) = qα(v) exp(∆ v )
+
+Z∆
+
+.
+
+29 We decompose the conditional KL: 
+
+DKL (q∥r) = X
+
+> v∈V
+
+q(v) log q(v)
+
+r(v)= X
+
+> v∈V
+
+q(v) log q(v)
+
+qα(v) + X
+
+> v∈V
+
+q(v) log qα(v)
+
+r(v)= DKL (q∥qα) + X
+
+> v∈V
+
+q(v) log qα(v)
+
+r(v) . (48) First, because 
+
+qα(v) = (1 − α)q(v) + αM ≥ (1 − α)q(v),
+
+we have 
+
+DKL (q∥qα) ≤ − log(1 − α). (49) Second, from (47), 
+
+log qα(v)
+
+r(v) = −∆v + log Z∆.
+
+Therefore, 
+
+X
+
+> v∈V
+
+q(v) log qα(v)
+
+r(v) = − X
+
+> v∈V
+
+q(v)∆ v + log Z∆. (50) Since 
+
+|∆v | ≤ R α(mh, m FF ),
+
+we get 
+
+− X
+
+> v∈V
+
+q(v)∆ v ≤ R α(mh, m FF ).
+
+Also, 
+
+Z∆ = X
+
+> u∈V
+
+qα(u) exp(∆ u) ≤ exp ( Rα(mh, m FF )) ,
+
+so 
+
+log Z∆ ≤ R α(mh, m FF ).
+
+Thus, X
+
+> v∈V
+
+q(v) log qα(v)
+
+r(v) ≤ 2Rα(mh, m FF ). (51) Combining (49) and (51), for every data-supported prefix h,
+
+DKL (qt(· | h) ∥ rt,θ (· | h)) ≤ − log(1 − α) + 2 Rα(mh, m FF ). (52) Using the autoregressive KL chain rule, 
+
+DKL (Pdata ∥ Pθ ) = 
+
+> T
+
+X
+
+> t=1
+
+EX∼Pdata [DKL (qt(· | X<t ) ∥ rt,θ (· | X<t ))] 
+
+≤
+
+> T
+
+X
+
+> t=1
+
+(− log(1 − α) + 2 Rα(mh, m FF )) = T (− log(1 − α) + 2 Rα(mh, m FF )) . (53) This proves (45). Substituting the definition of Rα(mh, m FF ) gives (46). 30 Interpretation. Theorem E.6 gives a quantitative version of the UAT-based KL guarantee. The smoothing term T [− log (1 − α)] is the price of making the true next-token logits finite. The approximation term 
+
+2T Rα(mh, m FF ) is the architectural misspecification error. Thus, increasing the attention budget mh
+
+and the feed-forward budget mFF (i.e., larger model with higher expressiveness) reduces the KL whenever the smoothed target logits have finite Transformer-adapted complexity. 31

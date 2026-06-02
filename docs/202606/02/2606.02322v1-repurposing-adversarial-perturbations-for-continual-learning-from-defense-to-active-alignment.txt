@@ -1,0 +1,829 @@
+Title: Repurposing Adversarial Perturbations for Continual Learning: From Defense to Active Alignment
+
+URL Source: https://arxiv.org/pdf/2606.02322v1
+
+Published Time: Tue, 02 Jun 2026 03:19:53 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+# Repurposing Adversarial Perturbations for Continual Learning: From Defense to Active Alignment 
+
+Ran Liu 1,2 , Min Yu 1,2 *, Mingqi Liu 1, Jianguo Jiang 1,2 ,Gang Li 3, Rongsheng Li 4, Ning Li 1, Zhen Xu 1,2 , Weiqing Huang 1,2 , Ming Liu 3†1Institute of Information Engineering, Chinese Academy of Sciences 
+
+> 2
+
+School of Cyber Security, University of Chinese Academy of Sciences 
+
+> 3
+
+Deakin University 4Harbin Engineering University 
+
+liuran@iie.ac.cn, yumin@iie.ac.cn, m.liu@deakin.edu.au 
+
+Abstract 
+
+In dynamic environments, large language mod-els need to keep adapting to new tasks, but continual learning often suffers from forget-ting, limited transfer, and vulnerability to ad-versarial perturbations. To address this, we present AdvCL, which repurposes adversar-ial perturbations as a geometric control signal for stable continual adaptation. AdvCL com-bines three plug-in modules: Intra-Smooth pro-motes local smoothness via small adversarial perturbations; Proto-Clip uses similarity clip-ping to prevent excessive alignment to current task prototype; and Inter-Align applies direc-tional alignment toward previous task prototype to reduce representational gaps. Experiments show consistent gains in both standard perfor-mance and robustness, with lower forgetting and stronger transfer. We further analyze key mechanisms by quantifying the sensitivity of Intra-Smooth to perturbation settings and the effect of Inter-Align on task similarity and geo-metric distance. In summary, the modules pro-vide complementary gains when combined, and each can also be integrated individually into diverse CL paradigms, including replay, regu-larization, and dynamic architectures, thereby offering a geometric control mechanism for continual learning. 
+
+1 Introduction 
+
+In dynamic environments, large language models (LLMs) must continually adapt to new tasks while preserving prior capabilities. Parameter efficient fine tuning (PEFT) supports this setting by updat-ing only a small set of parameters (Lester et al., 2021; Hu et al., 2022), and is widely used in con-tinual learning (CL). However, alignment does not ensure stable later adaptation. Models can exhibit rebound, where further fine tuning pulls behavior       
+
+> *Corresponding author.
+> †Corresponding author. Task 𝒕
+> Task 𝒕 −𝟏
+> Directional Alignment
+> Local Smoothing
+> 𝒄 𝒕 −𝟏
+> 𝜀 1
+> 𝜀 2
+
+Figure 1: Illustration of local smoothing and directional alignment in representation space. 
+
+back toward the pretraining distribution (Ji et al., 2025). This instability aligns with an optimiza-tion geometry view, since sharp minima are more sensitive to perturbations and tend to generalize unstably (Keskar et al., 2017), thereby amplify-ing drift and increasing vulnerability to noise and adversarial inputs. These issues can be traced to unstable representations and insufficiently smooth local geometry, which often manifest as forgetting, rebound, and brittleness. This motivates a key question: can adversarial perturbations be repurposed from defense into a geometric control signal for stable transfer in CL? The intuition is that robustness reflects local ge-ometric stability, which is tied to mitigating for-getting. Translating this intuition into a practical method is challenging. First, adversarial training involves a trade-off between neighborhood stabil-ity and standard accuracy (Zhang et al., 2019), and continual updates can disrupt this stability so that robustness degrades over time (Ru et al., 2024). Second, task similarity strongly influences transfer and forgetting (Hiratani, 2024). Prior work charac-terizes task relationships to predict transfer feasi-bility (Achille et al., 2019). But for low similarity task pairs, mainstream methods mainly constrain                 
+
+> arXiv:2606.02322v1 [cs.LG] 1 Jun 2026 Frozen Backbone
+> (Embeddings)
+> Output Logits
+> Frozen
+> Backbone
+> Trainable
+> LoRA
+> 3. Inter -Align
+> Prototype 𝒄 𝒕 −𝟏
+> Frozen
+> Backbone
+> Trainable
+> LoRA
+> 1. Intra -Smooth
+> 2. Proto -Clip
+> EMA Update
+> Prototype 𝒄 𝒕
+> Previous Task Data
+> ∆𝐢𝐧𝐭𝐞𝐫 ∆𝐢𝐧𝐭𝐫𝐚
+> Task 𝒕 −𝟏 Task 𝒕
+> Local
+> Smoothing
+> Directional
+> Alignment
+> 𝒄 𝒕 −𝟏
+> ∆𝐢𝐧𝐭𝐞𝐫
+
+Figure 2: Overview of AdvCL. It integrates Intra-Smooth, Proto-Clip, and Inter-Align, and maintains a prototype for each task as a semantic anchor for similarity clipping and subsequent directional alignment. 
+
+drift to preserve old representations (Rebuffi et al., 2017; Cha et al., 2021) instead of actively narrow-ing cross-task distances. We argue that adversarial perturbations are valu-able because their direction is controllable. As illustrated in Figure 1, they support local smooth-ing to reduce geometric brittleness (Miyato et al., 2019; Foret et al., 2021) and directional alignment to actively shrink geometric distances between low similarity tasks, thereby improving transfer. To this end, we present AdvCL, a multi-level adversarial perturbation framework for CL, shown in Figure 2. AdvCL maintains a prototype for the previous task and updates the current prototype with an exponential moving average. It includes three modules: (1) Intra-Smooth, which promotes local smoothing via small perturbations in a frozen embedding neighborhood; (2) Proto-Clip, which clips the similarity between current batch represen-tations and current task prototype to prevent over alignment toward prototype; and (3) Inter-Align, which performs directional alignment by perturb-ing features toward the previous prototype, actively shrinking geometric distance between tasks. Experiments show that AdvCL improves both standard performance and robustness under multi-ple evaluations, with lower forgetting and stronger transfer. We also find strong transferability of three modules, with complementary gains when com-bined. Finally, we analyze key mechanisms, in-cluding the sensitivity of Intra-Smooth to perturba-tion solvers and the effect of Inter-Align on task similarity and geometric distance. Our main contributions are as follows: (1) We introduce a new CL perspective that treats adversarial perturbations as a tool for local smooth-ing and cross-task directional alignment, providing a geometric route to improve stability and reduce forgetting. To our knowledge, this is the first to do so in PEFT-CL. (2) We present AdvCL, a three-module frame-work that leverages neighborhood perturbations for local smoothing, similarity clipping to avoid over-alignment to the current prototype, and directional alignment for retention and cross-task stability. (3) AdvCL jointly improves standard perfor-mance and robustness, yielding lower forgetting and stronger knowledge transfer. Moreover, mod-ules are applicable to representative CL paradigms. 
+
+2 Related Work 
+
+Continual learning (CL) mitigates catastrophic forgetting via replay (Rebuffi et al., 2017; Huang et al., 2024), regularization (Kirkpatrick et al., 2017; Wang and Huang, 2024), and dynamic archi-tectures (Rusu et al., 2016; Wang et al., 2024). Pa-rameter efficient fine tuning (PEFT) reduces train-ing cost by updating only a small set of parameters (Houlsby et al., 2019; Hu et al., 2022). Recent PEFT-CL methods largely follow two directions: constraining PEFT updates in a subspace to reduce cross-task conflicts (Wang et al., 2023; Lu et al., 2025), or maintaining a module pool and compos-ing modules via selection or routing to balance sta-bility and plasticity (Zhao et al., 2024; Han et al., 2025). In contrast, we enforce local smoothness via representation space perturbations, making PEFT updates more robust to perturbations and task distri-bution shifts, thus stabilizing continual adaptation. 
+
+Representation space perturbations have been studied for local smoothing and geometric regular-ization, for example through adversarial training that searches for worst-case directions (Zhu et al., 2020; Jiang et al., 2020) or through noise injection during forward pass (Aghajanyan et al., 2021; Jain et al., 2024). These methods mainly target single task generalization or offline adaptation, not cross-task consistency in CL. They often allow trainable embeddings or full parameter updates, which can drift semantic reference frame so that perturbations across tasks are no longer defined under the same reference frame, amplifying semantic anchor shifts and forgetting. In contrast, we fix embeddings and backbone representations, and use perturba-tions to enforce local smoothness and improve drift resistance of PEFT subspace updates rather than primarily targeting input robustness. 
+
+Task similarity strongly affects transfer and for-getting in CL. Prior work exploits task relations, for example by using task embeddings to measure similarity (Achille et al., 2019) and by selecting task orders (Bell and Lawrence, 2022). Another line stabilizes representations across tasks by an-choring prior knowledge with prototypes, repre-sentation alignment, or consistency learning (Cui et al., 2021; Wang et al., 2019; Zhao et al., 2022). Instead of treating similarity as a fixed signal or using alignment only to preserve old representa-tions, we connect the two. Our active alignment paradigm uses similarity to trigger directional align-ment on current data toward prior semantic anchors, shrinking representational gaps for low similarity task pairs and improving retention and backward transfer. 
+
+3 AdvCL Framework 
+
+AdvCL (as illustrated in Figure 2) repurposes ad-versarial perturbations and auxiliary constraints as training signals, where Intra-Smooth enforces intra-task neighborhood consistency to promote local smoothing, Proto-Clip uses a prototype constraint to prevent over-alignment to current task, and Inter-Align encourages inter-task directional alignment to enhance retention and stability. 
+
+3.1 Definitions 
+
+We consider online continual learning over a task sequence {T t}Nt=1 , where task t has dataset Dt =
+
+{(x, y )}. A single model is trained sequentially across tasks. At each task, only trainable param-eters θ in parameter-efficient fine-tuning (PEFT) modules are updated while backbone parameters remain frozen. We write the model with trainable parameters θ as fθ, and denote its intermediate rep-resentations by Hθ(·).Given an input text x = (w1, . . . , w L), let 
+
+E(x) ∈ RL×de be its embedding matrix, where 
+
+de is the embedding dimension. We use last layer token representations Hθ(x) ∈ RL×d to form a text representation via mean pooling: 
+
+hθ(x) = MeanPool  Hθ(x) ∈ Rd.
+
+We measure similarity using cosine similarity, defined as: 
+
+S(u, v) = u⊤v
+
+∥u∥2 ∥v∥2
+
+.
+
+For embedding level perturbations, ∆ ∈ RL×de
+
+denotes a continuous perturbation added to E(x),and ∇∆ denotes the gradient with respect to ∆.Analysis of discrete recovery from continuous per-turbations is provided in Appendix B. 
+
+3.2 Intra-Task Local Smoothing (Intra-Smooth) 
+
+Intra-Smooth promotes local smoothing by train-ing on worst-case embedding perturbations via an inner–outer procedure, where the inner step ap-proximates ∆⋆ under budget εintra , and the outer step updates trainable parameters θ on perturbed samples. From the current batch B, we sample a subset Bintra . For any (x, y ) ∈ B intra , the inner perturbation is: 
+
+∆⋆
+
+> intra
+
+(x) = argmax 
+
+> ∥∆∥2≤εintra
+
+Lsup 
+
+ fθ(E(x) + ∆) , y ,
+
+(1) where Lsup denotes supervised cross entropy loss. The inner maximization seeks an adversarial per-turbation within the budget that maximizes the loss. We approximate Equation 1 with Kintra steps of PGD (Madry et al., 2018). Let ∆(0) = 0 and itera-tively update ∆(k) by: 
+
+∆(k) = Π εintra 
+
+ ∆(k−1) + αintra · Norm  
+
+∇∆Lsup 
+
+ fθ(E(x) + ∆ (k−1) ), y  , (2) where αintra = εintra /K intra , Norm( ·) is ℓ2 nor-malization, and Πε projects onto the ℓ2 ball. The outer adversarial loss is: 
+
+Lintra = ELsup 
+
+ fθ(E(x) + ∆ ⋆
+
+> intra
+
+(x)) , y  .
+
+(3) Beyond the PGD-based solver, we also consider alternative inner solvers for generating ∆⋆
+
+> intra
+
+(x).
+
+FGSM computes a single update at ∆ = 0 
+
+(Goodfellow et al., 2015): 
+
+∆⋆
+
+> intra
+
+(x) = εintra · sign  
+
+∇∆Lsup 
+
+ fθ(E(x) + ∆) , y  
+
+> ∆=0
+
+,
+
+(4) where sign( ·) denotes element-wise sign function. Unlike Equation 2, FGSM uses an ℓ∞ budget, ap-plies one update, and does not involve projection. 
+
+Rand samples a random direction and scales it to ℓ2 budget: 
+
+∆⋆
+
+> intra
+
+(x) = εintra · ξ
+
+∥ξ∥2
+
+, ξ ∼ N (0 , I ). (5) 
+
+TRADES replaces supervised loss with a KL consistency objective (Zhang et al., 2019). The inner perturbation is: 
+
+∆⋆
+
+> intra
+
+(x) = argmax 
+
+> ∥∆∥2≤εintra
+
+KL  pθ(· | x) ∥ pθ(· | x, ∆) ,
+
+(6) and the outer loss is: 
+
+LTR intra = EKL  pθ(· | x) ∥ pθ(· | x, ∆⋆
+
+> intra
+
+(x))  .
+
+(7) 
+
+3.3 Similarity Clipping (Proto-Clip) 
+
+Proto-Clip discourages the model from overly strong alignment to the current task prototype 
+
+ct ∈ Rd via a similarity clipping loss. For the current batch B, mean representation is: 
+
+¯h = 1
+
+|B| 
+
+X
+
+> x
+
+hθ(x), x ∈ B . (8) The prototype is updated by an exponential mov-ing average: 
+
+ct ← m c t + (1 − m) ¯h, (9) where m ∈ (0 , 1) is the momentum coefficient. Based on ct, we introduce a penalty that enforces an upper bound on similarity: 
+
+Lclip = Emax  0, S (hθ(x), c t) − τhi 
+
+ 2 , (10) where τhi is a similarity threshold. This term acts as a soft constraint on overly high similarity and is activated only when S(hθ(x), c t) > τ hi .
+
+3.4 Inter-Task Directional Alignment (Inter-Align) 
+
+Inter-Align enhances retention and stability by shrinking the geometric gap between adjacent tasks. We treat the previous task prototype ct−1 as a se-mantic anchor and load it at the start of task t. From the current batch B, we sample a subset Binter . For any x ∈ B inter , the inner perturbation in embed-ding space is: 
+
+∆⋆
+
+> inter
+
+(x) = argmax 
+
+> ∥∆∥2≤εinter
+
+S hθ(E(x) + ∆) , c t−1
+
+.
+
+(11) This inner maximization seeks the most effec-tive directional alignment perturbation. Maximiz-ing S(hθ(E(x) + ∆) , c t−1) increases alignment to anchor ct−1 and narrows local geometric gap to the previous prototype. It is solved in the same manner as Equation 2, but with similarity objective in Equa-tion 11 replacing Lsup , and using εinter and Kinter .After obtaining ∆⋆
+
+> inter
+
+(x), we compute adversarial loss on perturbed embeddings: 
+
+Linter = ELsup 
+
+ fθ(E(x) + ∆ ⋆
+
+> inter
+
+(x)) , y  .
+
+(12) 
+
+3.5 Overall Objective 
+
+For each batch B, we sample Bstd , Bintra , and 
+
+Binter with fixed ratios. Let Lstd denote the stan-dard supervised loss over Bstd :
+
+Lstd = ELsup 
+
+ fθ(E(x)) , y  . (13) Putting the terms together, the overall objective is: 
+
+L(θ) = Lstd + λintra Lintra 
+
++ λclip Lclip + λinter Linter . (14) Except for task prototypes {ct}, AdvCL stores neither replay data nor historical models. Adversar-ial perturbations are generated online during train-ing and are not stored. For robustness evaluation, perturbations are regenerated following evaluation settings. 
+
+4 Experimental Setup 
+
+4.1 Datasets 
+
+We follow Super Natural Instructions (Wang et al., 2022) and construct a CL benchmark with six tasks, spanning both classification and generation: tweet anger detection from SemEval 2018 Task 1 (Mo-hammad et al., 2018), emotion classification (Sar-avia et al., 2018), news topic classification on AG News (Zhang et al., 2015), adversarial natural lan-guage inference on ANLI (Nie et al., 2020), ex-treme summarization on XSum (Narayan et al., 2018), and title generation on XL-Sum (Hasan et al., 2021). These tasks exhibit substantial hetero-geneity in cross-task similarity, which we charac-terize in Appendix A.1. The default order is anger 
+
+→ emotion → agnews → anli → xsum → xlsum. For each task, we randomly sample 2,000 samples for training, 200 for validation, and 200 for testing. 
+
+4.2 Baselines 
+
+All baselines follow the PEFT-CL setting (Coleman et al., 2025). AdvCL comprises three plug-in mod-ules that can be readily integrated into different CL frameworks, so we evaluate on representative CL frameworks that cover replay, regularization, and dynamic architecture methods. Specifically, we in-clude: (1) Sequence , which sequentially fine tunes a single PEFT module across tasks without any CL mechanism. (2) Replay , which sequentially updates the same PEFT module while replaying a fixed proportion of samples from each previous task at every stage. (3) EWC (Kirkpatrick et al., 2017), which adds a quadratic penalty weighted by parameter importance to constrain PEFT parame-ters that are critical to past tasks. (4) MoE , inspired by prior work (Shazeer et al., 2017; Araujo et al., 2024), which maintains multiple PEFT experts and uses a router to combine experts for each input dur-ing sequential training. (5) Joint , which trains a single PEFT module on the union of all task data. (6) Separate , which trains an independent PEFT module for each task and evaluates by selecting the corresponding module using the given task identity. 
+
+4.3 Metrics 
+
+We report five CL metrics. Average Performance (AP) averages final performance over all tasks after learning the full sequence, using accuracy for classification tasks and ROUGE-L for genera-tion tasks. Forgetting (FGT) quantifies drop on each earlier task from its best achieved value dur-ing training to its final value. Forward Transfer (FWT) evaluates how previously learned knowl-edge helps future tasks. We report two variants: 
+
+FWT-1 uses base model as a zero-shot reference for each upcoming task, while FWT-2 uses a single-task trained PEFT model as reference. Back-ward Transfer (BWT) measures how learning later tasks affects earlier tasks by comparing fi-nal performance to performance right after each task is learned. Detailed definitions are provided in Appendix A.3. 
+
+4.4 Training Settings 
+
+All experiments run on a single NVIDIA A100 40GB GPU. We use Llama 3.2 3B Instruct as the backbone and adopt LoRA (Hu et al., 2022) as the PEFT module. For classification tasks, micro batch size is 16 with gradient accumulation of 8, yielding an effec-tive batch size of 128. For generation tasks, micro batch size is 4 with gradient accumulation of 32. Learning rate is set to 3e-5 with a warmup ratio of 0.05 and weight decay 0.1. Baseline-specific settings and hyperparameters of three modules are provided in Appendix A.4. 
+
+5 Main Results 
+
+This section evaluates standard performance across baselines and their module-augmented variants. We present results on module ablation and cross-baseline transferability under the standard setting, as shown in Table 1, where S + C + A denotes AdvCL. Within each model family, the best and second-best results are highlighted in bold and un-derlined, respectively. 
+
+5.1 Module Ablation 
+
+See Part I of Table 1 for results. Intra-Smooth trains the model along locally challenging directions in embedding space and serves as a major contributor to overall performance gains. Inter-Align explic-itly aligns representations across tasks, which re-duces representation drift and improves retention, as reflected by lower forgetting and higher BWT, while its effect on forward transfer is more limited. Proto-Clip alone offers relatively limited gains, but when combined with Intra-Smooth, it strength-ens retention-related performance, especially BWT. Intra-Smooth plus Inter-Align is more effective at reducing forgetting and improving FWT-1. Com-bining all three modules achieves the best results on four metrics, indicating a better trade-off among accuracy, transfer, and forgetting. Additional order results are provided in Appendix C. In summary, the three-module combination is the most stable, and two-module combina-tions generally outperform single-module ones ,reflecting clear complementarity among the mod-ules. The main exception is Proto-Clip plus Inter-Align, where both mechanisms impose additional Table 1: Results of module ablation and transferability under standard setting. 
+
+Model AP( ↑) FGT( ↓) FWT-1( ↑) FWT-2( ↑) BWT( ↑)Part I: Module Ablation Sequence 55.21 3.42 1.65 1.76 -2.11 + S (Smooth) 55.90 2.70 2.70 1.57 -1.05 + C (Clip) 55.29 3.38 -0.42 1.99 -2.28 + A (Align) 55.36 2.20 0.28 1.23 -1.29 + S + C 55.97 2.30 2.52 1.10 -0.41 + S + A 55.71 1.80 3.55 1.06 -0.66 + C + A 54.98 1.95 2.11 0.48 -0.85 + S + C + A 56.64 1.50 2.38 2.73 0.38 Part II: Transferability Replay 55.61 1.70 0.35 0.46 -0.07 + S (Smooth) 57.89 1.30 3.72 2.99 -0.37 + C (Clip) 56.09 1.33 -0.54 0.74 0.17 
+
++ A (Align) 55.85 2.00 -1.46 1.47 -1.00 
+
+EWC 55.42 3.51 -0.06 1.97 -2.11 + S (Smooth) 55.66 3.40 3.05 1.76 -1.57 + C (Clip) 55.61 2.56 0.83 1.28 -1.06 + A (Align) 55.86 1.80 -0.08 1.08 -0.52 MoE 53.42 4.80 0.46 0.93 -3.27 + S (Smooth) 54.26 3.30 -1.31 0.86 -2.16 
+
++ C (Clip) 53.84 4.20 0.21 1.26 -3.15 + A (Align) 54.12 4.40 -0.21 1.38 -2.97 
+
+Joint 52.92 - - - -+ S (Smooth) 56.27 - - - -
+
+Separate 55.20 - - - -+ S (Smooth) 56.76 - - - -constraints on optimization and may therefore limit the attainable gains. 
+
+5.2 Transferability 
+
+See Part II of Table 1 for results. To isolate trans-ferability, we add each module individually to each baseline. All three modules exhibit strong transfer-ability, without any performance collapse, and they typically improve performance. In particular, Intra-Smooth is the most consistently beneficial module across baselines. Proto-Clip and Inter-Align primarily influence stability, but with different patterns. Proto-Clip penalizes over-alignment to the current prototype and is most effective when paired with other mod-ules. Inter-Align more directly shrinks cross-task representational gaps and shows more consistent retention benefits, typically reflected in lower for-getting and higher BWT. Since all unaugmented baselines share the same backbone and training steps, the aggregate metric AP varies only slightly. In contrast, CL metrics show clearer separation. For example, Replay ex-hibits substantially lower forgetting. Joint tends to achieve lower AP, which may reflect optimization difficulties caused by multi-task objective conflicts or distributional mismatch. Overall, the modules are plug-and-play and do not depend on specific CL details across training paradigms .
+
+6 Further Analysis 
+
+6.1 Robustness Evaluation 
+
+We further conduct cross-attack evaluation under five attacks (PGD-5, PGD-10, FGSM, Rand, and Table 2: Cross-attack results averaged over five attacks. 
+
+Model AP (↑) FGT (↓) FWT-1 (↑) FWT-2 (↑) BWT (↑)
+
+Sequence 37.47 8.78 2.20 1.61 -7.52 + S (Smooth) 43.23 4.04 3.72 2.50 -1.68 + C (Clip) 36.24 9.76 1.59 0.67 -7.87 + A (Align) 39.33 5.14 1.67 -0.38 -3.46 + S + C + A 44.22 2.76 3.48 2.90 -0.40 
+
+discrete perturbations), with averaged results re-ported in Table 2. Intra-Smooth yields consistent robustness gains, indicating strong generalization. Inter-Align primarily improves stability metrics, especially FGT and BWT. Proto-Clip alone de-grades robustness under this evaluation, suggesting an overly restrictive constraint. In contrast, com-bining all three modules achieves best performance on all metrics, highlighting clear synergistic effects. Additional baselines are provided in Appendix D.1. Robustness under PGD with varying perturbation strengths is also reported in Appendix D.2 and shows a similar overall pattern. 
+
+6.2 Intra-Smooth Sensitivity 6.2.1 Perturbation Strength. 
+
+Part I of Table 3 shows the effect of different pertur-bation strengths in Intra-Smooth. FGT and BWT vary non-monotonically with εintra . Small pertur-bations ( 0.05 , 0.10 ) behave like a mild regularizer for local smoothing, reducing forgetting and im-proving BWT. Intermediate strengths ( 0.15 , 0.20 )form a transition region, where perturbations am-plify conflicts with stability on clean samples, but do not yield a sufficiently consistent smoothing sig-nal. As a result, stability degrades and AP drops. With larger perturbations ( 0.25 , 0.30 ), adversarial examples become consistently harder across sam-ples, which strengthens the smoothing effect and restores stability, with AP recovering accordingly. In contrast, FWT decreases as εintra grows, sug-gesting that stronger smoothing constrains effective updates and favors neighborhood consistency over forward transfer. 
+
+6.2.2 Perturbation Solver. 
+
+Part II of Table 3 compares different perturbation solvers. Within PGD-K family, increasing K re-veals a clear trade-off between stability and plastic-ity. Larger K tends to raise FWT, while retention metrics can degrade, with higher forgetting and a more negative BWT. Compared with PGD-1, al-ternative solvers do not offer a consistent improve-ment across metrics. PGD-1 All perturbs both in-struction and input tokens, which often hurts stabil-ity. Rand lacks worst-case optimization and there-fore offers little benefit. TRADES-1 and FGSM achieve AP comparable to PGD-1, but their reten-tion metrics are less reliable than it. TRADES-1 optimizes a different objective, while FGSM fol-lows a different perturbation constraint. Empiri-cally, PGD-1 is a reliable and well-balanced default choice across metrics. 
+
+6.3 Inter-Align Geometry 
+
+To examine how Inter-Align affects representation geometry across tasks, we quantify geometric re-lationship between adjacent tasks in representa-tion space using three complementary metrics: (1) 
+
+Centroid Cosine Distance measures global gap between representation centroids of previous and current tasks; (2) Mean Pairwise Cosine Distance 
+
+measures distributional gap by averaging cosine distances over cross-task sample pairs; and (3) Di-rectional Prototype Alignment measures align-ment strength between current task representations and previous task prototype direction. Using repre-sentations extracted after training each task, Inter-Align yields average changes of -4.35%, -0.61%, and +0.33% on these three metrics, respectively, compared with sequence training over adjacent task pairs. These results suggest that Inter-Align nar-rows cross-task geometric gaps and strengthens directional alignment. See Appendix E for detailed metric definitions and results. Further analysis of similarity shift under direc-tional perturbations, together with the impact of 
+
+εinter on continual learning metrics, is provided in Appendix F. 
+
+6.4 Computational Overhead Analysis 
+
+To quantify computational cost of each module, we compare their additional training overhead under default settings. Intra-Smooth and Inter-Table 3: Standard evaluation on Sequence baseline with Intra-Smooth. Left: sensitivity to perturbation strength     
+
+> εintra . Right: comparison of different solvers used to generate adversarial perturbations. FWT is computed by averaging FWT-1 and FWT-2. Finer-grained εintra values show the same trend and are omitted for brevity. The suffix “-K” indicates using Kintra steps to generate perturbations, and “All” means perturbing both instruction and input embeddings.
+
+Part I: Perturbation Strength ( εintra ) Part II: Perturbation Solver Setting AP 
+
+(↑) FGT 
+
+(↓) FWT 
+
+(↑) BWT 
+
+(↑) Setting AP 
+
+(↑) FGT 
+
+(↓) FWT 
+
+(↑) BWT 
+
+(↑)0.00 55.21 3.42 1.71 -2.11 PGD-1 55.90 2.70 2.14 -1.05 0.05 55.75 2.70 2.16 -1.59 PGD-3 55.81 3.56 3.17 -3.16 0.10 55.90 2.70 2.14 -1.05 PGD-10 55.94 3.93 3.26 -3.53 0.15 53.87 6.04 2.55 -4.94 TRADES-1 55.78 3.17 1.41 -1.97 0.20 54.78 4.90 0.90 -3.25 FGSM 56.30 3.03 2.00 -1.53 0.25 55.70 3.06 0.49 -1.56 Rand 55.14 3.38 0.58 -1.78 0.30 56.66 1.55 0.22 -0.05 PGD-1 All 55.05 4.46 2.29 -3.16 Align incur approximately +25% and +12.5% ad-ditional computation, respectively. Proto-Clip is computed using activations from baseline training step and thus introduces negligible extra computa-tion. Overall, the computational overhead remains predictable and manageable. Three-module combi-nation adds about +37.5% computation, which is justified given the gains. More details are provided in Appendix G. 
+
+6.5 Additional Performance Analysis 
+
+We further analyze the proposed method from two perspectives: per-task stagewise behavior and the relationship between standard and robust per-formance. Detailed results are provided in Ap-pendix H. First, the per-task stagewise performance curves show that the three-module combination mainly supports long-term stability and transfer across stages, rather than maximizing performance at each stage. Although the gains differ across tasks, it generally leads to more stable trajectories and better preservation of earlier-task performance in later stages. Second, we compare standard and robust average performance under two PGD-based evaluation set-tings. Results suggest that standard and robust per-formance do not follow a simple trade-off. In most cases, adding our modules improves robustness while maintaining competitive or better standard performance. Intra-Smooth provides the most con-sistent gains, while the full combination remains strong overall. 
+
+7 Conclusion 
+
+We propose AdvCL, which repurposes adversarial perturbations as a geometric control signal for CL. AdvCL includes three transferable plug-in mod-ules, Intra-Smooth promotes local smoothing and robustness, Proto-Clip prevents over-alignment to current prototype, and Inter-Align reduces cross-task representational gaps via directional alignment. Experiments show consistent gains in both standard performance and robustness, with reduced forget-ting and better transfer. 
+
+References             
+
+> Alessandro Achille, Michael Lam, Rahul Tewari, Avinash Ravichandran, Subhransu Maji, Charless C. Fowlkes, Stefano Soatto, and Pietro Perona. 2019. Task2vec: Task embedding for meta-learning. In
+> Proceedings of the IEEE/CVF International Confer-ence on Computer Vision (ICCV) .Armen Aghajanyan, Akshat Shrivastava, Anchit Gupta, Naman Goyal, Luke Zettlemoyer, and Sonal Gupta. 2021. Better fine-tuning by reducing representational collapse. In International Conference on Learning Representations .Vladimir Araujo, Marie-Francine Moens, and Tinne Tuytelaars. 2024. Learning to route for dynamic adapter composition in continual learning with lan-guage models. In Findings of the Association for Computational Linguistics: EMNLP 2024 , pages 687–696, Miami, Florida, USA. Association for Computational Linguistics. Samuel J. Bell and Neil D. Lawrence. 2022. The ef-fect of task ordering in continual learning. Preprint ,arXiv:2205.13323.
+
+Hyuntak Cha, Jaeho Lee, and Jinwoo Shin. 2021. Co2l: Contrastive continual learning. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pages 9516–9525. Eric Nuertey Coleman, Luigi Quarantiello, Ziyue Liu, Qinwen Yang, Samrat Mukherjee, Julio Hur-tado, and Vincenzo Lomonaco. 2025. Parameter-efficient continual fine-tuning: A survey. Preprint ,arXiv:2504.13822. Li Cui, Deqing Yang, Jiaxin Yu, Chengwei Hu, Jiayang Cheng, Jingjie Yi, and Yanghua Xiao. 2021. Refin-ing sample embeddings with relation prototypes to enhance continual relation extraction. In Proceed-ings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing (Volume 1: Long Papers) , pages 232–243, Online. Association for Computational Linguistics. Pierre Foret, Ariel Kleiner, Hossein Mobahi, and Behnam Neyshabur. 2021. Sharpness-aware mini-mization for efficiently improving generalization. In 
+
+International Conference on Learning Representa-tions .Ian J. Goodfellow, Jonathon Shlens, and Christian Szegedy. 2015. Explaining and harnessing adversar-ial examples. In International Conference on Learn-ing Representations .Jiayi Han, Liang Du, Hongwei Du, Xiangguo Zhou, Yiwen Wu, Yuanfang Zhang, Weibo Zheng, and Donghong Han. 2025. SLIM: Let LLM learn more and forget less with soft LoRA and identity mixture. In Proceedings of the 2025 Conference of the Na-tions of the Americas Chapter of the Association for Computational Linguistics: Human Language Tech-nologies (Volume 1: Long Papers) , pages 4792–4804, Albuquerque, New Mexico. Association for Compu-tational Linguistics. Tahmid Hasan, Abhik Bhattacharjee, Md. Saiful Is-lam, Kazi Mubasshir, Yuan-Fang Li, Yong-Bin Kang, M. Sohel Rahman, and Rifat Shahriyar. 2021. XL-sum: Large-scale multilingual abstractive summariza-tion for 44 languages. In Findings of the Association for Computational Linguistics: ACL-IJCNLP 2021 ,pages 4693–4703, Online. Association for Computa-tional Linguistics. Naoki Hiratani. 2024. Disentangling and mitigating the impact of task similarity for continual learning. In 
+
+Advances in Neural Information Processing Systems ,volume 37, pages 3243–3274. Curran Associates, Inc. Neil Houlsby, Andrei Giurgiu, Stanislaw Jastrzebski, Bruna Morrone, Quentin De Laroussilhe, Andrea Gesmundo, Mona Attariyan, and Sylvain Gelly. 2019. Parameter-efficient transfer learning for NLP. In 
+
+Proceedings of the 36th International Conference on Machine Learning , volume 97 of Proceedings of Machine Learning Research , pages 2790–2799. PMLR. Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. 2022. LoRA: Low-rank adaptation of large language models. In International Conference on Learning Representations .Jianheng Huang, Leyang Cui, Ante Wang, Chengyi Yang, Xinting Liao, Linfeng Song, Junfeng Yao, and Jinsong Su. 2024. Mitigating catastrophic forgetting in large language models with self-synthesized re-hearsal. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Vol-ume 1: Long Papers) , pages 1416–1428, Bangkok, Thailand. Association for Computational Linguistics. Neel Jain, Ping-yeh Chiang, Yuxin Wen, John Kirchen-bauer, Hong-Min Chu, Gowthami Somepalli, Brian R. Bartoldson, Bhavya Kailkhura, Avi Schwarzschild, Aniruddha Saha, Micah Goldblum, Jonas Geiping, and Tom Goldstein. 2024. NEFTune: Noisy embed-dings improve instruction finetuning. In The Twelfth International Conference on Learning Representa-tions .Jiaming Ji, Kaile Wang, Tianyi Alex Qiu, Boyuan Chen, Jiayi Zhou, Changye Li, Hantao Lou, Josef Dai, Yun-huai Liu, and Yaodong Yang. 2025. Language mod-els resist alignment: Evidence from data compression. In Proceedings of the 63rd Annual Meeting of the As-sociation for Computational Linguistics (Volume 1: Long Papers) , pages 23411–23432, Vienna, Austria. Association for Computational Linguistics. Haoming Jiang, Pengcheng He, Weizhu Chen, Xi-aodong Liu, Jianfeng Gao, and Tuo Zhao. 2020. SMART: Robust and efficient fine-tuning for pre-trained natural language models through principled regularized optimization. In Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics , pages 2177–2190, Online. Association for Computational Linguistics. Nitish Shirish Keskar, Dheevatsa Mudigere, Jorge No-cedal, Mikhail Smelyanskiy, and Ping Tak Peter Tang. 2017. On large-batch training for deep learning: Gen-eralization gap and sharp minima. In International Conference on Learning Representations .James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Ag-nieszka Grabska-Barwinska, Demis Hassabis, Clau-dia Clopath, Dharshan Kumaran, and Raia Hadsell. 2017. Overcoming catastrophic forgetting in neural networks. Proceedings of the National Academy of Sciences , 114(13):3521–3526. Brian Lester, Rami Al-Rfou, and Noah Constant. 2021. The power of scale for parameter-efficient prompt tuning. In Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing ,pages 3045–3059, Online and Punta Cana, Domini-can Republic. Association for Computational Lin-guistics. Yuheng Lu, Bingshuo Qian, Caixia Yuan, Huixing Jiang, and Xiaojie Wang. 2025. Controlled low-rank adapta-tion with subspace regularization for continued train-ing on large language models. In Proceedings of the 63rd Annual Meeting of the Association for Compu-tational Linguistics (Volume 1: Long Papers) , pages 19165–19181, Vienna, Austria. Association for Com-putational Linguistics. Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. 2018. Towards deep learning models resistant to adversarial attacks. In International Conference on Learning Representations .Takeru Miyato, Shin-Ichi Maeda, Masanori Koyama, and Shin Ishii. 2019. Virtual adversarial training: A regularization method for supervised and semi-supervised learning. IEEE Transactions on Pat-tern Analysis and Machine Intelligence , 41(8):1979– 1993. Saif Mohammad, Felipe Bravo-Marquez, Mohammad Salameh, and Svetlana Kiritchenko. 2018. SemEval-2018 task 1: Affect in tweets. In Proceedings of the 12th International Workshop on Semantic Evaluation ,pages 1–17, New Orleans, Louisiana. Association for Computational Linguistics. Shashi Narayan, Shay B. Cohen, and Mirella Lapata. 2018. Don’t give me the details, just the summary! topic-aware convolutional neural networks for ex-treme summarization. In Proceedings of the 2018 Conference on Empirical Methods in Natural Lan-guage Processing , pages 1797–1807, Brussels, Bel-gium. Association for Computational Linguistics. Yixin Nie, Adina Williams, Emily Dinan, Mohit Bansal, Jason Weston, and Douwe Kiela. 2020. Adversarial NLI: A new benchmark for natural language under-standing. In Proceedings of the 58th Annual Meet-ing of the Association for Computational Linguistics ,pages 4885–4901, Online. Association for Computa-tional Linguistics. Sylvestre-Alvise Rebuffi, Alexander Kolesnikov, Georg Sperl, and Christoph H. Lampert. 2017. icarl: In-cremental classifier and representation learning. In 
+
+Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) .Xiaolei Ru, Xiaowei Cao, Zijia Liu, Jack Murdoch Moore, Xin-Ya Zhang, Xia Zhu, Wenjia Wei, and Gang Yan. 2024. Maintaining adversarial robustness in continuous learning. Preprint , arXiv:2402.11196. Andrei A. Rusu, Neil C. Rabinowitz, Guillaume Des-jardins, Hubert Soyer, James Kirkpatrick, Koray Kavukcuoglu, Razvan Pascanu, and Raia Hadsell. 2016. Progressive neural networks. Preprint ,arXiv:1606.04671. Elvis Saravia, Hsien-Chi Toby Liu, Yen-Hao Huang, Junlin Wu, and Yi-Shin Chen. 2018. CARER: Con-textualized affect representations for emotion recog-nition. In Proceedings of the 2018 Conference on Empirical Methods in Natural Language Processing ,pages 3687–3697, Brussels, Belgium. Association for Computational Linguistics. Noam Shazeer, Azalia Mirhoseini, Krzysztof Maziarz, Andy Davis, Quoc Le, Geoffrey Hinton, and Jeff Dean. 2017. Outrageously large neural networks: The sparsely-gated mixture-of-experts layer. In Inter-national Conference on Learning Representations .Hong Wang, Wenhan Xiong, Mo Yu, Xiaoxiao Guo, Shiyu Chang, and William Yang Wang. 2019. Sen-tence embedding alignment for lifelong relation ex-traction. In Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Tech-nologies, Volume 1 (Long and Short Papers) , pages 796–806, Minneapolis, Minnesota. Association for Computational Linguistics. Mingyang Wang, Heike Adel, Lukas Lange, Jannik Strötgen, and Hinrich Schuetze. 2024. Rehearsal-free modular and compositional continual learning for language models. In Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 2: Short Papers) ,pages 469–480, Mexico City, Mexico. Association for Computational Linguistics. Xiao Wang, Tianze Chen, Qiming Ge, Han Xia, Rong Bao, Rui Zheng, Qi Zhang, Tao Gui, and Xuanjing Huang. 2023. Orthogonal subspace learning for lan-guage model continual learning. In Findings of the Association for Computational Linguistics: EMNLP 2023 , pages 10658–10671, Singapore. Association for Computational Linguistics. Yizhong Wang, Swaroop Mishra, Pegah Alipoormo-labashi, Yeganeh Kordi, Amirreza Mirzaei, Atharva Naik, Arjun Ashok, Arut Selvan Dhanasekaran, An-jana Arunkumar, David Stap, Eshaan Pathak, Gian-nis Karamanolakis, Haizhi Lai, Ishan Purohit, Is-hani Mondal, Jacob Anderson, Kirby Kuznia, Krima Doshi, Kuntal Kumar Pal, and 16 others. 2022. Super-NaturalInstructions: Generalization via declar-ative instructions on 1600+ NLP tasks. In Proceed-ings of the 2022 Conference on Empirical Methods in Natural Language Processing , pages 5085–5109, Abu Dhabi, United Arab Emirates. Association for Computational Linguistics. Zhenyi Wang and Heng Huang. 2024. Model sensitivity aware continual learning. In Advances in Neural Information Processing Systems , volume 37, pages 132583–132613. Curran Associates, Inc. Hongyang Zhang, Yaodong Yu, Jiantao Jiao, Eric Xing, Laurent El Ghaoui, and Michael Jordan. 2019. The-oretically principled trade-off between robustness and accuracy. In Proceedings of the 36th Interna-tional Conference on Machine Learning , volume 97 of Proceedings of Machine Learning Research , pages 7472–7482. PMLR. Xiang Zhang, Junbo Zhao, and Yann LeCun. 2015. Character-level convolutional networks for text clas-sification. In Advances in Neural Information Pro-cessing Systems , volume 28. Curran Associates, Inc. Kang Zhao, Hua Xu, Jiangong Yang, and Kai Gao. 2022. Consistent representation learning for continual re-lation extraction. In Findings of the Association for Computational Linguistics: ACL 2022 , pages 3402– 3411, Dublin, Ireland. Association for Computational Linguistics. Weixiang Zhao, Shilong Wang, Yulin Hu, Yanyan Zhao, Bing Qin, Xuanyu Zhang, Qing Yang, Dongliang Xu, and Wanxiang Che. 2024. SAPT: A shared attention framework for parameter-efficient continual learn-ing of large language models. In Proceedings of the 62nd Annual Meeting of the Association for Compu-tational Linguistics (Volume 1: Long Papers) , pages 11641–11661, Bangkok, Thailand. Association for Computational Linguistics. Chen Zhu, Yu Cheng, Zhe Gan, Siqi Sun, Tom Gold-stein, and Jingjing Liu. 2020. Freelb: Enhanced ad-versarial training for natural language understanding. In International Conference on Learning Representa-tions .
+
+A Experimental Details 
+
+A.1 Dataset Details Tweet Anger Detection (anger). A binary clas-sification task for affect detection on social media. Given a tweet, the model predicts whether the tweet expresses anger. The dataset comes from SemEval 2018 Task 1 (Mohammad et al., 2018). Instruction: You are given a tweet. Decide if it expresses anger. Use the following numeric labels: 0 = Not angry; 1 = Angry. 
+
+Emotion Classification (emotion). A multi-class classification task for recognizing the emo-tion expressed in a sentence. Given a sentence, the model predicts one emotion label. The dataset comes from (Saravia et al., 2018). Instruction: You are given a tweet. Identify the emotion it expresses. Use the following numeric labels: 0 = anger; 1 = fear; 2 = joy; 3 = love; 4 = sadness; 5 = surprise. 
+
+News Topic Classification (agnews). A news topic classification task. Given a short news article, the model predicts its topic. The dataset comes from AG News (Zhang et al., 2015). Instruction: You are given a news article. Classify its topic. Use the following numeric labels: 0 = World; 1 = Sports; 2 = Business; 3 = Science/Technology. 
+
+Adversarial Natural Language Inference (anli). 
+
+A natural language inference task. Each example consists of a premise and a hypothesis, and the model predicts whether the hypothesis entails, con-tradicts, or is neutral with respect to the premise. The dataset comes from ANLI (Nie et al., 2020). 
+
+Instruction: You are given a premise and a hypoth-esis. Determine their logical relation. Use the following numeric labels: 0 = Contradiction; 1 = Neutral; 2 = Entailment. 
+
+Extreme Summarization (xsum). A conditional generation task. Given a news article, the model generates a single-sentence summary that captures the core point of the article. The dataset comes from XSum (Narayan et al., 2018). Instruction: You are given a news article. Write a one-sentence summary. 
+
+Title Generation (xlsum). A conditional genera-tion task. Given a news text, the model generates a concise title. The dataset comes from XL-Sum (Hasan et al., 2021). Instruction: You are given a news article. Generate a concise headline. (a) Centroid cosine similarity. (b) Distributional cosine similarity. 
+
+> Figure 3: Cross-task similarity in representation space.
+
+All datasets are in English. Beyond individual task details, we characterize similarity across tasks in representation space. Specifically, we compute cosine similarity at both centroid and distributional levels based on representations from a fixed en-coder. As shown in Figure 3, the benchmark ex-hibits substantial heterogeneity in cross-task sim-ilarity, xsum and xlsum are highly similar, anger and emotion show moderate similarity, while most other task pairs are well separated. Notably, we do not compute any predefined task similarity before the task sequence, nor use it to make any task-level decisions beyond the current stage. At each stage, only the current task data and the previous task prototype are available. 
+
+A.2 Baseline Details Sequence. Sequence is the simplest CL baseline. A single PEFT module is trained sequentially, using only the current task’s data at each stage, following the predefined task order. After finishing task t, the same PEFT parameters are reused as initialization for task t+1 , without any explicit anti-forgetting mechanism. 
+
+Replay. Replay augments sequential training with a memory buffer that stores samples from previous tasks. At each stage, training batches are formed by mixing current data with replay samples. The PEFT module is still a single adapter updated sequentially, but replay provides a direct rehearsal signal that helps retain past knowledge. The buffer is updated after each stage by adding samples from the current task. 
+
+EWC. EWC adds a quadratic penalty that dis-courages changing parameters deemed important for previous tasks during training on a new task (Kirkpatrick et al., 2017). In our PEFT setting, the EWC penalty is applied only to trainable PEFT parameters, while the backbone remains frozen. Concretely, after finishing task t, we estimate a diagonal Fisher approximation Ft,i for each train-able PEFT parameter θi based on squared loss gra-dients on task t. Let θ∗ 
+
+> s
+
+denote the learned param-eter vector after task s, and θ∗ 
+
+> s,i
+
+its i-th entry. We adopt an online accumulated variant that maintains: 
+
+Pi = X
+
+> s≤t
+
+Fs,i , μi =
+
+P 
+
+> s≤t
+
+Fs,i θ∗
+
+> s,i
+
+Pi
+
+. (15) When learning task t+1 , EWC adds a quadratic penalty: 
+
+LEWC (θ) = λEWC 
+
+2
+
+X
+
+> i
+
+Pi (θi − μi)2 , (16) which discourages changing parameters that are important for previously learned tasks. 
+
+MoE. Our MoE baseline maintains multiple PEFT experts and uses a learned router to softly combine experts for each input during sequential training. Instead of a single PEFT module, each target module is equipped with Ne PEFT experts, where expert e provides a parameterized update 
+
+∆e(·). Let x denote the layer input and Wbase the frozen backbone weight. The MoE layer output is: 
+
+y = xW base +
+
+> Ne
+
+X
+
+> e=1
+
+πe(x) ∆ e(x), (17) where π(x) ∈ RE is the routing distribution pro-duced by a shared router. In our implementation, a shared router computes the routing distribution π(x) from a pooled layer input. Specifically, it first averages token repre-sentations into a single vector, then feeds it into a lightweight two-layer MLP with a softmax output. During training, we freeze the backbone and update only the router and the PEFT expert parameters. 
+
+Joint. Joint trains a single PEFT module on the union of data from all tasks. It does not follow the continual learning constraint because it assumes that all task data are available for training. 
+
+Separate. Separate trains an independent PEFT module for each task, without parameter sharing across tasks. At evaluation time, it selects the cor-responding task-specific module using the given task identity. 
+
+A.3 Metric Details 
+
+Let T be number of tasks in a sequence. Let ai,j 
+
+denote performance on test set of task j after com-pleting training on task i, where i ∈ { 1, . . . , T }
+
+and j ∈ { 1, . . . , T }. For classification tasks, ai,j is accuracy, and for generation tasks, ai,j is ROUGE-L. Let a0,j denote performance on task j evaluated at initialization, before any training is performed. Let asep  
+
+> j
+
+denote performance of a model trained on task j only in a single-task setting. 
+
+Average Performance (AP). AP measures over-all ability after learning full sequence, computed as mean final performance across tasks: 
+
+AP = 1
+
+T
+
+> T
+
+X
+
+> j=1
+
+aT,j . (18) 
+
+Forgetting (FGT). Forgetting quantifies worst-case performance drop on each past task over train-ing. For each task j ≤ T − 1, define: 
+
+amax  
+
+> j
+
+= max  
+
+> i=j,...,T
+
+ai,j , (19) 
+
+Fj = amax  
+
+> j
+
+− aT,j , j = 1 , . . . , T − 1, (20) where amax  
+
+> j
+
+is best performance achieved on task 
+
+j after it is first learned. Mean forgetting over the first T − 1 tasks is: 
+
+Forgetting = 1
+
+T − 1 
+
+> T−1
+
+X
+
+> j=1
+
+Fj . (21) 
+
+Forward Transfer (FWT). FWT measures ben-efit of prior learning on a new task. Two variants are reported. (1) FWT-1 (zero-shot reference): 
+
+FWT -1 = 1
+
+T − 1
+
+> T
+
+X
+
+> j=2
+
+ aj−1,j − a0,j 
+
+, (22) where aj−1,j evaluates model after task j − 1 on task j without training on task j.(2) FWT-2 (single-task reference): 
+
+FWT -2 = 1
+
+T
+
+> T
+
+X
+
+> j=1
+
+ aj,j − asep 
+
+> j
+
+. (23) 
+
+Backward Transfer (BWT). BWT measures ef-fect of later learning on earlier tasks by comparing final performance on each past task to performance right after learning that task: 
+
+BWT = 1
+
+T − 1 
+
+> T−1
+
+X
+
+> j=1
+
+ aT,j − aj,j 
+
+. (24) 
+
+A.4 Training Details 
+
+All experiments run on a single NVIDIA A100 40GB GPU. We use Llama 3.2 3B Instruct 1 as the frozen backbone and adopt LoRA (Hu et al., 2022) as the PEFT module. For non-MoE baselines, i.e., Sequence, Replay, EWC, Joint, and Separate, LoRA uses rank r=32 ,scaling factor α=64 , and dropout =0 .1. Target modules are q_proj , k_proj , v_proj , o_proj ,
+
+gate_proj , up_proj , and down_proj . For MoE, we use Ne=6 LoRA experts. Each expert uses rank 
+
+r=32 , α=64 , and dropout =0 .1, and MoE-LoRA is applied only to q_proj , k_proj , v_proj , and 
+
+o_proj .For Replay, after finishing each task, we ran-domly sample 0.02 of its training samples and store them for replay in subsequent stages. For Intra-Smooth, we sample a subset Bintra 
+
+from each mini-batch with ratio rintra =0 .25 . We set ϵintra =0 .1, kintra =1 , and λintra =0 .1. For Proto-Clip, we use momentum coefficient m=0 .9
+
+and threshold τhi =0 .8, with λclip =0 .5. For Inter-Align, we sample a subset Binter from each mini-batch with ratio rinter =0 .125 . We set ϵinter =0 .03 ,
+
+kinter =1 , and λinter =0 .05 .    
+
+> 1https://huggingface.co/meta-llama/Llama-3. 2-3B-Instruct Table 4: Discrete recovery statistics under embedding-level PGD-1 perturbations with ϵ=0 .1.All values are multiplied by 100 for readability.
+
+Task Overall Shift Per-Token Shift Token Change Rate Min Margin 
+
+anger 4.72 0.75 0.00 7.78 emotion 3.81 0.67 0.00 13.33 agnews 4.47 0.46 0.00 7.78 anli 4.72 0.30 0.00 7.47 xsum 5.10 0.13 0.00 7.28 xlsum 5.72 0.13 0.00 7.28 For classification tasks, the micro-batch size is 16 with gradient accumulation of 8, yielding an ef-fective batch size of 128. For generation tasks, the micro-batch size is 4 with gradient accumulation of 32. We use a learning rate of 3e-5 with a warmup ratio of 0.05 and weight decay 0.1. We set maximum input length to 512 tokens and maximum output length to 64 tokens. For each stage, we train for 160 steps if current task is a classification task, and for 20 steps if it is a generation task. For generation evaluation, we use beam search with 4 beams, prevent 3-gram repetitions, and set the length penalty to 1.1. All reported results are averaged over three runs with different random seeds. 
+
+B Discrete Recovery from Continuous Perturbations 
+
+To assess discrete visibility of embedding-level continuous perturbations, we perform a discrete recovery analysis. Given an input token sequence 
+
+x = ( x1, . . . , x L), its embedding representation is 
+
+E(x) ∈ RL×de . We apply a continuous perturba-tion ∆ ∈ RL×de to obtain the perturbed embed-dings E(x) + ∆ . To facilitate analysis, we map each perturbed embedding vector (E(x)+∆) i back to a proxy discrete token by nearest-neighbor re-trieval in the vocabulary embedding space using cosine similarity. This recovery is used only to characterize how continuous perturbations trans-late into discrete token changes, and should not be interpreted as explicit discrete substitution attacks. We report four metrics: (1) Overall Shift , ∥∆∥F
+
+averaged across samples; (2) Per-token Shift ,
+
+∥∆i∥2 averaged across token positions within each sample, and then across samples; (3) Token Change Rate , the fraction of token positions where the nearest-neighbor recovered token differs from the original token, i.e., the proportion of positions whose discrete token changes after recovery; and (4) Min Margin , the minimum cosine similarity gap sorig − salt , where sorig is the cosine similarity between the perturbed embedding and the original token embedding, and salt is the highest cosine similarity to any alternative token. Smaller values indicate the recovered discrete token is closer to changing. Table 4 reports results across all six tasks un-der PGD-1 with ϵ=0 .1. Both Overall Shift and Per-Token Shift are consistently non-zero across tasks, indicating a stable perturbation size in em-bedding space. In contrast, Token Change Rate is 0
+
+for all tasks and Min margin remains positive, sug-gesting that nearest-neighbor recovery yields the same discrete tokens as the original input. These observations indicate that embedding-level pertur-bations can substantially modify continuous rep-resentations while leaving the recovered discrete tokens unchanged, which explains why the pertur-bations are largely imperceptible at the token level. 
+
+C Additional Order Results 
+
+In addition to default task order, we also evaluate baselines under an alternative order: emotion →
+
+agnews → anger → xsum → xlsum → anli. Re-sults are reported in Table 5. For the alternative task order, we directly reuse the hyperparameters from the default task order without further tuning. Overall, trends are consistent with Table 1, indicat-ing that our modules yields stable improvements across different task orders. 
+
+D Robustness Evaluation 
+
+D.1 Cross-Attack Evaluation 
+
+We evaluate different baselines under five attack settings: PGD-5, PGD-10, FGSM, Rand, and ex-plicit discrete perturbations. For PGD-5, PGD-10, Table 5: Results of additional task order under Standard and PGD settings. ↑ indicates higher is better, while ↓  
+
+> indicates lower is better. + S, + C, and + A denote augmenting a baseline with Intra-Smooth, Proto-Clip, and Inter-Align, respectively. The best and second-best results are highlighted in bold and underlined, respectively.
+
+Standard PGD (Input) AP FGT FWT-1 FWT-2 BWT AP FGT FWT-1 FWT-2 BWT Model (↑) (↓) (↑) (↑) (↑) (↑) (↓) (↑) (↑) (↑)
+
+Sequence 53.15 3.70 0.24 0.42 -2.98 32.34 8.47 2.21 -0.04 -7.89 + S (Smooth) 55.43 2.30 -0.64 1.61 -1.66 39.63 4.60 4.49 4.38 -4.45 + C (Clip) 54.62 3.41 0.56 2.25 -3.41 30.47 10.69 1.64 -0.42 -9.69 + A (Align) 53.94 3.97 0.77 1.73 -3.60 30.17 11.07 2.21 -0.73 -9.67 + S + C + A 56.09 1.63 -0.87 1.80 -1.11 42.12 1.15 2.54 2.96 0.24 
+
+and Rand, perturbations are constrained in ℓ2 norm with budget ε=0 .1 in embedding space. For FGSM, perturbations are constrained in ℓ∞ norm with bud-get ε=5e-4 in embedding space. For discrete per-turbations, we apply TextAttack 2 to perturb 10% of words for classification tasks and 5% of words for generation tasks via synonym substitutions and typographical perturbations. The averaged results across five attacks are re-ported in Table 6. Intra-Smooth is the key contribu-tor to robustness improvements. Inter-Align mainly helps mitigate forgetting and improves BWT. Com-bining all three modules further strengthens robust-ness beyond Intra-Smooth alone, achieving the best overall performance across all metrics. 
+
+D.2 Robustness under PGD 
+
+As shown in Figure 4, robust AP decreases mono-tonically as perturbation strength ϵ increases. Intra-Smooth yields consistent gains, since its perturba-tion form is more aligned with PGD evaluation. In contrast, mechanisms of Proto-Clip and Inter-Align are not fully matched to this evaluation setting, yet combining three modules still maintains higher ro-bustness, indicating complementary gains among modules. 
+
+E Geometric Metrics for Inter-Align 
+
+E.1 Metric Definitions 
+
+Let E(·) denote the encoder that maps an input sample to a representation vector. We use ℓ2 nor-malized representations z = E(x)/∥E(x)∥2 and compute cosine similarity and cosine distance ac-cordingly. For each adjacent task pair, we denote the previous task by p and the current task by c.Let Zp = {zp 
+
+> i
+
+}np 
+
+> i=1
+
+and Zc = {zc 
+
+> j
+
+}nc 
+
+> j=1
+
+be the sets 
+
+> 2https://github.com/QData/TextAttack
+
+of normalized representations from previous cur-rent tasks, respectively. We use S(u, v) for cosine similarity and 1 − S(u, v) for cosine distance. 
+
+Centroid Cosine Distance. We represent each task by a centroid prototype in representation space. Specifically, we compute the mean representation within each task and then apply ℓ2 normalization: 
+
+¯zp = 1
+
+np
+
+> np
+
+X
+
+> i=1
+
+zp 
+
+> i
+
+, ¯zc = 1
+
+nc
+
+> nc
+
+X
+
+> j=1
+
+zc 
+
+> j
+
+, (25) 
+
+ˆzp = ¯zp
+
+∥¯zp∥2
+
+, ˆzc = ¯zc
+
+∥¯zc∥2
+
+. (26) Centroid cosine distance is defined as: 
+
+dcent = 1 − S(ˆ zp, ˆzc) . (27) This metric captures global gap between the mean representation prototypes of previous and current tasks. A smaller value indicates closer cen-troids. If this value decreases after adding Inter-Align, it suggests that Inter-Align improves cross-task geometric alignment by bringing adjacent task centroids closer and reducing global representa-tional shift. 
+
+Mean Pairwise Cosine Distance. Centroid Co-sine Distance reflects only the difference between task centroids, so it may miss finer distributional differences. We therefore compute Mean Pairwise Cosine Distance by averaging cosine distances over cross-task pairs: 
+
+dpair = E(zp,zc)[1 − S(zp, zc)] ,
+
+where zp ∈ Z p, and zc ∈ Z c. (28) This metric measures distribution level gap be-tween previous and current tasks by averaging co-sine distances over cross-task sample pairs. Lower Table 6: Cross-attack results averaged over five attacks (PGD-5, PGD-10, FGSM, Rand, and discrete perturbations). 
+
+Model AP (↑) FGT (↓) FWT-1 (↑) FWT-2 (↑) BWT (↑)
+
+Sequence 37.47 8.78 2.20 1.61 -7.52 + S (Smooth) 43.23 4.04 3.72 2.50 -1.68 + C (Clip) 36.24 9.76 1.59 0.67 -7.87 + A (Align) 39.33 5.14 1.67 -0.38 -3.46 + S + C + A 44.22 2.76 3.48 2.90 -0.40 Replay 40.85 3.89 2.38 0.23 -1.81 + S (Smooth) 45.75 2.61 5.15 4.39 -0.93 
+
++ C (Clip) 41.39 4.13 1.23 0.99 -2.08 + A (Align) 41.60 3.66 1.22 0.97 -1.80 
+
+EWC 36.61 10.12 1.60 1.21 -8.08 + S (Smooth) 43.31 4.18 3.55 2.71 -1.83 
+
++ C (Clip) 38.02 7.50 1.64 0.39 -5.40 + A (Align) 36.76 8.83 2.17 0.29 -6.79 
+
+MoE 34.45 12.43 0.45 1.30 -10.78 + S (Smooth) 35.73 9.25 1.41 -0.13 -7.92 
+
++ C (Clip) 34.20 11.37 0.64 0.54 -10.17 + A (Align) 35.23 10.48 1.40 0.71 -9.13 values mean the two tasks are closer on average at sample level. Therefore, a decrease after adding Inter-Align suggests improved cross-task geomet-ric alignment by narrowing the distribution level gap, not only the centroid gap. 
+
+Directional Prototype Alignment. While the previous two metrics quantify centroid and distribu-tion gaps, they do not indicate whether current task representations are aligned toward the previous task prototype. To capture this, we treat the previous task centroid ˆzp as a prototype and measure how strongly current task representations align with it: 
+
+sc→p = 1
+
+nc
+
+> nc
+
+X
+
+> j=1
+
+S zc 
+
+> j
+
+, ˆzp
+
+ . (29) This metric measures alignment strength from current task representations to previous task pro-totype. Larger sc→p indicates stronger alignment, consistent with the intended effect of Inter-Align. 
+
+E.2 Results 
+
+For each adjacent task pair, Table 7 reports the absolute differences of three geometric metrics, computed as the difference between sequence train-ing with Inter-Align enabled and sequence training without Inter-Align, using representations extracted after finishing training on each current task. We denote these differences by ∆dcent , ∆dpair , and 
+
+∆sc→p, respectively. For ∆dcent and ∆dpair , a negative value indi-cates improvement because it means a reduced geometric gap. For ∆sc→p, a positive value in-dicates improvement because it means current sam-ples align more strongly with the previous task prototype in representation space. Across adjacent task pairs, Inter-Align consis-tently reduces centroid gaps, since ∆dcent is nega-tive for all pairs. For four of the five adjacent task pairs, it also reduces distribution level gaps and in-creases prototype alignment. These results support the claim that Inter-Align improves cross-task geo-metric alignment by narrowing representation gaps and pulling current task representations toward the previous task prototype. For xsum →xlsum, we observe a small incon-sistency in that centroid gap is further reduced, whereas distribution level and alignment deltas take opposite signs compared with most adjacent task pairs. A plausible reason is that xsum and xlsum are highly similar, so centroid gap is already very small and Inter-Align mainly induces fine grained redistribution of representations, which can lead to small fluctuations at distribution level and in prototype alignment. Figure 4: Robustness curve under PGD. Table 7: Absolute differences of geometric metrics for adjacent task pairs, reported in percentage points, where   
+
+> ∆( ·) = ( ·)Sequence+Inter-Align −(·)Sequence .
+
+Task Pair ∆dcent ∆dpair ∆sc→p
+
+anger →emotion -0.087 -0.065 +0.090 emotion →agnews -0.020 -0.168 +0.162 agnews →anli -0.086 -0.051 +0.063 anli →xsum -0.694 -1.087 +0.964 xsum →xlsum -0.144 +0.373 -0.051 
+
+F Additional Analysis of Inter-Align 
+
+F.1 Similarity Shift 
+
+We study how Inter-Align shifts cross-task similar-ity in representation space of a fixed encoder by applying directional perturbations to current task samples toward previous task prototype. Figure 5 shows that this perturbation increases cross-task similarity. As ϵinter increases, similarity gain rises and gradually saturates for both centroid and mean pairwise (distribution) similarity, indicating that Inter-Align improves similarity in a tunable way. 
+
+F.2 Inter-Align Sensitivity to Perturbation Strength 
+
+We study the sensitivity of Inter-Align to pertur-bation strength εinter on Sequence baseline. As shown in Table 8, Inter-Align consistently reduces forgetting across a wide range of εinter (e.g., FGT decreases from 3.42 to around 1.50 –2.20 ) and im-proves backward transfer (BWT increases from 
+
+−2.11 to as high as −0.69 ). These trends indicate that Inter-Align effectively stabilizes previously learned knowledge and alleviates catastrophic for-getting even when the alignment strength varies. Meanwhile, AP is broadly stable across εinter ,with only minor decreases. This is expected be-cause Inter-Align acts as a cross-task geometric regularizer by pulling a subset of current represen-tations toward previous task prototype, and it is not designed to explicitly improve performance on current task. Consequently, it can impose a mild constraint that prioritizes preserving past knowl-edge, which may slightly reduce AP while keeping changes small and acceptable. Overall, these results suggest that Inter-Align is robust to the choice of εinter and serves as an effective plug-in module for mitigating forgetting and improving backward transfer, with minimal impact on average performance. Figure 5: Similarity gain under varying ϵinter .
+
+G Computational Overhead Analysis 
+
+We take one training step without any module enabled as the baseline computation (denoted as 
+
+1.0×), which consists of a standard forward and backward update. Below, we approximate ad-ditional computation by counting extra forward passes and gradient computations introduced by each module. Intra-Smooth requires solving perturbation 
+
+∆⋆ 
+
+> intra
+
+for a subset of samples. Specifically, to up-date ∆⋆ 
+
+> intra
+
+(e.g., kintra steps of PGD), we need ex-tra forward passes and gradient computations to ob-tain ∇∆ on the subset. Since this process is applied only to a fraction rintra of the batch, additional computation can be approximated as rintra kintra .Under default settings rintra =0 .25 and kintra =1 ,Intra-Smooth incurs approximately +25% (1.25 ×)additional computation. Inter-Align similarly solves directional perturba-tion ∆⋆ 
+
+> inter
+
+on a fraction rinter of the batch. Ad-ditional cost mainly comes from extra forward and gradient computations needed to update ∆⋆
+
+> inter
+
+,yielding an overhead of approximately rinter kinter .Under default settings rinter =0 .125 and kinter =1 ,Inter-Align incurs approximately +12.5% (1.125 ×)additional computation. Proto-Clip applies a similarity-based clipping regularizer by comparing representations from the baseline training step with the previous task pro-totype. In implementation, this module reuses the intermediate activations from the baseline step and is backpropagated jointly with the main loss, with-out requiring an extra model forward or backward pass. Therefore, its additional cost is dominated by lightweight similarity and clipping operations and is negligible in practice. 
+
+H Additional Performance Analysis 
+
+H.1 Per-Task Stagewise Performance Curves 
+
+Figure 6 shows per-task stagewise performance curves. It can be observed that the three-module combination prioritizes long-term stability and cross-stage transfer rather than short-term optimal-ity at each stage. Moreover, the improvements vary by task. On Tasks 1, 3, and 4, it yields more sta-ble performance curves and maintains or even im-proves performance on earlier tasks in later stages, indicating stronger retention and potential positive backward transfer. For Task 5, while the perfor-mance is not particularly strong at the initial stage, it increases as stages progress. In contrast, the cor-responding Sequence baseline shows a declining trend, suggesting that the benefits of our method may accumulate gradually over stages. Notably, Table 8: Standard evaluation on Sequence baseline with Inter-Align under different perturbation strengths εinter .We mainly focus on forgetting ( FGT ) and backward transfer ( BWT ). Finer-grained εinter values show the same trend and are omitted. 
+
+Setting AP (↑) FGT (↓) FWT-1 (↑) FWT-2 (↑) BWT (↑)
+
+Sequence (εinter = 0 .00 ) 55.21 3.42 1.65 1.76 -2.11 + Inter-Align ( εinter = 0 .01 ) 55.00 1.80 1.79 0.72 -1.11 + Inter-Align ( εinter = 0 .02 ) 54.86 1.62 1.52 0.25 -0.72 + Inter-Align ( εinter = 0 .03 ) 55.36 2.20 0.28 1.23 -1.29 + Inter-Align ( εinter = 0 .04 ) 55.00 1.50 1.66 0.50 -0.86 + Inter-Align ( εinter = 0 .05 ) 54.91 2.11 1.76 0.79 -1.31 + Inter-Align ( εinter = 0 .10 ) 54.84 2.14 1.78 0.84 -1.44 + Inter-Align ( εinter = 0 .15 ) 54.87 1.88 1.90 0.56 -1.08 + Inter-Align ( εinter = 0 .20 ) 54.94 1.80 1.92 0.83 -1.31 + Inter-Align ( εinter = 0 .25 ) 54.98 1.80 1.67 0.65 -1.05 + Inter-Align ( εinter = 0 .30 ) 55.46 2.10 1.84 0.83 -0.69 degradation on Task 2 (emotion) is not unique to our method. Except for Replay, most baselines ex-hibit a similar declining trend on this task, which we attribute to this task’s fine-grained semantic boundaries and its dependence on lexical sentiment markers (e.g., negation, intensifiers, and affective words). These properties make it more vulnerable to representation drift caused by learning subse-quent tasks. Meanwhile, Replay’s advantage is consistent with sample rehearsal, which explicitly reinforces earlier decision boundaries. 
+
+H.2 Standard and Robust Performance Comparison 
+
+Figure 7 presents a two-dimensional view of differ-ent methods by jointly comparing standard average performance (Standard AP) and robust average per-formance (Robust AP) under two robustness set-tings. Overall, the relationship between Standard AP and Robust AP is not a simple trade-off. In par-ticular, most baselines enhanced by our modules move toward the upper-right region, reflecting si-multaneous improvements in both Standard AP and Robust AP. Note that Intra-Smooth, Proto-Clip, and Inter-Align are not designed with identical goals. Proto-Clip acts as a regularizer that limits over-alignment to the current task, while Align targets cross-task directional alignment. Nevertheless, un-der robustness settings these modules can still af-fect Robust AP, which often shifts the enhanced baselines upward while maintaining competitive Standard AP. At the same time, only a few outliers are observed, mostly under PGD (Input) setting. When the three modules are combined with Sequence baseline, the resulting model achieves higher Standard AP than the corresponding base-line and exhibits a consistent improvement in Ro-bust AP. Among all the models, it is surpassed only by two special settings, Replay + Intra-Smooth, which benefits from rehearsal samples, and Sepa-rate + Intra-Smooth, which trains each task inde-pendently. The former directly reinforces earlier tasks via explicit replay, whereas the latter is not subject to cross-task forgetting, placing both at a more advantageous position in this comparison. (a) Task 1 (anger) (b) Task 2 (emotion) 
+
+(c) Task 3 (agnews) (d) Task 4 (anli) 
+
+(e) Task 5 (xsum) (f) Task 6 (xlsum) 
+
+Figure 6: Per-task stagewise performance curves across all stages. (a) PGD (Input) 
+
+> (b) PGD (All)
+
+Figure 7: Comparison between standard average performance and robust average performance under PGD attacks. PGD (Input) perturbs only input tokens, whereas PGD (All) perturbs both instruction and input tokens. Here, seq denotes the Sequence baseline.
