@@ -1,0 +1,226 @@
+Title: Forgetting is Not Erasure: Recovering Latent Knowledge via Transport Keys
+
+URL Source: https://arxiv.org/pdf/2606.02860v1
+
+Published Time: Wed, 03 Jun 2026 00:13:25 GMT
+
+Number of Pages: 7
+
+Markdown Content:
+# Forgetting is Not Erasure: Recovering Latent Knowledge via Transport Keys 
+
+# Archie Chaudhury 11Axionic Labs archie@axioniclabs.ai 
+
+# Abstract 
+
+Catastrophic forgetting is often framed as a rep-resentational problem: after sequential training, a model appears to lose the features that supported performance on earlier tasks. We challenge the stronger form of this view. Across controlled continual-learning settings, we find that a signifi-cant portion of apparent forgetting can be attributed to interface drift between internal stages rather than permanent erasure of task-relevant computa-tion. We study this phenomenon through a stitched evaluation protocol that combines early computa-tion from a post-update network with late com-putation from its predecessor, optionally mediated by a compact, task-specific transport key. We de-scribe transport keys at a systems level as com-pact interface-alignment operators estimated from a small set of paired anchor activations and eval-uated through model stitching. On split CIFAR-100 with a ResNet-style network, transport keys re-cover most of the original Task A performance af-ter sequential training on Task B. On a compact vi-sion transformer, we observe a similar recovery pat-tern. These results suggest that continual learning may require better mechanisms for indexing and re-accessing latent computations, not only methods that prevent weight change. 
+
+# 1 Introduction 
+
+Continual Learning (CL) refers to the ability of an au-tonomous agent or machine to learn multiple different types of knowledge and behave as if it learned all of them at once [Wang et al. , 2024]. Enabling CL remains one of the largest problems in contemporary deep networks, where fine-tuning or training on a new task often results in the collapse of ac-curacy or performance on a prior task. This collapse has been historically defined as catastrophic forgetting, or era-sure, where a model’s ability to generalize is limited by its in-ternal representations [McCloskey and Cohen, 1989]. Catas-trophic forgetting is often framed as the result of a fundamen-tal, architectural compromise between stability and plasticity: the only way to enable a model to learn new tasks without los-ing performance on prior tasks is to scale it [French, 1999]. In this work, we show that in high-dimensional neural repre-sentations, forgetting can be modeled as an access problem ,being the result of drift between various network stages, and that training on a new task need not necessarily result in the permanent erasure of a model’s ability to do a task it observed previously. By modeling a neural network’s representation of a new learned task as a staged computation where later layers learn to interpret intermediate activations, we define forget-ting as a dimensional problem, in which the internal features of a model are altered significantly when learning a new task, leaving the original set of features associated with a task in-valid. Under this view, a model’s performance on a task or functionality over a wide range of scenarios can be recov-ered through the use of a small key that realigns its internal features at specific internal interfaces. Drawing upon model stitching [Bansal et al. , 2021], we construct such a key, al-lowing us to recover latent task-specific features and lost per-formance. 
+
+Contributions Our specific contributions are as follows. (i) We present evidence that a substantial component of catastrophic forgetting can be interpreted as an interface-access failure rather than complete representational erasure. (ii) We introduce the transport-key framing: a compact, task-specific alignment object that restores compatibility be-tween stages of sequentially trained networks by correcting activation-space interface drift. (iii) We provide a stitched evaluation protocol that directly tests whether post-update networks preserve task-relevant la-tent computation, and we use controls to distinguish genuine interface alignment from generic adaptation. (iv) We report preliminary results on ResNet-style and transformer-style vision models showing substantial recovery of Task A performance after sequential training. 
+
+Related Work Continual learning (CL) has been studied extensively across supervised and reinforcement learning set-tings, with a focus on addressing the inherent tradeoff be-tween long-term stability and plasticity [French, 1999]. Con-temporary approaches to addressing forgetting have mainly been focused on constraining weight updates to specific pa-rameters, such as Elastic Weight Consolidation (EWC) [Kirk-patrick et al. , 2017], Synaptic Intelligence (SI) [Zenke et al. ,2017], and Memory Aware Synapses [Aljundi et al. , 2018]. Alternative methodologies have leaned toward dynamically 
+
+> arXiv:2606.02860v1 [cs.LG] 1 Jun 2026
+
+generating prior task examples while training on new ones, as seen in iCaRL [Rebuffi et al. , 2017] and Experience Replay [Rolnick et al. , 2019]. Meanwhile, gradient-based methods such as GEM [Lopez-Paz and Ranzato, 2017] and A-GEM [Chaudhry et al. , 2019] enforce guards that ensure specific weight updates do not affect the features associated with prior tasks. We implement the stitching evaluation as an extension of model stitching, initially defined by [Lenc and Vedaldi, 2015; Bansal et al. , 2021]. Traditionally, stitching has been uti-lized to compare architectures or to merge models in weight-space [Entezari et al. , 2022; Ainsworth et al. , 2023]. We adapt stitching to a continual learning setting by treating the network post-training as the sender and its predecessor as the receiver. As such, we are able to test directly for the existence of latent knowledge, without needing retrain-ing or gradient updates, in contrast to the parameter-based methods such as those implemented by [Rusu et al. , 2016; Mallya and Lazebnik, 2018], or adapter-dependent methods such as [Houlsby et al. , 2019]. 
+
+# 2 Background and Formalization 
+
+We start by defining some preliminaries, particularly centered around formalizing sequential training as it applies to a stan-dard CL setting. We also provide a generalized definition of representational drift, which is essentially a value that quan-tifies the difference in a model’s ability to perform a Task A
+
+once it has been subsequently trained on a different Task B.
+
+2.1 Sequential Training 
+
+We start with a standard neural network f (x; θ) that maps inputs x to outputs, and train it on a sequential set of tasks. For simplicity, we restrict our focus to two tasks, although in practice, this extends to any number of tasks, all trained one after the other. Let θA denote the parameters after training on an individual starting Task A. We then continue training on Task B, yield-ing parameters θAB . In classic CL, this results in the accu-racy on task A for the model with parameters θAB degrading significantly, with the most common explanation being that the process of training on Task B overwrites the weights that defined the features associated with Task A. 
+
+2.2 Network Decomposition 
+
+Contemporary deep networks are essentially a broad com-bination of different stages. For example, in a traditional ResNet-style network, these stages are essentially the core stem, and then four residual blocks that get progressively deeper. At any individual stage ℓ, we can split the network into two parts: • The early network f≤ℓ, which maps an input x to an intermediate activation tensor hℓ ∈ RC×H×W .• The late network f>ℓ , which maps hℓ to a prediction, including the classification head. This decomposition allows us to precisely determine the stage at which performance on Task A drops once the net-work’s parameters have been updated. 
+
+2.3 Interface Drift 
+
+Our primary hypothesis is that the catastrophic forgetting of-ten seen in neural networks occurs not at a particular stage, but at the interface, such that the later stages in a network are no longer able to recognize the features for a prior task produced by the earlier stages. To formalize this, suppose there exists a transformation Tℓ
+
+such that 
+
+hℓ(x; θA) ≈ Tℓ
+
+ hℓ(x; θAB ) (1) for inputs x from Task A. If Tℓ is simple, then the network post-update is still able to compute and encode information associated with task A: the problem arises during decoding, when the later stages of the network (which have now been updated) expect a different computational result for the fea-tures it is decoding. Figure 1 showcases the phenomenon. Rather than the fea-tures associated with Task A being permanently deleted as a result of training on Task B, they are simply uninterpretable by the later stages of the network. We call this phenomenon 
+
+interface drift .
+
+> Figure 1: Comparison of traditional erasure versus interface drift
+
+# 3 Methodology 
+
+This section explains transport keys at the level needed to un-derstand the mechanism and the empirical claim. The central object is an interface-level alignment operator: it is inserted between an early portion of a post-update network and a late portion of the pre-update network, and it maps the new acti-vation coordinate system back into a form that the old down-stream computation can decode. 
+
+3.1 Overview: Transport Keys as Interface Alignment 
+
+Let f (x; θ) be a neural network trained first on Task A and then on Task B. Let θA denote the parameters after Task A training and θAB denote the parameters after subsequent Task B training. At an internal stage ℓ, we decompose the network into an early map f≤ℓ and a late map f>ℓ . For an input x
+
+from Task A, the two checkpoints induce paired activations 
+
+hAℓ (x) = f A
+
+> ≤ℓ
+
+(x), hAB ℓ (x) = f AB  
+
+> ≤ℓ
+
+(x). (2) A transport key Tℓ is a compact transformation that acts on 
+
+hAB ℓ (x) so that the transformed activation is readable by the old Task A decoder: 
+
+ehAℓ (x) = Tℓ(hAB ℓ (x)) . (3) Rather than being a new trained object or replay buffer, a transport key is simply an activation-space alignment object attached to a particular interface. Its role is to correct the mis-match between what the post-update early network now emits and what the pre-update late network expects to receive. Intuitively, sequential training can change an internal rep-resentation in at least two ways. First, it can shift or rescale individual channels, leaving the semantic content mostly in-tact but changing calibration. Second, it can rotate or mix features across channels, leaving the information present but expressed in a different basis. Transport keys are designed to correct these interface-level changes while preserving the original downstream decision rule. 
+
+3.2 Anchor Sets 
+
+To estimate a key, we use a small anchor set drawn from Task A. Anchors are ordinary examples from the earlier task and are passed through both checkpoints. This produces paired activations at the same interface: one activation from the Task A checkpoint and one from the post-update checkpoint. The use of paired anchors is important because the key is intended to align corresponding computations, not merely match ag-gregate activation statistics. Balanced anchor selection is used when the earlier task is a classification problem, so that the alignment signal is not dominated by a small subset of classes. The anchor set is used only to build the interface key. It does not retrain the backbone, does not update the Task A head, and does not introduce new labels at evaluation time. 
+
+3.3 Key Families 
+
+We consider two conceptual families of transport keys. The first is a channel-calibration key. It corrects per-channel drift, such as changes in activation scale or offset. This form is de-liberately small and is most effective when sequential training preserves the original channel basis but changes its calibra-tion. In the same-domain CIFAR experiments, this compact correction explains most of the recovered accuracy. The second is a cross-channel alignment key. It allows structured mixing between channels and is useful when the post-update representation has changed basis more substan-tially. This form is still applied at the activation interface rather than through end-to-end retraining. It becomes more important under domain shift, where a network trained after CIFAR-10 on SVHN may preserve useful CIFAR-10 infor-mation but express it in a less directly compatible coordinate system. These key families correspond to two interpretable modes of interface drift: calibration drift , where individual channels remain meaningful but change scale, and mixing drift , where information is distributed across channels in a different ba-sis. The experiments below use this distinction to explain why small keys suffice in some settings while more expres-sive keys matter in others. 
+
+> Figure 2: Transport-key evaluation workflow. Paired anchor activa-tions from the Task A checkpoint and the post-update checkpoint are used to build an interface key. The key is then inserted into a stitched model that combines post-update early computation with the origi-nal Task A downstream decoder.
+
+3.4 Stitched Evaluation 
+
+We evaluate transport keys using model stitching. Given the post-update early network f AB  
+
+> ≤ℓ
+
+, the pre-update late network 
+
+f A>ℓ , and a transport key Tℓ, the stitched model is 
+
+(f AB  
+
+> ≤ℓ
+
+⊕Tℓ f A>ℓ )( x) = f A>ℓ 
+
+ Tℓ(f AB  
+
+> ≤ℓ
+
+(x)) . (4) For Task A evaluation, the stitched prediction is 
+
+ˆy = head A
+
+ f A>ℓ (Tℓ(f AB  
+
+> ≤ℓ
+
+(x))) . (5) The Task A head is preserved and is not retrained. This de-sign makes the evaluation strict: recovery must come from restoring compatibility with the old internal decoder, not from learning a fresh classifier on top of post-update features. This protocol separates three cases. If the post-update early network has destroyed the information needed for Task A, keyed stitching should fail. If the information remains but has drifted out of the coordinate system expected by the old decoder, no-key stitching should perform poorly while keyed stitching should recover. If the interface remains mostly com-patible, no-key stitching itself can recover substantial perfor-mance. 
+
+3.5 Controls 
+
+We use controls to test whether the key is exploiting real interface structure. The no-key control sends hAB ℓ directly into the old downstream network. Channel-disruption con-trols test whether channel identity matters for compact cali-bration keys. Correspondence-breaking controls test whether the mapping depends on paired examples rather than only marginal statistics. Stage-wise controls evaluate the same procedure at multiple internal boundaries. The expected signature is specific: valid keyed stitch-ing should outperform the forgotten model and the no-key stitch; disrupting channel structure or example correspon-dence should reduce recovery; and recovery should vary sys-tematically by stage. This is the pattern observed in the ex-periments below. Setting Tasks Classes Domain Architecture Split CIFAR-100 A → B 50 / 50 Same ResNet-style Three-Task A → B → C 33/33/34 Same ResNet-style Domain Shift C10 → SVHN 10 / 10 Diff. ResNet-style Transformer A → B 50 / 50 Same Mini ViT 
+
+> Table 1: Summary of experimental settings.
+
+# 4 Experimental Setup 
+
+We evaluate the transport-key hypothesis in controlled image-classification continual-learning settings. The purpose of these experiments is not to establish a production-ready continual-learning system, but to test whether post-update networks retain latent computations that can be re-accessed by an internal alignment mechanism. 
+
+4.1 Datasets and Task Constructions 
+
+We use CIFAR-100, CIFAR-10, and SVHN as standard vi-sion benchmarks. CIFAR-100 enables same-domain task splits; CIFAR-10 to SVHN provides a stronger domain-shift test because natural-object recognition is followed by digit recognition. We consider four settings, summarized in Table 1: a two-task CIFAR-100 split, a longer three-task CIFAR-100 sequence, a CIFAR-10 to SVHN domain-shift sequence, and a compact vision-transformer variant of the CIFAR-100 split. 
+
+4.2 Models and Training 
+
+The main convolutional experiments use a ResNet-style net-work adapted to small images. The transformer experiment uses a compact ViT-style architecture. In each setting, the model is trained sequentially: first on Task A, then on one or more subsequent tasks. The Task A head is preserved for evaluation so that degradation in Task A performance is at-tributable to changes in the shared representation rather than replacement of the classifier. The baseline sequential-training setup follows ordinary su-pervised continual-learning practice. Each model is trained on Task A, then continued on the subsequent task or tasks. Transport keys are computed after the sequential update from paired internal activations and are evaluated only through the stitched protocol described above. This keeps the recovery test separate from ordinary retraining or adapter fine-tuning. 
+
+4.3 Evaluation Metrics 
+
+Our primary metric is classification accuracy on the Task A test set. We report four quantities: 1. Pre-update accuracy : Task A accuracy immediately af-ter Task A training, using parameters θA.2. Post-update accuracy : Task A accuracy after subsequent training, using the post-update shared network with the preserved Task A head. 3. Stitched accuracy : Task A accuracy using the stitched network defined in Section 3. 4. Recovery rate : the fraction of lost accuracy recovered by stitching, Recovery = Stitched − Post-update Pre-update − Post-update . (6)                      
+
+> Setting Stage Pre-update Post-update Keyed Split CIFAR-100 s10.750 0.392 0.721 Three-Task (A →B→C) s10.735 0.337 0.674 CIFAR-10 →SVHN s10.877 0.154 0.752 Mini ViT b00.590 0.315 0.542 Table 2: Task A accuracy before training on subsequent tasks (Pre-update), after training (Post-update), and after applying a transport key at the indicated stage (Keyed). All settings show substantial recovery.
+> Figure 3: Split CIFAR-100 recovery via stitching at stage 1. A com-pact transport key recovers 92% of lost Task A accuracy. A more expressive cross-channel variant provides only marginal additional benefit.
+
+A recovery rate of 100% means the stitched network matches the original Task A accuracy. A recovery rate near 0% means stitching provides no improvement over direct post-update evaluation. 
+
+4.4 Stage Selection 
+
+We evaluate stitching at multiple internal stage boundaries. Earlier stages test whether low-level and mid-level features remain accessible after sequential training. Later stages test whether more task-specific representations can be realigned. We report stage identifiers such as s1–s4 for convolutional networks and b0–b3 for transformer blocks. 
+
+# 5 Results 
+
+We present our results across all aforementioned experimen-tal settings. Table 2 summarizes the primary findings. 
+
+5.1 Split CIFAR-100 
+
+Figure 3 showcases our primary result. After training on Task B, Task A accuracy drops from 0.750 to 0.392. No-key stitch-ing at stage 1 yields 0.390, indicating that the interface is not already compatible. A compact transport key recovers accu-racy to 0.721, restoring 92% of lost performance. A more expressive cross-channel key family provides only marginal additional benefit, suggesting that the relevant drift in this set-ting is mostly structured channel-calibration drift rather than arbitrary feature rewriting. The recovery degrades significantly at later stages. Table 3 shows that keyed stitching at s1 achieves 92% recovery, drop-Stage No Key Keyed Recovery                         
+
+> s10.390 0.721 92.0%
+> s20.374 0.647 71.3%
+> s30.285 0.464 50.3%
+> s40.392 0.386 −1.7% Table 3: Stage-wise recovery in Split CIFAR-100. Stage Keyed Control A Keyed+ Control B
+> s10.705 0.332 0.752 0.536
+> s20.501 0.400 0.644 0.184 Table 4: Control analysis under domain shift (CIFAR-10 →SVHN). Perm is a channel-permutation control for compact calibration keys. Rand is a correspondence-breaking control for cross-channel keys.
+
+ping to 71% at s2, 50% at s3, and failing entirely at s4. This indicates that early features associated with a particular task do remain largely intact and encapsulate the majority of latent features. 
+
+5.2 Extended Task Sequences 
+
+The three-task experiment (A →B→C) tests whether interface drift is only concentrated on limited sequences. Task A accu-racy degrades from 0.735 after initial training to 0.450 af-ter Task B and 0.337 after Task C. Despite two updates, a transport key at s1 recovers accuracy to 0.674, restoring 85% of lost performance. The stage-wise gradient replicates: s1
+
+achieves 85% recovery, falling to 71% at s2, 50% at s3, and failing at s4.
+
+5.3 Domain Shift 
+
+In the domain-shift setting (CIFAR-10 →SVHN), the drop in performance is severe, with Task A accuracy collapsing from 0.877 to 0.154. Yet, no-key stitching at s1 already recovers to 0.619, indicating substantial latent retention even when the subsequent task involves a different visual domain. Table 4 presents the control analysis. The transport key substantially improves accuracy at the earliest stage, while structure-disrupting controls reduce the gain. At the next stage, the same pattern becomes sharper: keyed recovery re-mains strong, while a correspondence-breaking control col-lapses close to the post-update baseline. These results sup-port the claim that recovery depends on structured alignment rather than generic post-hoc adaptation. 
+
+5.4 Architectural Generality 
+
+The Mini ViT experiment tests whether interface drift is spe-cific to convolutional architectures. Task A accuracy drops from 0.590 to 0.315 after Task B training. Stitching at block 0 with a transport key recovers to 0.542 (83% recovery). No-tably, no-key stitching already achieves 0.541, suggesting that early transformer representations are highly stable under fine-tuning, with drift concentrated in late blocks. The stage gra-dient replicates: recovery degrades from 83% at b0 to 68% at 
+
+b1, 42% at b2, and fails at b3.
+
+# 6 Discussion 
+
+Our results show that forgetting in continual-learning set-tings is not necessarily permanent, and that substantial re-covery can be achieved through a compact transport key. Across all settings, our stitched evaluation protocol showed that task-specific computations persist as latent features that are no longer directly accessible, rather than being perma-nently erased. This was most evident in the cross-domain ex-periment, where stitched evaluation recovered a large portion of the lost accuracy. We also showed that forgetting is localized, and is pri-marily the result of representational drift between interfaces rather than erasure. In all experiments, transport keys applied at the early stages of the network were able to recover most of the pre-update performance, while keys at later stages were less effective. This suggests that early layers are more gen-eral, and often store latent features associated with individual, prior tasks. Third, interface drift appears to have internal structure. The same-domain setting can be corrected with a highly compact key, while the domain-shift setting benefits from a more ex-pressive cross-channel variant. The control experiments indi-cate that recovery depends on the relationship between cor-responding examples and internal interfaces, not merely on aggregate activation statistics. These findings show that forgetting is potentially an ac-cess problem, rather than being a representational one. Future systems in CL settings could store individual keys for each task, rather than needing to freeze their weights at a particular checkpoint or maintaining replay buffers. In our main experi-ment, a compact key was able to recover most lost accuracy in a ResNet-style network while remaining small relative to the base model. This suggests that there need not necessarily be a tradeoff between stability and plasticity; indeed, deep net-works regardless of their size may be able to achieve a high degree of plasticity if they are able to maintain an index that allows them access knowledge of prior tasks. 
+
+Limitations and Future Work We note several limitations in our work here. Our experiments only use a maximum of three tasks in an individual task for simplicity. Longer se-quences may exhibit drift that is unable to be fixed by our lightweight transport keys. The stitched evaluation requires access to pre-update components, which makes it primarily a diagnostic rather than a deployment recipe. Future work will investigate in-place recovery and online variants that preserve the same access-based principle without requiring a full pre-decessor network at inference time. 
+
+# Ethical Statement 
+
+A relevant ethical consideration is that improved recovery of prior capabilities could be used to preserve or restore capabil-ities that a deployer intended to remove. We therefore treat transport-key systems as controlled research infrastructure. Broader release should be paired with safety evaluations, ac-cess controls, and clear restrictions on applications that re-store harmful or intentionally deprecated capabilities. References 
+
+[Ainsworth et al. , 2023] Samuel K Ainsworth, Jonathan Hayase, and Siddhartha Srinivasa. Git re-basin: Merging models modulo permutation symmetries. In International Conference on Learning Representations (ICLR) , 2023. [Aljundi et al. , 2018] Rahaf Aljundi, Francesca Babiloni, Mohamed Elhoseiny, Marcus Rohrbach, and Tinne Tuyte-laars. Memory aware synapses: Learning what (not) to forget. In Proceedings of the European Conference on Computer Vision (ECCV) , pages 139–154, 2018. [Bansal et al. , 2021] Yamini Bansal, Gal Kaplun, Jing Yang, Preetum Raghavan, Shreya Medipally, Doina Precup, and Irina Rish. Revisiting model stitching to compare neural representations. In Advances in Neural Information Pro-cessing Systems (NeurIPS) , volume 34, pages 225–236, 2021. [Chaudhry et al. , 2019] Arslan Chaudhry, Marc’Aurelio Ranzato, Marcus Rohrbach, and Mohamed Elhoseiny. Efficient lifelong learning with a-gem. In International Conference on Learning Representations (ICLR) , 2019. [Entezari et al. , 2022] Rahim Entezari, Hanie Sedghi, Olga Saukh, and Neyshabur Behnam. The role of permutation invariance in linear mode connectivity of neural networks. In International Conference on Learning Representations (ICLR) , 2022. [French, 1999] Robert M. French. Catastrophic forgetting in connectionist networks. Trends in Cognitive Sciences ,3(4):128–135, 1999. [Houlsby et al. , 2019] Neil Houlsby, Andrei Giurgiu, Stanis-law Jastrzebski, Bruna Brunslo, Anna Degtyareva, Gal Kaplyn, et al. Parameter-efficient transfer learning for nlp. 
+
+Proceedings of the 36th International Conference on Ma-chine Learning (ICML) , 2019. [Kirkpatrick et al. , 2017] James Kirkpatrick, Razvan Pas-canu, Neil Rabinowitz, Joel Veness, Guillaume Des-jardins, Andrei A Rusu, Pashapi Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, et al. Overcom-ing catastrophic forgetting in neural networks. In Proceed-ings of the National Academy of Sciences (PNAS) , volume 114, pages 3521–3526, 2017. [Lenc and Vedaldi, 2015] Karel Lenc and Andrea Vedaldi. Understanding image representations by measuring their equivariance and equivalence. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , pages 991–999, 2015. [Lopez-Paz and Ranzato, 2017] David Lopez-Paz and Marc’Aurelio Ranzato. Gradient episodic memory for continual learning. In Advances in Neural Information Processing Systems (NeurIPS) , volume 30, 2017. [Mallya and Lazebnik, 2018] Arun Mallya and Svetlana Lazebnik. Packnet: Adding multiple tasks to a single net-work by iterative pruning. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , pages 7765–7773, 2018. [McCloskey and Cohen, 1989] Michael McCloskey and Neal J. Cohen. Catastrophic interference in connectionist networks: The sequential learning problem. volume 24 of 
+
+Psychology of Learning and Motivation , pages 109–165. Academic Press, 1989. [Rebuffi et al. , 2017] Sylvestre-Alvise Rebuffi, Alexander Kolesnikov, Georg Sperl, and Christoph H Lampert. icarl: Incremental classifier and representation learning. In Pro-ceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , pages 2001–2010, 2017. [Rolnick et al. , 2019] David Rolnick, Arun Ahuja, Jonathan Schwarz, Timothy Wayne, David Saxton, Timothy Lilli-crap, and Greg Wayne. Experience replay for continual learning. In Advances in Neural Information Processing Systems (NeurIPS) , volume 32, 2019. [Rusu et al. , 2016] Andrei A Rusu, Neil C Rabinowitz, Guillaume Desjardins, Soyer Hubert, Kirkpatrick James, Kavukcuoglu Koray, Pascanu Razvan, and Hadsell Raia. Progressive neural networks. In arXiv preprint arXiv:1606.04671 , 2016. [Wang et al. , 2024] Liyuan Wang, Xingxing Zhang, Hang Su, and Jun Zhu. A comprehensive survey of continual learning: Theory, method and application, 2024. [Zenke et al. , 2017] Friedemann Zenke, Ben Poole, and Ganguli Surya. Continual learning through synaptic in-telligence. In Proceedings of the 34th International Con-ference on Machine Learning (ICML) , pages 3987–3995, 2017. 
+
+# A Anchor Efficiency on Split CIFAR-100 
+
+Figure 4 reports the sensitivity of Task A recovery to the amount of Task A calibration data used to estimate the trans-port key. The important qualitative result is that recovery sat-urates rapidly: after a small balanced set of Task A examples, adding substantially more examples produces little additional improvement. This supports the claim that the dominant fail-ure mode is a structured interface shift rather than a high-capacity relearning problem. The graph should be read as follows. The horizontal axis varies the amount of calibration evidence available for key es-timation. The vertical axis reports recovered Task A accuracy under the stitched evaluation. A steep early rise followed by a plateau means that the post-update network already retains much of the Task A computation; the key only needs enough evidence to identify the interface mismatch. If the method were simply retraining Task A, we would expect a stronger dependence on additional examples. 
+
+# B Control Experiments Under Domain Shift 
+
+Figures 5 and 6 expand the CIFAR-10 →SVHN control anal-ysis from Table 4. This setting is intentionally more difficult than the same-domain CIFAR split: after learning SVHN, the model’s preserved CIFAR-10 head receives internal represen-tations that have shifted under a different visual distribution. The controls ask whether recovery comes from meaningful Figure 4: Anchor-efficiency analysis for Split CIFAR-100. Recov-ery reaches its effective plateau with a small balanced calibration set, suggesting that the relevant drift is low-dimensional or other-wise structured. The plateau indicates that the key is identifying a structured interface mismatch rather than relearning the task. 
+
+interface alignment or from a generic improvement produced by inserting an additional module. The stage-1 graph in Figure 5 compares keyed recovery against structure-disrupting controls. The transport key re-covers a large fraction of the lost CIFAR-10 accuracy, while disrupting the relationship between the key and the intended interface sharply reduces performance. This pattern is impor-tant: it shows that the improvement depends on preserving the correspondence between the post-update representation and the pre-update decoder. 
+
+> Figure 5: Control analysis at stage 1 for CIFAR-10 →SVHN. The transport key substantially improves stitched Task A accuracy, while controls that disrupt the relevant alignment structure reduce the gain.
+
+The stage-2 graph in Figure 6 shows a sharper version of the same phenomenon. At this later interface, simple com-patibility is weaker, so the difference between valid keyed alignment and disrupted controls becomes more diagnostic. The result supports the interpretation that recovery is not an artifact of the classifier head or a generic smoothing effect. It depends on the internal geometry of the source and target interfaces. 
+
+# C How to Interpret the Stage-Wise Results 
+
+Across the main and supplementary figures, the same stage-wise pattern recurs: early interfaces exhibit the strongest re-covery, middle interfaces show partial recovery, and late in-terfaces often fail. This is consistent with the access-based 
+
+> Figure 6: Control analysis at stage 2 for CIFAR-10 →SVHN. The valid keyed condition remains substantially above the post-update baseline, while correspondence-breaking controls collapse toward the forgotten model.
+
+view of forgetting. Early and mid-level computation re-mains partially reusable after sequential training, but the co-ordinate system or interface expected by the original down-stream model has shifted. Later representations are more task-specific and more strongly rewritten by subsequent train-ing, leaving less recoverable structure for stitching. This interpretation also explains why no-key stitching can sometimes perform well, especially in the Mini ViT exper-iment and the first stage of the domain-shift experiment. In those cases, the post-update early representation remains partly compatible with the pre-update decoder even without a key. The transport key is most informative when no-key stitching fails but keyed stitching succeeds, because that pat-tern isolates interface drift from direct feature preservation. 
+
+# D Methodological Takeaway 
+
+Taken together, the supplementary graphs support the cen-tral mechanism proposed in the paper. Small anchor sets are sufficient because the model is not relearning Task A from scratch; controls degrade performance because the key de-pends on real correspondence between old and new internal representations; and stage-wise degradation shows that recov-erable latent structure is concentrated earlier in the network. This combination of anchor efficiency, control sensitivity, and stage localization is the empirical signature of transport-key recovery.
