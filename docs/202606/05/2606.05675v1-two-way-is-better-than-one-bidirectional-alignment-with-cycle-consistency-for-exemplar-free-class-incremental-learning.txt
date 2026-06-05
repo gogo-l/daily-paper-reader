@@ -1,0 +1,1264 @@
+Title: Two-Way Is Better Than One: Bidirectional Alignment with Cycle Consistency for Exemplar-Free Class-Incremental Learning
+
+URL Source: https://arxiv.org/pdf/2606.05675v1
+
+Published Time: Fri, 05 Jun 2026 00:42:48 GMT
+
+Number of Pages: 23
+
+Markdown Content:
+Published as a conference paper at ICLR 2026 
+
+# TWO -W AY IS BETTER THAN ONE : BIDIRECTIONAL 
+
+# ALIGNMENT WITH CYCLE CONSISTENCY FOR EX-
+
+# EMPLAR -F REE CLASS -I NCREMENTAL LEARNING 
+
+Hongye Xu 
+
+Chester F. Carlson Center for Imaging Science Rochester Institute of Technology 
+
+hx5239@rit.edu 
+
+Bartosz Krawczyk 
+
+Chester F. Carlson Center for Imaging Science Rochester Institute of Technology 
+
+bartosz.krawczyk@rit.edu 
+
+## ABSTRACT 
+
+Continual learning (CL) seeks models that acquire new skills without erasing prior knowledge. In exemplar-free class-incremental learning (EFCIL), this challenge is amplified because past data cannot be stored, making representation drift for old classes particularly harmful. Prototype-based EFCIL is attractive for its ef-ficiency, yet prototypes drift as the embedding space evolves; thus, projection-based drift compensation has become a popular remedy. We show, however, that existing one-directional projections introduce systematic bias: they either retroac-tively distort the current feature geometry or align past classes only locally, leav-ing cycle inconsistencies that accumulate across tasks. We introduce BiCyc , a 
+
+bi directional projector alignment approach with a cyc le-consistency objective: two maps, old →new and new →old, are optimized with stop-gradient gating so that transport and representation co-evolve. Analytically, we prove that the cycle loss contracts the singular spectrum toward unity in whitened space and that im-proved transport of class means/covariances yields smaller perturbations of clas-sification log-odds, preserving old-class decisions and directly mitigating catas-trophic forgetting. Empirically, across standard EFCIL benchmarks, our method substantially reduces forgetting and improves accuracy in from-scratch settings, while remaining competitive in the pretrained fine-grained regime. The code is available at https://github.com/HXuSz11/BiCyc_ICLR2026 .
+
+## 1 INTRODUCTION 
+
+Continual learning (CL) studies models that learn from a stream of tasks without retraining from scratch or erasing prior knowledge (Parisi et al., 2019; Lange et al., 2022; Zenke et al., 2017). A widely used protocol is class-incremental learning (CIL), where tasks introduce disjoint labels and the learner must recognize all seen classes at test time without task identifiers. While rehearsal with stored exemplars often curbs forgetting (Lopez-Paz & Ranzato, 2017; Riemer et al., 2018; Pham et al., 2021; Caccia et al., 2021; Wang et al., 2022b; Yang et al., 2023), privacy or memory constraints motivate the exemplar-free variant (EFCIL), which prohibits retaining raw inputs. Among the many directions to mitigate forgetting (Zenke et al., 2017; Lopez-Paz & Ranzato, 2017; Schwarz et al., 2018; Aljundi et al., 2018; Riemer et al., 2018; Serra et al., 2018; Saha et al., 2020; Pham et al., 2021; Caccia et al., 2021; Deng et al., 2021; Cha et al., 2021; Wang et al., 2022a;b; Slim et al., 2022; Wang et al., 2023; Yang et al., 2023; Shi & Wang, 2023; Wang et al., 2024), prototype-based EFCIL has emerged as a compelling compromise: the model caches compact class statistics (means/covariances), and inference proceeds via nearest-prototype or Bayes scores—achieving strict no-memory operation with modest compute. The core difficulty in prototype-based EFCIL is representation drift: as the backbone adapts to new tasks, the embedding geometry shifts and previously cached statistics become stale, biasing predictions toward recent classes. Existing EFCIL solutions to drift largely follow two routes that differ in how they balance stability and plasticity. 
+
+Covariance and geometry modeling. This route improves robustness by shaping the feature geometry or the decision metric, commonly keeping the backbone partially/fixed to limit drift. 1
+
+> arXiv:2606.05675v1 [cs.LG] 4 Jun 2026
+
+Published as a conference paper at ICLR 2026 FeTrIL (Petit et al., 2023) freezes the backbone and translates features to synthesize pseudo-features for past classes, trading some plasticity for stability. FeCAM (Goswami et al., 2023) argues that Eu-clidean metrics are suboptimal under non-stationarity and adopts anisotropic (Mahalanobis) scoring with class-wise covariances, typically with a frozen extractor. PASS (Zhu et al., 2021) strengthens old-class representations via prototype augmentation and self-supervision without exemplars. These methods effectively mitigate forgetting by stabilizing or re-weighting the geometry, but they largely 
+
+avoid cross-space transport ; the price of stability is potentially limited adaptation to new tasks.    
+
+> Figure 1. TinyImageNet ( T=10 ): Our training algorithm yields solid performance gains over state-of-the-art EFCIL methods.
+
+Prototype drift compensation. A second—and increas-ingly dominant—route retains backbone plasticity and explicitly transports outdated prototypes into the current space. SDC (Yu et al., 2020) projects new features to-ward the old space and updates old prototypes accord-ingly. ADC (Goswami et al., 2024) estimates drift adver-sarially by pushing new samples toward old prototypes, then “resurrects” past classes. LDC (Gomez-Villa et al., 2024) replaces hand-crafted updates with a learnable drift module that scales across regimes. EFC (Magistri et al., 2024) performs affinity-weighted, class-wise shifts that update prototypes in tandem with classifier training. Ada-Gauss (Rype´ s´ c et al., 2024) follows the learned-projector path but transports full Gaussian class statistics (means and covariances) into the new space for Bayesian infer-ence rather than only moving class means. DPCR (He et al., 2025) mitigates representation drift by estimating task-to-task semantic shift from stored class statistics and then analytically re-calibrating the classi-fier via ridge regression using only these cached moments, avoiding any exemplar replay. Despite strong performance, the prevailing paradigm here is two-stage : first train on the new task (often with regularization/distillation), then learn a post-hoc adapter (old →new). This paradigm leaves residual inconsistencies between spaces: transport is optimized only after the fact, and cycle errors accumu-late over tasks. 
+
+Our idea: from two-stage to near single-stage transport. Motivated by the limitations of two-stage drift compensation, we propose bidirectional cycle consistency that evolves adapter training 
+
+into the main task optimization so that transport and representation co-evolve. Concretely, during each new task we jointly learn two maps— A : zold → znew and D : znew → zold —with stop-gradient 
+
+targets to prevent retrograde updates on the evolving representation and a cycle-consistency objective that regularizes the pair toward a near-bijection on the data support. Analytically, we show that the cycle loss in whitened space equals ∥ ˜A ˜D − I∥2 
+
+> F
+
+and contracts the singular spectrum of ˜A ˜D toward one; and that smaller alignment/cycle errors yield tighter bounds on the perturbation of classification log-odds, preserving old-class decisions. After the main stage, a brief consolidation fine-tune is applied; inference uses a Gaussian Bayes classifier built from transported old-class statistics and freshly estimated current-task statistics. 
+
+Contributions. 
+
+• Bidirectional cycle consistency (BiCyc) within training. We formulate paired projections 
+
+A (old →new) and D (new →old) learned during the task, with stop-gradient gating and a cycle loss that enforces near-inverse behavior on-support—addressing the asymmetry and post-hoc mismatch of prior two-stage, one-way pipelines. • Geometry-preserving transport for drift mitigation. Our transport keeps old-class ge-ometry stable as the backbone changes, yielding reduced recency bias and higher knowl-edge retention. • Theory-grounded alignment. We prove that minimizing the cycle loss contracts the sin-gular spectrum toward unity in whitened space and derive bounds linking mean/covariance transport errors to classification log-odds stability, explaining the observed reduction in forgetting. • Near single-stage pipeline with strong results. By collapsing adapter learning into the main stage (with a short consolidation fine-tune), our method strikes an excellent balance 2Published as a conference paper at ICLR 2026 
+
+Figure 2. Overview. (1) Train: the current backbone ft learns on Dt (producing znew , while frozen ft−1
+
+provides zold ) with task loss LCE . (2) Bidirectional alignment: jointly learn a distiller D : znew → zold and an adapter A : zold → znew using Lbi . (3) Cycle consistency: enforce A ◦ D ≈ I and D ◦ A ≈ I with Lcyc ,yielding near-bijective, geometry-preserving transport. Old Gaussian prototypes are mapped forward by A, and all classes are evaluated in the new space. 
+
+between preserving stability (i.e., preventing drift) and maintaining plasticity, substantially reducing forgetting and maintaining or improving new-task accuracy across CIFAR-100, TinyImageNet, ImageNet-100, and CUB-200 under multiple splits. We discuss limitations in the experiments section. 
+
+## 2 PRELIMINARIES 
+
+2.1 PROBLEM DEFINITION 
+
+Continual learning (CL) aims to train a model on a stream of tasks while preserving previously acquired knowledge. In the class-incremental scenario considered here, each task t ∈ { 1, . . . , T }
+
+introduces a disjoint label set Ct with Ci ∩ C j = ∅ for i̸ = j. After learning task t, the model must recognize any class in C1: t := Sti=1 Ci without a task identifier at test time. Let ft : X → Rd denote the feature extractor after completing the first t tasks. During training on task t, the learner has access only to Dt = {(xi, y i) | yi ∈ C t}. The absence of any prior-task data defines the exemplar-free class-incremental setting. 2.2 PROTOTYPE -B ASED EXEMPLAR -F REE CIL In exemplar-free class-incremental learning (EFCIL) , the learner is prohibited from retaining raw samples from prior tasks. In the absence of replayed data, a common strategy is to summarize past knowledge with prototypes —one representative feature mean per seen class. Focusing on a single transition t−1 → t, after completing task t−1 the learner stores for each class c ∈ C 1: t−1 the prototype. 
+
+μ t−1 
+
+> c
+
+= 1
+
+|D c|
+
+X
+
+> x∈D c
+
+ft−1(x), (1) where Dc collects all examples of class c encountered up to step t−1. This summary is compact—its memory scales as O(|C 1: t−1| d) for feature dimension d—and can be used at inference time either directly with a nearest-class-mean rule or to regularize subsequent training. 
+
+Prototype drift. When adapting the backbone from ft−1 to ft on Dt, the representation changes to fit the new classes and, as a side effect, the geometry of the feature space shifts. Hence, prototypes computed under ft−1 become stale once ft is deployed. Denote the updated class mean, its vector displacement, and its norm by 
+
+μ tc = 1
+
+|D c|
+
+X
+
+> x∈D c
+
+ft(x), ∆ tc = μ tc − μ t−1 
+
+> c
+
+, δ tc = ∥∆ tc ∥2. (2) Larger δ tc indicates stronger prototype drift, which biases decisions toward recently learned classes. 3Published as a conference paper at ICLR 2026 Because no earlier samples are retained, μ tc cannot be recomputed exactly; mitigating or compen-sating for this drift under the exemplar-free constraint motivates the two-stage strategy below. 2.3 PRIOR DRIFT COMPENSATION PARADIGM 
+
+A widely adopted recipe to handle prototype drift in EFCIL proceeds in two stages. 
+
+Stage I: in-task regularization (backward alignment via D). During task t, the old backbone 
+
+ft−1 is frozen and used as a teacher, while the current backbone ft is trained on the new data Dt
+
+as the student. Let g denote the classifier head (shared or task-specific). For each x ∈ D t we define zold = ft−1(x), znew = ft(x) and the corresponding logits ℓold = g(zold ), ℓnew = g(znew ).The student is optimized with the usual cross-entropy on new labels and a distillation/regularization term that constrains either features or logits relative to the teacher: 
+
+LS1 = E(x,y )∈D t
+
+h
+
+CE( ℓnew , y ) + λ D (ϕnew (x), ϕ old (x)) 
+
+i
+
+, (3) where ϕ is either z (feature) or ℓ (logit), and D stands for a distillation/regularization operator with 
+
+λ > 0 balancing the terms. This stage constrains the update of ft using only Dt, thereby limiting the growth of δ tc for past classes. 
+
+Stage II: post-hoc prototype transport (adapter learning). After training ft, both ft−1 and ft
+
+are frozen and an adapter A is learned on Dt to map old features into the new space. Concretely, A
+
+is fitted on paired features (ft−1(x), f t(x)) by minimizing 
+
+min  
+
+> A
+
+Ex∈D t ∥A (ft−1(x)) − ft(x)∥22, (4) with A instantiated as a global translation operator, a class-conditioned translation, or a learnable MLP/linear projector (details vary across works; see Appendix A.1.1). Once trained, A is applied to the cached prototypes from prior steps to relocate them into the current feature space: 
+
+˜μ tc = A (μ t−1 
+
+> c
+
+), c ∈ C 1: t−1. (5) These transported prototypes { ˜μ tc } are then used by the classifier at inference under ft, effectively compensating for the shift induced by the update from ft−1 to ft.
+
+Our Research Objective. In the two-stage paradigm, the regularization term in Stage I (often a distillation loss) pulls the new encoder ft toward the frozen teacher ft−1, whereas the Stage II adapter transports old prototypes forward from the space of ft−1 to that of ft. Functionally, these two modules act in opposite directions; structurally, a prior work (Rype´ s´ c et al., 2024) instantiates the distiller with the same architecture as the adapter but applies it in the reverse direction ( znew →
+
+zold vs. zold → znew ). Our objective is to make this duality explicit already in Stage I: we co-learn a forward adapter A and a backward distiller Dt during Stage I, enforcing bidirectional alignment and cycle consistency in both function (mutual inverses on features) and structure (mirrored/tied parameters), so that prototype transport becomes more accurate by design. 
+
+## 3 METHODOLOGY 
+
+3.1 SETUP 
+
+Let ft−1 be the frozen old backbone from task t−1 and ft the backbone being trained at task t. For an input x,
+
+zold = ft−1(x) ∈ Rd, znew = ft(x) ∈ Rd.
+
+Unless otherwise noted, evaluation is performed in the new feature space of ft using a Bayes clas-sifier (see Appendix A.1.2), with class statistics estimated from Dt (new classes) or transported into the new space (old classes). We instantiate two lightweight maps: a distiller D : Rd → Rd
+
+(new →old) and an adapter A : Rd → Rd (old →new), implemented as linear layers or shallow MLPs. We use the stop-gradient operator stopgrad( ·) throughout. 3.2 JOINT TRAINING WITH BIDIRECTIONAL CYCLE CONSISTENCY 
+
+We train ft, A, and D jointly on Dt, combining standard classification with teacher–student regular-ization and our bidirectional/cycle consistency. Let g be the task-specific classifier head with logits 
+
+ℓnew = g(znew ). For brevity, we denote the bidirectional alignment + consistency cycle module as 
+
+Bicyc (zold , z new ) (see Fig. 2). 4Published as a conference paper at ICLR 2026 
+
+Bidirectional alignment. We seek (i) backward compatibility by making znew projectable to the old space via D, and (ii) a forward map A that transports old prototypes into the current space used for evaluation—without dragging ft backward. Concretely, 
+
+Lbi = ∥D(znew ) − zold ∥22 + ∥A(zold ) − stopgrad( znew )∥22. (6) The first term updates ft and D (feature-level distillation, new →old). The second term up-dates A only (detached target), so A chases the evolving new space (old →new) without reduc-ing the plasticity of ft. In a linear–Gaussian view, minimizing equation 6 reduces transport er-rors εold →new = E∥A(zold ) − znew ∥2 and εnew →old = E∥D(znew ) − zold ∥2, which bound prototype mean/covariance mismatch after transport and help control margin drift. 
+
+Cycle consistency. While Lbi aligns both directions, it does not by itself prevent degeneracies (e.g., rank loss in weakly correlated directions). We therefore add a cycle loss that nudges the compositions toward identity on the data support: 
+
+Lcyc = ∥A(D(znew )) − stopgrad( znew )∥22 + ∥D(A(zold )) − stopgrad( zold )∥22. (7) Targets are detached, so Lcyc stabilizes (A, D ) without pulling ft. Spectrally, enforcing A◦D ≈ I and 
+
+D◦A ≈ I contracts the singular values of the composed transports toward 1, curbing rank/energy loss and promoting near-isometric geometry preservation. Thus Lbi lowers transport error (alignment) while Lcyc regularizes the transport operators (near-bijection); together they yield faithful prototype transport and empirically reduce forgetting without sacrificing plasticity. We denote the weighted sum of the bidirectional alignment and cycle-consistency losses by: 
+
+Bicyc (zold , z new ) := λbi Lbi + λcyc Lcyc (8) We analyze the cycle objective under centered features and full-rank covariances on the data support, passing to whitened variables ˜zold = Σ −1/2 
+
+> old
+
+zold and ˜znew = Σ −1/2 
+
+> new
+
+znew . In this space E[˜ znew ˜z⊤
+
+> new
+
+] = 
+
+I, and the expected cycle error equals the squared Frobenius distance of ˜A ˜D to I. We now state the resulting contraction property. 
+
+Theorem 1 (Cycle contraction). Let Σold = E[zold z⊤
+
+> old
+
+] and Σnew = E[znew z⊤
+
+> new
+
+] be full-rank on the data support and define whitened variables ˜zold = Σ −1/2 
+
+> old
+
+zold , ˜znew = Σ −1/2 
+
+> new
+
+znew with induced maps 
+
+˜A = Σ −1/2 
+
+> new
+
+AΣ1/2 
+
+> old
+
+and ˜D = Σ −1/2 
+
+> old
+
+DΣ1/2 
+
+> new
+
+. Let M := ˜A ˜D − I. If the features are centered, then: 
+
+E ∥M ˜znew ∥22 = ∥M ∥2 
+
+> F
+
+. (9) By Mirsky/Hoffman–Wielandt (Horn & Johnson, 2013) Pdk=1 (σk( ˜A ˜D) − 1) 2 ≤ ∥M ∥2 
+
+> F
+
+and hence max k |σk( ˜A ˜D) − 1| ≤ ∥M ∥F . In particular, if ∥M ∥2< 1 then 1 − ∥ M ∥2 ≤ σk( ˜A ˜D) ≤
+
+1 + ∥M ∥2 and κ( ˜A ˜D) ≤ 1+ ∥M ∥2  
+
+> 1−∥ M∥2
+
+. Consequently, minimizing Lcyc drives the singular values of ˜A ˜D toward 1 on the data support, preventing rank loss and preserving geometry. Proof in Ap-pendix A.2.1. 
+
+Corollary 2 (Decision stability for classification). Let old-class statistics be transported as ˆμ tc =
+
+Aμ t−1 
+
+> c
+
+and (for linear A) ˆΣ tc = AΣ t−1 
+
+> c
+
+A⊤. Assume evaluation uses the Bayes rule with Gaussian class-conditionals (μtc, Σtc) and priors πc, with log-scores ℓc(x) as in Appendix A.1.2. Define mean transport errors δc := ∥ˆμ tc − μtc∥(Σ tc)−1 . If the alignment error ε2 
+
+> old →new
+
+= E∥Az old − znew ∥22 and the cycle error ε2 
+
+> cyc,new
+
+= E∥ADz new − znew ∥22 are small, then: 
+
+δc ≲
+
+q
+
+ε2 
+
+> old →new
+
+, ∥ ˜Σ t − Σt∥2 ≲ C1
+
+q
+
+ε2 
+
+> old →new
+
++ C2 εcyc,new . (10) For any class pair (i, j ) and any x, let mij (x) := |ℓi(x) − ℓj (x)| be the Bayes margin. Then the induced change in log-odds satisfies |(ˆℓi − ˆℓj ) − (ℓi − ℓj )| ≲ Cμ(δi + δj ) + CΣ∥ ˆΣ t − Σt∥2.Consequently, if Cμ(δi + δj ) + CΣ∥ ˆΣ t − Σt∥2< m ij (x), the Bayes decision between i and j at x
+
+remains unchanged after transport. Proof in Appendix A.2.2. 
+
+Pitfall of anti-collapse loss. For features z ∈ RB×S , let Σ = 1 
+
+> B−1
+
+(z − ¯z)⊤(z − ¯z). The AdaGauss anti-collapse loss (Rype´ s´ c et al., 2024) is 
+
+Lac = − 1
+
+S
+
+> S
+
+X
+
+> i=1
+
+min(chol(Σ) ii , β ). (11) 5Published as a conference paper at ICLR 2026 
+
+Table 1: Average incremental ( Ainc ) and last-task average ( Alast ) accuracy (%, mean ± std. over five runs) on CIFAR-100 and TinyImageNet when training the feature extractor from scratch. Best results are bold .
+
+Method CIFAR-100 TinyImageNet 
+
+T =10 T =20 T =10 T =20 
+
+Alast Ainc Alast Ainc Alast Ainc Alast Ainc 
+
+EWC 30.9 ±1.9 50.4 ±1.7 17.0 ±1.6 34.2 ±2.1 18.5 ±1.8 34.3 ±2.3 11.3 ±1.9 26.8 ±2.5 LwF ECCV16 31.9 ±1.1 51.8 ±1.5 17.6 ±1.2 39.2 ±1.7 27.1 ±1.5 39.6 ±2.0 15.2 ±1.6 31.5 ±2.1 SDC CVPR20 40.6 ±0.9 56.2 ±1.3 32.3 ±1.0 46.6 ±1.4 29.5 ±1.1 43.8 ±1.5 26.3 ±1.2 40.6 ±1.7 PASS CVPR21 30.8 ±1.2 48.3 ±1.1 17.6 ±0.8 31.1 ±1.3 24.5 ±0.6 39.5 ±1.0 18.5 ±1.4 30.4 ±1.9 FeTrIL WACV23 34.9 ±0.5 51.2 ±1.1 23.3 ±1.4 37.9 ±1.2 31.0 ±0.9 45.3 ±1.8 25.9 ±1.2 39.9 ±1.2 FeCAM NeurIPS23 32.4 ±0.5 48.7 ±0.9 21.1 ±1.0 34.5 ±1.3 30.9 ±0.9 44.9 ±1.4 24.9 ±0.8 37.9 ±1.4 EFC ICLR24 43.5 ±0.8 58.1 ±1.2 32.4 ±0.9 47.0 ±1.3 34.5 ±1.1 47.9 ±1.5 28.4 ±1.2 42.1 ±1.6 ADC CVPR24 46.5 ±1.2 61.4 ±1.6 35.1 ±1.4 51.7 ±1.8 32.3 ±1.5 43.0 ±1.9 18.1 ±1.6 36.0 ±2.1 LDC ECCV24 45.4 ±1.6 59.5 ±1.9 35.5 ±1.9 51.9 ±2.3 34.2 ±1.1 46.8 ±1.6 24.9 ±2.2 38.2 ±2.7 AdaGauss NeurIPS24 46.8 ±1.2 60.9 ±1.0 37.9 ±1.0 54.4 ±0.8 32.9 ±0.9 45.8 ±1.3 27.5 ±1.2 39.5 ±1.1 DPCR ICML2025 50.2 ±0.7 62.8 ±1.1 39.8 ±1.2 54.8 ±0.9 34.3 ±1.8 46.9 ±0.9 25.6 ±0.7 39.3 ±0.6 
+
+BiCyc (Ours) 50.6 ±0.9 63.2 ±1.3 41.5 ±1.1 56.5 ±1.3 35.4 ±0.8 49.1 ±1.4 30.2 ±1.1 44.2 ±1.3 
+
+In practice, mini-batch Σ can be non-SPD or rank-deficient, causing Cholesky failures and poten-tially inflating scale near ill-conditioning. We enforce SPD via symmetrization and shrinkage, with a jittered Cholesky and eigenvalue flooring as fallback: 
+
+˜Σ = 12 (Σ + Σ ⊤), ˆΣ = ˜Σ + λ tr( ˜Σ) 
+
+S I + εI, (12) and, for very small batches, we optionally use a diagonal approximation ˆΣdiag = diag(diag( ˆΣ)) .The robust objective is 
+
+Lrob ac = − 1
+
+S
+
+> S
+
+X
+
+> i=1
+
+min(chol( ˆΣ) ii , β ). (13) 
+
+Total Stage-I loss and gradient routing. Combining the classification, cycle, and anti-collapse terms yields: Ltotal = LCE (ℓnew , y )
+
+| {z }
+
+> learn new classes
+
++Bicyc (zold , z new ) + α Lrob ac . (14) Here, LCE and the first term of equation 6 update ft (and D); the second term of equation 6 updates 
+
+A only (detached target); and equation 7 stabilizes (A, D ) without reducing the plasticity of ft.Importantly, if gradients from the adapter are allowed to flow into ft, A and D become adversarial, severely weakening D’s regularization and causing sharp performance drops. After Stage I, we freeze ft−1, ft, and D, and perform a low-learning-rate fine-tuning of A on Dt to sharpen transport without re-optimizing from scratch. 
+
+## 4 EXPERIMENTS 
+
+Baselines. We benchmark our approach against a broad set of exemplar-free class-incremental learn-ing (EFCIL) methods. Classic regularization baselines—EWC (Kirkpatrick et al., 2017) and LwF (Li & Hoiem, 2016)—are executed using the reference OCL implementation (Mai et al., 2022). Con-temporary state-of-the-art approaches—SDC (Yu et al., 2020), PASS (Zhu et al., 2021), FeTrIL (Pe-tit et al., 2023), FeCAM (Goswami et al., 2023), EFC (Magistri et al., 2024), ADC (Goswami et al., 2024), LDC (Gomez-Villa et al., 2024), and AdaGauss (Rype´ s´ c et al., 2024)—are run with the au-thors’ public codebases as distributed via FACIL (Masana et al., 2023), PyCIL (Zhou et al., 2023), or the official repositories. Unless otherwise noted, we preserve the original data augmentations and default hyper-parameters reported by each paper. 
+
+Implementation details and reproducibility. We build on the public AdaGauss codebase and add the components introduced in this work. Unless stated otherwise, all experiments use a 6Published as a conference paper at ICLR 2026 
+
+Table 2: Average incremental ( Ainc ) and last-task average ( Alast ) accuracy (%, mean ± std. over five runs) on ImageNet-100 and CUB-200. Best results are bold . †: results excerpted from (Gomez-Villa et al., 2024). ‡:results excerpted from (He et al., 2025). 
+
+Method ImageNet-100 CUB-200 
+
+T =10 T =20 T =10 T =20 
+
+Alast Ainc Alast Ainc Alast Ainc Alast Ainc 
+
+EWC 25.1 ±2.8 40.6 ±3.3 13.7 ±2.1 29.2 ±2.5 15.8 ±0.7 32.6 ±0.5 12.3 ±0.8 27.2 ±0.6 LwF ECCV16 33.4 ±2.2 51.5 ±1.6 18.6 ±1.6 41.3 ±1.9 30.4 ±1.1 46.1 ±1.0 19.4 ±1.6 34.7 ±1.8 SDC CVPR20 35.4 ±1.9 50.1 ±1.6 19.4 ±1.0 36.5 ±1.4 50.3 ±1.3 60.5 ±1.2 27.9 ±1.4 40.1 ±1.6 PASS CVPR21 26.4 ±1.3 45.7 ±0.2 14.4 ±1.2 31.7 ±0.4 27.0 ±0.9 42.3 ±0.9 18.1 ±1.2 36.9 ±1.1 FeTrIL WACV23 36.2 ±1.2 52.6 ±0.6 26.6 ±1.5 42.4 ±2.1 36.9 ±0.7 48.2 ±0.6 34.6 ±1.0 45.3 ±0.9 FeCAM NeurIPS23 38.7 ±1.0 54.8 ±0.5 29.0 ±1.3 44.6 ±2.0 40.2 ±0.8 54.9 ±1.0 36.2 ±1.1 48.9 ±1.3 EFC ICLR24 50.9 ±1.1 61.3 ±1.2 38.6 ±1.2 50.5 ±1.5 51.0 ±0.6 63.3 ±0.7 46.1 ±1.0 59.3 ±1.3 
+
+ADC CVPR24 38.3 ±1.2 55.5 ±1.5 25.1 ±1.3 43.4 ±1.7 49.5 ±0.9 58.8 ±1.1 35.4 ±1.4 48.3 ±1.4 LDC ECCV24 51.4 †±1.2 † 69.4 †±0.6 † 28.5 ±1.7 46.5 ±2.7 47.5 ±0.7 55.7 ±1.3 27.2 ±1.1 39.8 ±2.1 AdaGauss NeurIPS24 51.1 ±1.2 65.0 ±1.4 42.6 ±1.6 57.4 ±1.9 52.9 ±0.8 63.4 ±1.3 45.0 ±1.3 57.0 ±1.0 DPCR ICML2025 49.9 ±0.8 64.8 ±1.1 37.3 ±1.6 54.7 ±0.7 – – – –
+
+BiCyc (Ours) 52.7 ±0.9 66.8 ±1.4 43.8 ±1.4 58.2 ±1.8 53.7 ±0.7 64.0 ±0.8 43.7 ±1.4 55.9 ±1.2 Table 3: Last-task average forgetting ( Flast ) (%, mean ± std. over five runs). CIFAR-100, TinyImageNet, and ImageNet-100 use from-scratch training; CUB-200 uses ImageNet-pretrained initialization. Best results are 
+
+bold .
+
+Method CIFAR-100 TinyImageNet ImageNet-100 CUB-200 
+
+T =10 T =20 T =10 T =20 T =10 T =20 T =10 T =20 
+
+Flast Flast Flast Flast Flast Flast Flast Flast 
+
+LwF ECCV16 23.2 ±1.7 31.2 ±1.8 21.9 ±1.9 33.5 ±2.4 42.1 ±2.3 48.1 ±2.2 16.5 ±1.1 21.7 ±1.4 SDC CVPR20 34.8 ±1.7 35.9 ±1.9 25.1 ±1.4 29.4 ±2.1 44.6 ±2.0 54.4 ±2.3 10.9 ±1.3 17.3 ±1.1 EFC ICLR24 23.1 ±1.1 24.7 ±1.8 23.5 ±2.4 30.1 ±3.0 21.5 ±1.9 23.8 ±2.5 10.7 ±0.7 14.8 ±1.7 
+
+ADC CVPR24 21.9 ±1.1 31.0 ±1.6 30.2 ±2.0 36.8 ±1.9 32.4 ±1.6 33.4 ±1.8 12.8 ±1.1 21.3 ±1.5 LDC ECCV24 21.7 ±1.9 25.6 ±2.3 24.7 ±2.5 30.7 ±2.1 25.7 ±1.7 32.9 ±2.3 13.6 ±1.2 23.9 ±1.8 AdaGauss NeurIPS24 16.7 ±1.4 21.0 ±1.5 18.7 ±1.2 23.1 ±1.0 20.6 ±0.9 22.9 ±1.1 11.6 ±0.7 16.9 ±1.3 
+
+BiCyc (Ours) 13.5 ±1.3 16.6 ±0.9 12.0 ±0.9 18.9 ±1.1 18.2 ±1.6 20.8 ±1.4 11.3 ±0.9 17.5 ±1.3 
+
+ResNet-18 backbone with a batch size of 256 images per iteration, following AdaGauss. For CIFAR-100 (Krizhevsky, 2009), TinyImageNet (Le & Yang, 2015), and ImageNet-100 (Deng et al., 2009), the backbone is trained from scratch for 200 epochs using SGD with a fixed initial learning rate of 1 × 10 −1 and weight decay 5 × 10 −4; the learning rate is decayed by a factor of 10 at epochs 
+
+{60 , 120 , 180 }. For CUB-200 (Wah et al., 2011), we initialize from ImageNet-pretrained weights and adopt a split learning rate: 1 × 10 −2 for the backbone and 1 × 10 −1 for the heads. The distiller and adapter are trained with learning rate 5 × 10 −2 and weight decay 1 × 10 −4. For the main from-scratch experiments, we set λbi =5 and λcyc =1 . After Stage I, we fine-tune the adapter for 30 epochs using SGD with an initial learning rate of 1 × 10 −2 and weight decay 5 × 10 −4.All other hyperparameters follow AdaGauss verbatim. In particular, we keep its prototype storage and sampling settings unchanged; the small additional adapter overhead is quantified in Sec. 4.7. For completeness, we note that the public AdaGauss code reports TinyImageNet results averaged over splits formed from the first 100 classes, which is slightly misaligned with common balanced partitions. To enable an apples-to-apples comparison, our tables present the corrected numbers under the standard balanced partitioning. 
+
+Evaluation metrics. We report three standard measures: the last-task average accuracy Alast , the average incremental accuracy Ainc , defined as the running mean of Alast over incremental steps, and the last-task average forgetting Flast . Dataset specifics, hyper-parameter schedules, and metric definitions are provided in the Appendix A.3.2. 7Published as a conference paper at ICLR 2026 
+
+Figure 3. CIFAR-100 ( T =10 ): Per-step, per-task accuracy gains ( ∆, percentage points) of Ours over Ada-Gauss, EFC, and LDC. Improvements concentrate on earlier tasks, indicating stronger retention and reduced forgetting. 
+
+4.1 MAIN RESULTS 
+
+Tables 1 and 2 report results on CIFAR-100, TinyImageNet, and ImageNet-100 with feature extrac-tors trained from scratch, and on CUB-200 with ImageNet-pretrained initialization (mean ±std over five runs). CIFAR–100: compared to AdaGauss, we gain +3.8 /+2.3 pp at T =10 and +3.6 /+2.1 
+
+pp at T =20 . DPCR ‡ is competitive, but our method still slightly leads on all CIFAR-100 settings (e.g., +0.4/+0.4 pp at T =10 and +1.7/+1.7 pp at T =20 ). TinyImageNet: improvements over Ada-Gauss are +2.5 /+3.3 pp at T =10 and +2.7 /+4.7 pp at T =20 ; the margins over the second-best (EFC) are +0.9/+1.2 pp ( T =10 ) and +1.8/+2.1 pp ( T =20 ). DPCR again trails our method, with gaps of about +1.1/+2.2 pp at T =10 and +4.6/+4.9 pp at T =20 . ImageNet–100: vs. AdaGauss we obtain 
+
++1.6 /+1.8 pp at T =10 and +1.2 /+0.8 pp at T =20 ; at T =10 our Alast is best (runner-up LDC †, +1.3 pp), while Ainc is 2.6 pp below the best (LDC †). Under our protocol, rerunning public LDC code at 
+
+T =10 yields Alast =41 .7 ± 1.5% and Ainc =58 .7 ± 1.7% . DPCR ‡ is clearly weaker than AdaGauss and ours: at T =10 it trails our method by about 2.8/2.0 pp in Alast /A inc (and is already slightly below AdaGauss by 1.2/0.2 pp), while at T =20 the gap to ours further widens to 6.5/3.5 pp (with Ada-Gauss still ahead of DPCR by 5.3/2.7 pp). For T =20 we achieve the best Alast and Ainc (runner-up AdaGauss: +1.2/+0.8 pp). CUB–200 (ImageNet pre-trained): our performance is close to Ada-Gauss (vs. AdaGauss: +0.8/+0.6 pp at T =10 , −1.3/−1.1 pp at T =20 ), while on the 20-split setting we trail EFC by 2.4/3.4 pp. DPCR does not report its CUB-200 hyperparameter configuration under our training protocol, so the corresponding entries are marked “–” in Table 2. With a pretrained backbone, practitioners typically adopt a very low backbone learning rate, which keeps cross-task feature drift small and thus limits the incremental gains of our method. 
+
+Table 4: CIFAR-100: Contributions of Lbi and Lcyc .                             
+
+> Components T=10 T=20
+> Lbi Lcyc Alast (%) Ainc (%) Alast (%) Ainc (%)
+> ××46.8 ±1.2 60.9 ±1.0 37.9 ±1.0 54.4 ±0.8
+> ✓×49.4 ±1.0 62.1 ±1.1 40.2 ±1.1 55.8 ±1.0
+> ×✓47.8 ±1.1 61.8 ±1.0 39.0 ±1.1 54.9 ±0.9
+> ✓✓50.6 ±0.9 63.2 ±1.3 41.5 ±1.1 56.5 ±1.3
+
+Per-step advantage on CIFAR-100 (T =10 ). 
+
+As shown in Figure 3, across three baselines, our method shows consistently positive accuracy gain throughout training, with the largest gains on older tasks (lower-right region in each heatmap). Against EFC, margins often exceed +15–20 pp at mid/late steps; versus LDC, we sustain +6–11 pp on most old tasks; and relative to AdaGauss we obtain +5–10 pp improvements that persist to the final step. The concentration of positive ∆ on early tasks indicates significantly smaller forgetting :accuracy on initial tasks decays far less under ours while recent tasks remain competitive, yielding a superior plasticity–stability trade-off. 4.2 ADVANCE IN FORGETTING 
+
+As shown in Table 3, across the three balanced, training-from-scratch datasets, our method achieves the lowest forgetting . On CUB-200 , however, most methods fine-tune from a pretrained backbone , so the gaps in forgetting are much smaller than in the from-scratch regime. 8Published as a conference paper at ICLR 2026 
+
+Table 5: Adapter Strategy vs. Architecture: Ablation on CIFAR-100 (a) Direct prototype projection vs. projection with post-training adapter fine-tuning. Arrows indicate the preferred direction.                    
+
+> Ablation T=10 T=20
+> Alast ↑Flast ↓Alast ↑Flast ↓
+> Direct projection 49.9 15.2 38.9 17.6 + fine tuning (vs. Direct) +0.7 -1.7 +2.6 -1.0
+
+(b) Adapter/Distiller Architectures: MLP shows ab-solute scores, others report ∆ vs. MLP                            
+
+> Ablation T=10 T=20
+> Alast ↑Flast ↓Alast ↑Flast ↓
+> MLP 50.6 13.5 41.5 16.6 Linear -3.5 +1.2 -4.2 +1.3 CrossAttention -2.7 -0.7 -6.0 -1.0 MoE -3.7 -3.6 -2.8 -4.9
+
+4.3 EFFECT OF LBI AND LCYC 
+
+Notably, our approach delivers especially strong preservation of prior knowledge when training from scratch. As summarized in Table 4, on CIFAR-100 enabling either loss improves both Alast and Ainc over the AdaGauss baseline, and enabling both yields the best results across the 10- and 20-task splits. This pattern matches the roles established in Sec. 3: Lbi (Eq. 6) reduces the new ↔old feature-transport errors that bound prototype mean/covariance mismatch, while Lcyc (Eq. 7) contracts the spectrum of AD toward 1, mitigating rank loss and promoting near-isometric transport. Used together, they simultaneously lower transport error and preserve geometry, explaining consistent gains in Alast 
+
+and Ainc . Empirical diagnostics corroborate this: Figs. 4 and 5 (CIFAR-100, T =10 ) show lower symmetric KL between transported and ground-truth class Gaussians and singular-value spectra of AD that are tighter and more concentrated at 1 than AdaGauss, indicating better distributional transport and more stable decision boundaries. 4.4 ABLATION : DIRECT PROJECTION VS . POST -TRAINING FINE -TUNING .
+
+Figure 4. Task-0 stability via SymKL (↓). On the fixed task-0 data, we compare Gaussian fits from models after t=1 . . . 9
+
+to the task-0 reference using symmet-ric KL (Eqs. 30–31); mean ±std over classes. Our method maintains a smaller divergence—i.e., a closer match to the original distribution—than AdaGauss. 
+
+The adapter learned via bidirectional cycle consistency can be used as is to map old-class prototypes into the new space. We compare this “Direct projection” with an additional post-training fine-tuning of the adapter. On CIFAR-100, di-rect projection achieves Alast =49 .9 and Flast =15 .2 at 10-task split, and Alast =38 .9 and Flast =17 .6 at 20-task split. Fine-tuning yields consistent gains: +0 .7 points in Alast and 
+
+−1.7 in Flast at 10-task split, and a larger +2 .6 / −1.0 at 20-task split. These results indicate that while the cycle-consistent adapter already provides a strong zero-shot pro-jection, a brief post-training adjustment further aligns proto-types to the new feature geometry—an effect that becomes more pronounced as the task sequence lengthens. 4.5 ABLATION : A DAPTER /D ISTILLER ARCHITECTURE 
+
+Figure 5. Near-isometry on task-0 under continual updates. AD-% in 
+
+[0 .9, 1.1] for models after t=1 . . . 9; our method consistently preserves geometry better than AdaGauss. 
+
+Because our method learns bidirectional maps between old and new feature spaces, the adapter/distiller architecture di-rectly affects performance. Beyond the linear or shallow MLP adapters common in prior work, we test lightweight but richer alternatives—cross-attention and sparse MoE—to probe whether conditional/nonlinear mappings better track representation drift. Table 5b reports CIFAR-100 results for the 10- and 20-task splits. Across both splits, multilayer adapters consistently outperform a single linear map: rela-tive to an MLP baseline, the linear variant lowers Alast by 
+
+3.5–4.2 points and increases Flast by 1.2–1.3 points. Within the multilayer family, cross-attention favors stability, reduc-ing forgetting ( ∆Flast = −0.7 to −1.0) at the expense of accuracy ( ∆Alast = −2.7 to −6.0), whereas sparse MoE delivers the largest forgetting gains ( −3.6
+
+to −4.9) with only moderate accuracy drops ( −2.8 to −3.7). If new and old features differed by a single global affine transform, a linear adapter would suffice; the observed trade-offs instead point 9Published as a conference paper at ICLR 2026 to content-dependent, anisotropic drift, which conditional/nonlinear adapters model more faith-fully. All variants share identical training schedules; a parameter-matched linear control is a natural follow-up to isolate capacity from architecture. 4.6 PROTOTYPE DRIFT FROM ORACLE MEANS ON CIFAR-100          
+
+> (a) (b) Figure 6. CIFAR-100 ( T=10 ). Drift between maintained prototypes and oracle prototypes (empirical class means) after completing Task 9. For each of the 90 old classes (Tasks 0–8), we measure the ℓ2distance in feature space be-tween the maintained prototype and its oracle prototype. (a) Per-source-task average drift for the three methods. (b) His-togram of per-class drift over all old classes.
+
+To assess how well each method preserves old-class geometry, Fig. 6 reports proto-type drift on CIFAR-100 with the 10 -task split. After training Task 9, we freeze the backbone and, for every old class c, com-pute the maintained prototype bμc and an 
+
+oracle prototype μ⋆c given by the empirical feature mean of all samples of class c un-der the final backbone. The drift for class 
+
+c is defined as ∥bμc − μ⋆c ∥2.Panel 6a averages this drift over the ten classes of each source task, while Fig-ure 6b plots the full per-class distribution over all 90 old classes. Our method yields both lower average drift and a tighter dis-tribution at small values than AdaGauss and LDC, indicating less accumulated dis-tortion of old-class prototypes. 4.7 PARAMETER OVERHEAD IN THE 64-DIMENSIONAL SETTING 
+
+Setup. Following AdaGauss (Rype´ s´ c et al., 2024), all experiments use a ResNet-18 backbone fol-lowed by a 512 →64 linear reduction and a two-layer MLP projector D (new →old) in the S=64 
+
+space. Our bidirectional variant simply adds a second MLP A (old →new) with the same archi-tecture. Both A and D are MLPs RS → RmS → RS with width multiplier m=32 (hidden size 
+
+mS =2048 ). 
+
+Parameter count. A two-layer MLP with biases in this setting has 
+
+#params MLP = 2 mS 2 + ( m+1) S ⇒ #params MLP = 264 ,256 
+
+for S=64 , m=32 . Thus AdaGauss already uses one such projector D (≈ 0.26 M parameters), and our bidirectional version adds one more (A), for an extra 
+
+∆#params = 264 ,256 
+
+on top of the published AdaGauss model. Since a standard ResNet-18 backbone has about 11 Mparameters, the additional adapter increases the total parameter count by only ≈ 2.4% . We use this shared 64-dimensional configuration in all experiments. 
+
+## 5 CONCLUSIONS , L IMITATIONS , AND FUTURE WORK 
+
+Conclusions. We presented a bidirectional drift-compensation framework for exemplar-free class-incremental learning that jointly learns old to new and new to old projectors with stop-gradient gating and cycle consistency. Our analysis links least-squares projectors to CCA and shows how reducing alignment and cycle error stabilizes prototype margins. Experiments across standard EF-CIL benchmarks demonstrate strong forgetting reduction, especially in from-scratch settings, while maintaining competitive new-task accuracy. 
+
+Limitations. The current formulation assumes centered features, and second-order (Gaussian) pro-totype statistics; its theory is local to small alignment errors on the data support. The method may be sensitive to covariance estimation and hyperparameters in low-data regimes. 
+
+Future work. We plan to develop uncertainty-aware and class-imbalance–robust prototype trans-port, and derive non-asymptotic generalization/forgetting bounds beyond Gaussian assumptions. We also plan to integrate test-time adaptation and multi-modal backbones under strict memory budgets. 10 Published as a conference paper at ICLR 2026 
+
+## REFERENCES 
+
+Rahaf Aljundi, Francesca Babiloni, Mohamed Elhoseiny, Marcus Rohrbach, and Tinne Tuytelaars. Memory aware synapses: Learning what (not) to forget. In ECCV , 2018. Lucas Caccia, Rahaf Aljundi, Nader Asadi, Tinne Tuytelaars, Joelle Pineau, and Eugene Belilovsky. New insights on reducing abrupt representation change in online continual learning. In ICLR ,2021. Hyuntak Cha, Jaeho Lee, and Jinwoo Shin. Co2l: Contrastive continual learning. In ICCV , 2021. Hao Chen and Yin Xia. A normality test for high-dimensional data based on the nearest neighbor approach. Journal of the American Statistical Association , 118(541):719–731, 2023. doi: 10. 1080/01621459.2021.1953507. Danruo Deng, Guangyong Chen, Jianye Hao, Qiong Wang, and Pheng-Ann Heng. Flattening sharp-ness for dynamic gradient projection memory benefits continual learning. NeurIPS , 2021. Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In CVPR , pp. 248–255, 2009. doi: 10.1109/CVPR.2009.5206848. Bruno Ebner and Norbert Henze. Tests for multivariate normality—a critical review with emphasis on weighted l2-statistics. TEST , 29(4):845–892, 2020. doi: 10.1007/s11749-020-00740-0. Alex Gomez-Villa, Dipam Goswami, Kai Wang, Bagdanov Andrew, Bartlomiej Twardowski, and Joost van de Weijer. Exemplar-free continual representation learning via learnable drift compen-sation. In ECCV , 2024. Dipam Goswami, Yuyang Liu, Bartłomiej Twardowski, and Joost van de Weijer. Fecam: Feature covariance and mahalanobis metric for incremental learning. In Neurips , 2023. Dipam Goswami, Albin Soutif-Cormerais, Yuyang Liu, Sandesh Kamath, Bartlomiej Twardowski, and Joost van de Weijer. Resurrecting old classes with new data for exemplar- free continual learning. In CVPR , 2024. Run He, Di Fang, Yicheng Xu, Yawen Cui, Ming Li, Cen Chen, Ziqian Zeng, and Huiping Zhuang. Semantic shift estimation via dual-projection and classifier reconstruction for exemplar-free class-incremental learning. In ICML , 2025. Roger A. Horn and Charles R. Johnson. Matrix Analysis . Cambridge University Press, 2nd edition, 2013. James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, and et al. Overcoming catastrophic forgetting in neural networks. In Proceedings of the National Academy of Sciences , 2017. Alex Krizhevsky. Learning multiple layers of features from tiny images. Technical report, University of Toronto, 2009. Matthias De Lange, Rahaf Aljundi, Marc Masana, Sarah Parisot, Xu Jia, Ales Leonardis, Gregory G. Slabaugh, and Tinne Tuytelaars. A continual learning survey: Defying forgetting in classification tasks. IEEE Trans. Pattern Anal. Mach. Intell. , 44(7):3366–3385, 2022. Yann Le and Xuan Yang. Tiny imagenet visual recognition challenge. CS231N , 2015. Zhizhong Li and Derek Hoiem. Learning without forgetting. In ECCV , 2016. David Lopez-Paz and Marc’Aurelio Ranzato. Gradient episodic memory for continual learning. 
+
+NeurIPS , 2017. Simone Magistri, Tomaso Trinci, Albin Soutif-Cormerais, Joost van de Weijer, and Andrew D. Bagdanov. Elastic feature consolidation for cold start exemplar- free incremental learning. In 
+
+ICLR , 2024. Simone Magistri, Tomaso Trinci, Albin Soutif-Cormerais, Joost van de Weijer, and Andrew D. Bag-danov. Efc++: Elastic feature consolidation with prototype re-balancing for cold start exemplar-free incremental learning, 2025. URL https://arxiv.org/abs/2503.10439 .11 Published as a conference paper at ICLR 2026 Zheda Mai, Ruiwen Li, Jihwan Jeong, David Quispe, Hyunwoo Kim, and Scott Sanner. Online continual learning in image classification: An empirical survey. Neurocomputing , 469:28–51, 2022. ISSN 0925-2312. doi: https://doi.org/10.1016/j.neucom.2021.10.021. URL https:// www.sciencedirect.com/science/article/pii/S0925231221014995 .Marc Masana, Xialei Liu, Bartłomiej Twardowski, Mikel Menta, Andrew D. Bagdanov, and Joost van de Weijer. Class-incremental learning: Survey and performance evaluation on image clas-sification. IEEE Transactions on Pattern Analysis and Machine Intelligence , 45(5):5513–5533, 2023. doi: 10.1109/TPAMI.2022.3213473. German Ignacio Parisi, Ronald Kemker, Jose L. Part, Christopher Kanan, and Stefan Wermter. Con-tinual lifelong learning with neural networks: A review. Neural Networks , 113:54–71, 2019. Gr´ egoire Petit, Adrian Popescu, Hugo Schindler, David Picard, and Bertrand Delezoide. Fetril: Feature translation for exemplar-free class-incremental learning. In WACV , January 2023. Quang Pham, Chenghao Liu, and Steven Hoi. Dualnet: Continual learning, fast and slow. NeurIPS ,2021. Matthew Riemer, Ignacio Cases, Robert Ajemian, Miao Liu, Irina Rish, Yuhai Tu, and Gerald Tesauro. Learning to learn without forgetting by maximizing transfer and minimizing interfer-ence. In ICLR , 2018. Grzegorz Rype´ s´ c, Sebastian Cygert, Tomasz Trzci´ nski, and Bartłomiej Twardowski. Task-recency bias strikes back: Adapting covariances in exemplar-free class incremental learning. NeurIPS ,2024. Gobinda Saha, Isha Garg, and Kaushik Roy. Gradient projection memory for continual learning. In 
+
+ICLR , 2020. Jonathan Schwarz, Wojciech Czarnecki, Jelena Luketina, Agnieszka Grabska-Barwinska, Yee Whye Teh, Razvan Pascanu, and Raia Hadsell. Progress & compress: A scalable framework for contin-ual learning. In ICML , 2018. Joan Serra, Didac Suris, Marius Miron, and Alexandros Karatzoglou. Overcoming catastrophic forgetting with hard attention to the task. In ICML , 2018. Haizhou Shi and Hao Wang. A unified approach to domain incremental learning with memory: Theory and algorithm. In NeurIPS , 2023. Habib Slim, Eden Belouadah, Adrian Popescu, and Darian Onchis. Dataset knowledge transfer for class-incremental learning without memory. In WACV , 2022. Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. In NeurIPS , 2017. Catherine Wah, Steve Branson, Peter Welinder, Pietro Perona, and Serge Belongie. The caltech-ucsd birds-200-2011 dataset. 2011. Liyuan Wang, Xingxing Zhang, Qian Li, Jun Zhu, and Yi Zhong. Coscl: Cooperation of small continual learners is stronger than a big one. In ECCV , 2022a. Zhenyi Wang, Li Shen, Le Fang, Qiuling Suo, Donglin Zhan, Tiehang Duan, and Mingchen Gao. Meta-learning with less forgetting on large-scale non-stationary task distributions. In ECCV ,2022b. Zhenyi Wang, Yan Li, Li Shen, and Heng Huang. A unified and general framework for continual learning. In ICLR , 2024. Zifeng Wang, Zheng Zhan, Yifan Gong, Yucai Shao, Stratis Ioannidis, Yanzhi Wang, and Jennifer Dy. Dualhsic: Hsic-bottleneck and alignment for continual learning. In ICML , 2023. Enneng Yang, Li Shen, Zhenyi Wang, Tongliang Liu, and Guibing Guo. An efficient dataset con-densation plugin and its application to continual learning. NeurIPS , 2023. 12 Published as a conference paper at ICLR 2026 Lu Yu, Bartlomiej Twardowski, Xialei Liu, Luis Herranz, Kai Wang, Yongmei Cheng, Shangling Jui, and Joost van de Weijer. Semantic drift compensation for class-incremental learning. In 
+
+CVPR , 2020. Friedemann Zenke, Ben Poole, and Surya Ganguli. Continual learning through synaptic intelligence. In ICML , 2017. Da-Wei Zhou, Fu-Yun Wang, Han-Jia Ye, and De-Chuan Zhan. Pycil: a python toolbox for class-incremental learning. SCIENCE CHINA Information Sciences , 66(9):197101, 2023. doi: https: //doi.org/10.1007/s11432-022-3600-y. Fei Zhu, Xu-Yao Zhang, Chuang Wang, Fei Yin, and Cheng-Lin Liu. Prototype augmentation and self-supervision for incremental learning. In CVPR , 2021. 
+
+## A APPENDIX 
+
+This appendix provides additional details, proofs, metrics, and supplementary results. It is organized as follows: • Method details. §A.1.1 (transport view of drift compensation), §A.1.2 (Bayes classifier), §A.1.3 (pseudo-code). • Theory. §A.2.1 (Proof of Theorem 1), §A.2.2 (Proof of Corollary 2). • Experimental protocol. §A.3.1 (setup), §A.3.2 (accuracy metrics), §A.3.3 (distribution-similarity metrics), §A.3.4 (near-isometry metric). • Additional results and ablations. §A.4.1 (additional visualizations), §A.4.2 (dis-tiller/adapter architecture ablations), §A.4.3 (hyperparameter sensitivity), §A.4.4 (choice of classifier). • Additional discussion and diagnostics. §A.5.1 (prototype-based EFCIL and Gaus-sian modeling in prior work), §A.5.2 (Gaussianity diagnostics), §A.5.3 (t-SNE snap-shots), §A.5.4 (intuitive view of bidirectional cycle consistency), §A.5.5 (AdaGauss, full-covariance prototypes, and robustness). • Limitations and disclosure. §A.6.1 (ImageNet-1K limitations), §A.6.2 (LLM usage dis-closure). A.1 METHOD DETAILS 
+
+A.1.1 PROTOTYPE -D RIFT COMPENSATION : A T RANSPORT PERSPECTIVE 
+
+In the main paper, we adopt a vectorial notion of prototype drift. For each previously-seen class 
+
+c ∈ C 1: t−1, the backbone update from ft−1 to ft induces the feature-mean displacement 
+
+∆ tc = μ tc − μ t−1 
+
+> c
+
+, δ tc = ∥∆ tc ∥2, (15) where μ tc = 1
+
+> |D c|
+
+P 
+
+> x∈D c
+
+ft(x) is the (unknown) class mean under the updated encoder ft. Because EFCIL forbids storing past raw samples, μ tc cannot be recomputed exactly, and cached prototypes 
+
+μ t−1 
+
+> c
+
+become stale once ft is deployed. Most drift-compensation pipelines in prior work follow a two-stage pattern: Stage I constrains the backbone update using only Dt,
+
+LS1 = E(x,y )∈D t
+
+h
+
+CE( g(ft(x)) , y ) + λ D (ϕnew (x), ϕ old (x)) 
+
+i
+
+, (16) with ϕ ∈ { f (·), g ◦ f (·)} and D a generic distillation/regularizer. Stage II then learns a forward adapter At (with frozen ft−1, f t) by aligning paired features (ft−1(x), f t(x)) on Dt, and transports old prototypes: 
+
+At ∈ arg min  
+
+> A
+
+Ex∈D t∥A(ft−1(x)) − ft(x)∥22, ˜μ tc = At(μ t−1 
+
+> c
+
+). (17) This transport view unifies existing drift-compensation recipes—each can be seen as instantiating either a global/class-wise translation At(z) = z + b∆ t or a learned projector At applied to cached prototypes. 13 Published as a conference paper at ICLR 2026 
+
+Transport-based summary of prior methods. Below we cast representative EFCIL approaches as special cases of Eq. 17. For consistency, we denote the encoders by ft−1 and ft (some works write Ft−1, F t) and use Dt for the current-task data. • Semantic Drift Compensation (SDC) (Yu et al., 2020). SDC estimates a global shift from new-task samples and uses it as a translation adapter: 
+
+¯∆ t = 1
+
+|D t|
+
+X
+
+> x∈D t
+
+(ft(x) − ft−1(x)) , At(z) = z + ¯∆ t, ˜μ tc = μ t−1 
+
+> c
+
++ ¯∆ t.
+
+• Adversarial Drift Compensation (ADC) (Goswami et al., 2024). For each old class c,ADC selects a current-sample ˆxc that is adversarially driven towards the vicinity of μ t−1
+
+> c
+
+(in the old space), and takes the resulting pairwise feature gap as a class-wise translation: 
+
+b∆ tc = ft(ˆ xc) − ft−1(ˆ xc), A(c) 
+
+> t
+
+(z) = z + b∆ tc , ˜μ tc = μ t−1 
+
+> c
+
++ b∆ tc .
+
+• Learnable Drift Compensation (LDC) (Gomez-Villa et al., 2024). LDC directly learns aprojector as the adapter: 
+
+Gθ ∈ arg min  
+
+> G
+
+Ex∈D t∥G(ft−1(x)) − ft(x)∥22, At(z) = Gθ (z), ˜μ tc = Gθ(μ t−1 
+
+> c
+
+).
+
+This captures non-linear, potentially class-dependent deformations. • EFC (EFM-weighted transport). (Magistri et al., 2024) EFC computes a weighted aver-age of per-sample shifts using a pseudo-metric induced by the Empirical Feature Matrix 
+
+Et−1 (estimated after task t−1). Let ∥v∥2 
+
+> E
+
+:= v⊤E v . Each xi ∈ D t casts a vote for class c
+
+with weight 
+
+wc,i = exp 
+
+
+
+− ∥ ft−1(xi) − μ t−1 
+
+> c
+
+∥2
+
+> Et−1
+
+2σ2
+
+
+
+,
+
+yielding the class-wise transport 
+
+b∆ tc =
+
+P 
+
+> xi∈D t
+
+wc,i (ft(xi) − ft−1(xi)) 
+
+P 
+
+> xi∈D t
+
+wc,i 
+
+, ˜μ tc = μ t−1 
+
+> c
+
++ b∆ tc .
+
+• AdaGauss. Like LDC, AdaGauss first learns a forward projector Gθ by aligning paired features on Dt:
+
+Gθ ∈ arg min  
+
+> G
+
+Ex∈D t∥G(ft−1(x)) − ft(x)∥22, At(z) = Gθ (z).
+
+Unlike LDC—which directly transports old means via ˜μ tc = Gθ(μ t−1 
+
+> c
+
+)—AdaGauss mod-els each old class as a Gaussian and transports the distribution by Monte Carlo push-forward (see Alg. 1, Stage II): 
+
+um ∼ N (μ t−1 
+
+> c
+
+, Σ t−1 
+
+> c
+
+), vm = Gθ (um) = At(um), m = 1 , . . . , M, 
+
+followed by re-estimation in the new space: 
+
+˜μ tc = 1
+
+M
+
+> M
+
+X
+
+> m=1
+
+vm, ˜Σ tc = 1
+
+M − 1
+
+> M
+
+X
+
+> m=1
+
+(vm − ˜μ tc )( vm − ˜μ tc )⊤.
+
+When Gθ (equivalently At) is affine, this reduces in closed form to pushing moments 
+
+( ˜ μ tc , ˜Σ tc ) = ( Aμ t−1 
+
+> c
+
++ b, A Σ t−1 
+
+> c
+
+A⊤).A.1.2 BAYES CLASSIFIER IN THE NEW FEATURE SPACE 
+
+Let z = ft(x) ∈ Rd be the feature of an input x at task t and let each seen class c ∈ C 1: t be represented in the new space by a Gaussian prototype N (μc, Σc) (means and covariances trans-ported/estimated as in Sec. A.1.1). We define the Gaussian negative log-posterior score, up to con-stants independent of c, as 
+
+sc(x) = ( z − μc)⊤Σ−1 
+
+> c
+
+(z − μc) + log det Σ c − 2 log πc, (18) 14 Published as a conference paper at ICLR 2026 where πc is the class prior. In our implementation, we follow the common Mahalanobis-prototype variant and retain only the quadratic term, while the full Gaussian score above is used for the the-oretical stability analysis; the same perturbation argument applies after dropping the prior and log-determinant terms. The task-agnostic prediction (TAg) is 
+
+ˆyTAg (x) = arg min 
+
+> c∈C 1: t
+
+sc(x). (19) When a task-aware (TAw) report is required, we restrict the argmin to the current task’s label set Ct:
+
+ˆyTAw (x) = arg min 
+
+> c∈C t
+
+sc(x). (20) A.1.3 PSEUDO -CODE FOR OUR ALGORITHM 
+
+Algorithm 1 specifies the end-to-end procedure for each task t: it learns the current backbone ft
+
+under classification with bidirectional alignment and cycle consistency (via A and D), and updates the class prototypes by transporting stored Gaussians into the current feature space for inference. 
+
+Algorithm 1 Bidirectional Cycle Consistency (EFCIL) 
+
+Inputs: Task stream {D t}Tt=1 ; old backbone ft−1 (frozen); current backbone ft (learnable); classifier head g;adapter A : Rd → Rd (old →new); distiller D : Rd → Rd (new →old); hyperparameters λbi , λ cyc , α ; learning rates η, η A, η D ; batch size B;anti-collapse hyperparameters κ, β, ε ; per-class sample count M for distribution transport. 
+
+Outputs: Trained ft, A, D for each t; transported means & covariances for inference. 
+
+Initialization: Copy ft ← ft−1; randomly initialize A, D ; freeze ft−1.
+
+for t = 1 , . . . , T do 
+
+# Stage I: Joint training on current task Dt
+
+while not converged do 
+
+Sample minibatch {(x, y )}Bb=1 ∼ D t.
+
+zold ← ft−1(x) ▷ no gradient 
+
+znew ← ft(x)
+
+ℓnew ← g(znew )
+
+Bidirectional alignment: 
+
+Lbi ← ∥ D(znew ) − zold ∥22+∥A(zold ) − z(detach)  
+
+> new
+
+∥22
+
+Cycle consistency: 
+
+Lcyc ← ∥ A(D(znew )) − z(detach)  
+
+> new
+
+∥22+∥D(A(zold )) − z(detach)  
+
+> old
+
+∥22
+
+Classification: LCE ← CE( ℓnew , y )
+
+Robust anti-collapse on features: 
+
+Σ ← 1
+
+B − 1 (znew − ¯z)⊤(znew − ¯z); ˜Σ ← 12 (Σ+Σ ⊤); ˆΣ ← ˜Σ + κ tr( ˜Σ) 
+
+d I + εI 
+
+Lrob ac ← − 1
+
+d
+
+Pdi=1 min(chol( ˆΣ) ii , β )
+
+Total: L ← L CE + λbi Lbi + λcyc Lcyc + α Lrob ac 
+
+end while 
+
+# Stage II: Distribution transport via sampling + adapter fine-tuning (optional) 
+
+Freeze ft−1, ft, D; fine-tune A on Dt with a small LR by minimizing ∥A(zold ) − z(detach)  
+
+> new
+
+∥22.
+
+for each old class c ∈ C 1: t−1 do 
+
+Load stored stats (μ t−1 
+
+> c
+
+, Σ t−1 
+
+> c
+
+).
+
+Sample old features: draw U = {um}Mm=1 ∼ N (μ t−1 
+
+> c
+
+, Σ t−1 
+
+> c
+
+).
+
+Push-forward to new space: V = {vm}Mm=1 with vm ← A(um).
+
+Re-estimate in new space: 
+
+˜μ tc ← 1
+
+> M
+
+PMm=1 vm, ˜Σ tc ← 1 
+
+> M−1
+
+PMm=1 (vm − ˜μ tc )( vm − ˜μ tc )⊤.
+
+end for Estimate new-class stats under ft from Dt: (μ tc , Σ tc ) for all c ∈ C t.Build a new prototype collection using {(˜ μ tc , ˜Σ tc )}c∈C 1: t−1 and {(μ tc , Σ tc )}c∈C t .
+
+Store {(μ tc , Σ tc )}c∈C 1: t for the next task. 
+
+end for 
+
+15 Published as a conference paper at ICLR 2026 A.2 THEORY 
+
+A.2.1 PROOF OF THEOREM 1
+
+Proof of Theorem 1 (Cycle contraction). Let M := ˜A ˜D−I and note that by definition of whitening, 
+
+E[˜ znew ˜z⊤
+
+> new
+
+] = I (features are taken to be centered; otherwise replace z by its centered version). Then 
+
+E∥M ˜znew ∥22= E[˜ z⊤
+
+> new
+
+M ⊤M ˜znew ] = Tr( M ⊤M E[˜ znew ˜z⊤
+
+> new
+
+]) = Tr( M ⊤M ) = ∥M ∥2 
+
+> F
+
+, (21) which yields the stated identity. For the consequence, write the singular values of ˜A ˜D as {σk}dk=1 . Since M = ˜A ˜D − I, Weyl’s inequality gives max k|σk − 1|≤ ∥ M ∥2≤ ∥ M ∥F . Thus minimizing Lcyc = E∥M ˜znew ∥22= ∥M ∥2
+
+> F
+
+forces ∥M ∥F→ 0, hence σk → 1 for all k. In particular, when the loss is small, all singular values of ˜A ˜D lie in a tight neighborhood of 1, preventing rank/energy loss and preserving local geometry on the data support. A.2.2 PROOF OF COROLLARY 2
+
+Proof of Corollary 2 (Decision stability for classification). Fix a class c and abbreviate μ = μtc,
+
+Σ = Σtc, ˜μ = ˜μ tc , ˜Σ = ˜Σ tc , ∆μ := ˜μ − μ, ∆Σ := ˜Σ − Σ. The Bayes log-score is 
+
+ℓc(x) = log πc − 12 log det Σ − 12 (x − μ)⊤Σ−1(x − μ). A first-order expansion in (∆ μ, ∆Σ) 
+
+gives the perturbation 
+
+˜ℓc(x) − ℓc(x) = − 12 Tr(Σ −1∆Σ) + 12 (x − μ)⊤Σ−1∆Σ Σ −1(x − μ) + ∆ μ⊤Σ−1(x − μ) + Rc(x),
+
+(22) where Rc(x) = O(∥∆Σ ∥22+∥∆μ∥2Σ−1 ) by the identities log det(Σ + ∆Σ) = log det Σ + Tr(Σ −1∆Σ) + O(∥∆Σ ∥22) and (Σ + ∆Σ) −1 = Σ −1 − Σ−1∆Σ Σ −1 + O(∥∆Σ ∥22).Taking absolute values and applying Cauchy–Schwarz and spectral norm bounds, (23) |˜ℓc(x) − ℓc(x)| ≤ C(1) Σ ∥∆Σ ∥2 + C(2) Σ ∥∆Σ ∥2 ∥x − μ∥2Σ−1
+
++ ∥∆μ∥Σ−1 ∥x − μ∥Σ−1 + O(∥∆Σ ∥22 + ∥∆μ∥2Σ−1 ),
+
+for constants C(1) Σ , C (2) Σ depending only on ∥Σ−1∥2 (and dimension via standard inequalities). For a pair (i, j ), the log-odds perturbation satisfies by triangle inequality 
+
+|(˜ℓi − ˜ℓj )−(ℓi −ℓj )| ≤ Cμ(∥∆μi∥(Σ ti )−1 +∥∆μj ∥(Σ tj )−1 )+ CΣ(∥∆Σ i∥2+∥∆Σ j ∥2)+ O(·), (24) where Cμ, C Σ absorb bounded factors of ∥x − μtc∥(Σ tc)−1 on the evaluation support. Now set δc := 
+
+∥˜μ tc − μtc∥(Σ tc)−1 and invoke the transport-fidelity bounds used in the corollary, 
+
+δc ≲
+
+q
+
+ε2
+
+> old →new
+
+, ∥ ˜Σ t − Σt∥2 ≲ C1
+
+q
+
+ε2 
+
+> old →new
+
++ C2 εcyc,new , (25) to obtain 
+
+|(˜ℓi − ˜ℓj ) − (ℓi − ℓj )| ≲ Cμ(δi + δj ) + CΣ∥ ˜Σ t − Σt∥2. (26) If the right-hand side is strictly smaller than the Bayes margin mij (x) := |ℓi(x) − ℓj (x)|, then the sign of the log-odds is unchanged and the Bayes decision between i and j at x is preserved, as claimed. A.3 EXPERIMENTAL PROTOCOL 
+
+A.3.1 EXPERIMENTAL SETUP 
+
+We utilize a workstation equipped with an NVIDIA RTX 6000 Ada GPU and a Xeon Gold 6448Y CPU to run all the experiments. 16 Published as a conference paper at ICLR 2026 
+
+Datasets. We evaluate our method on four canonical continual-learning benchmarks CIFAR-100, TinyImageNet, ImageNet-100 and CUB-200. Each benchmark is instantiated with multiple class-incremental task splits so that each class/image is assigned to exactly one incremental task; no raw samples from previous tasks are revisited in later tasks; only the granularity of the partition changes. We use the official train/val (or test) partitions supplied with each dataset. • CIFAR-100 consists of 50,000 training and 10,000 test images of size 32 × 32 drawn from 100 classes. • Tiny-ImageNet contains 100,000 training and 10,000 validation images at 64 × 64 resolu-tion spanning 200 classes. • ImageNet-100 (also referred to as ImageNet-Subset ) includes 130,000 training and 5,000 validation images preprocessed to 224 × 224 for 100 classes. • CUB-200 comprises 11,788 bird photographs—5,994 for training and 5,794 for test-ing—covering 200 fine-grained species. All images are center-cropped and resized to 
+
+224 × 224 to match ImageNet preprocessing. 
+
+Testing. All results are reported with a test batch size of 512 and no test-time augmentations. A.3.2 ACCURACY METRICS 
+
+We evaluate continual learning along three complementary axes: (i) aggregate predictive perfor-mance on seen tasks, (ii) distributional alignment between stored prototypes and the current test distribution, and (iii) near–isometry of the learned transport between old and new representations. This subsection formalizes the first axis. We report the last-task average accuracy Alast , its running mean average incremental accuracy 
+
+Ainc , and the last-task average forgetting Flast . Let a(K) 
+
+> i
+
+denote accuracy on task i after training up to task K, and let |C i| be the number of classes introduced at step i. Then 
+
+Alast =
+
+PKi=1 |C i| a(K)
+
+> i
+
+PKi=1 |C i| , Ainc = 1
+
+K
+
+> K
+
+X
+
+> j=1
+
+A(j) 
+
+> last
+
+, Flast =
+
+PKi=1 |C i| f (K)
+
+> i
+
+PKi=1 |C i| , (27) where f (K) 
+
+> i
+
+= [max 1≤j≤K a(j) 
+
+> i
+
+− a(K) 
+
+> i
+
+]+ and A(j) 
+
+> last
+
+is Alast evaluated at step j.A.3.3 DISTRIBUTION -S IMILARITY EVALUATION METRICS 
+
+To study prototype drift, we compare stored Gaussian prototypes to test-time class statistics under the current backbone. Let fθ (·) ∈ RS denote the feature map, and for each class c let (bμc, bΣc) be the stored prototype. Given a held-out set Dtest  
+
+> c
+
+, we compute 
+
+μ⋆c = 1
+
+|D test  
+
+> c
+
+|
+
+X
+
+> x∈D test
+> c
+
+fθ (x), Σ⋆c = Cov( {fθ (x) : x ∈ D test  
+
+> c
+
+}) ∈ RS×S .
+
+For numerical stability, all expressions involving covariances use Tikhonov regularization eΣ := Σ + εI with a small ε > 0.We report three per-class discrepancies that emphasize complementary aspects of drift; lower values are better. 
+
+(1) Prototype Mean Drift ( μ-L2). 
+
+μ-L2 c = ∥bμc − μ⋆c ∥2. (28) 
+
+(2) Covariance Drift (Frobenius). 
+
+Σ-Fc = ∥bΣc − Σ⋆c ∥F =
+
+r
+
+tr 
+
+h
+
+(bΣc − Σ⋆c )⊤(bΣc − Σ⋆c )
+
+i
+
+. (29) 17 Published as a conference paper at ICLR 2026 
+
+(3) Symmetric KL Between Gaussians. 
+
+DKL (N (μ1, Σ1) ∥ N (μ2, Σ2)) = 12
+
+h
+
+tr(Σ −12 Σ1) + ( μ2 − μ1)⊤Σ−12 (μ2 − μ1) − S + ln det Σ 2
+
+det Σ 1
+
+i
+
+,
+
+(30) with S the feature dimension and inverses/determinants taken on regularized covariances. We report the bi-directional form: 
+
+SymKL c = DKL 
+
+
+
+N (bμc, eΣb
+
+> c
+
+) ∥ N (μ⋆c , eΣ⋆c )
+
+
+
++ DKL 
+
+
+
+N (μ⋆c , eΣ⋆c ) ∥ N (bμc, eΣb
+
+> c
+
+)
+
+
+
+. (31) 
+
+Aggregation over a Class Set. For any per-class statistic mc ∈ { μ-L2 c, Σ-Fc, SymKL c} and class set C (e.g., a task slice), we report its mean and dispersion: 
+
+m = 1
+
+|C| 
+
+X
+
+> c∈C
+
+mc, std( m) = 
+
+s 1
+
+|C| 
+
+X
+
+> c∈C
+
+(mc − m)2. (32) A.3.4 AD-% IN [0 .9, 1.1] 
+
+Finally, to probe geometry preservation of the old ↔new mapping, we measure the fraction of singu-lar values of the composed map that lie in a tight unit band. Consistent with Sec. A.1.1, let ft−1 and 
+
+ft be the frozen previous and current encoders at task t, and let At (old →new) and Dt (new →old) be the learned maps. On a held-out split Vt restricted to the newly introduced classes Ct, extract paired features 
+
+zold = ft−1(x) ∈ RS , znew = ft(x) ∈ RS , x ∈ V t, y (x) ∈ C t,
+
+stack them as Zold , Z new ∈ RS×N , and form least-squares surrogates: 
+
+bDt = ( Zold Z⊤
+
+> new
+
+) ( Znew Z⊤
+
+> new
+
+)†, bAt = ( Znew Z⊤
+
+> old
+
+) ( Zold Z⊤
+
+> old
+
+)†.
+
+Let {σi}Si=1 = σ( bAt bDt) be the singular values. We report 
+
+AD -% in [0 .9, 1.1] = 100 × 1
+
+S
+
+> S
+
+X
+
+> i=1
+
+1
+
+n
+
+0.9 ≤ σi( bAt bDt) ≤ 1.1
+
+o
+
+. (33) (If At or Dt is a single linear layer, its weight can replace the corresponding surrogate.) 
+
+Interpretation. Higher AD -% in [0 .9, 1.1] indicates that AtDt is closer to an isometry with less spectral shrinkage/expansion. This complements Sec. A.3.3: improved near–isometry typically co-incides with lower symmetric KL, indicating better preservation of the class-conditional geometry across tasks. A.4 ADDITIONAL RESULTS AND ABLATIONS 
+
+A.4.1 ADDITIONAL VISUALIZATIONS 
+
+Figure 7 tracks prototype drift on the fixed task-0 validation split over steps t=1 . . . 9 (CIFAR-100, 
+
+T =10 ), reporting the mean L2 shift of class centers ( μ-L2; Eq. 28) and the Frobenius change of covariances ( Σ-Fro; Eq. 29) with mean ±std across classes; smaller is better. Our method exhibits consistently lower center and covariance drift than AdaGauss, indicating closer alignment to the original task-0 distribution, i.e., reduced degradation of old-class statistics as ft evolves. 
+
+Relation to the main findings. These curves complement the diagnostics in Sec. A.3.3: we observe both lower symmetric KL between transported and ground-truth Gaussians and a higher fraction of singular values for AtDt within [0 .9, 1.1] (near-isometry), each pointing to better distributional transport and geometry preservation under our bidirectional + cycle training. A.4.2 ADDITIONAL DETAILS ON DISTILLER /A DAPTER ARCHITECTURE ABLATIONS 
+
+Setup and parity. All adapter/distiller variants in Table 5b are trained under an identical data pipeline, optimization schedule, and loss configuration; only the architectural family of the adapter/distiller changes. Each map takes an S-dimensional feature and returns an S-dimensional output. Unless noted, dropout is disabled and LayerNorms use default ϵ.18 Published as a conference paper at ICLR 2026            
+
+> Figure 7. CIFAR-100 ( T=10 ): Prototype drift on task-0 under continual updates ( ↓). Using the fixed task-0 validation split, for each step t=1 . . . 9we evaluate the model trained up to step t. Left: prototype mean drift
+> μ-L2 (Eq. 28); Right: covariance drift Σ-Frobenius (Eq. 29). Curves show mean ±std over classes (Eq. 32); smaller is better. O URS exhibits consistently lower center and covariance drift than AdaGauss.
+
+Linear. A single affine projection W ∈ RS×S without bias (i.e., z 7 → W z ). This variant is parameter- and compute-light, and serves to illustrate the contribution of our objective under mini-mal capacity. 
+
+MLP (default). Unless stated otherwise, we instantiate the adapter/distiller as a two-layer MLP 
+
+RS → RmS → RS with GELU nonlinearity, no residual connection, and no dropout. We set the width multiplier to m=32 (hidden size 32 S), which matches the capacity used in our main experiments. 
+
+Cross-Attention (XAttn). We use a single cross-attention block with pre-LayerNorm , 8 heads ,and an FFN with SwiGLU and expansion 4× (hidden size 4S), followed by a linear projection back to S; dropout is disabled. Queries are produced from current (student) features and keys/values from frozen previous-task (teacher) features, following the standard encoder–decoder attention pattern (Vaswani et al., 2017). 
+
+Mixture-of-Experts (MoE). We optionally replace the projection MLP with a sparse MoE 
+
+(Switch-style) comprising 4 experts . A lightweight router (LayerNorm + linear) performs top-1 
+
+routing per sample; the selected expert is a SwiGLU FFN with expansion 4× (hidden size 4S) and a linear projection back to S; dropout is disabled. 
+
+Interpretation and scope. Table 5b compares representative lightweight instantiations of Lin-ear/MLP/XAttn/MoE under a common training protocol. Since parameter counts and FLOPs nat-urally co-vary across families, the absolute margins are best read as robustness across common, small-footprint configurations rather than as a strict capacity-matched ranking. 
+
+Symbolic capacity accounting (per map). Let S denote the feature dimension and mS the MLP hidden size. Ignoring biases, LayerNorm, and constants: Linear: Θ( S2)
+
+2-layer MLP: Θ(2 m S 2) (S → mS → S; default m=32) 
+
+1-block XAttn: 4S2
+
+|{z} 
+
+> Q/K/V/O
+
++ 8S2
+
+|{z}  
+
+> FFN (4 ×)
+
+≈ 12 S2
+
+Sparse MoE (4 experts, top-1): O(S2)
+
+| {z } 
+
+> router
+
++ 8S2
+
+|{z} 
+
+> active expert per sample
+
+A.4.3 PARAMETER SENSITIVITY AND CHOICE OF DEFAULT HYPERPARAMETERS 
+
+In the main experiments we did not perform an extensive grid search. Instead, we chose the scales of the bidirectional and cycle-consistency losses based on their rough magnitude: λbi =5 and λcyc =1 
+
+were selected so that the additional terms had a similar order of contribution as the task loss and KD 19 Published as a conference paper at ICLR 2026    
+
+> Table 6: CIFAR-100: Sensitivity of λbi ,λcyc , and α.
+
+Settings T =10 T =20 
+
+λbi λcyc α Alast (%) Ainc (%) Alast (%) Ainc (%) 5 1 1 50.6 63.2 41.5 56.5 0 1 1 47.8 61.8 39.0 54.9 5 0 1 49.4 62.1 40.2 55.8 0 0 1 46.8 60.9 37.9 54.4 5 1 0 49.7 62.3 39.2 55.2 5 1 0.5 51.0 63.4 42.4 56.1 5 1 2 48.7 61.9 42.6 56.5 0.5 1 1 47.4 61.3 39.8 55.3 1 1 1 51.3 63.7 40.0 56.4 10 1 1 47.2 59.9 38.8 53.8 5 0.5 1 50.4 63.1 40.8 55.7 5 2 1 51.9 63.5 42.9 57.0 
+
+loss. For the anti-collapse loss we inherit the default scaling factor α=1 from AdaGauss; our robust formulation preserves the role and typical scale of this regularizer. The parameter-sensitivity study in Table 6 varies λbi ∈ { 0, 0.5, 1, 5, 10 }, λcyc ∈ { 0, 0.5, 1, 2},and α ∈ { 0, 0.5, 1, 2}. Alternative configurations can slightly outperform our default choice on CIFAR-100. Nevertheless, for all main results we retain the original defaults to avoid the impression that gains are driven by aggressive hyperparameter tuning. The bidirectional and cycle-consistency terms improve over the one-directional baseline in most non-degenerate settings, while overly large weights can hurt performance, as expected for strong auxiliary regularization. A.4.4 CHOICE OF CLASSIFIER                    
+
+> Table 7: Linear classifier vs. Bayesian classifier on CIFAR-100.
+> Classifier T=10 T=20
+> Alast ↑Ainc ↑Alast ↑Ainc ↑
+> Bayesian 50.6 63.2 41.5 56.5 Linear (sampling) 51.1 63.7 40.8 55.7
+
+Following common terminology in Gaussian-prototype EFCIL, we refer to our inference rule as the Bayesian classifier, although the implementation follows the Mahalanobis-prototype variant de-scribed in Sec. A.1.2: it retains the quadratic term of the Gaussian score and predicts by distance to stored Gaussian prototypes. We additionally evaluate a linear classifier trained from these Gaus-sians (Table 7). Following the public AdaGauss implementation, we construct a synthetic training set by sampling features from each class-wise Gaussian N (μc, Σc) and optimize a single linear head over all seen classes with standard cross-entropy (denoted Linear (sampling) ). In the EFC literature (Magistri et al., 2024; 2025), this procedure is often referred to as Gaussian rebalancing .As shown in Table 7, the sampling-based linear head closely matches the Bayesian classifier: differ-ences in Alast and Ainc remain below one percentage point for both T =10 and T =20 . This indicates that our conclusions are not sensitive to the choice between the Bayesian/Mahalanobis-prototype inference rule and a Gaussian-sampling linear head. A.5 ADDITIONAL DISCUSSION AND DIAGNOSTICS 
+
+A.5.1 PROTOTYPE -B ASED EFCIL AND GAUSSIAN MODELING IN PRIOR WORK 
+
+Prototype-based strategies are a well-established line of work in exemplar-free class-incremental learning (EFCIL). Broadly, existing methods differ in how they represent class prototypes (means 20 Published as a conference paper at ICLR 2026 vs. Gaussians) and how they use them (direct classification vs. pseudo-feature rehearsal vs. drift compensation). 
+
+Mean prototypes with synthetic feature rehearsal. PASS stores one feature mean per class and performs prototype rehearsal by injecting Gaussian noise around these means to synthesize pseudo-features, which are mixed with current-task data to train the classifier; a self-supervised rotation head is added to further stabilize the backbone. FeTrIL also stores class means, but produces old-class pseudo-features by a geometric translation of real features from the current task, ˆf = fnew + μold −
+
+μnew , and uses these translated features together with new-class features to train a linear classifier. 
+
+Explicit Gaussian prototypes and covariance-aware classification. FeCAM estimates per-class means and covariances and performs Bayes/Mahalanobis classification in this Gaussian space. EFC represents each class as a Gaussian prototype (μc, Σc) and samples from these Gaussians to perform asymmetric prototype rehearsal (PR-ACE), while explicitly compensating prototype drift across tasks. AdaGauss likewise models each class as N (μc, Σc) and introduces an anti-collapse regu-larizer based on the Cholesky factor of Σc to prevent rank deficiency and feature collapse, together with covariance-adaptation mechanisms that update (μ, Σ) across tasks. 
+
+Mean-only drift compensation. LDC stores one mean prototype per class and learns a forward projector that maps old-space means into the new feature space after each task. ADC uses adversari-ally perturbed current-task inputs whose embeddings lie near old-class means and uses the resulting feature displacements to estimate how old means should move in the new space. Neither LDC nor ADC explicitly models full Gaussian structure. 
+
+Our position. Our work does not introduce Gaussian prototypes as a new concept; instead, we build on Gaussian-based EFCIL (FeCAM, EFC, AdaGauss) and mean-based drift compensation (LDC, ADC). Our novelty lies in how prototypes are transported across tasks : we introduce a bidirectional projector with cycle consistency that is trained online during backbone optimization, with theoretical guarantees linking the cycle loss to spectral contraction and classification stability. A.5.2 MEASURING THE ADHERENCE OF FEATURES TO GAUSSIAN ASSUMPTIONS 
+
+On the suitability of multivariate normality tests. Mardia’s multivariate normality test is not well aligned with the geometry and scale of continual-learning vision features. It relies on third- and fourth-order moments (multivariate skewness and kurtosis), and its asymptotic calibration assumes moderate dimension and i.i.d. samples. In high-dimensional settings with complex dependence structures and large sample sizes—as in deep feature spaces of EFCIL benchmarks—this test can become overly restrictive and reject even when deviations are mild and do not affect downstream methods Ebner & Henze (2020); Chen & Xia (2023). Prior analyses also highlight sensitivity to sample size and dimensionality, motivating the use of graphical or geometric diagnostics. Instead of relying on a global hypothesis test, we assess Gaussianity through a geometric, class-wise visualization in a low-dimensional embedding space. For a fixed subset of classes, we periodically extract their validation features across the training sequence, embed them with t-SNE, and over-lay the corresponding fitted class-conditional Gaussians by plotting their one- and two-standard-deviation ellipses. This procedure directly reveals whether the learned representations form com-pact, approximately elliptical clusters that are stable over time. A.5.3 T-SNE S NAPSHOTS OF TASK -0 C LASSES ON CIFAR-100 (10 T ASKS )To better understand how feature distributions evolve over time, we conduct a t-SNE study on the 
+
+balanced CIFAR-100 benchmark with T =10 equally sized tasks. We fix the ten classes introduced at task 0 and, after finishing tasks 0, 3, 6, and 9, extract their validation features and project them with t-SNE. For each snapshot in Figure 8, we fit a Gaussian to the features of each class and visualize its one- and two-standard-deviation regions with solid and dashed ellipses, respectively. Across all stages, the per-class clusters remain roughly unimodal and are well covered by a single Gaussian, rather than fragmenting into multiple disjoint modes. This suggests that the dominant challenges in EFCIL are not due to a gross mismatch of the Gaussian prototype assumption, but rather due to drift of class statistics and reduced separability as the representation evolves. 21 Published as a conference paper at ICLR 2026          
+
+> (a) After task 0. (b) After task 3.
+> (c) After task 6. (d) After task 9.
+> Figure 8. t-SNE of task-0 classes on CIFAR-100 with T=10 . We project validation features of the same ten classes after training tasks 0, 3, 6, and 9. Solid and dashed ellipses mark the one- and two-standard-deviation regions of the fitted Gaussian for each class.
+
+A.5.4 INTUITIVE VIEW OF BIDIRECTIONAL CYCLE CONSISTENCY AND LOW -D RIFT 
+
+REGIMES 
+
+From post-hoc adapters to in-task bidirectional alignment. Most drift-compensation pipelines follow a two-stage pattern: during Stage I the new encoder ft is regularized toward ft−1 (often via distillation), and only in Stage II is an adapter A trained post hoc to map old features into the new space. Our goal is to make this duality explicit and move it inside Stage I: we jointly learn a distiller 
+
+D: znew → zold and an adapter A: zold → znew while the backbone is still being optimized. Intuitively, 
+
+D regularizes ft toward the frozen teacher, while A learns the forward transport used for prototype relocation under the evolving representation. 
+
+Why this is not adversarial training. Cycle consistency in Eq. 7 is a self-consistency constraint rather than an adversarial game: applying D then A (or A then D) should approximately return the original feature on the data support. A key design choice is that both Lbi and Lcyc are implemented with stop-gradient targets: ∥A(zold ) − stopgrad (znew )∥2 updates A only, so A follows the evolving 
+
+ft rather than dragging it; the cycle terms update (A, D ) but not ft, stabilizing the maps without reducing backbone plasticity. 
+
+An intuitive reading of Theorem 1 and Corollary 2. Theorem 1 analyzes the cycle loss in a whitened feature space where each side has identity covariance; the expected cycle error is the squared Frobenius distance between the composed map ˜A ˜D and the identity. Minimizing Lcyc 
+
+therefore encourages a near-isometry on the data support (singular values close to 1), preventing rank/energy loss. Corollary 2 then links transport fidelity of means/covariances to bounded pertur-bations of Bayes scores; if the perturbation is smaller than the margin, old decisions are preserved. 22 Published as a conference paper at ICLR 2026 
+
+Why CUB-200 shows smaller gains. On CUB-200 we fine-tune from an ImageNet-pretrained ResNet-18 with a very low backbone learning rate, so representation drift is modest. In this low-drift regime, the incremental benefit of aggressively regularizing and transporting features is naturally smaller; empirically the method behaves closer to AdaGauss. A.5.5 ON ADA GAUSS , F ULL -C OVARIANCE PROTOTYPES , AND THE NEED FOR ROBUSTNESS 
+
+AdaGauss and full-covariance prototypes. AdaGauss represents each class c with a Gaussian prototype N (μc, Σc) and uses these Gaussians both for classification (via a Bayes classifier) and for Gaussian sampling to train the prototype adapter. To make this feasible and numerically stable, AdaGauss introduces an anti-collapse loss that regularizes class-wise covariance matrices through a Cholesky factorization. 
+
+Why dimensionality reduction is necessary. The Cholesky-based anti-collapse term and Gaussian sampling require each Σc to be symmetric positive-definite. In exemplar-free incremental settings, keeping the feature dimension at 512 (ResNet-18 penultimate layer) often makes reliable full-rank covariance estimation difficult. AdaGauss therefore applies a learned linear reduction layer after the ResNet-18 backbone, mapping 512 → 64 , improving the sample-to-dimension ratio and stabilizing covariance estimation. 
+
+Why dimensionality reduction alone is still not sufficient. Even after projecting to S = 64 , the mini-batch covariance can be non-SPD or ill-conditioned in realistic EFCIL regimes (e.g., small 
+
+B, correlated features, or imbalance), leading to Cholesky failures and unstable scales. We there-fore adopt a robust anti-collapse variant: symmetrization, shrinkage, and jitter (and fallbacks when needed), aimed at guaranteeing numerical stability without changing the role of the regularizer. 
+
+Implications for our method. Following the public AdaGauss codebase, we retain the 512 →64 projection. All Gaussian prototypes, anti-collapse losses, and transport maps are defined in the same S = 64 feature space, enabling direct comparisons and controlled ablations. A.6 LIMITATIONS AND DISCLOSURE 
+
+A.6.1 LIMITATIONS OF IMAGE NET -1K E XPERIMENTS 
+
+Under our current setup, scaling this protocol to the full 1K-class ImageNet dataset would require several weeks of continuous GPU time, making such an experiment unrealistic for the present study. Consequently, we restrict large-scale evaluation to ImageNet-100, whose class count still exposes the challenges of our setup while remaining computationally feasible. A.6.2 LLM U SAGE DISCLOSURE 
+
+We used ChatGPT (OpenAI) as a writing copilot to critique and polish the prose (clarity, tone, and grammar). The model was not used to generate technical content, figures, or results, nor to design experiments or draw conclusions. The authors take full responsibility for all claims and the accuracy of the paper. 23
