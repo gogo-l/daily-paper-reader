@@ -1,0 +1,755 @@
+Title: Unsupervised Continual Clustering via Forward-Backward Knowledge Distillation
+
+URL Source: https://arxiv.org/pdf/2606.07474v1
+
+Published Time: Mon, 08 Jun 2026 01:10:14 GMT
+
+Number of Pages: 27
+
+Markdown Content:
+# Unsupervised Continual Clustering via Forward-Backward Knowledge Distillation 
+
+Mohammadreza Sadeghi, Sareh Soleimani, Zihan Wang, and Narges Armanfard 
+
+Department of Electrical and Computer Engineering, McGill University, Montreal, QC H3A 0E9, Canada, and Mila – Quebec AI Institute, Montreal, QC H2S 3H1, Canada 
+
+Abstract. Unsupervised Continual Learning (UCL) aims to enable neu-ral networks to learn sequential tasks without labels or access to past data. A major challenge in this setting is Catastrophic Forgetting, where models forget previously learned tasks upon learning new ones. This chal-lenge is amplified in UCL due to the absence of labels to guide learning and memory retention. Existing mitigation strategies, such as knowledge distillation and replay buffers, often raise memory and privacy concerns. Moreover, current UCL methods largely overlook clustering-specific ob-jectives. To fill this gap, we introduce Unsupervised Continual Cluster-ing (UCC) and propose Forward-Backward Knowledge Distillation for Continual Clustering (FBCC). FBCC employs a continual teacher net-work with a clustering projector and lightweight task-specific students. Through a dual-phase forward–backward distillation process, the teacher learns new clusters while preserving previously discovered cluster struc-ture without storing past data. FBCC represents a pioneering approach to UCC, demonstrating improved clustering performance across sequen-tial tasks. Experiments on four benchmark datasets demonstrate that FBCC consistently outperforms existing continual learning baselines in clustering accuracy while significantly reducing catastrophic forgetting. 
+
+Keywords: Unsupervised continual learning · Continual clustering ·
+
+Lifelong learning · knowledge distillation · Incremental learning. 
+
+# 1 Introduction 
+
+Continual Learning (CL) [44] aims to enable neural networks to learn a sequence of tasks without revisiting past data. Each task presents a portion of a dataset, inaccessible in its entirety. Existing CL paradigms include supervised continual learning (SCL), semi-supervised continual learning (SeCL), and unsupervised continual learning (UCL). In contrast to SCL and SeCL, UCL operates without labels and focuses on learning stable representations from evolving data streams. Unlike conventional offline learning, where all data are available simultaneously, continual learning must adapt to sequentially arriving tasks while mitigating catastrophic forgetting. For example, in offline unsupervised contrastive learn-ing frameworks, such as [30], an encoder is trained with access to all unlabeled  
+
+> arXiv:2606.07474v1 [cs.LG] 5 Jun 2026 2Authors Suppressed Due to Excessive Length
+
+data simultaneously to learn general-purpose feature representations. These rep-resentations are then leveraged to improve performance on downstream few-shot tasks, where a limited number of labeled samples are available at evaluation time. In contrast, continual learning frameworks such as the one proposed in this pa-per, do not have access to all past data. Instead, they must adapt to new tasks sequentially, without revisiting old samples, while preserving previously learned representations. Existing UCL methods primarily focus on learning stable representations over time [27, 11, 54] and clustering is treated as a downstream procedure ap-plied after representation learning. However, many real-world applications re-quire clustering itself to be the primary objective, where cluster assignments must be discovered and preserved sequentially without access to previous data. To address this gap, we introduce Unsupervised Continual Clustering (UCC), a setting in which cluster structure must be jointly learned and optimized along-side representation learning, and maintained across sequential tasks without la-bels or replay. In UCC, forgetting is reflected not only in representation drift but in degradation of previously discovered cluster assignments. The main challenge of all of the CL approaches is “Catastrophic Forgetting” (CF) [44]. In SCL, SeCL, and UCL, several strategies attempt to mitigate CF. Some use generative replay with discriminator regularization [43], but train-ing generative models is resource-intensive. Others store past samples in replay buffers [27, 21, 28], though privacy concerns often prohibit this. Knowledge dis-tillation (KD) methods [11, 21] transfer insights from previous tasks by storing models from prior tasks in memory, but this is memory-inefficient, particularly for large networks. Moreover, methods like [11] retain only a single past model, which leads to forgetting when faced with many tasks. To overcome these limitations, we propose an innovative solution termed 
+
+Forward-Backward Knowledge Distillation for mitigating CF in the domain of unsupervised Continual Clustering ( FBCC ). In FBCC, we introduce a single continual learner, also referred to as the “teacher”, which comprises a deep neural network with a high number of parameters, together with a cluster projector that maps outputs into a clustering space. For each task, we train a lightweight student model with significantly fewer parameters to specialize in reproducing the representations learned by the teacher for that task. During subsequent tasks, the teacher is trained on new data while being explicitly regularized by previously learned student models through forward knowledge distillation, which constrains the teacher’s representations to remain close to those of the frozen students on past tasks. In this way, knowledge from earlier tasks is progressively consolidated into the teacher without storing past data. To sum up, the main novelties of this paper are as follows: 
+
+– FBCC stands out as the first unsupervised continual clustering framework that jointly integrates representation learning and clustering, in a sequential, no-replay setting. 
+
+– FBCC mitigates catastrophic forgetting through a dual-phase forward-backward knowledge distillation strategy, where a compact, task-specific student is dis-Unsupervised Continual Clustering (FBCC) 3
+
+tilled after each task to guide the teacher in preserving past knowledge while adapting to new tasks. 
+
+– FBCC offers a memory-efficient approach to continual clustering, where task-specific knowledge is stored in specialized light-weight student models rather than storing samples or large-scale models from past tasks. 
+
+– Extensive experiments on four benchmark datasets demonstrate that FBCC consistently outperforms both state-of-the-art unsupervised and supervised continual learning methods in clustering accuracy and forgetting. 
+
+# 2 Related Work 
+
+Unsupervised Continual learning. The primary challenge in CL lies in com-bating CF, a phenomenon involving the loss of performance on previously learned tasks when learning new tasks. Traditional CL approaches mitigate CF using regularization-based methods [19, 29, 3], architectural expansion or parameter isolation strategies [34, 35, 42], and replay-based mechanisms [5, 52, 6]. However, these approaches assume the availability of task- and class-specific labels, which are incompatible with our label-free, no-replay setting. Conversely, unsupervised continual learning, without task and class labels, presents a significantly more complex challenge. Several works employ generative replay or memory-intensive architectures to preserve past representations [31, 32, 47]. For instance, STAM [40] employed an expandable memory architecture designed for processing single-pass data streams by incorporating novelty detection and memory update, while LUMP [27] enhances memory retention by augmenting data and blending new samples with stored representations. These methods refine representations but rely on memory-intensive replay buffers or complex memory architectures, un-suitable in privacy-constrained or low-memory settings. CaSSLe [11] transforms the self-supervised loss into a knowledge distillation approach by associating the present state of a representation with its preceding state. However, CaSSLe and similar methods only retain a single model from the previous task, which becomes inefficient when handling multiple tasks, leading to information loss over time. SCALE [54] addresses CF for non-iid and single-pass data using a self-supervised forgetting loss and online memory update mechanisms. POCON [12] trains an expert network solely for new task, followed by an adaptation-retrospection phase to prevent forgetting. Evolve [53] leverages multiple pretrained models as cloud-based experts to enhance existing self-supervised learning methods on local clients. In contrast, FBCC directly addresses catastrophic forgetting without replay by employing a forward–backward knowledge distillation mechanism. Unlike con-ventional KDs, which are typically for supervised transfer or compression with prior-data access, FBCC applies KD bi-directionally with multiple lightweight students that serve as task-specific memories, thereby extending KD to continual lifelong clustering without replay. In parallel, several prototype-based continual learning methods have been proposed for supervised settings, where clustering is used as an auxiliary mech-4 Authors Suppressed Due to Excessive Length 
+
+anism to summarize labeled class representations and stabilize replay. For in-stance, authors in [1] propose a prototype-based framework with a label-free replay buffer and cluster preservation loss to mitigate catastrophic forgetting in class- and domain-incremental learning. However, their approach relies on class labels during training via supervised contrastive objectives, and clustering serves to compactly represent class structure rather than as the primary learn-ing objective. Similarly, unsupervised continual domain shift learning is studied in [41], where labels are unavailable during continual adaptation but class se-mantics are established through supervised pretraining. Their approach main-tains multiple prototypes per class to model intra-class distributional shifts and preserve classification performance. In contrast, our setting assumes no prede-fined semantic classes, and clusters must be discovered and preserved over time. Prototype-based approaches have also been explored in non-class, task-specific continual learning, such as ProtoDepth [33], which addresses unsupervised con-tinual depth completion under domain shift. In this setting, prototypes act as domain-adaptive feature modifiers for a frozen backbone to mitigate forgetting in a regression task, rather than representing semantic classes or latent clus-ters. Unlike FBCC, ProtoDepth does not perform representation learning for structure discovery and does not aim to discover or preserve cluster identity. 
+
+Deep Clustering. Traditional deep clustering techniques [45, 16, 48] typi-cally involve finding a suitable latent representation (e.g., autoencoder (AE)) for data samples and subsequently employing a clustering algorithm, such as k-means, to assign the latent representation of samples to different clusters. In-corporating representation learning and clustering losses has been shown to yield better performance than traditional deep clustering methods in several studies [13, 38, 50]. For example, DEC [49] utilizes an autoencoder (AE) to jointly assign samples to clusters and refine representations based on the cluster assignments. [13, 38] enhance the performance of DEC by incorporating the reconstruction loss of the autoencoder into the loss function introduced by DEC. [36] employs a general autoencoder for instances that are easily clustered along with separate AEs for difficult-to-cluster data to improve performance. In recent years, contrastive learning has gained significant attention in un-supervised representation learning [51, 2, 8]. Many deep clustering methodolo-gies have seamlessly integrated contrastive learning, resulting in substantial im-provements in deep clustering performance. Contrastive Clustering CC [23] ap-plies contrastive learning at instance and cluster levels, while [39] extends it by incorporating inter-sample relationships in latent space of CC. [9] devises con-trastive loss functions from both sample and class perspectives, thereby fostering the learning of more discriminative representations. Twin Contrastive Learning (TCL) [24] extends CC by jointly performing instance- and cluster-level con-trastive learning, enabling efficient clustering of streaming data where succes-sive batches contain samples from the same fixed set of clusters as in the first batch, with no new classes or clusters appearing in the evolving incoming data. Therefore, it cannot accommodate newly emerging classes, unlike our continual clustering setting. Unsupervised Continual Clustering (FBCC) 5  
+
+> Fig. 1. Overview of the FBCC Framework for Task t: The teacher network, shown in blue, focuses on jointly clustering samples and learning representations for the current task while retaining knowledge of previous tasks with assistance from student networks trained on earlier tasks, depicted in orange. The student network for the current task, shown in green, aims to emulate the teacher network on the current task to assist the teacher in future tasks.
+
+While deep clustering approaches have achieved state-of-the-art performance across various tasks, to the best of our knowledge, no clustering algorithm has been specifically designed to handle data streams, where data clusters arrive se-quentially. To address this gap, we propose FBCC in this paper, a novel approach developed for clustering in streaming data environments. 
+
+# 3 Method 
+
+We introduce the UCC problem which involves learning a sequence of N tasks. Here, the set of tasks is denoted as Ω = {D 1, D2, ..., DN }, where Dt corresponds to the dataset from task t (1 ≤ t ≤ N ). In the UCC setting, although labeled information is not available, it is known that data samples belonging to different tasks are from distinct classes. In other words, if Yi and Yj respectively represent sets of class labels from task i and task j (i̸ = j), then Yi ∩ Y j = ∅. This scenario is similar to unsupervised class-incremental setting [11, 44]; however, no class labels are available during training. Following the clustering literature where the number of clusters is predetermined, we assume that the number of clusters present in every task is known in the UCC setup, while cluster identities and assignments are discovered during training. In our benchmarks, the number 6 Authors Suppressed Due to Excessive Length 
+
+of clusters per task is set equal to the number of underlying semantic classes for evaluation purposes only, and class labels are never used during training. Given the recent success of contrastive clustering methods, we propose train-ing FBCC’s networks using losses inspired by contrastive learning. In line with other contrastive learning methodologies, we employ two sets of augmentations 
+
+a, b on each sample within the dataset Dt = {x1, ..., x |D t|} at task t, yielding 
+
+Dta = {x1a, ..., x |D t|a} and Dtb = {x1b, ..., x |D t|b} respectively. In the following sections, we describe our forward-backward knowledge dis-tillation approach for continual clustering. Firstly, we introduce forward distil-lation, where the teacher is trained to learn the new task t while leveraging knowledge from students 1 to lt−1, whose parameters remain frozen. Here, lt is the index of the student model trained for task t. Conversely, in the backward mode, we propose a novel approach for training the lt-th student to capture the teacher’s representation for task t. In the backward mode, all parameters of students ranging from 1 to lt−1, as well as the teacher encoder, are frozen, and only the parameters of student lt are updated. 
+
+3.1 Forward Knowledge Distillation Training Teacher on the Current Task. We train the teacher model to learn the current task, i.e. Dt, while retaining knowledge from previous tasks. Since we do not have labeled data, we adopt contrastive learning [23, 8] to guide the teacher’s learning process. The model uses two augmentations per sample to produce similar representations while keeping them distinct from others in the batch. Each augmented view is generated by sequentially applying stochas-tic transformations including random resized cropping, horizontal flipping, color jittering, and random grayscale conversion to the same input sample, with full implementation details provided in the appendix. To further separate the cur-rent task’s representations from prior tasks, given the absence of datasets from previous tasks, we enforce distance using prototypes learned from previous tasks ranging from the first task up to task t − 1 as Pt−1. We discuss the way of defining prototypes later in this section. This approach facilitates the preser-vation of task-specific information and aids in reducing interference between tasks, thereby enhancing the model’s performance on sequential learning tasks. As shown in Figure 1, the teacher encoder T (·) produces latent representations 
+
+hTik = T (xik ), where k ∈ { a, b } denotes different augmentations. To reduce di-mensionality and compute contrastive losses, we use lt instance-level projectors 
+
+Ir (·). For 1 ≤ r ≤ lt − 1, Ir (·) maps hSr 
+
+> ik
+
+from the r-th student to zSr 
+
+> ik
+
+= Ir (hSr 
+
+> ik
+
+).We propose to share the the lt-th projector between the lt-th student and the teacher, producing zSlt 
+
+> ik
+
+= Ilt (hSlt 
+
+> ik
+
+) and zTik = Ilt (hTik ). The teacher encoder at task t is trained using the following contrastive loss function (i.e. Lcon ). 
+
+Lcon = 12|B| 
+
+X
+
+> xi∈B
+
+(ℓcon ia + ℓcon ib ) (1) Unsupervised Continual Clustering (FBCC) 7
+
+ℓcon ia = − log ( exp( sim (zTia ,z Tib ))      
+
+> Pj̸=ij∈B
+> P
+> k∈{ a,b }exp( sim (zTia ,z Tjk ))+ P
+> zp ∈P t−1exp( sim (zTia ,z p))
+
+) (2) In this study, sim (.) denotes the cosine similarity between two vectors. Sim-ilar to ℓcon ia , we define ℓcon ib , which measures the similarity between zTib and other samples in the batch B as well as the prototypes set. 
+
+Knowledge Distillation from Students to Teacher. In task t, since data from previous tasks are unavailable, we use student models trained on earlier tasks as memory to help the teacher retain prior knowledge and prevent forgetting. Each student specializes in one past task. Instead of directly matching 
+
+zTik to zSr 
+
+> ik
+
+, which could limit learning new concepts, we draw inspiration from [11] and propose to map zTik using fully connected predictor networks gr (.) to the previous task learned by the r-th student (e.g. zSr 
+
+> ik
+
+), while freezing the parameters of the r-th student and r-th instance-level projector. We apply a contrastive loss as Ldis to align the predictor output with the latent representation of the previous task for the current dataset, as in [11]. With this approach, our teacher network aims to imitate the behavior of stu-dents, which serve as estimations of the previous teacher. Unlike [11], which re-tains only the large-scale network from the last task, we store multiple lightweight students, each preserving knowledge of a specific task. This allows retention of multiple past tasks with far fewer parameters, reducing forgetting when many tasks are encountered. 
+
+Clustering Samples of the Current Task. We use a task-specific cluster-level projector Ct(·) to map teacher representations into a cluster probability space Fk = [ f1k | · · · | fλtk], where k ∈ a, b denotes different augmentations, λt
+
+is the number of clusters for task t, and each fjk is the cluster-assignment prob-ability vector for cluster j. The first and last layers of Ct(·) are denoted as Cfirst 
+
+> t
+
+and Clast  
+
+> t
+
+, respectively. We apply a cluster-level contrastive loss Lclu , inspired by [23], to align probability assignments for similar clusters while separating dissimilar ones. 
+
+Updating Prototype Set. At the end of training task t, we define λt new prototypes that represent the clusters of task t. These prototypes, denoted as 
+
+pv for 1 ≤ v ≤ λt, are used in (1) to ensure that representations of future tasks remain distinct from those learned during the current task. Once new prototypes have been identified for task t, we incorporate them into the existing set of prototypes from preceding tasks Pt−1 to form the updated prototype set 
+
+Pt.Detailed formulations, initialization strategies and additional explanations for knowledge distillation from students to teacher, the task-specific clustering process and prototype computation are provided in the Appendix. 
+
+3.2 Backward Knowledge Distillation 
+
+In each task t, we train a light-weight student encoder ( lt-th student) with sig-nificantly fewer parameters than the teacher encoder to replicate its behavior. 8 Authors Suppressed Due to Excessive Length 
+
+These student models are stored for knowledge distillation in future tasks, help-ing the teacher retain knowledge of clusters from previous tasks. However, in Section 4.3, we demonstrate that considering all previous tasks when training the teacher for the current task is not essential. Therefore, we propose keeping up to M trained lightweight student encoders, where M is a hyperparameter (with 1 < M ≤ N ) that defines the maximum number of student models stored in memory at once. For t ≤ M , all previously trained students are retained and used for knowledge distillation in subsequent tasks. When t > M , only the most recent M students are kept, and older ones are discarded. The optimal value of M is determined by balancing memory usage and performance gain, as shown in Section 4.3. In our experimental evaluation on fixed benchmarks, N
+
+is known only for analysis purposes to study the trade-off between performance and the number of retained students. Accordingly, M = ⌈N/ 2⌉ is selected as a representative operating point, since further increasing M yields diminishing improvements in average accuracy and average forgetting while incurring addi-tional memory overhead as discussed in Section 4.3. The total parameters stored across these M students remain smaller than that of the teacher encoder, pro-viding better memory efficiency than methods such as [11], which store the full teacher network from the current task for knowledge distillation in subsequent tasks, as shown in Section 6 of the Appendix. The student is trained via Lstu 
+
+to (1) match the teacher’s representations and (2) preserve the structural rela-tionships between samples in a batch, enabling it to learn both output features and their inter-sample relations. Detailed loss formulations and explanations are provided in Appendix. 
+
+3.3 Overall Training Scheme 
+
+For each task t, FBCC alternates between forward distillation, where the teacher is trained using Lcon + Ldis + Lclu , and backward distillation, where the lt-th student is trained using Lstu .After completing training on the final task, the cluster assignments for all samples are obtained by leveraging the task-specific clustering spaces learned and stored during FBCC’s alternating forward and backward distillation, mapping each sample to the last layers trained for each task and selecting the index of the maximum value. Storing these task-specific cluster layers ensures that features from past tasks can still be mapped into their corresponding learned cluster spaces at test time, enabling accurate cluster assignment and performance evaluation without retraining. The pseudo-code for the FBCC training procedure (Algorithm 1) and the details of the final cluster assignment for samples are provided in the appendix. 
+
+# 4 Experiments 
+
+In this section, we conduct comprehensive experiments to illustrate the effec-tiveness of our proposed method. We assess our model’s performance on four Unsupervised Continual Clustering (FBCC) 9
+
+challenging computer vision benchmark datasets by selecting certain classes as tasks in an incremental fashion: CIFAR-10 [20] (with 10 classes and 5 tasks), CIFAR-100 [20] (with 100 classes and 10 tasks), Tiny-ImageNet [10] (with 200 classes and 10 tasks), and ImageNet100 [10] (with 100 classes and 10 tasks). To train our model, we concatenate the train and test sets of the datasets, a common practice in clustering research (e.g., [37, 36, 23, 39]). As classes are disjoint across tasks, both the class identities and their sample proportions vary from task to task, resulting in a non-stationary data distri-bution. In contrast to experimental settings in which each task contains the same set of classes, yielding a stationary distribution and representing only new data rather than genuinely new tasks [46], our method explicitly models realistic scenarios where tasks arrive with different classes and varying class proportions. 
+
+Implementation Details. We use ResNet-18 [14] as the teacher network, which has approximately 11.5 million parameters. For the student networks, we employ SqueezeNet 1.1 with around 1.2 million parameters. To match the output dimension of SqueezeNet to ResNet-18, we add a single-layer fully connected network at the end of SqueezeNet. Instance projectors and predictors are 2-layer fully connected networks with dimensions d −→ 512 −→ 128 (d = 512 for projectors, d = 128 for predictors). The cluster projector is a 2-layer network with dimensions 512 −→ 512 −→ λt, where λt is the number of clusters in the task. The first layer of the cluster projector is shared, and the last layer is stored for cluster prediction. Batch size is 256 in all experiments. 
+
+Metrics. We evaluate the performance of our clustering model using two key metrics: average clustering accuracy (ACC) and average forgetting (F), where ACC is a widely used metric for assessing clustering performance and average forgetting is a common metric used to measure how much information the model has forgotten about previous tasks. ACC and F are defined as follows: ACC = 1
+
+N
+
+> N
+
+X
+
+> t=1
+
+ACC t, N (3) F = 1
+
+N − 1
+
+> N−1
+
+X
+
+> i=1
+
+max 
+
+> t∈{ 1,.., N−1}
+
+(ACC i,t − ACC i, N), (4) where ACC i,j is ACC of task i at the end of training of task j.
+
+4.1 Comparison Results 
+
+To the best of our knowledge, no existing unsupervised continual learning algo-rithm is designed explicitly for the clustering task. Therefore, in this section, we compare our proposed FBCC algorithm with state-of-the-art UCL algorithms such as CCL [25], STAM [40], LUMP [27], CaSSLe [11], and POCON [12]. Also, we compare our FBCC with two state-of-the art SCL method Co 2L [7] and OCD-Net [22] on four benchmark datasets. Note that Co 2L and OCD-Net are supervised methods that make use of data labels during their training phase. 10 Authors Suppressed Due to Excessive Length 
+
+Table 1. FBCC performance comparison in terms of ACC (%) and F (%) .                                                                                                    
+
+> Algorithms CIFAR-10 CIFAR-100 Tiny-ImageNet ImageNet100 ACC (↑)F(↓)ACC (↑)F(↓)ACC (↑)F(↓)ACC (↑)F(↓)
+> CC (offline) 79.00 -42.90 -14.00 -47.60 –Co 2L (SCL) 28.35 14.05 19.88 10.30 8.69 4.95 23.12 10.34 OCD-Net (SCL) 40.41 7.03 18.06 7.46 7.97 5.31 19.83 8.41 CCL 36.56 6.21 19.59 8.51 8.21 4.68 24.03 9.33 STAM 39.61 5.15 25.34 6.25 9.21 4.26 28.76 8.53 LUMP 56.43 12.76 19.53 6.16 10.53 2.51 32.70 7.63 CaSSLe 40.56 3.28 36.67 3.92 17.45 2.69 41.53 5.29 POCON 57.20 3.59 35.29 4.28 16.25 3.54 39.28 5.88
+> FBCC 75.28 ±0.812.29 ±0.2938.73 ±0.643.62 ±0.2118.36 ±0.322.00 ±0.2743.28 ±0.664.79 ±0.48
+
+We follow a widely-used method in the field, as described in [54], by using the spectral clustering algorithm on the latent representations learned by other algo-rithms. This allows us to compute and report ACC and F for these techniques. The comparison results are shown in Table 4. For each dataset, we conducted 5 experiments on FBCC using different random initializations and reported the average results along with the confidence intervals in this table. Moreover, we compare our FBCC with a baseline CC [23] algorithm. CC possesses the flexi-bility to define its loss function using any pair of samples from distinct clusters, rendering it more potent compared to FBCC, which, in each step, only has ac-cess to partial clusters. Consequently, we employ CC as a proxy upper bound for assessing the performance of our algorithm. Note that the lower performance of CC on the Tiny-ImageNet compared to FBCC can be associated with the fact that CC is a memory-hungry algorithm, and running it for more than 256 samples per batch is practically impossible [39, 23] while the given 256 samples might not be enough for defining relationship between samples when dealing with numerous clusters like the case of Tiny-ImageNet. Yet, CC serves as a proper upper bound for datasets with a small number of classes, such as CIFAR-10, CIFAR-100 and ImageNet100. As illustrated in Table 4, FBCC demonstrates notable superiority over alternative algorithms concerning both ACC and F. Notably, FBCC surpasses Co 2L and OCD-Net, which learns latent representa-tions of data in a supervised manner, and the state-of-the-art UCL algorithm, CaSSLe, while employing fewer parameters. Specifically, FBCC utilizes a total of 15.1m parameters for CIFAR-10 and 17.5m for CIFAR-100, Tiny-ImageNet and ImageNet100, whereas CaSSLe employs 29m parameters across all datasets. FBCC’s advantage lies in two aspects: first, it is specifically designed for cluster-ing tasks, jointly learning data representations and cluster assignments, unlike other UCL methods that focus only on representation learning; second, it pre-serves knowledge from previous tasks through a small set of specialized student models that mimic the teacher’s task-specific representations. 
+
+4.2 Ablation Study Effectiveness of Prototypes in Forward Knowledge Distillation. To demonstrate the effectiveness of including prototypes learned from the previous task (i.e., Pt−1) during training in the forward distillation phase, we propose to Unsupervised Continual Clustering (FBCC) 11                                                      
+
+> Table 2. Ablation study of FBCC in terms of ACC (%) and F (%) .
+> Algorithms CIFAR-10 CIFAR-100 Tiny-ImageNet ImageNet100 ACC (↑)F(↓)ACC (↑)F(↓)ACC (↑)F(↓)ACC (↑)F(↓)
+> FBCC w/o Pro 75.00 2.19 37.61 4.10 17.91 2.37 42.47 5.15 FBCC w/o KD 67.54 9.21 32.47 13.31 14.28 6.58 37.17 12.89 FBCC + CaSSLe 70.69 4.63 35.21 6.41 15.28 3.01 39.62 6.94
+> FBCC 75.28 2.29 38.73 3.62 18.36 2.00 43.28 4.79
+
+exclude prototypes and focus solely on the contrastive loss, i.e., we remove the second term in the denominator of Equation (2). All other model configurations remain unchanged. This setup is labeled as FBCC w/o Pro in Table 2. Upon comparing the results obtained from FBCC and FBCC w/o Pro, it is evident that the inclusion of prototypes in forward distillation leads to improved ACC and F across various tasks. This enhancement is attributed to our model’s abil-ity to effectively distinguish between data from the current task and prototypes, which serve as representatives of previous tasks. 
+
+Effectiveness of Students in Forward Knowledge Distillation. In Ta-ble 2, we present a comparison of our proposed method with two alternative configurations in terms of ACC and F. In one of these configurations, denoted as FBCC w/o KD, we exclude the knowledge distillation loss from students to the teacher (i.e., Ldis ) when updating the parameters of the teacher encoder. In the second configuration, inspired by [11], instead of training multiple students, we employ a strategy where we utilize a previously trained teacher model to mit-igate catastrophic forgetting. We freeze the parameters of this copied network, and the knowledge distillation loss is defined in [11]. This configuration is labeled as FBCC + CaSSLe in Table 2. If we compare FBCC w/o KD with FBCC, we observe approximately a 5.88% improvement in terms of ACC and 7.05% improvement in terms of F across all datasets. This improvement is primarily attributed to the effectiveness of knowl-edge distillation from students to the teacher using Ldis in retaining knowledge from previous tasks. Moreover, upon comparing results obtained from FBCC + CaSSLe with those from FBCC, we can conclude that the effectiveness of having multiple students lies in retaining knowledge from more than one previous task. It is worth not-ing that the number of parameters for FBCC on CIFAR-10, CIFAR-100, Tiny-ImageNet and ImageNet100 are 15.1m, 17.5m, 17.5m, and 17.5m, respectively, while the number of parameters for FBCC + CaSSLe for all datasets is 29m. Our FBCC achieves better results in terms of 3.58% improvement in ACC and exhibits 2.03% improvement in terms of F across all datasets despite having fewer parameters. 12 Authors Suppressed Due to Excessive Length   
+
+> Fig. 2. Average ACC and Average Forgetting of different values of M
+
+4.3 Effect of Number of Students in Forward Knowledge Distillation. 
+
+In this section, we analyze the impact of the number of students (denoted as 
+
+M ), varied from 2 to N , on the performance of FBCC, measured by the average accuracy (ACC) and average forgetting rate (F), across CIFAR-10, CIFAR-100 and Tiny-ImageNet. The results are presented in Figure 2. As shown in the figure, a trade-off is observed between the performance of FBCC and the memory usage required for training the FBCC model. When the number of students increases, the model’s ability to retain knowledge from previous tasks improves, albeit at the cost of higher memory consumption. As illustrated in Figure 2, an elbow-shaped trend emerges in the performance curve. Specifically, increasing M from 2 to ⌈ N 
+
+> 2
+
+⌉ results in a notable performance improvement in terms of ACC and F, which can be attributed to the model’s enhanced ability to retain information from earlier tasks. However, when M is further increased from ⌈ N 
+
+> 2
+
+⌉ to N , the performance gains become marginal. This may be due to the increased number of students placing a greater burden on the teacher to retain knowledge from too many previous tasks, potentially reducing its ability to effectively learn new tasks. Based on these observations, we adopted M = ⌈ N 
+
+> 2
+
+⌉. This value captures most of the benefit of larger M while avoiding the memory and compute overhead associated with storing and distilling from too many student models. Therefore, the N is set to 3 for CIFAR-10, and 5 for CIFAR-100, Tiny-ImageNet, and ImageNet-100. 
+
+4.4 Effect of Teacher Architecture 
+
+In this section, we analyze the impact of various teacher architectures on the CIFAR-100 dataset, focusing on the performance of ResNet-18, ResNet-34, and Unsupervised Continual Clustering (FBCC) 13 
+
+ResNet-50 as teacher networks. The results, summarized in Table 3, demonstrate that deeper architectures, such as ResNet-34 and ResNet-50, outperform ResNet-18. This improvement can be attributed to their enhanced capacity for capturing complex patterns and relationships within the data, leading to superior feature extraction. However, for consistency and fair comparison with other methods including [11], [12], [25], and [27] that use ResNet-18 as the continual learner, we also employ ResNet-18 in our experiments. This confirms that the success of FBCC is not simply due to using a more sophisticated teacher network.             
+
+> Table 3. Effect of different teacher architecture in terms of ACC (%) and F (%) .
+> Algorithms CIFAR-100 ACC (↑)F(↓)
+> ResNet-18 38.73 3.62 ResNet-34 39.91 3.29 ResNet-50 41.06 3.07
+
+Additional analyses are provided in the appendix, including: (i) the effective-ness of FBCC in heterogeneous tasks, (ii) the impact of backward distillation when tested with three different student architectures, (iii) the efficacy of FBCC in tackling tasks with highly imbalanced sample distributions, (iv) semantically proximal class groupings, e.g., CIFAR-100 super-class–based task definitions, and (v) an efficiency comparison of FBCC against existing UCL benchmarks . 
+
+# 5 Conclusion 
+
+In conclusion, while UCL shows promise for sequential learning without labels, the lack of unsupervised continual clustering methods remains a challenge, par-ticularly due to catastrophic forgetting (CF). Existing CF solutions such as knowledge distillation and replay buffers have limitations. To address this, we propose FBCC, which combines a continual teacher network with lightweight task-specific students. Through forward and backward distillation, FBCC en-ables incremental cluster discovery while preserving previously learned struc-ture in a memory-efficient manner. Experiments on four benchmark datasets demonstrate that FBCC consistently outperforms existing UCL and SCL meth-ods in both clustering accuracy and forgetting. These results highlight FBCC as a practical and scalable solution for continual clustering in dynamic, streaming environments.  
+
+> Acknowledgments. This work was supported by the Natural Sciences and Engineer-ing Research Council of Canada (NSERC) and the Fonds de recherche du Québec -Nature et technologies (FRQNT).
+
+14 Authors Suppressed Due to Excessive Length 
+
+Disclosure of Interests. The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper. 
+
+Declaration of Generative AI in the writing process. Generative AI tools were used to assist with formatting and language refinement. The authors reviewed and edited the output and take full responsibility for the final manuscript. 
+
+# References 
+
+1. Aghasanli, A., Li, Y., Angelov, P.: Prototype-based continual learning with label-free replay buffer and cluster preservation loss. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW). pp. 6545–6554 (2025) 2. Albelwi, S.: Survey on self-supervised learning: auxiliary pretext tasks and con-trastive learning methods in imaging. Entropy 24 (4), 551 (2022) 3. Aljundi, R., Babiloni, F., Elhoseiny, M., Rohrbach, M., Tuytelaars, T.: Memory aware synapses: Learning what (not) to forget. In: Proceedings of the European Conference on Computer Vision (ECCV) (September 2018) 4. Alkhulaifi, A., Alsahli, F., Ahmad, I.: Knowledge distillation in deep learning and its applications. PeerJ Computer Science 7, e474 (2021) 5. Arani, E., Sarfraz, F., Zonooz, B.: Learning fast, learning slow: A general contin-ual learning method based on complementary learning system. In: International Conference on Learning Representations (ICLR) (2022) 6. Ashfahani, A., Pratama, M.: Unsupervised continual learning in streaming envi-ronments. IEEE Transactions on Neural Networks and Learning Systems 34 (12), 9992–10003 (2022) 7. Cha, H., Lee, J., Shin, J.: Co2l: Contrastive continual learning. In: Proceedings of the IEEE/CVF International conference on computer vision. pp. 9516–9525 (2021) 8. Chen, T., Kornblith, S., Norouzi, M., Hinton, G.: A simple framework for con-trastive learning of visual representations. arXiv preprint arXiv:2002.05709 (2020) 9. Dang, Z., Deng, C., Yang, X., Huang, H.: Doubly contrastive deep clustering. arXiv preprint arXiv:2103.05484 (2021) 10. Deng, J., Dong, W., Socher, R., Li, L.J., Li, K., Fei-Fei, L.: Imagenet full (fall 2011 release) 11. Fini, E., Da Costa, V.G.T., Alameda-Pineda, X., Ricci, E., Alahari, K., Mairal, J.: Self-supervised models are continual learners. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 9621–9630 (2022) 12. Gomez-Villa, A., Twardowski, B., Wang, K., van de Weijer, J.: Plasticity-optimized complementary networks for unsupervised continual learning. In: Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV). pp. 1690–1700 (2024) 13. Guo, X., Gao, L., Liu, X., Yin, J.: Improved deep embedded clustering with local structure preservation. In: Proceedings of the 26th International Joint Conference on Artificial Intelligence. p. 1753–1759. IJCAI’17, AAAI Press (2017) 14. He, K., Zhang, X., Ren, S., Sun, J.: Deep residual learning for image recognition. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 770–778 (2016) Unsupervised Continual Clustering (FBCC) 15 15. Howard, A.G., Sandler, M., Chu, G., Chen, L.C., Chen, B., Tan, M., Wang, W., Zhu, Y., Pang, R., Vasudevan, V., Le, Q.V., Adam, H.: Searching for mobilenetv3 pp. 1314–1324 (2019) 16. Huang, P., Huang, Y., Wang, W., Wang, L.: Deep embedding network for cluster-ing. In: 2014 22nd International Conference on Pattern Recognition. pp. 1532–1537 (2014) 17. Iandola, F.N., Han, S., Moskewicz, M.W., Ashraf, K., Dally, W.J., Keutzer, K.: Squeezenet: Alexnet-level accuracy with 50x fewer parameters and< 0.5 mb model size. arXiv preprint arXiv:1602.07360 (2016) 18. Iandola, F.N., Han, S., Moskewicz, M.W., Ashraf, K., Dally, W.J., Keutzer, K.: Squeezenet: Alexnet-level accuracy with 50x fewer parameters and< 0.5 mb model size. arXiv preprint arXiv:1602.07360 (2016) 19. Jung, S., Ahn, H., Cha, S., Moon, T.: Continual learning with node-importance based adaptive group sparse regularization. In: Proceedings of the 34th Interna-tional Conference on Neural Information Processing Systems. NIPS’20, Curran Associates Inc., Red Hook, NY, USA (2020) 20. Krizhevsky, A., Nair, V., Hinton, G.: Cifar-10 (canadian institute for advanced research), http://www.cs.toronto.edu/~kriz/cifar.html 
+
+21. Li, J., Ji, Z., Wang, G., Wang, Q., Gao, F.: Learning from students: Online con-trastive distillation network for general continual learning. In: Proc. 31st Int. Joint Conf. Artif. Intell. pp. 3215–3221 (2022) 22. Li, J., Ji, Z., Wang, G., Wang, Q., Gao, F.: Learning from students: Online con-trastive distillation network for general continual learning. In: Proc. 31st Int. Joint Conf. Artif. Intell. pp. 3215–3221 (2022) 23. Li, Y., Hu, P., Liu, Z., Peng, D., Zhou, J.T., Peng, X.: Contrastive clustering. In: Proceedings of the AAAI Conference on Artificial Intelligence. vol. 35, pp. 8547– 8555 (2021) 24. Li, Y., Yang, M., Peng, D., Li, T., Huang, J., Peng, X.: Twin contrastive learning for online clustering. International Journal of Computer Vision 130 (9), 2205–2221 (2022) 25. Lin, Z., Wang, Y., Lin, H.: Continual contrastive learning for image classification. In: 2022 IEEE International Conference on Multimedia and Expo (ICME). pp. 1–6. IEEE (2022) 26. Ma, N., Zhang, X., Zheng, H.T., Sun, J.: Shufflenet v2: Practical guidelines for efficient cnn architecture design. In: Proceedings of the European conference on computer vision (ECCV). pp. 116–131 (2018) 27. Madaan, D., Yoon, J., Li, Y., Liu, Y., Hwang, S.J.: Representational continuity for unsupervised continual learning. arXiv preprint arXiv:2110.06976 (2021) 28. Mai, Z., Li, R., Kim, H., Sanner, S.: Supervised contrastive replay: Revisiting the nearest class mean classifier in online class-incremental continual learning. In: Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-tion. pp. 3589–3599 (2021) 29. Paik, I., Oh, S., Kwak, T., Kim, I.: Overcoming catastrophic forgetting by neuron-level plasticity control. In: Proceedings of the AAAI Conference on Artificial In-telligence (2019) 30. Poulakakis-Daktylidis, S., Jamali-Rad, H.: Beclr: Batch enhanced contrastive few-shot learning (2024), arXiv:2402.02444 31. Ramapuram, J., Gregorova, M., Kalousis, A.: Lifelong generative modeling. Neu-rocomputing 404 , 381–400 (2020) 16 Authors Suppressed Due to Excessive Length 32. Rao, D., Visin, F., Rusu, A.A., Teh, Y.W., Pascanu, R., Hadsell, R.: Continual un-supervised representation learning. In: Advances in Neural Information Processing Systems (NeurIPS 2019) (2019) 33. Rim, P., Park, H., Gangopadhyay, S., Zeng, Z., Chung, Y., Wong, A.: Protodepth: Unsupervised continual depth completion with prototypes. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 6304–6316 (2025) 34. Rusu, A.A., Rabinowitz, N.C., Desjardins, G., Soyer, H., Kirkpatrick, J., Kavukcuoglu, K., Pascanu, R., Hadsell, R.: Progressive neural networks (2022) 35. Rypeść, G., Cygert, S., Khan, V., Trzcinski, T., Zieliński, B.M., Twardowski, B.: Divide and not forget: Ensemble of selectively trained experts in continual learning. In: The Twelfth International Conference on Learning Representations (2024) 36. Sadeghi, M., Armanfard, N.: Deep multi-representation learning for data clustering. TechRxiv (2022) 37. Sadeghi, M., Soleimani, S., Armanfard, N.: Deep clustering with self-supervision using pairwise similarities. IEEE Access (2025) 38. Sadeghi, M., Armanfard, N.: Idecf: Improved deep embedding clustering with deep fuzzy supervision. In: 2021 IEEE International Conference on Image Processing (ICIP). pp. 1009–1013 (2021) 39. Sadeghi, M., Hojjati, H., Armanfard, N.: C3: Cross-instance guided contrastive clustering. The 34th British Machine Vision Conference (BMVC) (2023) 40. Smith, J., Taylor, C., Baer, S., Dovrolis, C.: Unsupervised progressive learning and the stam architecture. Proceedings of the Thirtieth International Joint Conference on Artificial Intelligence (2021) 41. Sun, H., Zhang, Y., Xu, L., Jin, S., Luo, P., Qian, C., Liu, W., Chen, Y.: Unsuper-vised continual domain shift learning with multi-prototype modeling. In: Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 10131–10141 (2025) 42. Wang, L., Zhang, X., Li, Q., Zhang, M., Su, H., Zhu, J., Zhong, Y.: Incorporating neuro-inspired adaptability for continual learning in artificial intelligence. Nature Machine Intelligence 5(12), 1356–1368 (2023) 43. Wang, L., Yang, K., Li, C., Hong, L., Li, Z., Zhu, J.: Ordisco: Effective and effi-cient usage of incremental unlabeled data for semi-supervised continual learning. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 5383–5392 (2021) 44. Wang, L., Zhang, X., Su, H., Zhu, J.: A comprehensive survey of continual learning: Theory, method and application. arXiv preprint arXiv:2302.00487 (2023) 45. Wang, X., Wang, L.: Research on intrusion detection based on feature extraction of autoencoder and the improved k-means algorithm. In: 2017 10th International Symposium on Computational Intelligence and Design (ISCID). vol. 2, pp. 352– 356. IEEE (2017) 46. Wang, Z., Wang, X., Zhang, S.: Mostream: A modular and self-optimizing data stream clustering algorithm. In: IEEE International Conference on Data Mining (ICDM). pp. 500–509 (2024) 47. Wu, C., Herranz, L., Liu, X., Wang, Y., van de Weijer, J., Raducanu, B.: Memory replay gans: Learning to generate images from new categories without forgetting. In: Advances in Neural Information Processing Systems (NeurIPS 2018) (2018) 48. Wu, W., Wang, W., Jia, X., Feng, X.: Transformer autoencoder for k-means ef-ficient clustering. Engineering Applications of Artificial Intelligence 133 , 108612 (2024) Unsupervised Continual Clustering (FBCC) 17 49. Xie, J., Girshick, R., Farhadi, A.: Unsupervised deep embedding for clustering analysis. In: Proceedings of the 33rd International Conference on International Conference on Machine Learning - Volume 48. p. 478–487. ICML’16, JMLR.org (2016) 50. Yang, B., Fu, X., Sidiropoulos, N.D., Hong, M.: Towards k-means-friendly spaces: Simultaneous deep learning and clustering. In: Proceedings of the 34th Interna-tional Conference on Machine Learning (ICML). pp. 3861–3870 (2017) 51. Yang, Z., Li, K., Huang, Z., Xu, Z., Zhu, X., Xiao, Y.: A combined perspective self-supervised contrastive learning framework for human activity recognition in-tegrating instance prediction and clustering. Engineering Applications of Artificial Intelligence 162 , 112317 (2025) 52. Yoon, J., Madaan, D., Yang, E., Hwang, S.J.: Online coreset selection for rehearsal-based continual learning. In: International Conference on Learning Representations (ICLR) (2022) 53. Yu, X., Rosing, T., Guo, Y.: Evolve: Enhancing unsupervised continual learning with multiple experts. In: Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV). pp. 2366–2377 (2024) 54. Yu, X., Guo, Y., Gao, S., Rosing, T.: Scale: Online self-supervised lifelong learn-ing without prior knowledge. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 2483–2494 (2023) 18 Authors Suppressed Due to Excessive Length 
+
+# A Implementation Details 
+
+In Section 4.3 of the main manuscript, we demonstrate that considering all pre-vious tasks in training the current teacher is not essential. We propose train-ing up to M light-weight student encoders, where M is a hyperparameter with 
+
+1 < M ≤ N , to alleviate catastrophic forgetting. Specifically, when t < M , we train t students, and when t ≥ M , we retain the last M students while removing all others from memory. Henceforth, we denote the number of students for task t
+
+as lt = 1{t < M }t + 1{t ≥ M }M , where 1{.} is an indicator function. The r-th student encoder is denoted as Sr (.), where 1 ≤ r ≤ lt. The latent representations of the r-th student encoder for xik is denoted as hSr 
+
+> ik
+
+= Sr (xik ). Hereafter, we utilize the notation r to denote indices ranging from 1 to lt, i.e. 1 ≤ r ≤ lt.
+
+A.1 Forward Knowledge Distillation Knowledge Distillation from Students to Teacher. Given the well-studied effectiveness of utilizing contrastive loss between the output of the predictor and the latent representation of the previous task for the current dataset in [11], we define our loss as follows: 
+
+Ldis = 12|B| 
+
+X
+
+> xi∈B
+
+(ℓdis ia + ℓdis ib ), (5) 
+
+ℓdis ia =
+
+− 1
+
+> lt−1
+
+P 
+
+> 1≤r<l t
+
+log( exp( sim (gr (zTia ),∆ (zSr ia )))      
+
+> Pj̸=ij∈B
+> P
+> k∈{ a,b }exp( sim (gr(zTia ),∆ (zSr jk )))
+
+) (6) where ∆(.) denotes the detaching operation, in which we detach vectors from a network and do not have a backward path to this network from our loss. With this approach, our teacher network aims to imitate the behavior of students, which serve as estimations of the previous teacher. The primary distinction between our proposed distillation framework and [11] lies in our approach to addressing the catastrophic forgetting issue. We train multiple light-weight stu-dents, each capable of serving as a reliable estimation of our teacher network, allowing us to remember more than one previous task while storing a lower num-ber of parameters in memory. In contrast, [11] relies solely on the large-scale deep network learned in the previous task, potentially leading to forgetting of the ini-tial tasks when confronted with numerous tasks. Moreover, in supplementary material, we elucidate the significance of retaining memories of more than one previous task in mitigating the catastrophic forgetting issue. 
+
+Clustering Samples of the Current Task. To effectively cluster the data samples from the current task, we employ a method that combines the represen-tation learning of the teacher model with clustering. The teacher model processes each sample and generates a representation that is passed through a clustering layer specifically designed for the task at hand. This clustering layer helps assign each data point to one of the predefined clusters. Inspired by [23], for clustering Unsupervised Continual Clustering (FBCC) 19 
+
+samples belonging to Dt, we propose to train a cluster-level projector network for task t, denoted by Ct(·). This network consists of a 2-layer fully connected network followed by a softmax function, which maps the latent representation of the teacher encoder to a suitable space designed for the clustering task. The first layer and the last layer of Ct(·) are denoted as Cfirst  
+
+> t
+
+and Clast  
+
+> t
+
+, respectively, i.e. Ct = Clast  
+
+> t
+
+(Cfirst  
+
+> t
+
+). At the beginning of task t, where 2 ≤ t ≤ N , we initialize 
+
+Cfirst  
+
+> t
+
+with Cfirst  
+
+> t−1
+
+. This initialization is intended to retain the information from previous tasks during this stage. The output of Cfirst  
+
+> t
+
+for sample xik is denoted by ˆhik = Cfirst  
+
+> t
+
+(T (xik )) . Also, we propose to store Clast  
+
+> t−1
+
+in memory for use dur-ing the test phase. Within Clast  
+
+> t
+
+, we allocate λt neurons to transform ˆhik into a specialized space designed for the clustering of data samples within the current task. We initialize Clast  
+
+> t
+
+with random values. For instance, if we assume 2 clusters per task, in Figure 1 of the main manuscript, for the new task, we add two new neurons, shown in dark blue, to create Clast  
+
+> t
+
+. Also, we store neurons of previous tasks shown in light blue in memory. In every task, for a batch of data B, we create two augmentations of the batch to obtain Bk, where k ∈ { a, b }. We then pass these two augmented batches to the teacher network and the cluster-level projector to obtain Fk = Ct(T (Bk)) ,where Fk = [ f1k|f2k|... |fλtk] ∈ R|B|× λt , and fjk ∈ R|B| represents the probabil-ity vector for assigning samples from Bk to cluster j. Inspired by [23], we apply contrastive loss on the features of Fk (e.g., fjk ) instead of applying the con-trastive loss between samples. The motivation stems from the derivation of Fa
+
+and Fb from two augmentations of the same batch. Therefore, similar clusters represented in Fa and Fb (e.g. fia and fib ) are expected to possess matching probability assignments and ideally be situated far apart from dissimilar clus-ters. This strategy is designed to promote distinct and well-separated clusters, thereby improving the overall quality of the clustering process. The loss is defined as follow: 
+
+Lclu = 12λtλtX
+
+> i=1
+
+(ℓclu ia + ℓclu ib ) − H(F ), (7) 
+
+ℓclu ia = − log( exp( sim (fia , f ib )) 
+
+Pλt  
+
+> j=1 j̸=i
+
+P 
+
+> k∈{ a,b }
+
+exp( sim (fia , f jk ) ), (8) where H(F ) = P
+
+> k∈{ a,b }
+
+Pλt 
+
+> j=1
+
+−Q (fjk ) log( Q(fjk )) is entropy of cluster assign-ments probabilities, where Q(fjk ) = || fjk || 1/|| Fk|| 1 and || .|| 1 denotes the ℓ1
+
+norm. We maximize the entropy to avoid the trivial solution of converging all assignments to one cluster. 
+
+Updating Prototype Set. At the end of training of task t, we propose to define λt new prototypes that are representatives of task t. These prototypes, denoted as pv for 1 ≤ v ≤ λt, are intended for use in Equation (1) of the main manuscript where we generate representations of future tasks to be distinct from the representations learned during the current task. pv is designed to maintain the same distance with samples belonging to the v-th cluster. Given cia and 20 Authors Suppressed Due to Excessive Length 
+
+cib as the cluster assignments of xia and xib (i.e. cia = argmax [Ct(T (xia )] and 
+
+cib = argmax [Ct(T (xib )] ), we can formulate the following equation for determin-ing pv .
+
+pv =
+
+P 
+
+> xi∈B
+
+1{cia = v and cib = v}(zTia + zTib )2 P 
+
+> xi∈B
+
+1{cia = v and cib = v} (9) To enhance the quality of prototypes for the clusters of task t, the prototype of the v-th cluster is the center of the “reliable” augmented samples in the z space. We consider a sample as “reliable” if both of its augmentations are assigned to the same cluster. Once new prototypes have been identified for task t, we incorporate them into the existing set of prototypes obtained from preceding tasks Pt−1 to constitute the updated prototype set Pt.
+
+A.2 Backward Knowledge Distillation 
+
+In task t, we propose to train the lt-th student network with the following loss function, while keeping the parameters of the teacher encoder and all other student encoders frozen. 
+
+Lstu = 12|B| 
+
+X
+
+> xi∈B
+
+(ℓstu ia + ℓstu ib ) (10) 
+
+ℓstu ia = 1
+
+|hSlt 
+
+> ia
+
+| || hSlt 
+
+> ia
+
+− ∆(hTia )|| 22
+
+− log( exp( sim (zSlt 
+
+> ia
+
+, ∆ (zTia ))) 
+
+Pj̸ =ij∈B 
+
+P 
+
+> k∈{ a,b }
+
+exp( sim (zSlt 
+
+> ia
+
+, ∆ (zTjk ))) ) (11) where || .|| 2 represents the ℓ2 norm and |hSlt 
+
+> ia
+
+| shows the number of elements in 
+
+hSlt 
+
+> ia
+
+. With this loss function, we aim to instruct our student network in two critical aspects: 1- Our student must grasp the representations produced by the teacher network irrespective of other samples. This is achieved through the first component of our loss. 2- Our student network must follow the same structural relationships established by the teacher encoder within a batch; we propose to enforce such behavior through defining a contrastive loss between the student and teacher network outputs, as is shown in the second term of the loss defined in (11). While the first term in (11) aligns the intermediate representations hSlt 
+
+> ia
+
+and 
+
+∆(hTia ), the mapping from h to z via the projector is nonlinear, and alignment in 
+
+h-space does not guarantee optimal separation of clusters in z-space. Therefore, the second term explicitly enforces discriminative structure in z-space by pulling positive pairs closer and pushing apart negative pairs, thereby enhancing cluster separability. These two components of the loss function enable the lt-th student to learn both the output and the relationships between samples produced by the teacher encoder. 
+
+Overall Training Scheme. For the batch B comprising data samples from task Unsupervised Continual Clustering (FBCC) 21 
+
+t, we initially fix the parameters of all students and conduct forward distillation to minimize the combined losses of contrastive, distillation, and clustering (i.e., 
+
+Lcon +Ldis +Lclu ). Subsequently, we proceed with backward distillation, wherein we freeze the parameters of the teacher and unfreeze the parameters of the lt-th student, minimizing Lstu for the same batch B. Figure 1 of the main manuscript shows the overall training scheme for task t. Furthermore, Algorithm 1 in the Supplementary Material file provides the pseudo-code for the training of FBCC. 
+
+Assigning Samples to Clusters: For the UCC setting, after completing train-ing on the last task N , to find the final cluster assignments for sample xi, we propose to use the trained teacher encoder (i.e., T ), the first layer of the clus-ter projector (i.e., Cfirst  
+
+> N
+
+), which is shared among all tasks, and the last lay-ers of the cluster projector, which are task-specific and stored in memory (i.e., 
+
+Clast  
+
+> 1
+
+, ..., C last  
+
+> N
+
+). To assign cluster label ci to data sample xi, we propose to ob-tain the latent representation of data ˆhi = Cfirst  
+
+> N
+
+(T (xi)) , then map ˆhi to different clustering spaces using the last layers trained for each task and pick the index of the maximum value, i.e., ci = argmax [Clast  
+
+> 1
+
+(ˆhi), ..., C last  
+
+> N
+
+(ˆhi)] .
+
+# B Effectiveness of FBCC in Heterogeneous Tasks 
+
+In this section, we delve into the impact of heterogeneous tasks, where the num-ber of clusters varies across tasks. The primary challenge posed by such hetero-geneity for a continual learner lies in addressing catastrophic forgetting (CF), wherein the model must retain knowledge from tasks with a high number of clus-ters while adapting to subsequent tasks. To assess our model’s ability to handle such scenarios, we delineate two cases using the CIFAR-100 dataset, aiming to evaluate its performance and compare it with the state-of-the-art UCL algorithm CaSSLe [11]. In Case 1 , we define the number of clusters as 50-10-10-10-10-10 for tasks 1 through 5, respectively, from left to right. Here, our model encounters half of the total clusters in the initial task before facing a consistent number of clusters across subsequent tasks. In Case 2 (50-30-10-5-5), we present a more challenging setup where our model encounters a higher number of clusters ini-tially, followed by tasks with progressively fewer clusters. This case emphasizes the significance of ensuring that the model retains knowledge from tasks with a greater number of clusters while adapting to those with fewer clusters. Compari-son results are presented in Table 4. In this section, we employ three students for conducting experiments. As depicted in Table 4, the performance of FBCC sur-passes that of CaSSLe. This superiority can be attributed to the fact that most forgetting occurs after task 1 and then task 2 for both Case 1 and Case 2. Our model exhibits the capability to remember previous tasks more effectively due to the utilization of multiple well-trained students. In contrast, CaSSLe relies on a single teacher for retaining knowledge from each preceding task, leading to a gradual forgetting phenomenon. This effect is particularly pronounced for tasks 1 and 2. Additionally, it is worth noting that the number of parameters in our model for this experiment is 15.1 million, whereas the number of parameters in CaSSLe is 23 million. This significant difference in parameter count underscores 22 Authors Suppressed Due to Excessive Length 
+
+the efficiency of our approach in achieving competitive performance with fewer parameters. 
+
+Table 4. FBCC and CaSSLe performance on heterogeneous tasks scenario in terms of ACC (%) and F (%) . The best result for continual learning algorithms in each column is highlighted in bold.                  
+
+> Algorithms Case 1 Case 2 ACC (↑)F(↓)ACC (↑)F(↓)
+> CaSSLe 48.74 7.89 45.61 8.51
+> FBCC 51.21 4.33 48.9 4.81
+
+# C Effectiveness of Backward Distillation 
+
+In this section, we delve into the effectiveness of Lstu in transferring knowledge from teacher to student on CIFAR-100 dataset. To achieve this, we define an average over the difference between ACC of the teacher and the ACC of the student. This is defined as follows: 
+
+ˆACC = 1
+
+N
+
+X 
+
+> t∈{ 1,...,N }
+
+(ACC Tt,t − ACC Slt 
+
+> t,t
+
+) (12) where ACC Tt,t and ACC Slt 
+
+> t,t
+
+represent the ACC of the teacher and the student on the task t after completing training on the task t, respectively. To obtain ACC Slt 
+
+> t,t
+
+for dataset Dt, after completing training on Dt, we take the output of the student, i.e. hSlt 
+
+> Dt
+
+, and feed it into the cluster projector learned during forward distillation to obtain cluster assignments for the dataset, i.e. cDt =
+
+argmax [Ct(hSlt 
+
+> Dt
+
+)] . Subsequently, we compare these assignments with the true cluster assignments to compute the ACC Slt 
+
+> t,t
+
+.Moreover, we consider three architectures for the student, namely MobileNetV3 Small [15], ShuffleNetV2 (0.5x) [26], and SqueezeNet 1.1 [17]. Inspired by [4], to select the best model for our student, we define a distillation score (DS) that takes into account the size and accuracy of the student relative to those of the teacher network. This score helps us identify the optimal model for the student. The formula for DS is defined as follows: 
+
+DS = α( #P aram S
+
+#P aram T
+
+) + (1 − α)(1 − 1
+
+N
+
+> N
+
+X
+
+> t=1
+
+ACC Slt
+
+> t,t
+
+ACC Tt,t 
+
+), (13) where #Param S and #Param T represent the number of parameters of the stu-dent and teacher network, respectively, and α ∈ [0 , 1] is a hyperparameter that Unsupervised Continual Clustering (FBCC) 23 
+
+highlights the importance of the first ratio over the second one. Lower DS val-ues indicate better models. In our experiments, α is set to 0.5 and the teacher network is ResNet-18 with 11.5 million parameters.                   
+
+> Table 5. Comparison of different student architectures in terms of number of param-eters, ˆACC (%) and DS. The best result in each column is highlighted in bold.
+> Students CIFAR-100
+> #Param S(↓)ˆACC (↓)DS (↓)
+> MobileNetV3 Small 2.5m 1.05 0.120 ShuffleNetV2 (0.5x) 1.3m 1.91 0.081 SqueezeNet 1.1 1.2m 1.68 0.075
+
+Table 5 shows the comparison of different student architecture in terms of number of parameters, ˆACC (%) , and DS. By comparing the ˆACC of students with different architectures, we can infer the effectiveness of Lstu in knowl-edge distillation from the teacher to the students. For instance, the ACC of SqueezeNet 1.1 with 1.2 million parameters is 1.68% less than the ACC of ResNet-18 with 11.5 million parameters on average across different tasks on the CIFAR-100 dataset. Based on DS reported in Table 5, we choose SqueezeNet 1.1 as our student network for the CIFAR-100 dataset, as it has the lowest DS among the other architectures. We observe similar pattern for the other datasets as well. 
+
+# D Imbalanced Dataset 
+
+In this section, we delve into assessing the efficacy of our proposed FBCC in tackling learning tasks characterized by highly imbalanced sample distributions. To accomplish this, we adopt a strategy wherein we selectively sample data from task t within the CIFAR-10 dataset. Instances from the first task are incorpo-rated into the training set with a likelihood of 0.1, while instances from the final task are included with a likelihood of 1. Instances from intermediate tasks are chosen proportionally, following a linear progression. The inherent challenge posed by imbalanced data lies in the scenario where our model is trained on a limited number of instances from the current task, yet it encounters increasingly more samples from subsequent tasks. This imbalance heightens the risk of CF wherein the model’s performance on the current task deteriorates as it learns new tasks, potentially leading to performance degradation in future tasks. In Figure 3-(a), we present a comparative analysis between our proposed FBCC approach and FBCC + CaSSLe. The figure illustrates ACC achieved on the first three tasks ( 1 ≤ t ≤ 3) after completing training on each task. As depicted in the figure, transitioning from task t to task t + 1 reveals that the 24 Authors Suppressed Due to Excessive Length (a)  (b)  
+
+> Fig. 3. Experiments on imbalanced data.
+
+performance of FBCC + CaSSLe for task t surpasses that of FBCC. This discrep-ancy arises due to the utilization of a teacher network explicitly trained on task 
+
+t within the FBCC + CaSSLe framework. In contrast, FBCC employs a student network with notably fewer parameters for task retention. However, following task t + 2 , a reversal in performance is observed. FBCC exhibits superior perfor-mance on task t compared to FBCC + CaSSLe. This shift can be attributed to FBCC’s utilization of multiple specialized student networks, thereby enhancing its capacity to retain knowledge from previous tasks effectively. For example, this characteristic becomes particularly evident when examining the performance on task 1. At the conclusion of training on task 2, FBCC + CaSSLe exhibits su-perior performance compared to FBCC. However, after completing task 3, the trend reverses, with FBCC surpassing FBCC + CaSSLe in terms of ACC. Furthermore, to demonstrate the effectiveness of training students to mimic the behavior of the teacher network on imbalanced data, we plot ACC T 
+
+> t,t
+
+and ACC Slt 
+
+> t,t
+
+, as discussed in Section 3 of the supplementary file, for imbalanced data in Figure 3-(b). For our experiments, we utilize SqueezeNet 1.1 [18]. As depicted in the figure, our student network adeptly follows the teacher network in generating quality representations for the each task on imbalanced datasets. 
+
+# E Semantic Proximity for Defining Tasks 
+
+CIFAR-100 consists of 100 fine-grained classes, which are further grouped into 20 broader super-classes. Each super-class represents a general category that includes multiple fine classes based on their similarities or related characteris-tics. For instance, the super-class “vehicles 1" might include fine classes such as “bicycle," “bus," “motorcycle," and others. In this section, we introduce two different experimental settings for CIFAR-100. In the first setting, referred to as Case 1, we randomly select 10 tasks. This approach is commonly adopted in continual learning research [11], [25], and [27]. In the second setting, or Case 2, we ensure that each task contains data samples from two distinct super-classes within the CIFAR-100 dataset. Unsupervised Continual Clustering (FBCC) 25 
+
+We apply our FBCC algorithm to both settings, with the results presented in Table 6. As shown in the table, Case 2 outperforms Case 1, which can be attributed to the following factor: data samples within the same super-class tend to cluster closely together in the latent space, making it difficult for FBCC to distinguish between them. By presenting data samples from the same super-class as a task to the network, we enable the network to better differentiate between the various clusters within that super-class. In contrast, Case 1 relies primarily on prototypes to separate the super-classes, leading to less effective separation. 
+
+Table 6. Performance comparison of FBCC algorithm on different settings of CIFAR-100. The best result for continual learning algorithms in each column is highlighted in bold.         
+
+> Algorithms CIFAR-100 ACC (↑)F(↓)
+> Case 1 38.73 3.62 Case 2 39.49 3.38
+
+Table 7. FBCC computational and memory efficiency comparison against existing UCL.                            
+
+> Algorithms Total Training Time (s) Max GPU Memory (MB) Model Size (MB) Trainable Parameters (m) CCL 25133.49 1221.85 164.03 11.50 STAM 1094.30 32650.25 14.23 –LUMP 18856.38 2602.76 86.85 22.73 CaSSLe 36810.84 2088.37 110.89 29.06 POCON 23495.17 3920.75 402.67 49.52
+> FBCC 22591.10 19611.12 66.75 17.50
+
+# F Efficiency Analysis of FBCC Against Existing UCL Benchmarks 
+
+In addition to clustering performance, we assess the computational and memory efficiency of all models using CIFAR-100 dataset. Table 7 presents a comparison based on total training time, peak GPU memory usage, total model size, and the number of trainable parameters. Since our focus is on unsupervised contin-ual learning (UCL), we restrict this efficiency analysis to models that specifi-cally address this setting. STAM reports the lowest model size (14.23 MB) and fastest training time (1094 s) due to its minimalist architecture: it does not rely 26 Authors Suppressed Due to Excessive Length 
+
+on gradient-based learning or neural weights and avoids backpropagation en-tirely but instead uses online clustering to store a set of certain centroids per task in a dual-memory system. Since these centroids are not trainable param-eters in the conventional sense, we exclude this field in the table for STAM to avoid misrepresentation. Despite its efficiency, STAM performs poorly across all four datasets, specifically, on average, its clustering accuracy is over 30% lower, and its forgetting scores are more than twice as high, reflecting limited reten-tion and representation quality. For instance, on CIFAR-10, STAM reaches only 39.61% ACC with an F of 5.15, while FBCC achieves 75.28% ACC and 2.29 F, clearly demonstrating the performance gap in both discriminative power and stability over time (see Table 1 of the main manuscript). This tradeoff high-lights STAM’s limited capacity for capturing complex representations, which constrains its generalizability. Additionally, while STAM does not store raw data, its long-term memory accumulates task-specific centroids over time, resulting in a growing internal memory footprint. These centroids indirectly encode previ-ously seen class information, which may raise concerns in memory-constrained or privacy-sensitive applications. In contrast, our proposed FBCC model offers a significantly better balance compared to existing continual learning models: it achieves state-of-the-art performance across all datasets, with higher cluster-ing accuracy and lower forgetting, while maintaining a moderate model size, reasonable training time and a manageable number of trainable parameters. Al-though FBCC uses 17.5 million trainable parameters which is slightly more than trainable parameters used by CCL, its overall model size is significantly smaller compared to CCL. This demonstrates FBCC’s practical memory efficiency de-spite its modular design. The increase in trainable parameters is justified by FBCC’s architecture, which includes multiple lightweight student networks and task-specific clustering heads. These components are essential for achieving su-perior clustering performance and robustness to forgetting. In contrast, CCL employs a single encoder trained end-to-end, limiting its flexibility and expres-siveness in complex continual learning scenarios. Compared to larger models like POCON and CaSSLe, FBCC is more scalable, with lower computational overhead and higher performance, making it a compelling choice for continual clustering in both performance-critical and resource-constrained settings. Al-though FBCC exhibits higher peak GPU usage than some lighter models, this overhead stems solely from architectural complexity, namely, the simultaneous training of student and teacher networks and not from storing or replaying past data. Importantly, FBCC trades off replay buffer memory, which grows with the number of tasks, for temporary GPU allocation during training. This constitutes a one-time training resource cost, whereas replay-based methods impose contin-uous storage and sampling overhead across tasks. Unlike methods such as LUMP that rely on replay buffers, FBCC requires no access to previous task samples, making it privacy-compliant by design and better suited for settings where data retention is restricted. As a result, FBCC offers a practical and efficient solution for continual clustering that balances accuracy, scalability, and privacy. Unsupervised Continual Clustering (FBCC) 27 
+
+Algorithm 1 Training of FBCC Algorithm for task t
+
+Input: Teacher network T (·), Student networks S1, ..., S lt , Instance Pro-jectors I1, ...I lt , Predictor networks g1, ..., g lt−1, prototype set Pt−1, cluster-projector Ct = Cf irst t (Clast t ), maximum number of iterations M ax iter , two sets of augmentations denoted by aug_a and aug_b, dataset for task t shown by Dt.
+
+1: for 1 ≤ epoch ≤ M ax iter do 
+
+2: for B = {x1, x 2, ...x |B| } ∈ D t do 
+
+3: Ba, Bb ← aug_a( B), aug_b( B), where Bk = {xik } with k ∈ { a, b }
+
+and 1 ≤ i ≤ |B| 
+
+# Forward Knowledge Distillation 
+
+4: Freeze Students and Unfreeze the Teacher 
+
+5: hTia , h Tib ← T (xia ), T (xib ) ▷ we define hTk = {hTik }
+
+6: zTia , z Tib ← Ilt (hTia ), I lt (hTib ) ▷ we define zTk = {zTik }
+
+7: Fa, F b ← Ct(T (Ba)) , C t(T (Bb)) 
+
+8: for 1 ≤ r ≤ lt − 1 do 
+
+9: hSr 
+
+> ia
+
+, h Sr 
+
+> ib
+
+← Sr (xia ), S r (xib )
+
+10: zSr 
+
+> ia
+
+, z Sr 
+
+> ib
+
+← Ir (hSr 
+
+> ia
+
+), I r (hSr 
+
+> ib
+
+) ▷ we define zSr 
+
+> k
+
+= {zSr 
+
+> ik
+
+}
+
+11: end for 
+
+12: Compute Lcon (zTa , z Tb , Pt−1) using eq. (1) 
+
+13: Compute Ldis (gr (zTk ), z Sr 
+
+> k
+
+.detach ()) using eq. (5) ▷ 1 ≤ r ≤ lt − 1
+
+14: Compute Lclu (Fa, F b) using eq. (7) 
+
+15: Update parameters of T , Ilt , Ct, and gr using Lcon + Lclu + Ldis 
+
+# Backward Knowledge Distillation 
+
+16: Freeze The Teacher and Unfreeze lt-th Student 
+
+17: hSlt 
+
+> ia
+
+, h Slt 
+
+> ib
+
+← Slt (xia ), S lt (xib ) ▷ we define hSr 
+
+> k
+
+= {hSr 
+
+> ik
+
+}
+
+18: zSlt 
+
+> ia
+
+, z Slt 
+
+> ib
+
+← Ilt (hSlt 
+
+> ia
+
+), I lt (hSlt 
+
+> ib
+
+) ▷ we define zSlt 
+
+> k
+
+= {zSlt 
+
+> ik
+
+}
+
+19: Compute Lstu (hSlt 
+
+> k
+
+, z Slt 
+
+> k
+
+, h Tk .detach () , z Tk .detach ()) using eq. (11) 
+
+20: Update parameters of Slt using Lstu 
+
+21: end for 
+
+22: end for 
+
+23: Update Prototype set Pt−1 using (9) to obtain Pt

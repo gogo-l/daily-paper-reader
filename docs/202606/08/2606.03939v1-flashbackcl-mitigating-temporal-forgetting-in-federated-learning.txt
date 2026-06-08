@@ -1,0 +1,504 @@
+Title: FlashbackCL: Mitigating Temporal Forgetting in Federated Learning
+
+URL Source: https://arxiv.org/pdf/2606.03939v1
+
+Published Time: Wed, 03 Jun 2026 01:31:53 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# FlashbackCL: Mitigating Temporal Forgetting in Federated Learning 
+
+## Mubarak A. Ojewale , Adriana E. Chis , Jorge M. Cort´ es-Mendoza , Bernardo Pulido-Gaytan , Horacio Gonz´ alez-V´ elez 
+
+## Cloud Competency Centre, National College of Ireland, Dublin, Ireland mubarak.ojewale@ncirl.ie, adriana.chis@ncirl.ie, JorgeMario.CortesMendoza@ncirl.ie, LuisBernardo.PulidoGaytan@ncirl.ie, horacio@ncirl.ie 
+
+## Abstract 
+
+Federated Learning (FL) of foundation and edge models increasingly targets deployments where client data distributions drift over time, yet ex-isting forgetting-mitigation methods assume each client’s distribution is stationary. Flashback, the strongest recent FL method against cross-client (spatial) forgetting, uses monotonically accumulat-ing per-class label counts as a knowledge proxy; this proxy becomes miscalibrated under temporal distribution shift and anchors the global model to an outdated class balance. We formalise temporal for-getting in FL with a per-phase metric isolated from protocol-level fluctuations and propose Flashback Continual Learning (FlashbackCL), a drop-in ex-tension of Flashback with (i) temporally-decayed label counts; (ii ) a device-aware replay buffer with Class-Balanced Reservoir Sampling (CBRS); and 
+
+(iii ) server-side active coreset curation on the pub-lic distillation set. The results show that Flash-backCL achieves 6.9% to 10.0% relative improve-ment relative to Flashback, on CIFAR-10 with 50 clients and three controlled temporal shift modes, while simultaneously reducing temporal forgetting by up to 68%. A 5-variant ablation identifies CBRS replay as the critical component. FlashbackCL also improves Flashback by 3.5 points on stationary CIFAR-100, suggesting that class-balanced replay regularises spatial heterogeneity as well as tempo-ral shift. 
+
+## 1 Introduction 
+
+Federated Learning (FL) has become the default paradigm for training shared models across decentralised clients with-out moving private data to a central server [McMahan et al. ,2017; Kairouz et al. , 2021]. Recent work on FL of founda-tion models and large edge models has pushed the research agenda toward realistic deployment settings where clients are resource-constrained and their data distributions are strongly non-Independent and Identically Distributed (non-IID) [Li 
+
+et al. , 2020; Lin et al. , 2020]. A key insight from the last two years is that spatial data heterogeneity in FL can be re-cast as a forgetting problem: local updates overwrite global knowledge that other clients have contributed, and coordinate-wise averaging destroys class-specific knowledge embedded in divergent client models [Aljahdali et al. , 2025; Lee et al. , 2022]. Aljahdali et al. [2025] introduced Flash-back, which uses per-class label counts as a knowledge proxy and combines client-side and server-side dynamic distillation weighted by those counts, yielding strong gains over proxi-mal, contrastive, and not-true-distillation baselines. Flashback and its predecessors rest on an implicit assump-tion: each client’s local data distribution is stationary over time, which fails in real-world edge deployments. In Con-nected and Cooperative Autonomous Mobility (CCAM), for example, traffic patterns shift with time of day and season, weather alters sensor readings, and road layouts change. In FL of foundation models at the edge, device-side data tracks the evolving behaviour of users rather than a static sample. Each device’s data distribution therefore evolves across FL rounds, introducing a temporal dimension to heterogeneity that existing methods do not address. Flashback’s knowledge proxy is particularly vulnerable to temporal shift because the label count vector accumu-lates monotonically across rounds: the count of seen classes never decreases. The label count still assigns high distillation weights to classes even if they become rare or disappear from the federation’s active data, which anchors the global model to an outdated class balance and dampens adaptation. 
+
+Contributions. We (i) formalise and propose an isolated per-phase metric for temporal forgetting as a failure mode distinct from the spatial forgetting already studied; (ii ) intro-duce FlashbackCL as an extension of Flashback with three additional components: a temporally-decayed label count to release pressure on vanished classes, a device-aware re-play buffer admitted via Class-Balanced Reservoir Sampling (CBRS) so that the buffer is not flushed at phase boundaries [Chrysakis and Moens, 2020], and server-side active coreset curation that re-weights the public distillation set using per-class trend estimates; and (iii ) report controlled experiments on CIFAR-10 dataset with 50 clients, and CIFAR-100 dataset with 100 clients, across three shift modes (abrupt, grad-ual, and cyclic). On CIFAR-10, FlashbackCL reaches from 55.7% to 57.5% final accuracy, versus Flashback’s 51.9% to 52.3%, and reduces temporal forgetting by up to 68%. In CIFAR-100, FlashbackCL improves over Flashback by 9.7% to 12.7% in all three modes. A 5-variant ablation isolates 
+
+> arXiv:2606.03939v1 [cs.LG] 2 Jun 2026
+
+CBRS replay as the primary mechanism. 
+
+## 2 Background and Related Work 
+
+2.1 Federated Learning (FL) 
+
+We consider the standard cross-device FL setup with N
+
+clients [McMahan et al. , 2017; Kairouz et al. , 2021; Bonawitz 
+
+et al. , 2019]. A client i holds a private dataset Di =
+
+{(xj , y j )}ni 
+
+> j=1
+
+and the goal is to train a single global model that minimises     
+
+> min
+> w∈Rd
+> NX
+> i=1
+> |D i|| ∪ jDj|Li(w),(1)
+
+where Li(w) = 1
+
+> |D i|
+
+P 
+
+> j
+
+ℓ(w; ( xj , y j )) is the local loss for client i and ℓ is typically cross-entropy. Federated Aver-aging (FedAvg) solves (1) through partial participation: at each communication round t, the server selects K clients 
+
+St ⊆ [N ], broadcasts the current global model wt−1 to them, lets each one perform E epochs of local Stochastic Gradi-ent Descent (SGD), and then aggregates the returned mod-els by sample-weighted averaging wt = P  
+
+> k∈S t
+> nkP
+> jnj
+
+wk,t 
+
+[McMahan et al. , 2017]. 
+
+Heterogeneity-aware FL. FedAvg degrades under non-IID client data because each client’s local SGD pulls wk,t to-ward a different optimum, an effect that compounds with 
+
+E and with the spread of label distributions across clients. Three complementary families of methods address this is-sue. Optimisation-side approaches such as FedProx [Li et al. ,2020] and Stochastic Controlled Averaging for FL (SCAF-FOLD) [Karimireddy et al. , 2020] keep local updates close to a global anchor, through a proximal term μ 
+
+> 2
+
+∥w − wt−1∥2
+
+in the local objective or through control variates that esti-mate and cancel client-specific drift. Representation-side ap-proaches such as MOdel-cONtrastive learning (MOON) [Li 
+
+et al. , 2021] use contrastive losses to align local and global feature spaces, while matching-based aggregation [Wang et al. , 2020a] reduces the destructive interference inherent in coordinate-wise averaging. Distillation-side approaches such as FL Distillation Fusion (FedDF) [Lin et al. , 2020] re-place weighted averaging with ensemble knowledge distil-lation [Hinton et al. , 2015] against a public dataset, treating each participating client as a teacher. Wang et al. [2020b] for-malised the objective inconsistency that local-epoch hetero-geneity introduces, motivating per-client normalisation. All of these approaches assume that the only source of distribu-tional change between rounds is which clients are sampled; none address temporal drift inside any single client. 
+
+2.2 Forgetting in Federated Learning 
+
+Lee et al. [2022] introduced FedNTD, which masks the ground-truth class in the KL divergence so that local train-ing preserves global knowledge on classes that the client has not just seen, and showed that this mitigation alone yields competitive accuracy with FedDF. Xu et al. [2022] proposed FedReg, generating Fast Gradient Signed Method (FGSM) perturbed synthetic data from the global model to regularise local updates against forgetting [Goodfellow et al. , 2015]. Dupuy et al. [2023] provided large-scale measurements of catastrophic forgetting in continual federated learning and showed that its magnitude scales with both spatial and tem-poral heterogeneity. Aljahdali et al. [2025] reframed FL con-vergence as forgetting at both the local-update and aggrega-tion phases, introducing the round-forgetting metric Ft =
+
+− 1
+
+> C
+
+P 
+
+> c
+
+min(0 , A ct −Act−1), where C is the number of classes and Act is the global model’s accuracy on class c at round t.This metric captures only negative changes in per-class accu-racy and so isolates loss of knowledge from gain of knowl-edge in other classes. 
+
+Flashback’s dynamic distillation. Flashback uses per-class label counts as a proxy for per-class model knowl-edge. Given a student label count ν ∈ RC and teacher label counts {μi}Mi=1 , the per-class distillation weights are 
+
+αci = μci /(νc + P 
+
+> k
+
+μck) and the dynamic-distillation loss is          
+
+> LdKD =αysLCE +X
+> i
+> LdKL (Fwi, F ws;αi),(2)
+
+with LdKL (p, q ; αi) = P 
+
+> c
+
+αci · pc log( pc/q c). Flashback ap-plies (2) in two places: at each client during local training (with the global model as the single teacher) and at the server during a public-dataset distillation step (with the participat-ing clients’ local models plus the previous global model as teachers). The global label count π is built incrementally by adding γμk for each participant k, gated by γr k ≤ 1 where 
+
+rk is the client’s lifetime participation count. System-side work on resource-efficient client selection is orthogonal to but interacts with our temporal-shift question, because client-selection skew can amplify drift in the global label count [Abdelmoniem et al. , 2023; Fourati et al. , 2023]. 
+
+2.3 Continual Learning (CL) 
+
+Continual Learning (CL) trains a model on a sequence of tasks without revisiting prior data [Parisi et al. , 2019; De Lange et al. , 2021]. Three families of methods address catastrophic forgetting. Regularisation-based methods such as EWC [Kirkpatrick et al. , 2017] penalise changes to pa-rameters important for previous tasks, where importance is quantified by the diagonal Fisher information matrix; Learn-ing without Forgetting [Li and Hoiem, 2017] distils from the old model to the new one. Replay-based methods [Chaudhry 
+
+et al. , 2018] maintain a buffer of past examples and interleave them with current training data; the effectiveness depends critically on which examples to store. CBRS [Chrysakis and Moens, 2020] is a distribution-agnostic admission policy de-signed for online CL under class imbalance; it evicts from the majority class when the buffer is full and applies within-class reservoir sampling otherwise. Architecture-based meth-ods [Yoon et al. , 2020] allocate separate parameters per task and avoid interference at the cost of poor scaling. 
+
+2.4 Federated Continual Learning (FCL) 
+
+Task-incremental Federated CL (FCL) methods such as FCL with Weighted Inter-client Transfer (FedWeIT) [Yoon et al. ,2021] decompose model parameters into a shared federated component and sparse task-specific components, requiring known task identity at inference time. Continual FL with Distillation (CFeD) [Ma et al. , 2022] introduces a surro-gate dataset on which both clients and the server distil from previous models when new tasks arrive, mitigating inter-task forgetting at both endpoints. Generative replay (Feder-ated Class-Incremental Learning - FedCIL [Qi et al. , 2023]) sidesteps explicit replay buffers by training a generator on previous-task data and synthesising replay samples on de-mand, which is attractive when raw replay would violate retention policies. Global-Local Forgetting Compensation (GLFC) [Dong et al. , 2022] combines class-aware gradient compensation with semantic relation distillation, while fed-erated orthogonal training [Bakman et al. , 2024] aggregates per-client activation subspaces and projects gradients to lie outside spans where prior tasks have been learned. Wuerkaixi 
+
+et al. [2024] explicitly models heterogeneity in how different clients forget, using a per-client forgetting score to weight aggregation. All of these methods, with the partial exception of CFeD, assume task-incremental setups in which task iden-tity and task boundaries are known. Our setting is domain-incremental : the task (e.g. classify into 10/100 categories) is fixed throughout training, there are no explicit boundaries, and the input distribution drifts continuously. This regime more closely matches CCAM and 5G/6G-era (FM-era) edge deployments, where the data-generating process evolves but the predictive task does not change. 
+
+This work . Heterogeneity-aware FL methods (FedProx, SCAFFOLD, MOON, and FedDF) target spatial heterogene-ity and assume client distributions are stationary in time. FL-forgetting methods (FedNTD, FedReg, and Flashback) re-frame spatial heterogeneity as forgetting at the local-update and aggregation phases but inherit the same stationarity as-sumption. Task-incremental FCL methods (FedWeIT, CFeD, FedCIL, GLFC, and FOT) target temporal change but re-quire explicit task boundaries and are evaluated against task-incremental benchmarks. The unfilled gap is domain-incremental FL, in which the predictive task is fixed and the per-client distribution drifts continuously. This is the regime FlashbackCL targets, and it is also the regime in which FL of foundation models on edge devices will operate, because user behaviour and sensor environments rarely respect ex-plicit task boundaries. EWC [Kirkpatrick et al. , 2017] reg-ularises updates by a diagonal Fisher matrix. LwF [Li and Hoiem, 2017] distills from the previous-task model. Expe-rience replay [Chaudhry et al. , 2018] stores past examples; CBRS [Chrysakis and Moens, 2020] is a distribution-agnostic admission policy for imbalanced online streams. We use CBRS inside federated client buffers, a combination that to our knowledge has not been explored. 
+
+## 3 Temporal Forgetting in FL 
+
+Setup. We extend the standard FL setup with time-varying client distributions. Each client i ∈ [N ] holds a dataset D(t)
+
+> i
+
+at round t, drawn from a distribution P (t) 
+
+> i
+
+that may differ across rounds. Past data may have been discarded; we do not assume clients can revisit D(t′) 
+
+> i
+
+for t′ < t . The server samples 
+
+St ⊆ [N ] with |S t| = K at each round and aggregates local updates into a global model wt.
+
+Two orthogonal heterogeneities. We can decompose the deviation of the empirical FL objective at round t from a hypothetical IID-stationary objective into two components. Let T denote the total number of training rounds, ¯P (t) =
+
+> 1
+> N
+
+P 
+
+> i
+
+P (t) 
+
+> i
+
+the federation-wide marginal at round t, and ¯P =
+
+> 1
+> T
+
+P 
+
+> t
+
+¯P (t) the time-averaged marginal. For any test loss functional ℓ,                            
+
+> EP(t)
+> i
+> [ℓ]−E¯P[ℓ]
+> |{z }
+> total deviation
+> =EP(t)
+> i
+> [ℓ]−E¯P(t)[ℓ]
+> |{z }
+> spatial heterogeneity at t
+> +E¯P(t)[ℓ]−E¯P[ℓ]
+> |{z }
+> temporal drift of population mean
+> .(3)
+
+The first term is the within-round, between-client variation that classical heterogeneity-aware FL methods target [Li et al. , 2020; Karimireddy et al. , 2020; Lin et al. , 2020]. The second term is the across-round, within-population shift that is the focus of this paper. The two are orthogonal in the sense that a method can address one without addressing the other; FedProx is the canonical example of a method that targets the spatial term but is structurally insensitive to the temporal term. 
+
+Measuring temporal forgetting. Flashback’s round-forgetting metric Ft collapses both terms of (3) into a single scalar and so cannot attribute observed accuracy drops to either source. To isolate the temporal component, we divide the T training rounds into P phases, where phase 
+
+j ∈ {1, . . . , P } corresponds to a distinct distributional regime, and define TF (j, k ) = A(j)(tend  
+
+> j
+
+) − A(j)(tend 
+
+> j+k
+
+), (4) where A(j)(t) is the global model’s accuracy on a held-out test set drawn from phase-j’s distribution at round t and tend 
+
+> j
+
+is the last round of phase j. Positive values indicate forget-ting; negative values indicate backward transfer. We report the mean TF (TF) over valid (j, k ) pairs. By construction, TF is invariant to spatial heterogeneity at any given round and responds only to changes in the global model’s competence on a fixed phase distribution as training progresses through subsequent phases. 
+
+Why Flashback fails under shift. Flashback’s global label count π accumulates each participating client’s local count 
+
+μk scaled by γ, subject to the trust gate γr k ≤ 1. In closed form, the label count for class c at round t is 
+
+πct = X
+
+> t′≤t
+
+X
+
+> k∈S t′
+
+γ · μck(t′) · 1[γr k(t′) ≤ 1] , (5) where rk(t′) is client k’s participation count up to round t′
+
+and 1[·] is the indicator function. This sum is monotonically non-decreasing in t. The dynamic α derived from π therefore reflects a time-integrated history of class exposure rather than the current federation marginal. Concretely, suppose class c
+
+was active during phases 1, . . . , j −1 and disappeared from all clients’ active data at the start of phase j. The label count πc
+
+at any round t > t end  
+
+> j
+
+remains lower-bounded by the total con-tribution accumulated across the first j − 1 phases, which is large. The dynamic αc continues to place distillation weight on c, with two consequences: during local training the client is forced to preserve outdated knowledge at the expense of the current distribution; during server distillation the global model is pushed to maintain confidence on a class that no re-cent participant has seen. Stationary settings benefit from this anchoring because it stabilises the distillation against noise from partial client participation; non-stationary settings are actively harmed by it. 
+
+Design implication. The decomposition in (3) suggests that a temporally-aware extension of Flashback should attack both the temporal-drift term in the global label count (so the dis-tillation proxy reflects recent rather than historical exposure) and the temporal-drift term in the per-client effective data (so clients can replay vanished classes when they have momen-tarily disappeared from their own loaders). FlashbackCL’s three components map onto this prescription: temporal decay addresses the first, the device-aware replay buffer addresses the second, and active coreset curation provides a population-level safety net through the public dataset. Each component is independently ablatable and reduces to vanilla Flashback in the limit of its hyperparameter (Section 5.4). 
+
+## 4 FlashbackCL 
+
+Flashback Continual Learning (FlashbackCL) extends Flash-back with three components that each address one aspect of the anchoring problem. When all three are disabled Flash-backCL reduces exactly to Flashback. 
+
+4.1 Temporally-Decayed Label Count 
+
+At the start of every round, we apply a decay factor λ ∈ (0 , 1] 
+
+to the global label count before adding the round’s contribu-tions: 
+
+πt = λ · πt−1 + X
+
+> k∈S t
+
+γkμk, (6) where γk follows Flashback’s trust-gated rule. The decay lets 
+
+πc decrease for classes that are no longer present in recent clients’ data. A high λ is robust to noise from partial par-ticipation but slow to respond to shift; a low λ is responsive but sensitive to client-selection randomness. Section 5.4 finds 
+
+λ = 0 .95 optimal on CIFAR-100 with 200 rounds, with ro-bust performance across λ ∈ [0 .95 , 0.99] .
+
+4.2 Device-Aware Replay Buffer with CBRS 
+
+Each client k maintains a replay buffer Bk of capacity 
+
+|B k| = min( Mk, ⌊β/f k⌋), (7) where Mk is the device’s memory budget (in number of sam-ples), fk = rk/t is client k’s participation frequency, and β
+
+is a system-wide budget parameter. Clients that participate rarely receive a larger buffer because they rely more heavily on their own replay between participations. 
+
+Why a global-count admission policy fails. A natural de-sign is to admit by inverse global count, p(x, y ) ∝ 1/(πy +ϵ).We implemented this and found it fails catastrophically at phase boundaries: classes that have just appeared have πy ≈
+
+0 and therefore infinite priority, flushing the buffer of all prior-phase samples within a few rounds. This is the oppo-site of the desired behaviour. 
+
+CBRS admission. We instead use class-balanced reservoir sampling [Chrysakis and Moens, 2020]. Let ny be the count of class-y items currently in the buffer and nseen  
+
+> y
+
+the total class-y samples ever seen. Given a new sample (x, y ):1. If the buffer has free capacity, admit unconditionally. 2. Otherwise let y∗ = arg max c nc be the majority class. • If y̸ = y∗: evict a random item of class y∗ and admit (x, y ).• If y = y∗: apply within-class reservoir sampling, admitting as a random replacement with probability 
+
+ny /n seen  
+
+> y
+
+.CBRS is distribution-agnostic. New classes can only take slots from already-overrepresented classes, never from mi-nority classes at risk of being forgotten. During local train-ing, replay batches are mixed with current-data batches at a fixed ratio ρ ∈ [0 , 1] , so the effective loss per step is 
+
+(1 − ρ)LdKD (current ) + ρ LdKD (replay ). We use ρ = 0 .4.CBRS makes a simple invariant hold: the buffer’s per-class histogram is approximately uniform over the classes the client has ever seen, regardless of the order in which classes arrive. A buffer that respects this invariant cannot be flushed of a phase-(j − 1) class merely because phase-j samples have started arriving, because phase-(j − 1) classes are minority classes by construction and CBRS only ever evicts from the majority. The invariant fails for any admission policy that scores incoming samples by a quantity correlated with nov-elty, because novelty is monotonically larger for the most re-cently appearing classes. 
+
+4.3 Server-Side Active Coreset Curation 
+
+The server maintains a sliding window of the last W rounds of aggregated label-count inflows mt′ = P 
+
+> k∈S t′
+
+μk, and fits a per-class linear regression to estimate the slope sc of class 
+
+c’s inflow over the window. Absolute slopes bias toward high-baseline classes (a class dropping 1000 → 500 produces a larger slope than 10 → 5). We therefore normalise by the per-class mean inflow ¯mc to obtain a unit-free relative slope: 
+
+˜sc = sc
+
+max( ¯ mc, 10 −6) , ¯mc = 1
+
+W
+
+> t
+
+X 
+
+> t′=t−W+1
+
+mct′ . (8) The public-distillation sampler is then re-weighted as 
+
+ωc = (1 − η) · softmax( −˜sc/τ ) + η/C, (9) where τ > 0 is a temperature controlling how sharply the curator concentrates on declining classes and η ∈ [0 , 1] is a uniform-floor coefficient that guarantees every class receives at least η/C sampling weight, preventing the curator from starving any class under sharp shifts. 
+
+4.4 Analysis 
+
+Reduction to Flashback. FlashbackCL becomes Flash-back with λ = 1 , |B k| = 0 , and η = 1 . The extensions are additive, which makes the ablation in Section 5.4 well-defined. Overhead. Temporal decay is an element-wise multiplica-tion per round. The replay buffer adds one forward-backward pass per local step on a 32-sample batch against the 64-sample current batch, approximately 50% overhead. Core-set curation adds a linear regression over W × C per round, negligible against server distillation. Communication cost is identical to Flashback. 
+
+## 5 Experiments 
+
+5.1 Setup 
+
+Datasets. We evaluate FlashbackCL on two image-classification benchmarks under controlled temporal shift. In both cases, a 2.5% random sample of the training set is held as the server-side public dataset. Primary: CIFAR-10 
+
+with 10 classes partitioned across N = 50 clients, Dirichlet 
+
+β = 0 .1, K = 10 clients per round, and T = 200 rounds, where the 10 classes are divided into groups of 2 (P = 5), cre-ating temporal phases of 40 rounds each. Secondary (harder): 
+
+CIFAR-100 with 100 classes across N = 100 clients, Dirich-let β = 0 .1, K = 10 , and T = 200 rounds, where the 100 classes are divided into groups of 20 (P = 5). The experimen-tal evaluation considers three temporal shift modes: Instant switch at phase boundaries ( abrupt ), 10-round linear transi-tion window ( gradual ), and phases wrap modulo P ; phase length halved to fit two cycles ( cyclic ). Finally, stationary CIFAR-100 backward-compatibility with T = 150 and no shift is also reported. 
+
+Model and baselines. Our implementation evaluates a 2-layer CNN with ∼580 K parameters, following the architec-ture of McMahan et al. [2017] and Flashback [Aljahdali et al. ,2025]. The baseline algorithms on CIFAR-10 are FedAvg, Flashback, and FlashbackCL with three seeds each. For CIFAR-100, we additionally compare FedProx ( μ = 0 .01 ), FedNTD ( β = 1 and τ = 3 ). 
+
+FlashbackCL hyperparameters. An SGD with lr = 0 .01 ,momentum 0.9, and weight decay 10 −4, and a CNN with batch 64 and E = 3 local epochs. Additionally, distillation temperature 3, decay λ = 0 .97 , replay mix ρ = 0 .4, replay batch 32, per-client memory 10 MB with β = 200 , sliding window W = 10 , coreset temperature τ = 1 .0, uniform floor 
+
+η = 0 .5, and seeds {42 , 123 , 456 }.
+
+Metrics. Global and per-phase test accuracy (Acc) at the fi-nal round, and average temporal forgetting (TF), see Equation (4). 
+
+Hardware. All experiments were run on a single Apple M4 chip using the PyTorch MPS backend. No multi-GPU paral-lelism was used. Total compute across all experiments re-ported in this paper was approximately 350 M4-hours. 
+
+5.2 Results 
+
+CIFAR-10: Main Results 
+
+Table 1 and Figure 1 report the main comparison on CIFAR-10. FlashbackCL reaches the highest final accuracy in every shift mode (55.7% to 57.5%), improving over Flashback by 6.9% to 10.0% relative. FlashbackCL substantially reduces TF from 0.112 to 0.036 , which represents a 68% lower in Abrupt Gradual Cyclic   
+
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> Final test accuracy (%)
+> CIFAR-10 with temporal shift (50 clients, 5 phases, n=3 seeds)
+> FedAvg Flashback FlashbackCL
+
+Figure 1: Final test accuracy on CIFAR-10 with 50 clients across three temporal shift modes (mean over three seeds, error bars = stan-dard deviation). FlashbackCL is the highest bar in every mode. Abr. Grad. Cyc.   
+
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> Final acc (%)
+> CIFAR-10
+> Flashback
+> FlashbackCL
+> Abr. Grad. Cyc.
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> Final acc (%)
+> CIFAR-100
+> Cross-dataset: FlashbackCL vs Flashback across shift modes
+
+Figure 2: Cross-dataset comparison: FlashbackCL (green) vs Flash-back (blue) on CIFAR-10 (left) and CIFAR-100 (right) across three shift modes. The relative advantage replicates at both dataset scales despite the 10 × difference in number of classes and clients. 
+
+gradual shift, and 42% lower for abrupt shift than Flashback. In particular, FlashbackCL also exhibits lower seed-to-seed variance, ±0.019 versus ±0.038 , than Flashback with cyclic 
+
+shift, consistent with the ablation finding that the entire con-figuration stabilizes across runs (see Section 5.4). On cyclic shift, the TF comparison is not meaningful as Flashback’s TF is already near zero ( 0.036 ± 0.079 ) because phase cycling revisits old classes, and FlashbackCL’s slightly higher value (0.065 ±0.069 ) reflects seed variance rather than a real degra-dation; the wide standard deviations overlap entirely. Flash-backCL also exhibits lower seed-to-seed variance than Flash-back on cyclic shift ( ±0.019 versus ±0.038 ), consistent with the ablation finding (Section 5.4) that the full configuration stabilises across runs. 
+
+5.3 Cross-Dataset Replication: CIFAR-100 
+
+Table 2 and Figure 2 show that the CIFAR-10 result repli-cates on CIFAR-100. FlashbackCL improves over Flashback by 9.7% to 12.7% across all three shift modes. FedProx tracks FedAvg within seed noise across all modes, confirming that the proximal term targets spatial heterogeneity but is struc-turally insensitive to temporal shift. The CIFAR-100 absolute numbers (5% to 8%) are lower than CIFAR-10 because of the 10 × larger output space versus the same 580K-parameter CNN, and because the 5-phase protocol means only 20% of test classes correspond to currently-active training classes. Table 1: CIFAR-10 with temporal shift: final test accuracy and temporal forgetting TF, mean ± std over three seeds. Bold marks the best value per row. ∆acc is the relative improvement of FlashbackCL over Flashback; ∆TF is the absolute reduction in temporal forgetting. FedAvg Flashback FlashbackCL 
+
+Shift Acc TF Acc TF Acc ( ∆acc ) TF ( ∆TF )
+
+Abrupt 0.157 ± 0.018 0.179 ± 0.071 0.519 ± 0.015 0.126 ± 0.029 0.566 ± 0.028 (+9 .0% ) 0.073 ± 0.041 (−42% )
+
+Gradual 0.130 ± 0.052 0.191 ± 0.076 0.523 ± 0.019 0.112 ± 0.015 0.575 ± 0.028 (+10 .0% ) 0.036 ± 0.011 (−68% )
+
+Cyclic 0.119 ± 0.029 0.171 ± 0.156 0.521 ± 0.038 0.036 ± 0.079 0.557 ± 0.019 (+6 .9% ) 0.065 ± 0.069 
+
+Table 2: CIFAR-100 with temporal shift (100 clients, 200 rounds, 
+
+n = 3 seeds). FedProx tracks FedAvg closely, confirming that the proximal term addresses spatial but not temporal heterogeneity. Shift FedAvg FedProx FedNTD Flashback FlashbackCL                                              
+
+> Abrupt .047 ±.010 .047 ±.011 .065 ±.016 .071 ±.013 .080 ±.005
+> Gradual .057 ±.013 .056 ±.013 .072 ±.012 .069 ±.018 .077 ±.012
+> Cyclic .038 ±.009 .038 ±.013 .056 ±.013 .072 ±.006 .079 ±.006
+
+Table 3: CIFAR-10 without any public data (server distillation disabled, n = 3 seeds). FlashbackCL’s advantage comes entirely from its client-side mechanisms (temporal decay + CBRS replay), not from public-data access. Shift FedAvg Flashback FlashbackCL 
+
+Abrupt 15 .7 ± 1.8 15 .9 ± 3.2 39 .0 ± 1.5
+
+Gradual 13 .0 ± 5.2 18 .4 ± 4.4 37 .5 ± 3.6
+
+Cyclic 11 .9 ± 2.9 17 .3 ± 3.6 42 .1 ± 3.8
+
+The relative improvements are the meaningful comparison. 
+
+5.4 Public-Data Independence 
+
+A recurring concern with Flashback-family methods is that their advantage may stem from access to a public dataset rather than from the distillation mechanism itself. To test this, we disable all server-side distillation ( server epochs = 0 )so that neither FedAvg, Flashback, nor FlashbackCL uses the public dataset in any way. The only difference between the three methods is their client-side training procedure. Table 3 reports the results. Without public data, Flash-back collapses to FedAvg-level accuracy (15.9% vs 15.7% on abrupt): its local dynamic distillation against the global model adds nothing when the global model’s label count is stale and no server distillation corrects it. FlashbackCL, by contrast, reaches 37.5% to 42.1% across all three shift modes, more than doubling the baseline. The entire gain comes from temporal decay and CBRS replay operating on each client’s own private data. This result establishes that FlashbackCL’s core contribu-tion is independent of public-data access . When a public dataset is additionally available, server-side distillation adds a further ∼17 points on top (Table 1), but the client-side mech-anisms provide a standalone +19 to +25 point advantage that no other tested method achieves. 
+
+Ablation Studies 
+
+Figure 3 reports a 5-variant ablation of FlashbackCL on CIFAR-100 with abrupt shift: decay , replay , coreset , re-play + coreset , and full (decay + replay + coreset) . The Full 
+
+> Decay
+> Replay
+> Coreset
+> Replay+Coreset
+> 0
+> 2
+> 4
+> 6
+> 8
+> Final acc (%)
+> Final accuracy (higher better)
+> Full
+> Decay
+> Replay
+> Coreset
+> Replay+Coreset
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> TF
+> Temporal forgetting (lower better)
+> Ablation of FlashbackCL components on CIFAR-100 abrupt shift
+
+Figure 3: 5-variant ablation on CIFAR-100 abrupt (two seeds). Each variant has a distinct colour. Left: final accuracy (higher better). Right: temporal forgetting TF (lower better). 
+
+Full variant is the original FlashbackCL version, while the other versions consider only some of its subcomponents. Re-play (CBRS) variants reach final accuracy within 1.2 points of the full method, and variants without CBRS underperform vanilla Flashback; therefore, replay is the critical component. The replay version achieves the highest point with Acc = 
+
+0.079 , but has four times the variance of the full configura-tion and worse temporal forgetting. The full version trades a small amount of point Acc for substantially lower variance and lower TF. Also, to isolate CBRS’s contribution from replay in gen-eral, we additionally compare against Replay-Fed, which uses standard random reservoir sampling (no class balanc-ing) without distillation. On CIFAR-10 with abrupt shift and n = 3 seeds, Replay-Fed reaches 37 .4 ± 5.0% , well above FedAvg with 15 .7% , but far below 51 .9% of Flash-back and 56 .6% of FlashbackCL. This result confirms that (i) 
+
+replay variant without distillation cannot match distillation-based methods; and (ii) CBRS’s class-balancing property is critical for the marginal gain over Flashback, since random eviction suffers from buffer flushing at phase boundaries as predicted by our design reasoning in Section 4.2. Replay-Fed also exhibits twice the seed-to-seed variance of FlashbackCL (±5.0% vs ±2.8% ), further validating the stability advantage of class-balanced admission. 
+
+Decay-λ Sensitivity and Backward Compatibility 
+
+Figure 4 sweeps the decay rate on CIFAR-100 with abrupt 
+
+shift. The optimum is λ = 0 .95 ; performance is within seed noise across λ ∈ [0 .95 , 0.99] and drops sharply at λ = 0 .90 
+
+(over-decay). The main results use λ = 0 .97 , chosen before the sweep. We note that the optimal λ value may be workload dependent. 0.90 0.92 0.94 0.96 0.98                  
+
+> Decay rate λ
+> 6
+> 7
+> 8
+> Final acc (%)
+> Decay-λsensitivity (abrupt, T=150)
+> Flashback (7.1%)
+> FlashbackCL Figure 4: Decay-λsensitivity for CIFAR-100 with abrupt shift, T=150 , and two seeds, and Flashback’s mean from the main results (dashed line). Table 4: ResNet-18 with CIFAR-100, abrupt shift, a single seed,
+> K=5 , and T=100 .Method Final acc (seed 42) FedAvg 3.7%
+> Flashback 7.0%
+> FlashbackCL 9.3%(+33% rel.)
+
+On stationary CIFAR-100 with no shift and T = 150 ,FlashbackCL reaches a 3.5-point improvement even with-out temporal shift than Flashback, from 0.265 ± 0.007 to 
+
+0.230 ± 0.011 . Both trail FedAvg ( 0.308 ± 0.008 ) because dynamic distillation adds noise when there is no forgetting to combat. This backward-compatibility result shows that CBRS replay is a useful regulariser for spatial heterogeneity in its own right. 
+
+ResNet-18 Preliminary Result 
+
+To test the generalisability of CBRS as a primary finding beyond the 580K-parameter CNN, we performed a single-seed proof-of-scale experiment using ResNet-18 with ∼11 Mparameters on CIFAR-100 with abrupt shift, K = 5 , and 
+
+T = 100 rounds. The ranking is maintained according to Table 4 despite the reduced protocol. FlashbackCL’s relative improvement over Flashback is +33%. Evaluation of ResNet-18 with 3 seeds and 3 modes requires cluster computation, which is deferred to the extended version, but this single-seed result provides evidence that the temporal-forgetting advan-tage is not an artefact of the small-model regime. 
+
+## 6 Discussion and Future Work 
+
+Scope and generalisability. This paper is a controlled study establishing temporal forgetting as a concrete failure mode in FL and identifying CBRS replay as a promising ingredient for addressing it. Our evaluation uses a 580K-parameter CNN on image-classification benchmarks with synthetic phase-rotation protocols. We do not claim that the specific gains observed here transfer directly to CCAM or foundation-model fine-tuning; however, the underlying fail-ure mechanism (monotonic global statistics becoming mis-calibrated at distribution-shift boundaries) is structural and independent of model scale, dataset modality, or the specifics of the phase protocol. A preliminary ResNet-18 experiment confirms that FlashbackCL’s relative advantage holds at 11M parameters, see Section 5.4. Validation on real-world tempo-ral drift (e.g., nuScenes day/night shift, user-behaviour drift in on-device FM fine-tuning) is an important next step that we leave for a follow-up study. 
+
+Connection to client-selection and resource-aware FL. 
+
+Resource-efficient client selection can amplify temporal drift if its prioritisation is biased toward currently-active classes [Abdelmoniem et al. , 2023; Fourati et al. , 2023]. Flash-backCL’s decayed label count provides a natural signal for temporal-aware client selection. We do not explore the joint design here, but it is a natural follow-up. 
+
+On the coreset component. The ablation shows that the coreset curator contributes minimally to point accuracy over CBRS replay alone (Section 5.4). We recommend the two-component configuration (decay + CBRS) as the default for practitioners, with coreset curation as an optional addition for settings where server-side distillation is the primary aggrega-tion mechanism and the public dataset is large enough for trend estimation to be meaningful. The full three-component version remains the most stable (lowest variance) configura-tion. 
+
+Limitations. (i) Both datasets use the same CNN architec-ture; the ResNet-18 result in Section 5.4 is single-seed and uses a reduced protocol. Full multi-seed, multi-mode ResNet-18 evaluation requires cluster compute which we currently do not have. (ii) The temporal-shift protocol uses hard phase boundaries. A continuous “soft drift” mode where Dirichlet concentration parameters evolve per round would better ap-proximate real deployments and is a natural next experiment. (iii) All experiments use K = 10 clients per round; prelimi-nary results at K = 50 suggest the advantage persists but the absolute numbers are low. 
+
+## 7 Conclusion 
+
+In this work, we have formalised temporal forgetting in FL, distinct from the spatial forgetting already studied, and pro-posed FlashbackCL as a drop-in extension of Flashback that addresses it. On CIFAR-10, FlashbackCL reduces temporal forgetting by up to 68% and reaches from 55.7% to 57.5% fi-nal accuracy across three temporal shift modes with respect to Flashback’s 51.9% to 52.3%. The same pattern replicates on CIFAR-100 with 9.7% to 12.7% relative improvements. A 5-variant ablation identifies class-balanced reservoir sampling as the primary mechanism, and temporal decay plus coreset curation as variance-reducing stabilisers. FlashbackCL also improves on Flashback by 3.5 points in the stationary setting, supporting the view that CBRS replay regularises spatial het-erogeneity as well as temporal shift. 
+
+Acknowledgements. This research was funded by the ”GreenShift – EU MSc in AI & HPC for Green Digital Inno-vation in Transport” project (EU Digital Europe Programme grant number 101226222). References 
+
+Ahmed M Abdelmoniem, Atal Narayan Sahu, Marco Canini, and Suhaib A Fahmy. REFL: Resource-efficient federated learning. In ACM EuroSys , 2023. Mohammed Aljahdali, Ahmed M. Abdelmoniem, Marco Canini, and Samuel Horv´ ath. Flashback: Understanding and mitigating forgetting in federated learning. In 2025 3rd International Conference on Federated Learning Tech-nologies and Applications (FLTA) , pages 408–415, 2025. Yavuz Bakman, Duygu Nur Akyurek, Ekin Akyurek, Kang-wook Lin, and Jingzhao Huang. Federated orthogonal training: Mitigating global catastrophic forgetting in con-tinual federated learning. In International Conference on Learning Representations , 2024. Keith Bonawitz, Hubert Eichner, Wolfgang Grieskamp, Dzmitry Huba, Alex Ingerman, Vladimir Ivanov, Chloe Kiddon, Jakub Koneˇ cn´ y, Stefano Mazzocchi, Brendan McMahan, et al. Towards federated learning at scale: A system design. In Proceedings of Machine Learning and Systems , volume 1, pages 374–388, 2019. Arslan Chaudhry, Puneet K Dokania, Thalaiyasingam Ajan-than, and Philip HS Torr. Riemannian walk for incremen-tal learning: Understanding forgetting and intransigence. In Proceedings of the European Conference on Computer Vision (ECCV) , 2018. Aristotelis Chrysakis and Marie-Francine Moens. Online continual learning from imbalanced data. In Interna-tional Conference on Machine Learning , pages 1952– 1961, 2020. Matthias De Lange, Rahaf Aljundi, Marc Masana, Sarah Parisot, Xu Jia, Aleˇ s Leonardis, Gregory Slabaugh, and Tinne Tuytelaars. A continual learning survey: Defying forgetting in classification tasks. IEEE Transactions on Pattern Analysis and Machine Intelligence , 44(7):3366– 3385, 2021. Jiahua Dong, Lixu Wang, Zhen Fang, Gan Sun, Shichao Xu, Xiao Wang, and Qi Zhu. Federated class-incremental learning. In IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 10164–10173, 2022. Christophe Dupuy, Jimit Majmudar, Jixuan Wang, Tanya G Roosta, Rahul Gupta, Clement Chung, Jian Ding, and Salman Avestimehr. Quantifying catastrophic forgetting in continual federated learning. 2023. Fares Fourati, Salma Kharrat, Vaneet Aggarwal, Mohamed-Slim Alouini, and Marco Canini. FilFL: Accelerating federated learning via client filtering. arXiv preprint arXiv:2302.06599 , 2023. Ian J Goodfellow, Jonathon Shlens, and Christian Szegedy. Explaining and harnessing adversarial examples. In Inter-national Conference on Learning Representations , 2015. Geoffrey Hinton, Oriol Vinyals, and Jeff Dean. Distill-ing the knowledge in a neural network. arXiv preprint arXiv:1503.02531 , 2015. Peter Kairouz, H Brendan McMahan, Brendan Avent, Aur´ elien Bellet, Mehdi Bennis, Arjun Nitin Bhagoji, Kallista Bonawitz, et al. Advances and open problems in federated learning. Foundations and Trends in Machine Learning , 14(1–2):1–210, 2021. Sai Praneeth Karimireddy, Satyen Kale, Mehryar Mohri, Sashank Reddi, Sebastian Stich, and Ananda Theertha Suresh. SCAFFOLD: Stochastic controlled averaging for federated learning. In International Conference on Ma-chine Learning , pages 5132–5143, 2020. James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the National Academy of Sciences , 114(13):3521–3526, 2017. Gihun Lee, Minchan Jeong, Yongjin Shin, Sangmin Bae, and Se-Young Yun. Preservation of the global knowledge by not-true distillation in federated learning. Advances in Neural Information Processing Systems , 35, 2022. Zhizhong Li and Derek Hoiem. Learning without forgetting. 
+
+IEEE Transactions on Pattern Analysis and Machine Intel-ligence , 40(12):2935–2947, 2017. Tian Li, Anit Kumar Sahu, Manzil Zaheer, Maziar Sanjabi, Ameet Talwalkar, and Virginia Smith. Federated optimiza-tion in heterogeneous networks. Proceedings of Machine Learning and Systems , 2:429–450, 2020. Qinbin Li, Bingsheng He, and Dawn Song. Model-contrastive federated learning. In Conference on Computer Vision and Pattern Recognition , 2021. Tao Lin, Lingjing Kong, Sebastian U Stich, and Martin Jaggi. Ensemble distillation for robust model fusion in federated learning. Advances in Neural Information Processing Sys-tems , 33, 2020. Yuhang Ma, Zhongle Xie, Jue Wang, Ke Chen, and Lidan Shou. Continual federated learning based on knowledge distillation. In Proceedings of the Thirty-First Interna-tional Joint Conference on Artificial Intelligence (IJCAI) ,2022. Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas. Communication-efficient learning of deep networks from decentralized data. In AISTATS , 2017. German I Parisi, Ronald Kemker, Jose L Part, Christopher Kanan, and Stefan Wermter. Continual lifelong learning with neural networks: A review. Neural Networks , 113:54– 71, 2019. Daiqing Qi, Handong Zhao, and Sheng Li. Better generative replay for continual federated learning. In International Conference on Learning Representations , 2023. Hongyi Wang, Mikhail Yurochkin, Yuekai Sun, Dimitris Pa-pailiopoulos, and Yasaman Khazaeni. Federated learning with matched averaging. In International Conference on Learning Representations , 2020. Jianyu Wang, Qinghua Liu, Hao Liang, Gauri Joshi, and H Vincent Poor. Tackling the objective inconsistency prob-lem in heterogeneous federated optimization. In Advances in Neural Information Processing Systems , 2020. Abudukelimu Wuerkaixi, Sen Cui, Jingfeng Zhang, Kunda Yan, Bo Han, Gang Niu, Lei Fang, Changshui Zhang, and Masashi Sugiyama. Accurate forgetting for heterogeneous federated continual learning. In International Conference on Learning Representations , 2024. Chencheng Xu, Zhiwei Hong, Minlie Huang, and Tao Jiang. Acceleration of federated learning with alleviated forget-ting in local training. arXiv preprint arXiv:2203.02645 ,2022. Jaehong Yoon, Saehoon Kim, Eunho Yang, and Sung Ju Hwang. Scalable and order-robust continual learning with additive parameter decomposition. arXiv preprint arXiv:1902.09432 , 2020. Jaehong Yoon, Wonyong Jeong, Giwoong Lee, Eunho Yang, and Sung Ju Hwang. Federated continual learning with weighted inter-client transfer. In International Conference on Machine Learning , pages 12073–12086. PMLR, 2021.
