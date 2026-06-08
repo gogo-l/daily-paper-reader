@@ -1,0 +1,604 @@
+Title: Fairness Beyond Demographics: Optimizing Performance Across Appearance-Based Hidden Cohorts in Medical Imaging
+
+URL Source: https://arxiv.org/pdf/2605.29827v1
+
+Published Time: Fri, 29 May 2026 01:29:38 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+## Fairness Beyond Demographics: Optimizing Performance Across Appearance-Based Hidden Cohorts in Medical Imaging 
+
+Milad Masroor, Cuong Nguyen, Kevin Wells, and Gustavo Carneiro 
+
+Centre for Vision, Speech and Signal Processing, University of Surrey, Guildford, UK 
+
+{m.masroor,c.nguyen,k.wells,g.carneiro}@surrey.ac.uk 
+
+Abstract. Medical image analysis models can exhibit performance dis-parities across patient subgroups, threatening clinical safety and fairness. Existing methods typically address this issue by optimizing accuracy and fairness metrics for visible demographic attributes (e.g., sex or age) con-sidered in isolation. This strategy not only overlooks potentially more informative latent stratifications, which may reveal deeper sources of model error and inequity, but also fails to scale when multiple demo-graphic attributes are considered simultaneously due to the resulting sparsity of training data within each subgroup. We deal with these is-sues by introducing the label-free hidden-cohort fairness (LHCF) training paradigm that instead of maximizing fairness over visible demographic attributes, it optimizes fairness across latent subpopulations discovered from image appearance. By clustering images into K appearance-based cohorts and applying fairness optimization over them, LHCF uncovers underlying sources of model error and avoids the combinatorial sparsity of multi-demographic attributes, reducing disparities across both single and multiple demographic attributes. We demonstrate on our proposed fairness benchmark, HIDFairBench, that LHCF provides state-of-the-art fairness results on single and multiple demographic attributes, de-spite never using demographic labels for training. Our results position hidden-cohort fairness as a practical, scalable, and robust alternative to demographic-based fairness optimization for trustworthy medical image analysis. Code will be available upon paper acceptance. 
+
+Keywords: Hidden Cohort Fairness · Demographic-Label-Free Fairness 
+
+· Trustworthy AI in Healthcare. 
+
+1 Introduction 
+
+Medical image analysis (MIA) systems often exhibit performance disparities across visible demographic attributes (e.g., sex, age, ethnicity) [1, 6, 12, 18, 24, 32], raising concerns about clinical safety and fairness [6, 32]. Although these attributes are assumed to be the main drivers of such gaps, recent studies have shown that they may align only weakly with latent factors that may better ex-plain model behavior [1, 24, 31]. Indeed, performance disparities can be much  
+
+> arXiv:2605.29827v1 [cs.CV] 28 May 2026 2Masroor et al.
+
+larger between hidden patient cohorts (formed by visually coherent but unlabeled subsets of the data) than across demographic groups, creating low-performing subpopulations often referred to as underperforming slices or blind spots [10, 25, 27, 39]. This challenge becomes more severe when multiple attributes are con-sidered jointly, as the number of intersectional subgroups expands while avail-able samples per subgroup shrink [2]. These issues reflect the hidden stratifi-cation phenomenon, in which coarse labels fail to capture meaningful clinical variation [24, 40], causing models to perform poorly on underrepresented co-horts [8, 28, 29, 33] and ultimately increasing the risk of disproportionate patient harm [15]. Despite growing evidence that hidden patient cohorts represent a major driver of model failures, fairness methods in medical imaging still focus primarily on visible demographic attributes [19, 20, 22, 34, 35], while work on hidden co-horts has mostly diagnosed, instead of mitigating, the reported disparities [1, 5, 7, 25]. Demographic-focused fairness approaches also scale poorly as intersectional groups increase and per-group sample sizes collapse [2]. Taken together, these limitations point to latent cohorts, with sufficient data and richer structure, as a more reliable basis for fairness optimization than visible demographic groups. To illustrate this paradigm shift, we compare two approaches: (i) classic fairness training that optimizes across visible demographic attributes; and (ii) label-free hidden-cohort fairness (LHCF), which optimizes fairness across clusters formed with appearance-based embeddings. Fig. 1b shows that LHCF yields the best classification and fairness results not only for isolated demographic groups but also for multi-attribute intersections. In this paper, we propose LHCF (Fig. 1a), which optimizes fairness over appearance-based latent cohorts without demographic labels and is compatible with existing fairness approaches. We also propose the HIdden-Demographic Fairness Benchmark (HIDFairBench), a new benchmark to stress-test fairness methods. This paper has the following contributions: 
+
+– The new LHCF training that clusters images into K hidden clusters and applies fairness optimization to balance accuracy and fairness across these clusters. This approach avoids the combinatorial sparsity of multi-attribute demographic groups and reduces performance disparities not only for the hidden clusters but also across single and multiple demographic attributes. 
+
+– The new HIDFairBench, a benchmark that evaluates hidden-cohort quality and tests fairness methods under increasingly complex multi-demographic partitions, exposing the scalability limits of fairness approaches. Our experiments show that LHCF achieves state-of-the-art accuracy and fairness across single and multiple demographic attributes from HIDFairBench, despite never using demographic labels for training, establishing LHCF as a scalable and robust alternative to demographic-based fairness optimization in MIA. 
+
+2 Method 
+
+In this section, we present the LHCF training and the HIDFairBench benchmark. Fairness Beyond Demographics 3
+
+(a) LHCF training. Gender (2)  
+
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+> 0.918
+> 0.920
+> 0.922
+> 0.924
+> 0.926
+> 0.928
+> 0.930
+> Score
+> Overall AUC
+> Classic
+> LHCF
+> Gender (2)
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+> 0.78
+> 0.80
+> 0.82
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> Min AUC
+> Gender (2)
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+> 0.87
+> 0.88
+> 0.89
+> 0.90
+> 0.91
+> 0.92
+> 0.93 ES-AUC
+> Gender (2)
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+> 0.000
+> 0.025
+> 0.050
+> 0.075
+> 0.100
+> 0.125
+> 0.150
+> 0.175
+> AUC Gap
+
+(b) Classic vs. LHCF Results. 
+
+Fig. 1: (a) LHCF training. (b) Overall AUC (left) and fairness metrics (Min AUC, ES-AUC, AUC Gap; second-to-fourth plots) across visible cohort com-plexity for Classic demographic fairness training (i) and LHCF training (ii) of FairDi [22] (using ResNet18 backbone) on HAM10000 [36]. Visible-cohort com-plexity increases from Gender (2 groups) to Age_binary (2 groups), Age_multi4 (4 groups), and intersectional cohorts Gender ×Age_binary (4 groups) and Gender ×Age_multi4 (8 groups) – Sec. 2.2 explains this experimental setup. 
+
+2.1 LHCF Training 
+
+The LHCF training has two steps (Fig. 1a): (i) unsupervised discovery of latent cohorts from image embeddings, and (ii) fairness-aware training, where the discovered cohort identities are treated as sensitive attributes. 
+
+Step (i) assumes the availability of a labeled dataset D = {(xi, y i)}Ni=1 , con-taining medical images x ∈ X and diagnostic labels y ∈ Y ⊆ ∆|Y|− 1, but without demographic annotations. Our goal is to learn the model fθ = dθd ◦ eθe ,where θ = ( θe, θ d), eθe : X → Z represents the encoder, and dθd : Z → Y 
+
+denotes the decoder. We assume that the model fθ (.) has been pre-trained ei-ther with self-supervised learning [17] or with supervised learning using D. In this Step (i), the method first finds the hidden cohorts via Gaussian Mixture Model (GMM) [9], where the number of clusters is estimated with the Bayesian Information Criterion (BIC) [30]. This clustering happens with the image em-beddings in Z = {zi|zi = eθe (xi), (xi, y i) ∈ D} . For K ∈ N, a Gaussian mixture is defined by p(z | ΦK ) = PKk=1 πk N (z | μk, Σ k), ΦK = {πk, μ k, Σ k}Kk=1 , with log-likelihood ℓ(ΦK ; Z) = PNi=1 log PKk=1 πkN (zi | μk, Σ k). We estimate Φ∗
+
+K
+
+by Expectation Maximization (EM) [9], yielding the responsibility γik = p(k |4 Masroor et al. 
+
+zi, Φ ∗ 
+
+> K
+
+) = πk N (zi|μk ,Σ k )      
+
+> PKj=1 πjN(zi|μj,Σ j)
+
+. The number of cohorts can be estimated with 
+
+K∗ ∈ argmin K∈{ 1,...,N } BIC( K) = argmin K∈{ 1,...,N } pK log N − 2 ℓ(Φ∗ 
+
+> K
+
+; Z), (1) where pK = ( K − 1) + Kd + K d(d+1) 2 for full covariances. The hidden cohort dataset to be used in subsequent fairness optimization is then defined by bD =
+
+{(xi, y i, c i)|(xi, y i) ∈ D , c i = arg max k∈{ 1,...,K ∗} γik }, where ci represents the hidden cohort label of the sample (xi, y i) computed with the responsibility γik .
+
+Step (ii) uses the hidden cohort dataset bD to optimize 
+
+θ∗ = argmin θ 1
+
+> N
+
+PNi=1 ℓclss 
+
+ yi, f θ (xi) + λ ℓ fair 
+
+  bD, θ , (2) where λ ≥ 0 is a hyper-parameter, ℓclss (.) is a classification loss and ℓfair (.) denotes a fairness loss that can be defined in different ways, such as: 
+
+ℓwst fair 
+
+  bD, θ  = max k Rk(θ) or ℓgap fair 
+
+  bD, θ  = max k Rk(θ) − min k Rk(θ), (3) with Rk(θ) = 1 
+
+> |Ck|
+
+P 
+
+> (xi,y i)∈Ck
+
+ℓclss 
+
+ yi, f θ (xi) denoting classification loss of sam-ples in the cluster Ck, ℓwst fair (·) minimizing the worst-cohort classification loss, and 
+
+ℓgap fair (·) minimizing the gap between the best- and worst-cohort losses. LHCF is agnostic to the model and fairness loss, which together define a FairAI method (e.g., SWAD [4], FIS[20], FEBS [35], FairCLIP [19], FaMI [34], FairDi [22]). 
+
+Theoretical analysis We show that under mild clustering assumptions, the fairness loss ℓwst fair ( bD, θ ) upper-bounds the loss of any visible cohort; thus, min-imizing it yields fairness across all visible cohorts [29]. Specifically, we assume that the GMM with hard assignments partitions the data into K disjoint clusters 
+
+{C1, . . . , C K } with Ck ∩ Ck′ = ∅ for k̸ = k′, and that each visible cohort Gt is a union of these clusters, i.e., Gt = S 
+
+> k∈K
+
+Ck, where K ⊆ { 1, . . . , K }.
+
+Lemma 1. The empirical risk of any visible cohort is upper-bounded by ℓwst fair ( bD, θ ),meaning: L(Gt) = 1
+
+> |Gt|
+
+P 
+
+> (xi,y i)∈Gt
+
+ℓclss (yi, f θ (xi)) ≤ max k Rk(θ).
+
+Proof. Assuming Gt = ∪k∈K Ck, I(( xi, y i) ∈ Gt) = P 
+
+> k∈K
+
+I(( xi, y i) ∈ Ck), where 
+
+I(.) is the indicator function, we re-write the risk on Gt as: 
+
+L(Gt) = 1
+
+> |Gt|
+
+P 
+
+> (xi,y i)
+
+ℓclss (yi, f θ (xi)) I(( xi, y i) ∈ Gt)= 1
+
+> |Gt|
+
+P
+
+> (xi,y i)
+
+P 
+
+> k∈K
+
+ℓclss (yi, f θ (xi)) I(( xi, y i) ∈ Ck)= 1
+
+> |Gt|
+
+P
+
+> k∈K
+
+P 
+
+> (xi,y i)∈Ck
+
+ℓclss (yi, f θ (xi)) = 1
+
+> |Gt|
+
+P 
+
+> k∈K
+
+|Ck|Rk(θ) ≤ P 
+
+> j∈K |Cj|
+
+/|Gt| max k Rk(θ) ≤ max k Rk(θ). (4) 
+
+⊓⊔
+
+2.2 HIDFairBench Benchmark Datasets. The benchmark relies on three public medical imaging datasets: 
+
+Fitzpatrick17K [14], HAM10000 [36], and CMMD [3]. For HAM10000 (9,948 dermoscopic images), we follow prior work [21] and binarize diagnoses into Fairness Beyond Demographics 5
+
+benign vs. malignant. Visible cohort partitions include Gender , Age_binary 
+
+(≤60, >60), Age_multi4 (≤39, 40–59, 60–79, ≥80), and intersectional Gen-der × Age_binary and Gender × Age_multi4 groups. For Fitzpatrick17K, we group lesions into benign (non-neoplastic + benign) vs. malignant, and use Fitz-patrick skin types (0–5) as visible demographic attributes. For both HAM10000 and Fitzpatrick17K, we use an 80%/10%/10% train/validation/test split. For CMMD (5,152 mammography images), we frame classification as non-cancer vs. cancer, use binarized patient age (≤55, >55) as the sensitive attribute, and rely on a 70%/10%/20% train/validation/test split. 
+
+Evaluation & Statistical Tests. The hidden-cohort quality is measured using the Brier Score (BS) [25], which captures calibration and identifies under- and overperforming cohorts, and Average Purity (AP) [1], which quantifies align-ment between discovered cohorts and visible demographic attributes. For vis-ible cohort evaluation, we report AUC and four fairness metrics: AUC Gap ,
+
+Worst-Case AUC [41], ES-AUC [20], and Performance-Scaled Disparity (PSD) .Statistical significance uses the Friedman test [13, 41] with Nemenyi post-hoc comparisons [23] ( p < 0.05 ), visualized via Critical Difference (CD) diagrams. 
+
+FairAI Methods & Backbones. The benchmark tests many FairAI meth-ods , starting from the ERM [37] baseline, which optimizes average classification error without addressing fairness. SWAD [4] improves generalization by promot-ing convergence to flat minima. Among fairness approaches, FIS [20] reweights group losses to equalize performance, while FEBS [35] emphasizes hard examples via error-bound scaling. We also include FairCLIP-OT , an optimal-transport fairness regularizer adapted from FairCLIP [19], and FaMI [34], which reduces dependence between representations and sensitive attributes via mutual informa-tion. Furthermore, FairDi [22] learns a shared fair backbone and distills knowl-edge from cohort-specific experts into a unified student model. For the backbone models , we consider ResNet18 [16], CLIP [11], MedCLIP [38], and DINOv2 [26]. 
+
+3 Experiments 
+
+3.1 HIDFairBench Results Hidden-Cohort Quality. Using an ERM-trained ResNet18, BS on HAM10000 reveals a clear risk stratification across hidden cohorts (Table 1): low malignancy-rate cohorts (Clusters 0,2) show low BS, intermediate malignancy-rate cohorts (1,3,5) exhibit moderate BS, and high malignancy-rate cohorts (4,6) attain the highest BS, indicating reduced reliability on clinically severe cases. These trends mirror underlying population structure, with cohorts dominated by older pa-tients showing higher malignancy prevalence, consistent with known age-related risk patterns in dermatology. Across CMMD and Fitzpatrick17K, BS similarly tracks malignancy severity, with low malignancy-rate cohorts obtaining low cal-ibration error and high malignancy-rate clusters showing higher BS. Despite this clear risk stratification, hidden cohorts show weak alignment with avail-able demographic metadata: on HAM10000, AP is 0.4919 ±0.0183 (gender) and 6 Masroor et al. 
+
+Table 1: AUC and BS across hidden clusters (Clt. ID) on HAM10000 (ERM, ResNet18), with cohort proportions (%) of malignant/benign, male/female, and age ≤ 60 or > 60 years old.                                        
+
+> Clt.ID AUC BS (Mal)(Ben) (Male)(Female) (≤60)( >60)
+> 0–5.3E-5 (0.00)(100.00) (48.66)(51.34) (78.61)(21.39) 10.6179 0.1506 (18.55)(81.45) (39.18)(60.82) (70.10)(29.90) 20.8247 0.0241 (2.63)(97.37) (46.24)(53.76) (74.44)(25.56) 30.7507 0.1759 (27.27)(72.73) (45.45)(54.55) (54.54)(45.46) 40.6113 0.2255 (36.36)(63.64) (63.64)(36.36) (35.06)(64.94) 50.7557 0.1090 (13.65)(86.35) (59.03)(40.97) (56.38)(43.62) 60.7299 0.1956 (66.39)(33.61) (69.75)(30.25) (23.53)(76.47)
+
+Table 2: Classic vs. LHCF training results averaged over HAM10000 ( Gen-der , Age_binary , Age_multi4 , Gender × Age_binary , Gender × Age_multi4 ), Fitzpatrick17K ( Skin Type ), and CMMD ( Age_binary ). Cell colors denote Better / Worse / Same between LHCF and Classic, and Bold =best result.                                                                
+
+> Measures and Ranks ERM SWAD FIS FaMI FEBS FairCLIP-OT FairDi Classic  Avg. Overall AUC Score ↑0.8775 0.8867 0.8806 0.8582 0.8731 0.8692 0.9014 Avg. Min. AUC Score ↑0.8213 0.8340 0.8212 0.8113 0.8246 0.8083 0.8511 Avg. ES-AUC Score ↑0.8447 0.8578 0.8477 0.8304 0.8444 0.8374 0.8744 Avg. Gap AUC Score ↓0.1053 0.0905 0.1019 0.0953 0.0940 0.1012 0.0824 Avg. Mean PSD Score ↓0.0478 0.0406 0.0487 0.0448 0.0444 0.0473 0.0354 Avg. Max PSD Score ↓0.1220 0.1042 0.1186 0.1134 0.1104 0.1192 0.0915
+> LHCF  Avg. Overall AUC Score ↑0.8775 0.8889 0.8804 0.8668 0.8827 0.8703 0.9050
+> Avg. Min. AUC Score ↑0.8213 0.8418 0.8266 0.8106 0.8369 0.8127 0.8686
+> Avg. ES-AUC Score ↑0.8447 0.8617 0.8486 0.8339 0.8519 0.8399 0.8817
+> Avg. Gap AUC Score ↓0.1053 0.0843 0.0967 0.1061 0.0929 0.0963 0.0666
+> Avg. Mean PSD Score ↓0.0478 0.0386 0.0461 0.0498 0.0450 0.0451 0.0312
+> Avg. Max PSD Score ↓0.1220 0.0976 0.1124 0.1245 0.1080 0.1132 0.0762
+
+0.2234 ±0.0065 (age); on Fitzpatrick17K, AP for skin type is 0.0998 ±0.0161 ; and on CMMD, AP for age is 0.3517 ±0.0067 . Such APs < 0.5 confirm that hidden cohorts primarily reflect visual structure rather than demographic attributes. 
+
+Visible Cohort Evaluation. Table 2 compares visible-demographic super-vised ( Classic ) and LHCF training across all datasets and demographic at-tributes. LHCF improves AUC and fairness, especially for intersectional co-horts, without using any demographic metadata (see Fig. 1b). Despite weak alignment between hidden and demographic groups (AP < 0.5), the fairness learned from appearance-based cohorts generalizes well to visible attributes, with FairDi+LHCF delivering the strongest overall results. The CD diagrams in Fig. 2 confirm the superiority of LHCF, and in particular the FairDi+LHCF as the top-ranked approach across nearly all evaluation metrics. An important question is why LHCF, trained on hidden cohorts, outperforms classical methods trained on visible cohorts. The intuition, based on Lemma 1, is that instead of minimizing the average loss over overlapping visible cohorts, which can overem-phasize intersectional groups, LHCF minimizes the loss over hidden cohorts, thereby reducing extreme disparities and producing more balanced performance. Fairness Beyond Demographics 71 2 3 4 5 6 7 8 9 10 11 12 13 14  
+
+> FairDi+LHCF
+> FairDi+Classic
+> SWAD+LHCF
+> SWAD+Classic
+> FEBS+LHCF
+> FIS+LHCF
+> FIS+Classic ERM+Classic
+> ERM+LHCF
+> FairCLIP-OT+LHCF
+> FEBS+Classic
+> FairCLIP-OT+Classic
+> FaMI+LHCF
+> FaMI+Classic
+> CD
+
+(a) Overall AUC 1 2 3 4 5 6 7 8 9 10 11 12 13 14   
+
+> FairDi+LHCF
+> FairDi+Classic
+> SWAD+LHCF
+> SWAD+Classic
+> FEBS+LHCF
+> FIS+LHCF
+> FEBS+Classic FIS+Classic
+> ERM+LHCF
+> ERM+Classic
+> FairCLIP-OT+LHCF
+> FaMI+LHCF
+> FaMI+Classic
+> FairCLIP-OT+Classic
+> CD
+
+(b) Min. AUC 1 2 3 4 5 6 7 8 9 10 11 12 13 14   
+
+> FairDi+LHCF
+> FairDi+Classic
+> SWAD+LHCF
+> SWAD+Classic
+> FEBS+LHCF
+> FIS+LHCF
+> FIS+Classic ERM+Classic
+> FEBS+Classic
+> ERM+LHCF
+> FairCLIP-OT+LHCF
+> FairCLIP-OT+Classic
+> FaMI+Classic
+> FaMI+LHCF
+> CD
+
+(c) ES-AUC 1 2 3 4 5 6 7 8 9 10 11 12 13 14  
+
+> FairDi+LHCF
+> FairDi+Classic
+> SWAD+LHCF
+> SWAD+Classic
+> FEBS+LHCF
+> FaMI+Classic
+> FEBS+Classic FIS+LHCF
+> FairCLIP-OT+LHCF
+> ERM+LHCF
+> FairCLIP-OT+Classic
+> ERM+Classic
+> FaMI+LHCF
+> FIS+Classic
+> CD
+
+(d) Gap AUC 1 2 3 4 5 6 7 8 9 10 11 12 13 14   
+
+> FairDi+LHCF
+> FairDi+Classic
+> SWAD+LHCF
+> SWAD+Classic
+> FEBS+Classic
+> FaMI+Classic
+> FEBS+LHCF FairCLIP-OT+LHCF
+> FIS+LHCF
+> FairCLIP-OT+Classic
+> ERM+LHCF
+> ERM+Classic
+> FIS+Classic
+> FaMI+LHCF
+> CD
+
+(e) Mean PSD 1 2 3 4 5 6 7 8 9 10 11 12 13 14   
+
+> FairDi+LHCF
+> FairDi+Classic
+> SWAD+LHCF
+> SWAD+Classic
+> FEBS+LHCF
+> FaMI+Classic
+> FEBS+Classic FIS+LHCF
+> FairCLIP-OT+LHCF
+> ERM+LHCF
+> ERM+Classic
+> FairCLIP-OT+Classic
+> FIS+Classic
+> FaMI+LHCF
+> CD
+
+(f) Max PSD 
+
+Fig. 2: CD diagrams comparing Classic and LHCF learning across all datasets and demographic cohorts (Please zoom in to view the figures clearly). Gender (2) 
+
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+
+0.922 
+
+0.924 
+
+0.926 
+
+0.928 
+
+> Score
+
+Overall AUC 
+
+> Gender (2)
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+
+0.750 
+
+0.775 
+
+0.800 
+
+0.825 
+
+0.850 
+
+0.875 
+
+0.900 
+
+0.925 
+
+Min AUC 
+
+> Gender (2)
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+
+0.86 
+
+0.87 
+
+0.88 
+
+0.89 
+
+0.90 
+
+0.91 
+
+0.92 
+
+0.93 ES-AUC 
+
+> Gender (2)
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+
+0.00 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+0.25 AUC Gap 
+
+K = 3 
+
+K = 5 
+
+K = 7 (BIC) 
+
+K = 9 
+
+Fig. 3: Sensitivity analysis of LHCF (FairDi+ResNet18 backbone) with respect to the number of hidden cohorts ( K) on the HAM10000 dataset. 
+
+3.2 Ablation Studies Number of Hidden Cohorts ( K). Fig. 3 evaluates the performance of LHCF as a function of the number of cohorts. The BIC choice (i.e., K=7 ) produces the best results for AUC and fairness measures for the majority of visible cohort partitions, whereas larger or smaller values of K ∈ { 3, 5, 9} tend to degrade performance. This supports BIC as an effective criterion for selecting K.
+
+Embedding Backbone. Fig. 4 summarizes how representation backbones af-fect LHCF. ResNet18 and MedCLIP achieve the best Overall AUC. Fairness metrics separate more clearly: for Min. AUC and AUC Gap, ResNet18 performs best on simpler intersectional settings; for ES-AUC, ResNet18 is consistently strongest across all cohort complexities, with MedCLIP a solid second. CLIP and DINOv2 show larger drops in worst-case performance and higher disparity as cohort complexity increases. Overall, backbones inducing moderate hidden-cohort granularity, e.g., ResNet18 ( K=7 ) and MedCLIP ( K=6 ) selected by BIC, yield better accuracy and fairness than CLIP ( K=10 ) and DINOv2 ( K=5 ). 
+
+Demographic-Aware Clustering (DAC) vs. LHCF. As an intermediate alternative between Classic and LHCF , DAC clusters samples using embeddings augmented with demographic attributes and then optimizes fairness over these clusters. Fig. 5 shows that LHCF outperforms DAC on nearly all measures and across all cohort complexities. These results indicate that appearance driven, 8 Masroor et al. Gender (2)    
+
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+> 0.922
+> 0.923
+> 0.924
+> 0.925
+> 0.926
+> 0.927
+> 0.928
+> 0.929
+> Score
+> Overall AUC
+> Gender (2)
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94 Min AUC
+> Gender (2)
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+> 0.88
+> 0.89
+> 0.90
+> 0.91
+> 0.92
+> 0.93 ES-AUC
+> Gender (2)
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> 0.12
+> 0.14
+> 0.16 AUC Gap
+> ResNet18
+> CLIP
+> MedCLIP
+> DINOv2
+
+Fig. 4: Sensitivity analysis of LHCF (FairDi) with respect to the backbone (ResNet18, CLIP [11], MedCLIP [38], and DINOv2 [26]) on HAM10000. Gender (2)   
+
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+> 0.9265
+> 0.9270
+> 0.9275
+> 0.9280
+> 0.9285
+> 0.9290
+> 0.9295
+> Score
+> Overall AUC
+> DAC
+> LHCF
+> Gender (2)
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> Min AUC
+> Gender (2)
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+> 0.87
+> 0.88
+> 0.89
+> 0.90
+> 0.91
+> 0.92
+> 0.93 ES-AUC
+> Gender (2)
+> Age_binary (2)
+> Gender × Age_binary (4)
+> Age_multi4 (4)
+> Gender × Age_multi4 (8)
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> 0.12
+> 0.14
+> 0.16 AUC Gap
+
+Fig. 5: DAC vs. LHCF (FairDi+ResNet18 backbone) on HAM10000 dataset. label-free fairness optimization offers greater robustness to visible-cohort com-plexity than DAC while eliminating any dependence on demographic labels. 
+
+4 Conclusion 
+
+We introduced LHCF, which optimizes fairness over appearance-based latent co-horts without demographic supervision, and proposed HIDFairBench to evaluate fairness under single and multiple demographic attributes. Across three datasets, hidden cohorts exhibit clinical risk stratification (BS rises with malignancy) but weak demographic alignment (AP < 0.5), indicating they capture meaningful visual structure. Relative to the demographic-supervised Classic FairAI meth-ods, LHCF improves fairness and accuracy on visible groups without using de-mographic labels, with solid gains for intersectional cohorts. LHCF is robust to design choices: a BIC-selected moderate number of cohorts ( K=7 ) yields the best accuracy-fairness tradeoff, and backbones with similar cohort granular-ity (ResNet18, MedCLIP) provide the best performance. Compared with DAC, LHCF delivers better accuracy and fairness. In future work, we will improve the reproducibility of LHCF by stabilizing the unsupervised clustering stage and ex-tend Lemma 1 to accommodate more fairness losses; nonetheless, the adoption of data-driven latent stratification offers a more generalizable and deployable pathway toward equitable and trustworthy medical imaging analysis. Fairness Beyond Demographics 9
+
+References 
+
+1. Bissoto, A. et al. Subgroup Performance Analysis in Hidden Stratifications. In MICCAI (2025), 594–603. 2. Buolamwini, J. et al. Gender shades: Intersectional accuracy disparities in com-mercial gender classification. In ACM FAccT (2018), 77–91. 3. Cai, H. et al. An online mammography database with biopsy confirmed types. Scientific Data 10, 123 (2023). 4. Cha, J. et al. Swad: Domain generalization by seeking flat minima. NeurIPS 34, 
+
+22405–22418 (2021). 5. Chakraborty, R. et al. Exmap: Leveraging explainability heatmaps for unsuper-vised group robustness to spurious correlations. In CVPR (2024), 12017–12026. 6. Christodoulou, E. et al. Confidence intervals uncovered: Are we ready for real-world medical imaging AI? In MICCAI (2024), 124–132. 7. Collevati, M. et al. Leveraging Neurosymbolic AI for Slice Discovery. In NESY (2024), 403–418. 8. DeGrave, A. et al. AI for radiographic COVID-19 detection selects shortcuts over signal. Nat. Mach. Intell. 3, 610–619. 2021. 9. Dempster, A. P. et al. Maximum likelihood from incomplete data via the EM algorithm. JRSSSB (methodological) 39, 1–22 (1977). 10. Eyuboglu, S. et al. Domino: Discovering systematic errors with cross-modal em-beddings. arXiv preprint arXiv:2203.14960 (2022). 11. Fang, Y. et al. Eva: Exploring the limits of masked visual representation learning at scale. In CVPR (2023), 19358–19369. 12. Finlayson, S. G. et al. The clinician and dataset shift in artificial intelligence. New England Journal of Medicine 385, 283–286 (2021). 13. Friedman, M. The use of ranks to avoid the assumption of normality implicit in the analysis of variance. Journal of the American Statistical Association 32, 675–701 (1937). 14. Groh, M. et al. Evaluating deep neural networks trained on clinical images in dermatology with the Fitzpatrick 17k dataset. In CVPR Workshop (2021), 1820– 1828. 15. Hashimoto, T. et al. Fairness without demographics in repeated loss minimization. In ICML (2018), 1929–1938. 16. He, K. et al. Deep residual learning for image recognition. In CVPR (2016), 770– 778. 17. Jing, L. et al. Self-supervised visual feature learning with deep neural networks: A survey. IEEE TPAMI 43, 4037–4058 (2020). 18. Koch, L. M. et al. Distribution shift detection for the postmarket surveillance of medical AI algorithms: a retrospective simulation study. NPJ Digital Medicine 7, 
+
+120 (2024). 19. Luo, Y. et al. FairCLIP: Harnessing fairness in vision-language learning. In CVPR (2024), 12289–12301. 20. Luo, Y. et al. FairVision: Equitable Deep Learning for Eye Disease Screening via Fair Identity Scaling. 2024. arXiv: 2310.02492 [cs.CV] . https://arxiv.org/abs/ 2310.02492 .21. Maron, R. C. et al. Systematic outperformance of 112 dermatologists in multi-class skin cancer image classification by convolutional neural networks. European Journal of Cancer 119, 57–65 (2019). 10 Masroor et al. 22. Masroor, M. et al. Fair Distillation: Teaching Fairness from Biased Teachers in Medical Imaging. arXiv preprint arXiv:2411.11939 (2024). 23. Nemenyi, P. B. Distribution-free multiple comparisons. (Princeton University, 1963). 24. Oakden-Rayner, L. et al. Hidden stratification causes clinically meaningful failures in machine learning for medical imaging. In CHIL (2020), 151–159. 25. Olesen, V. et al. Slicing through bias: Explaining performance gaps in medical im-age analysis using slice discovery methods. In FAIMI Workshop, MICCAI (2024). 26. Oquab, M. et al. Dinov2: Learning robust visual features without supervision. arXiv preprint arXiv:2304.07193 (2023). 27. Plumb, G. et al. Towards a more rigorous science of blindspot discovery in image classification models. arXiv preprint arXiv:2207.04104 (2022). 28. Rajpurkar, P. et al. Deep learning for chest radiograph diagnosis: A retrospective comparison of the CheXNeXt algorithm to practicing radiologists. PLoS medicine 
+
+15, e1002686 (2018). 29. Sagawa, S. et al. Distributionally robust neural networks for group shifts: On the importance of regularization for worst-case generalization. In ICLR (2020). 30. Schwarz, G. Estimating the dimension of a model. The annals of statistics, 461–464 (1978). 31. Seo, S. et al. Unsupervised learning of debiased representations with pseudo-attributes. In CVPR (2022), 16742–16751. 32. Seyyed-Kalantari, L. et al. Underdiagnosis bias of artificial intelligence algorithms applied to chest radiographs in under-served patient populations. Nature medicine 
+
+27, 2176–2182 (2021). 33. Sohoni, N. et al. No subclass left behind: Fine-grained robustness in coarse-grained classification problems. NeurIPS 33, 19339–19352 (2020). 34. Tian, Y. et al. FairDomain: Achieving Fairness in Cross-Domain Medical Image Segmentation and Classification. In ECCV (2024). 35. Tian, Y. et al. FairSeg: A Large-Scale Medical Image Segmentation Dataset for Fairness Learning Using Segment Anything Model with Fair Error-Bound Scaling. In ICLR (2024). 36. Tschandl, P. et al. The HAM10000 dataset, a large collection of multi-source der-matoscopic images of common pigmented skin lesions. Scientific data 5, 1–9 (2018). 37. Vapnik, V. N. An overview of statistical learning theory. IEEE Trans. Neural Netw. 
+
+10, 988–999 (1999). 38. Wang, Z. et al. Medclip: Contrastive learning from unpaired medical images and text. In EMNLP (2022), 3876–3887. 39. Wynants, L. et al. Prediction models for diagnosis and prognosis of covid-19: sys-tematic review and critical appraisal. BMJ 369 (2020). 40. Zech, J. R. et al. Variable generalization performance of a deep learning model to detect pneumonia in chest radiographs: a cross-sectional study. PLoS medicine 15, 
+
+e1002683 (2018). 41. Zong, Y. et al. MEDFAIR: Benchmarking fairness for medical imaging. In ICLR (2023).

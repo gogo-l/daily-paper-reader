@@ -1,0 +1,361 @@
+Title: Keyed Nonlinear Transform: Lightweight Privacy-Enhancing Feature Sharing for Medical Image Analysis
+
+URL Source: https://arxiv.org/pdf/2605.14123v1
+
+Published Time: Fri, 15 May 2026 00:22:39 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+> arXiv:2605.14123v1 [eess.IV] 13 May 2026
+
+LEE AND KIM: KEYED NONLINEAR TRANSFORM 1
+
+# Keyed Nonlinear Transform: Lightweight Privacy-Enhancing Feature Sharing for Medical Image Analysis 
+
+Haebom Lee 
+
+hblee@oolu.team 
+
+Gyeongjung Kim 
+
+gjkim@oolu.team 
+
+OOLU Soft Co., Ltd. 
+
+Abstract 
+
+Feature sharing via split inference offers a lightweight alternative to federated learn-ing for resource-constrained hospitals, but transmitted features still leak patient identity information and lack practical mechanisms for controlled feature sharing. We propose Keyed Nonlinear Transform (KNT), a drop-in feature transformation that applies key-conditioned obfuscation to intermediate representations. KNT reduces re-identification AUC from 0.635 to 0.586, corresponding to a 36 % reduction in above-chance identity signal, while introducing only 0 .15 ms CPU overhead, without backbone retraining, and preserving classification performance within 1 .0 pp . Our analysis shows that KNT’s non-linear transform prevents closed-form inversion and shifts recovery to iterative gradient-based optimization under full key compromise, substantially increasing inversion diffi-culty. The same transform generalizes to dense prediction tasks, incurring only a 4.4 pp Dice reduction on skin-lesion segmentation without retraining. These results position KNT as a practical and efficient privacy layer for split inference deployments. 
+
+# 1 Introduction 
+
+Medical images contain biometric information that can identify patients. Packhäuser et al. [15] demonstrated that chest X-rays enable patient re-identification with a verification AUC of 0.994, and subsequent work confirmed this threat at scale across over one million radio-graphs [11]. Hospitals need cloud-hosted deep learning for diagnosis, but transmitting raw images risks patient privacy. Federated learning keeps data local but requires each institu-tion to maintain capital-intensive GPU clusters, participate in synchronous training rounds, and manage model aggregation, overhead that is prohibitive for many resource-constrained hospitals. Feature sharing via split inference [19] is a lighter alternative: the hospital runs only a frozen feature extractor, and heavy computation happens on the cloud. Image reconstruc-tion from deep features is already difficult (Xu et al. [23] report SSIM 0.03 at layer 4 using a gradient-based attack without training data), so pixel-level image privacy is largely pre-served by depth alone. Patient re-identification, however, is a separate threat: identity can 
+
+© 2026. The copyright of this document resides with its authors. It may be distributed unchanged freely in print or electronic forms. 2 LEE AND KIM: KEYED NONLINEAR TRANSFORM 
+
+be inferred from feature similarity without reconstructing any image. We confirm empiri-cally that frozen ResNet-18 layer-4 features enable patient re-identification with AUC 0.635 (Section 4.3). Without any feature protection mechanism, intercepted representations remain vulnerable to identity inference attacks. Existing defenses fall into two categories, each with a critical limitation. Keyless defenses 
+
+such as NoPeek [20], Shredder [13], and DISCO [18] modify features without a secret, so anyone who observes the defense mechanism can reverse or circumvent it. Keyed linear defenses such as PPCMI-SF [2] use secret-key-dependent transforms, but restrict themselves to orthogonal (linear) mixing, which is vulnerable to closed-form inversion [17]. We propose Keyed Nonlinear Transform (KNT), which combines three lightweight feature-protection components: (1) key-dependent spatial permutation of feature map positions, (2) per-patch multi-layer nonlinear transform with key-derived parameters, and (3) optional dimensionality reduction via projection ( C → d). Spatial permutation disrupts spatial co-herence, the multi-layer nonlinear transform prevents closed-form inversion, and projection (when d < C) reduces the transmitted information. We position KNT as a practical protec-tion layer for split inference, and our adversarial analysis characterizes the boundaries of its protection. Our contributions are: 1. A practical, drop-in feature transform. KNT is, to our knowledge, the first keyed nonlinear defense applied post-hoc to split inference features. Unlike keyed chaotic dy-namics [7], which modifies inference weights, KNT transforms transmitted features di-rectly with negligible overhead (Table 5), no backbone retraining, and classification utility within 1.0 pp at d=512. 2. Privacy-utility evaluation across tasks and backbones. We evaluate image reconstruc-tion (SSIM), identity signal reduction (verification AUC), and downstream performance on both classification (five MedMNIST datasets) and dense prediction (ISIC 2018 skin-lesion segmentation), using two backbones and multiple projection dimensions. 3. Transparent adversarial analysis. We evaluate key compromise under both analytic and gradient-based attacks. Feature-level recovery is possible under key compromise, but image reconstruction from deep features remains extremely difficult with current meth-ods [23]. We discuss deployment guidance including key management and dimensional-ity reduction as a secondary defense. 
+
+# 2 Related Work 
+
+Patient re-identification from medical images. Chest X-rays contain biometric features (bone structure, body habitus, cardiac silhouette) that enable patient re-identification even after standard anonymization. Packhäuser et al. [15] achieved verification AUC 0.994 on ChestX-ray14 using a trained verification network, and Macpherson et al. [11] extended this to over one million radiographs with triplet-loss metric learning (Precision@1 = 0.976), confirming the threat at scale. Image-space mitigations such as PriCheXy-Net [16] reduce re-identification AUC from 0.818 to 0.577 via learned deformation fields, but they operate on raw images and do not address the privacy of features transmitted in split inference. 
+
+Feature-level attacks on split learning. FORA [23] demonstrated feature-oriented recon-struction attacks on split learning, achieving SSIM 0.83 from shallow features (layer 2) but LEE AND KIM: KEYED NONLINEAR TRANSFORM 3
+
+only SSIM 0.03 from deep features (layer 4); this depth-induced robustness applies to pixel-level reconstruction only and does not block identity inference via feature similarity, which we evaluate separately as verification AUC. Scale-MIA [17] showed that linear layers are analytically invertible, enabling scalable model inversion. Erdogan et al. [6] showed that model-inversion and label-inference attacks succeed even without access to training data, and Gao and Zhang [8] demonstrated that a pseudo-client can steal data and functionality from split learning using minimal public data. Higgins et al. [9] systematically evaluated existing defenses, finding that most provide limited protection. 
+
+Keyless defenses. NoPeek [20] minimizes distance correlation between inputs and activa-tions. Shredder [13] learns noise distributions; DISCO [18] zeros sensitive channels. All three are keyless and require training-time modification. 
+
+Differential privacy for feature release. Differential privacy [5] provides formal (ε, δ )
+
+guarantees against statistical inference. DP-SGD [1] adds calibrated Gaussian noise to gra-dients during training; for inference-time release, the Gaussian mechanism perturbs released features with N (0, σ 2I) calibrated to the L2 sensitivity, and has been applied to medical-imaging deep learning [27]. We compare against this formal baseline in Section 4.4. 
+
+Keyed and spatial defenses. Yao et al. [25] proposed patch shuffling for Vision Trans-formers, permuting patch tokens to disrupt spatial coherence. Niwa et al. [14] applied secret-key transforms to speech CNNs. PPCMI-SF [2] uses key-dependent orthogonal mixing on autoencoder latent features for medical segmentation. Fagan [7] proposed keyed chaotic dy-namics for privacy-preserving inference. LoFt [26] showed that low-rank filtering reduces privacy leakage, supporting dimensionality reduction as a privacy mechanism. KNT differs from prior work by combining key-conditioned feature protection, nonlinear transforms, and spatial disruption in a single post-hoc transform. Whereas NoPeek/Shredder/DISC operate without a secret and PPCMI-SF restricts itself to orthogonal (linear) mixing, KNT pairs a secret key with nonlinear transforms that resist closed-form algebraic inversion. In-staHide [10] was broken by Carlini et al. [3] because its linear mixing is analytically in-vertible; KNT applies element-wise ReLU, which prevents closed-form inversion, though gradient-based optimization can still recover features under key compromise (Section 4.5). Recent theoretical work by Xiao et al. [22] proved that any utility-preserving encoding nec-essarily leaks information, placing a fundamental limit on all lightweight privacy transforms including KNT. 
+
+# 3 Method 
+
+Given spatial features from a frozen backbone (Section 3.1), KNT transforms them into key-protected representations through three sequential components: spatial permutation (Sec-tion 3.2), per-patch keyed nonlinear transform (Section 3.3), and optional dimensionality reduction (Section 3.4). 4 LEE AND KIM: KEYED NONLINEAR TRANSFORM 
+
+# 3.1 Feature Extraction 
+
+Given an input image x ∈ RH0×W0×3, the client computes features using a frozen ResNet-18 backbone truncated after layer 4: 
+
+F = φ (x) ∈ RH×W ×C, (1) where H = W = 7 and C = 512 for 224 × 224 input images. The backbone is frozen (no fine-tuning), so the feature extractor is deterministic and identical across institutions. While we use ResNet-18 as the primary backbone throughout this paper, KNT operates on any spatial feature map H ×W ×C and is not tied to a specific architecture (Section 4.4). 
+
+# 3.2 Spatial Permutation 
+
+A key-derived permutation πk : {1, . . . , HW } → { 1, . . . , HW } shuffles the HW = 49 spatial positions of the feature map: 
+
+Fπ 
+
+> i
+
+= Fπk(i), i = 1, . . . , HW . (2) The permutation is generated deterministically from the key k using a seeded pseudorandom number generator (PRNG). Spatial permutation breaks the spatial coherence of the feature map, disrupting attacks that exploit spatial structure ( e.g ., U-Net decoders that assume spa-tial correspondence). Because downstream classification uses global average pooling over spatial positions, permutation has zero effect on classification accuracy (Table 1: Spatial permutation achieves identical AUC to Raw features ). For dense-prediction tasks where the decoder depends on the original spatial layout, the inverse permutation must be applied before decoding; this step can only be performed by a party holding the key (Section 4.1). 
+
+# 3.3 Per-Patch Keyed Nonlinear Transform 
+
+At each spatial position i, we apply an L-layer nonlinear transform with key-derived param-eters: 
+
+h(0) 
+
+> i
+
+= fπ 
+
+> i
+
+, h(ℓ) 
+
+> i
+
+= ReLU  W(ℓ) 
+
+> k
+
+h(ℓ−1) 
+
+> i
+
++ b(ℓ)
+
+> k
+
+, gi = h(L) 
+
+> i
+
+, (3) where ℓ = 1, . . . , L. All weight matrices W(ℓ) 
+
+> k
+
+∈ Rd×d and bias vectors b(ℓ) 
+
+> k
+
+∈ Rd are drawn i.i.d. from N (0, 1/√d) using the key k as the PRNG seed (the first layer is W(1) 
+
+> k
+
+∈ Rd×C
+
+when d̸ = C). We use L=2 and d=512 as defaults in this paper. The same parameters are applied at every spatial position. Each ReLU layer zeroes components with negative pre-activations, preventing exact ana-lytic inversion. This distinguishes KNT from linear keyed transforms [2]: a linear transform 
+
+Wkf can be inverted given Wk [17], but ReLU breaks the linear relationship needed for closed-form recovery. Section 4.5 analyzes residual attack surfaces under key compromise. 
+
+# 3.4 Dimensionality Reduction 
+
+The first-layer weight matrix W(1) 
+
+> k
+
+∈ Rd×C with C = 512 simultaneously performs the nonlin-ear transform and optional dimensionality reduction. The projection dimension d is a tunable deployment parameter controlling the privacy-utility-bandwidth tradeoff. When d = C, W(1)
+
+> k
+
+is square and no compression occurs, so privacy protection comes solely from the multi-layer LEE AND KIM: KEYED NONLINEAR TRANSFORM 5
+
+nonlinear transform and spatial permutation. When d < C, the first layer performs projection, providing additional privacy through information compression: at d = 128, 4 × compression reduces transmitted data from 25 ,088 to 6 ,272 values per image, while d = 256 offers an intermediate tradeoff (Section 4.4). 
+
+# 3.5 Full KNT Pipeline 
+
+The complete transform, illustrated in Figure 1, applies the three components sequentially: 
+
+G = KNT (F, k) = ReLU  W(2) 
+
+> k
+
+ReLU (W(1) 
+
+> k
+
+· Perm k(F) + b(1) 
+
+> k
+
+) + b(2)
+
+> k
+
+, (4) where Perm k applies key-derived spatial permutation and the first layer optionally includes 512 → d projection. The output G ∈ R7×7×d is transmitted to the server. The server receives G and performs classification using a linear probe trained on KNT-transformed features: global average pooling followed by a linear classifier. Hospital (Client)  Cloud   
+
+> Medical
+> Image
+> ResNet -18
+> (frozen)
+> Spatial
+> Permutation
+> 2-Layer
+> ReLU MLP Downstream Head
+
+Figure 1: Overview of the KNT pipeline. A frozen backbone extracts spatial features (H ×W ×C). The client applies key-derived spatial permutation followed by a 2-layer keyed nonlinear transform (Eq. 3), with optional dimensionality reduction ( C → d). The trans-formed features are sent to the cloud server for downstream tasks ( e.g ., classification, seg-mentation). 
+
+# 4 Experiments 
+
+# 4.1 Experimental Setup 
+
+Datasets. For classification, we use five datasets from MedMNIST v2 [24]. ChestM-NIST (112,120 chest X-rays, 14 binary labels, 224 × 224) is our primary evaluation dataset due to its established re-identification risk [15]. DermaMNIST (10,015 dermatoscopic images, 7 classes), RetinaMNIST (1,600 fundus photographs, 5 ordinal classes), PathM-NIST (107,180 colorectal histology patches, 9 classes), and PneumoniaMNIST (5,856 pe-diatric chest X-rays, binary) test generalization across imaging modalities and task complex-ities. For dense prediction, we use ISIC 2018 Task 1 [4] (2594 train / 100 val / 1000 test skin-lesion segmentation masks at 224 × 224). All MedMNIST datasets follow the official 6 LEE AND KIM: KEYED NONLINEAR TRANSFORM 
+
+train/validation/test splits provided by Yang et al. [24]; for ChestMNIST, this corresponds to 78,468 / 11,219 / 22,433 patient-disjoint images. 
+
+Backbones and task heads. All features are extracted from a frozen ImageNet-pretrained ResNet-18 at the output of layer 4, yielding 7 × 7 × 512 spatial feature maps (no fine-tuning); we additionally evaluate ResNet-50 for backbone generalization. For classification, a linear probe (global average pooling → linear classifier Rd → RK ) is trained on the (possibly trans-formed) features over 3 random seeds ( ± std). AUC conventions follow each task: per-label binary AUC macro-averaged over 14 pathologies for multi-label ChestMNIST; one-vs-rest macro-averaged AUC for multi-class DermaMNIST / PathMNIST / RetinaMNIST; stan-dard binary AUC for PneumoniaMNIST. For dense prediction, a small decoder head (five 1×1 convolutions interleaved with bilinear 2 × upsampling) maps the 7 ×7×d feature map to a 224 ×224 binary mask; we train the decoder for 50 epochs with Adam (initial learning rate 10 −3, cosine schedule), batch size 16, combined BCE + Dice loss, no augmentation, three seeds. A key-holding party applies spatial_unpermute before decoding; this step has no effect on classification since global average pooling is permutation-invariant, but is required for dense prediction. To verify that key-holding users can still recover spa-tial explanations despite the permutation, we additionally train a spatial-attention classifier on PneumoniaMNIST: a linear layer on the 7 × 7 feature map without global average pool-ing, followed by CAM extraction via the learned spatial weights, which the authorized user inverse-permutes back to the original coordinate system. We measure preservation by Pear-son correlation between CAMs from original and KNT-transformed features. 
+
+Privacy metrics. We evaluate privacy through three complementary metrics: (1) Recon-struction SSIM : a U-Net decoder (5 upsampling blocks, 7 ×7 → 224 ×224, trained on 5000 samples with MSE loss for 25 epochs) reconstructs the original image from features; higher SSIM indicates more visual information leakage. (2) Verification AUC [15]: a cosine-similarity-based protocol tests whether features from the same patient are more similar than features from different patients, using 1000 balanced pairs (500 same-patient, 500 different-patient) drawn from 500 held-out patients; AUC 0.5 indicates random chance. (3) Top-1 accuracy : the fraction of queries where the closest feature match in a gallery of 500 patients is the correct patient. 
+
+Baselines and ablations. We compare KNT against eight methods including baselines and ablations (all at d=512 unless noted): (1) Raw features (no defense), (2) Gaussian noise (σ = 3.0), (3) Spatial permutation only, (4) KNT w/o permutation (ReLU + key), (5) KNT w/o key (non-secret W), (6) KNT w/o ReLU (linear, keyed), (7) KNT (full pipeline), (8) DP-Gaussian [5]. We also compare against NoPeek [20] applied post-hoc to frozen features; Shredder [13] and DISCO [18] require training-time integration and cannot be applied post-hoc. Our ablations subsume two prior keyed methods: Spatial Perm corresponds to the patch shuffling approach of Yao et al. [25], and KNT w/o ReLU captures the same linear-invertibility vulnerability as the orthogonal mixing of PPCMI-SF [2], though PPCMI-SF operates on learned autoencoder latents rather than frozen classification features. We now define the adversary under which these metrics are evaluated. LEE AND KIM: KEYED NONLINEAR TRANSFORM 7
+
+# 4.2 Threat Model 
+
+We consider an honest-but-curious adversary: a cloud server that faithfully executes infer-ence but attempts to extract patient identity from the received features. We analyze two adversary regimes based on the attacker’s knowledge of the secret key. In the primary regime , the adversary has access to the transmitted features and knows the feature extractor architecture (ResNet-18), but does not possess the secret key k. The server never sees the original images and is assumed not to have access to supervised training pairs for a learned re-identification model; its primary attack surface is unsupervised comparison of the transformed features it receives. We use cosine-similarity-based verification as our primary privacy metric, as it is a standard and strong unsupervised matching baseline for this adversary. In the key-compromise regime , the adversary additionally obtains full knowledge of the key k and all derived parameters (weight matrices, biases, permutation). This models insider threats, server breaches, or operational misconfiguration. The adversary may attempt to recover original features via analytic inversion or gradient-based optimization. We evaluate this regime separately (Section 4.5) to quantify how much protection the nonlinear transform provides independent of key secrecy. Reconstruction attacks are a related threat; we evaluate reconstruction quality via SSIM. Dense-prediction tasks introduce an additional authorized party: the decoder owner, who holds the key in order to inverse-permute the features before the task head (Section 4.3). This party is inside the trust boundary; our threat model applies to an external server that receives only the KNT-transformed features. 
+
+# 4.3 Main Results 
+
+Classification. Table 1 presents the main comparison across all methods on ChestMNIST at d=512. KNT (full 2-layer pipeline) reduces identity signal the most: test-set verification AUC drops from 0.635 (raw features) to 0.586 (3 key seeds), and Top-1 re-identification drops from 1.3% to 0.5%. The classification cost is modest: test AUC decreases from 0.759 to 0.749, a 1.0 percentage point drop. Spatial permutation alone incurs zero classi-fication cost (AUC 0.759, identical to raw) because global average pooling is permutation-invariant, yet already provides a meaningful privacy improvement (verification AUC 0.624). In terms of above-chance identity signal, raw features score 0 .635 − 0.5 = 0.135 above ran-dom chance; KNT reduces this to 0 .586 − 0.5 = 0.086, a 36% relative reduction. Figure 2(a) visualizes the SSIM ordering: U-Net reconstructions from raw, linear keyed (no ReLU), and KNT features, with per-image annotations matching the Table 1 means (raw .722 > linear .680 > KNT .665). NoPeek [20] is designed for training-time integration; under the post-hoc frozen-feature conditions evaluated here (Table 1, †), it achieves 0.723 classification AUC vs. KNT’s 0.749, though this gap may partly reflect the adaptation mismatch. 
+
+Localization. Beyond label prediction, we ask whether authorized users can recover spa-tially meaningful explanations after permutation. On PneumoniaMNIST, the spatial-attention classifier described in Section 4.1 trained on KNT features reaches AUC 0.980, matching the one trained on original features (0.981). Figure 2(b) shows CAM preservation: after in-verse permutation with the authorized key, the correlation with the original-feature CAM is 
+
+r = 0.673, meaning diagnostically relevant spatial attention patterns survive the transform. 8 LEE AND KIM: KEYED NONLINEAR TRANSFORM 
+
+Table 1: Main results on ChestMNIST ( d=512 , 2-layer). All methods are applied post-hoc to frozen ResNet-18 layer-4 features. Classification AUC is the mean over 3 linear-probe seeds (std ≤ 0.002, omitted for clarity). Privacy metrics use the ± notation for transfor-mation seed variation: 3 key seeds for keyed methods, 3 noise seeds for Gaussian noise. Methods without randomized transforms (Raw, KNT w/o key) have no such variation. 
+
+Method Cls AUC ↑ Recon SSIM ↓ Verif AUC ↓ Top-1 ↓
+
+Raw features (no defense) .759 .722 .635 1.3% Gaussian noise ( σ =3.0) .722 .647 ± .003 .610 ± .003 0.7 ± 0.2% Spatial permutation (keyed) .759 .686 ± .004 .624 ± .006 0.8 ± 0.2% KNT w/o permutation (ReLU + key) .749 .698 ± .002 .634 ± .006 1.0% KNT w/o key (non-secret W) .747 .664 .590 0.4% KNT w/o ReLU (linear, keyed) .754 .680 ± .005 .607 ± .010 0.6 ± 0.1% 
+
+KNT (full, 2-layer) .749 .665 ± .004 .586 ± .005 0.5 ± 0.1% NoPeek † [20] .723 .691 .615 0.6% 
+
+> †Applied post-hoc to frozen features; the original method requires training-time integration.
+
+Table 2: Dense prediction extension. ISIC 2018 Task 1 skin lesion segmentation, held-out test set (1000 images), 3 seeds. ∆: absolute Dice drop from Raw. Decoder trained on top of frozen ResNet-18 layer-4 features with the authorized-use protocol (inverse spatial permutation before decoding). †Decoder trained without inverse permutation, simulating an unauthorized party. 
+
+Method d Dice IoU 
+
+Raw features 512 .754 ± .002 .630 ± .002 KNT 512 .710 ± .005 (−4.4) .577 ± .004 KNT 256 .690 ± .005 (−6.4) .553 ± .005 KNT 128 .676 ± .003 (−7.8) .537 ± .002 KNT w/o unpermute † 512 .542 ± .006 (−21 .2) .371 ± .005 Without the key, the correlation collapses to r = 0.025, confirming that spatial localization becomes substantially less accessible without the key. 
+
+Segmentation. To verify that KNT extends to dense prediction, we evaluate pixel-level skin-lesion segmentation on ISIC 2018 Task 1 (Section 4.1). The backbone and KNT trans-form are identical to the classification setup; only the task head differs, using a bilinear-upsample decoder in place of the linear probe. Table 2 reports mean Dice and IoU on the held-out test set over three seeds. At d=512, KNT preserves Dice within 4.4 pp of the un-defended Raw baseline (0 .754 → 0.710), and degrades monotonically with d. A decoder without access to the key, skipping the inverse permutation, achieves only Dice 0 .542 at 
+
+d=512 (Table 2, bottom row), a 21 pp drop confirming that the decoder cannot implicitly learn to reverse the permutation during training. Because the underlying transform is un-changed, feature-level privacy metrics reported in Section 4.3 and Section 4.5 transfer di-rectly; output-space leakage through the predicted masks themselves is task-specific and left for future work. LEE AND KIM: KEYED NONLINEAR TRANSFORM 9(a) Reconstruction attack results 
+
+Original  Raw Recon  Linear (Keyed) Recon  KNT Recon       
+
+> SSIM = 0.627 SSIM = 0.606 SSIM = 0.557
+> SSIM = 0.712 SSIM = 0.660 SSIM = 0.643
+> SSIM = 0.800 SSIM = 0.769 SSIM = 0.734
+
+(b) Class activation map preservation           
+
+> Pneumonia #1 Original CAM KNT CAM Pneumonia #2 Original CAM KNT CAM
+> Normal #1 Original CAM KNT CAM Normal #2 Original CAM KNT CAM
+
+Figure 2: Qualitative privacy and utility analysis. (A) Reconstruction comparison between raw, linear-keyed, and KNT features. (B) CAM preservation on PneumoniaMNIST after inverse permutation (r = 0.673; without key: r = 0.025). 10 LEE AND KIM: KEYED NONLINEAR TRANSFORM 
+
+Table 3: Layer depth ablation on ChestMNIST ( d=512 ). Classification AUC and privacy metrics vs. number of ReLU layers. Std omitted for clarity. Privacy gains diminish after 
+
+L=2; utility cost accelerates. 
+
+L Cls AUC ↑ SSIM ↓ Verif AUC ↓
+
+1 .755 .672 .595 
+
+2 .749 .665 .586 3 .743 .649 .577 4 .730 .633 .575 
+
+# 4.4 Analysis 
+
+Component ablation. Table 1 quantifies each component’s contribution. Spatial permu-tation provides the largest single privacy improvement: verification AUC drops from 0.635 (raw) to 0.624, with zero classification cost. Adding permutation to KNT w/o permutation 
+
+(0 .634 → 0.586) yields an additional 0.048 reduction, so spatial disruption and the nonlinear transform provide additive privacy gains. The activation function has a modest empirical effect under the primary regime: at d=512 with 2 layers, the linear variant (verification AUC 0.607) is close to the nonlinear one (0.586). However, linear transforms are analyt-ically invertible given the key [17], whereas ReLU breaks closed-form inversion; the key-compromise regime exposes this gap (Section 4.5). The KNT w/o key ablation (weights derived from a fixed, non-secret seed, verification AUC 0.590) confirms that the cosine-similarity attack does not require key knowledge, since it compares features without at-tempting inversion. The key becomes critical when an adversary attempts feature recovery, as analyzed in Section 4.5. We sweep the number of ReLU layers from L=1 to L=4 (Table 3). Each additional layer improves privacy at increasing utility cost: L=1 → 2 drops verification AUC from 0.595 to 0.586 at 0.6 pp classification cost, while L=3 → 4 drops verification by only 0.002 at 1.3 pp classification cost. We use L=2 as the default for its best privacy-per-utility-cost ratio. 
+
+Generalization across datasets, backbones, and dimensions. We evaluate KNT’s gen-eralization along three axes: projection dimension d, dataset diversity, and backbone archi-tecture. Table 4 reports classification AUC across three datasets and three projection dimen-sions. At d = 512, utility drops are at most 2.8 pp across all three datasets evaluated with ResNet-18; at d = 256 (2 × compression), drops remain within 6.2 pp; at d = 128 (4 × com-pression), ChestMNIST loses 4.2 pp, while DermaMNIST and RetinaMNIST lose 11.4 pp and 6.7 pp respectively; fine-grained datasets are more sensitive to aggressive compression. To confirm backbone agnosticism, we evaluate on ResNet-50 (Table 4, bottom rows): origi-nal AUC 0.762, KNT at d=512 yields 0.733 (a 3.0 pp drop). At d=C=2048 (matching the backbone output, no projection), the drop shrinks to 0.4 pp (0.762 → 0.758), confirming that utility loss at lower d is due to projection, not the nonlinear transform itself. Table 5 provides additional cross-dataset evidence. On PathMNIST (9-class histology), KNT at d=512 incurs only a 0.2 pp AUC drop (0 .989 → 0.987); on PneumoniaMNIST (binary), the drop is 1.5 pp (0 .980 → 0.965). All timing is measured on a single AMD Ryzen 7 9800X3D CPU (no GPU): the KNT transform runs in 0.15 ms, with end-to-end latency 6.2 ms (ResNet-18) and 17.0 ms (ResNet-50). LEE AND KIM: KEYED NONLINEAR TRANSFORM 11 
+
+Table 4: Generalization across datasets and projection dimensions ( L=2). Classification AUC for KNT at varying d on ChestMNIST, DermaMNIST, and RetinaMNIST (ResNet-18) plus ChestMNIST (ResNet-50). ∆: absolute drop from the undefended baseline. At d=C
+
+(no projection), drops are minimal.                        
+
+> Dataset Original d=128 ( ∆)d=256 ( ∆)d=512 ( ∆)d=C(∆)
+> ResNet-18 (C =512 )
+> ChestMNIST (14-label) .759 .717 ( −4.2) .736 ( −2.3) .749 ( −1.0) DermaMNIST (7-class) .925 .811 ( −11 .4) .863 ( −6.2) .897 ( −2.8) RetinaMNIST (5-class) .841 .774 ( −6.7) .802 ( −3.8) .825 ( −1.6)
+> ResNet-50 (C =2048 )
+> ChestMNIST (14-label) .762 .689 ( −7.3) .714 ( −4.8) .733 ( −3.0) .758 ( −0.4)
+
+Table 5: Cross-dataset generalization and efficiency. KNT ( d=512, 2-layer) transfers across datasets with minimal utility loss and runs efficiently on CPU. 
+
+Original KNT 
+
+Classification AUC by dataset (d =512 , 2-layer) 
+
+ChestMNIST (14-label) .759 ± .0002 .749 ± .0001 PathMNIST (9-class) .989 ± .0002 .987 ± .0001 PneumoniaMNIST (binary) .980 ± .0012 .965 ± .0015 
+
+Efficiency on CPU (AMD Ryzen 7 9800X3D, 64 GB RAM) 
+
+ResNet-18 (+ KNT) 6.0 ms 6.2 ms ResNet-50 (+ KNT) 16.0 ms 17.0 ms 
+
+Privacy-utility tradeoff summary. Figure 3 summarizes all methods in a privacy-utility scatter plot (classification AUC on y, verification AUC on x). KNT (full 2-layer, d=512) occupies the upper-left region with the lowest verification AUC (0.586) and only 1.0 pp clas-sification loss. Gaussian noise ( σ = 3.0) provides weaker privacy (verification AUC 0.610) at a higher classification cost (AUC 0.722); spatial permutation alone offers a zero-cost privacy improvement (AUC 0.759, verification 0.624). However, the plot also exposes a weakness of spatial permutation: if the key is compromised, an attacker can reverse the permutation and recover raw-level privacy (verification AUC 0.635). KNT fares better: analytic inversion yields near-random features (cosine similarity .005), though gradient-based optimization can partially recover identity structure (Section 4.5). 
+
+Comparison with formal differential privacy. Table 6 compares KNT against the Gaus-sian mechanism [5] applied to L2-clipped frozen features at δ = 10 −5. On 7 ×7×512 =
+
+25 ,088-dimensional layer-4 features, the calibrated noise destroys utility before reaching KNT’s operating point: at ε = 8 (the conventional formal-privacy regime), classification AUC drops to 0.508; even at ε = 128, it recovers only to 0.591. Under this frozen-feature setting, KNT achieves a more favorable empirical utility–identity-leakage tradeoff than the tested DP-Gaussian configurations, achieving both higher classification AUC (0.749 vs. 0.591) and lower verification AUC (0.586 vs. 0.519) than the most permissive budget. The two defenses target complementary threats: KNT’s keyed transform protects against feature interception by parties without the key, while DP protects against statistical inference of 12 LEE AND KIM: KEYED NONLINEAR TRANSFORM Raw         
+
+> Noise (σ=3)
+> Spat. Perm.
+> w/o perm.
+> w/o key
+> w/o nonlin.
+> KNT (ours)
+> NoPeek (keyless)
+> 0.71
+> 0.72
+> 0.73
+> 0.74
+> 0.75
+> 0.76
+> 0.77
+> 0.58 0.59 0.60 0.61 0.62 0.63 0.64
+> Classification AUC (higher  = better)
+> Verification AUC (lower =safer)
+> Baselines
+> Ablations
+> Ours
+> Prior Work
+> Key compromised
+
+Figure 3: Privacy-utility tradeoff on ChestMNIST. KNT achieves the best empirical trade-off in the upper-left region. Red arrow shows key compromise: spatial permutation degrades to raw. Gradient-based recovery under key compromise is analyzed in Section 4.5. Table 6: Comparison with formal Gaussian-mechanism DP [5]. Per-image L2 clip at the 95th-percentile training-feature norm, then calibrated N (0, σ 2I) at δ = 10 −5. Three noise seeds × three classification seeds, test split. Raw baseline from Table 1. 
+
+Method σ Cls AUC ↑ Verif AUC ↓ SSIM ↓
+
+Raw (Table 1) 0 .759 .635 .722 DP ε=8 364 .508 .497 .477 DP ε=128 23 .591 .519 .501 
+
+KNT (full) — .749 .586 .665 
+
+training-set membership. 
+
+Clinical-resolution validation. We replicate the main protocol on NIH ChestX-ray14 [21] at native 1024 × 1024 resolution (Table 7). KNT yields classification AUC 0.704 against a Raw baseline of 0.726 (2.2 pp drop). Verification AUC saturates near chance for both meth-ods (0.536 vs. 0.537), so the binding privacy signal shifts to reconstruction: KNT reduces SSIM from 0.838 to 0 .672 ± 0.004, a 16.5 pp gap, close to triple the 5.7 pp gap at 224. 
+
+# 4.5 Key-Compromise Security Analysis 
+
+We evaluate KNT’s residual security when the key is fully compromised, as defined in Sec-tion 4.2. 
+
+Analytic inversion. A linear KNT (no ReLU) is trivially invertible: the pseudoinverse recovers original features exactly (cosine similarity 1.0, Top-1 100%). Applying the same LEE AND KIM: KEYED NONLINEAR TRANSFORM 13 
+
+Table 7: Clinical-resolution validation on NIH ChestX-ray14 [21] ( 1024 × 1024 ). Frozen ImageNet ResNet-18, 3 cls seeds × 3 key seeds. Classification seed std < 0.001 (omitted). Verification AUC near chance for both methods; the privacy-relevant metric at this resolution is SSIM. 
+
+Method Cls AUC ↑ SSIM ↓ Verif AUC ↓ Top-1 ↓
+
+Raw .726 .838 .536 0.02% KNT .704 .672 ± .004 .537 ± .002 0.05% Table 8: Key-compromise security analysis. Gradient-based inversion results (3 key seeds, 1000 test samples each). Dimensionality reduction substantially degrades attack perfor-mance. 
+
+Attack d Cosine Sim Top-1 
+
+Pseudoinverse (linear) 512 1.000 100% Pseudoinverse (nonlinear) 512 .005 0.1% Gradient (nonlinear) 512 .626 ± .005 99 .8 ± 0.2% Gradient (nonlinear) 256 .404 ± .014 71 .9 ± 5.5% Gradient (nonlinear) 128 .271 ± .014 28 .8 ± 3.0% pseudoinverse to the nonlinear variant yields near-random features (cosine similarity 0.005, Top-1 0.1%), confirming that ReLU breaks closed-form inversion. 
+
+Gradient-based inversion. Since the pseudoinverse cannot exploit the piecewise-linear structure of ReLU, we evaluate gradient-based optimization [6, 17] minimizing ∥KNT (ˆf, k)−
+
+g∥2 + λ ∥ˆf∥2 via Adam (5 per-sample restarts, 2000 steps, λ =10 −4). Across 3 key seeds and 1000 test samples each, this attack recovers features with cosine similarity 0.626 and Top-1 retrieval of 99.8%, requiring approximately 15 s per sample on an RTX 3090 Ti. The recovered features preserve enough identity-discriminative structure for near-perfect re-identification, though they are not exact copies. 
+
+Effect of dimensionality reduction. Dimensionality reduction provides an additional de-fense even under full key compromise. Reducing d from 512 to 128, the gradient attack’s cosine similarity drops from 0.626 to 0.271 and Top-1 retrieval falls from 99.8% to 28.8%, because the 512 → 128 projection permanently discards information that the optimizer can-not recover. Table 8 summarizes these results. 
+
+Implications. Nonlinearity shifts inversion from closed-form recovery to iterative opti-mization ( ∼15 s per sample vs. instantaneous), but does not prevent feature recovery. The recovered objects are approximations of the feature vectors, not the original images; faith-ful inversion from deep features remains extremely difficult [23]. The primary additional risk under key compromise is therefore cross-database re-identification; classification and attribute inference are already possible from the transformed features without the key [12]. KNT’s privacy therefore depends principally on key secrecy, with nonlinearity and dimen-sionality reduction providing secondary barriers. 14 LEE AND KIM: KEYED NONLINEAR TRANSFORM 
+
+# 5 Discussion 
+
+KNT is designed for institutions that need lightweight feature protection beyond unprotected split inference, but cannot afford federated learning or cryptographic protocols. Compared to federated learning, which requires GPU infrastructure, synchronous training, and aggrega-tion servers at every institution, KNT requires only a frozen feature extractor with negligible per-image overhead (Table 5). Homomorphic encryption and secure multi-party compu-tation provide provable security but are orders of magnitude more expensive. In resource-constrained hospitals, a low-overhead privacy layer that can actually be deployed may matter more than provable security that cannot. KNT is not intended to replace cryptographic or formally private inference protocols, but to provide a lightweight practical protection layer for split inference. KNT’s structured keyed transform reduces identity signal more effectively than unstruc-tured perturbation (Gaussian noise) while incurring a smaller classification penalty (Table 1). Some identity signal survives, as expected: Xiao et al. [22] proved that any utility-preserving encoding necessarily leaks information about its input. Under key compromise, nonlinearity raises the attack cost from closed-form to iterative optimization but does not prevent recovery (Section 4.5); key secrecy is therefore the principal defense. For deployment, we recommend standard key management practices (hardware secu-rity modules, key rotation, access separation). Dimensionality reduction ( d=128) provides an additional defense layer when bandwidth constraints permit the utility tradeoff. Per-institution keys require only per-key retraining of the server-side linear probe; the transform itself operates on any spatial feature map H ×W ×C and is backbone-agnostic. 
+
+Limitations. Our re-identification evaluation assumes an honest-but-curious server with-out access to supervised identity-labeled training pairs; stronger adversaries with auxiliary labeled data could train learned re-identification models that outperform cosine similarity. Reconstruction leakage is evaluated separately with a supervised decoder (Section 4.1). At 1024 × 1024, the frozen ImageNet-pretrained backbone yields a lower baseline classification AUC than at 224 × 224 (0.726 vs. 0.759); fine-tuning or pretraining at native clinical resolu-tion may recover this gap. Detection benchmarks and extension to shallower feature layers remain future work. 
+
+# 6 Conclusion 
+
+Split inference provides a practical alternative to transmitting raw medical images, but inter-mediate features still leak patient identity information. KNT introduces lightweight key-conditioned obfuscation for split inference, reducing identity leakage and reconstruction quality while preserving downstream performance with negligible overhead and no back-bone retraining. Our analysis shows that nonlinearity shifts inversion from closed-form recovery to iterative optimization, while dimensionality reduction provides additional ro-bustness under key compromise. With proper key management, KNT offers a lightweight practical protection layer between unprotected feature sharing and computationally expen-sive cryptographic methods. 
+
+Reproducibility. Code and experiment configurations will be released upon publication. LEE AND KIM: KEYED NONLINEAR TRANSFORM 15 
+
+# References 
+
+[1] Martin Abadi, Andy Chu, Ian Goodfellow, H. Brendan McMahan, Ilya Mironov, Kunal Talwar, and Li Zhang. Deep learning with differential privacy. In Proceedings of the 2016 ACM SIGSAC Conference on Computer and Communications Security (CCS ’16) ,pages 308–318. ACM, 2016. doi: 10.1145/2976749.2978318. [2] Saheed Ademola Bello, Muhammad Shahid Jabbar, Muhammad Sohail Ibrahim, and Shujaat Khan. Privacy-preserving collaborative medical image segmentation using la-tent transform networks. arXiv preprint arXiv:2603.05541 , 2026. [3] Nicholas Carlini, Samuel Deng, Sanjam Garg, Somesh Jha, Saeed Mahloujifar, Mo-hammad Mahmoody, Shuang Song, Abhradeep Thakurta, and Florian Tramèr. Is pri-vate learning possible with instance encoding? In Proceedings of the 2021 IEEE Sym-posium on Security and Privacy (S&P) , pages 410–427. IEEE, 2021. [4] Noel C. F. Codella, Veronica Rotemberg, Philipp Tschandl, M. Emre Celebi, Stephen Dusza, David Gutman, Brian Helba, Aadi Kalloo, Konstantinos Liopyris, Michael Marchetti, Harald Kittler, and Allan Halpern. Skin lesion analysis toward melanoma detection 2018: A challenge hosted by the international skin imaging collaboration (isic). arXiv preprint arXiv:1902.03368 , 2019. [5] Cynthia Dwork and Aaron Roth. The algorithmic foundations of differential privacy. 
+
+Foundations and Trends in Theoretical Computer Science , 9(3-4):211–407, 2014. doi: 10.1561/0400000042. [6] Ege Erdogan, Alptekin Küpçü, and A. Ercüment Çiçek. Unsplit: Data-oblivious model inversion, model stealing, and label inference attacks against split learning. In Proceed-ings of the 21st Workshop on Privacy in the Electronic Society (WPES@CCS) , pages 115–124, 2022. doi: 10.1145/3559613.3563201. [7] Peter David Fagan. Keyed chaotic dynamics for privacy-preserving neural inference. 
+
+arXiv preprint arXiv:2505.23655 , 2025. [8] Xinben Gao and Lan Zhang. PCAT: Functionality and data stealing from split learning by pseudo-client attack. In Proceedings of the 32nd USENIX Security Symposium ,pages 5271–5288, 2023. [9] Griffin Higgins, Roozbeh Razavi-Far, Xichen Zhang, Amir David, Ali Ghorbani, and Tongyu Ge. Towards privacy-preserving split learning: Destabilizing adversarial infer-ence and reconstruction attacks in the cloud. Internet of Things , 31:101558, 2025. doi: 10.1016/j.iot.2025.101558. [10] Yangsibo Huang, Zhao Song, Kai Li, and Sanjeev Arora. Instahide: Instance-hiding schemes for private distributed learning. In Proceedings of the 37th International Con-ference on Machine Learning (ICML) , pages 4507–4518. PMLR, 2020. [11] Matthew S. Macpherson, Charles E. Hutchinson, Carolyn Horst, Vicky Goh, and Gio-vanni Montana. Patient reidentification from chest radiographs: An interpretable deep metric learning approach and its applications. Radiology: Artificial Intelligence , 5(6): e230019, 2023. doi: 10.1148/ryai.230019. 16 LEE AND KIM: KEYED NONLINEAR TRANSFORM 
+
+[12] Luca Melis, Congzheng Song, Emiliano De Cristofaro, and Vitaly Shmatikov. Ex-ploiting unintended feature leakage in collaborative learning. In Proceedings of the IEEE Symposium on Security and Privacy (S&P) , pages 691–706, 2019. doi: 10.1109/SP.2019.00029. [13] Fatemehsadat Mireshghallah, Mohammadkazem Taram, Prakash Ramrakhyani, Ali Jalali, Dean M. Tullsen, and Hadi Esmaeilzadeh. Shredder: Learning noise distribu-tions to protect inference privacy. In Proceedings of the 25th International Conference on Architectural Support for Programming Languages and Operating Systems (ASP-LOS) , pages 3–18, 2020. doi: 10.1145/3373376.3378522. [14] Shoko Niwa, Sayaka Shiota, and Hitoshi Kiya. Speech privacy-preserving methods us-ing secret key for convolutional neural network models and their robustness evaluation. 
+
+APSIPA Transactions on Signal and Information Processing , 13(1), 2024. [15] Kai Packhäuser, Sebastian Gundel, Nicolas Münster, Christopher Syben, Vincent Christlein, and Andreas Maier. Deep learning-based patient re-identification is able to exploit the biometric nature of medical chest x-ray data. Scientific Reports , 12: 14851, 2022. doi: 10.1038/s41598-022-19045-3. [16] Kai Packhäuser, Sebastian Gündel, Florian Thamm, Felix Denzinger, and Andreas Maier. Deep learning-based anonymization of chest radiographs: A utility-preserving measure for patient privacy. In Medical Image Computing and Computer-Assisted In-tervention – MICCAI 2023 , volume 14222 of Lecture Notes in Computer Science , pages 262–272. Springer, 2023. doi: 10.1007/978-3-031-43898-1_26. [17] Shanghao Shi, Ning Wang, Yang Xiao, Chaoyu Zhang, Yi Shi, Y. Thomas Hou, and Wenjing Lou. Scale-MIA: A scalable model inversion attack against secure federated learning via latent space reconstruction. In Proceedings of the Network and Distributed System Security Symposium (NDSS) , 2025. [18] Abhishek Singh, Ayush Chopra, Ethan Garza, Emily Zhang, Praneeth Vepakomma, Vivek Sharma, and Ramesh Raskar. DISCO: Dynamic and invariant sensitive channel obfuscation for deep neural networks. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 12125–12135, 2021. [19] Praneeth Vepakomma, Otkrist Gupta, Tristan Swedish, and Ramesh Raskar. Split learning for health: Distributed deep learning without sharing raw patient data. arXiv preprint arXiv:1812.00564 , 2018. [20] Praneeth Vepakomma, Abhishek Singh, Otkrist Gupta, and Ramesh Raskar. Nopeek: Information leakage reduction to share activations in distributed deep learning. In Pro-ceedings of the IEEE International Conference on Data Mining Workshops (ICDMW) ,pages 933–942, 2020. doi: 10.1109/ICDMW51313.2020.00134. [21] Xiaosong Wang, Yifan Peng, Le Lu, Zhiyong Lu, Mohammadhadi Bagheri, and Ronald M. Summers. Chestx-ray8: Hospital-scale chest x-ray database and bench-marks on weakly-supervised classification and localization of common thorax diseases. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , pages 3462–3471, 2017. doi: 10.1109/CVPR.2017.369. LEE AND KIM: KEYED NONLINEAR TRANSFORM 17 
+
+[22] Hanshen Xiao, G. Edward Suh, and Srinivas Devadas. Formal privacy proof of data encoding: The possibility and impossibility of learnable encryption. In Proceedings of the 2024 ACM SIGSAC Conference on Computer and Communications Security (CCS ’24) , New York, NY, USA, 2024. ACM. doi: 10.1145/3658644.3670277. [23] Xiaoyang Xu, Mengda Yang, Wenzhe Yi, Ziang Li, Juan Wang, Hongxin Hu, Yong Zhuang, and Yaxin Liu. A stealthy wrongdoer: Feature-oriented reconstruction attack against split learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 12130–12139, 2024. [24] Jiancheng Yang, Rui Shi, Donglai Wei, Zequan Liu, Lin Zhao, Bilian Ke, Hanspeter Pfister, and Bingbing Ni. Medmnist v2 – a large-scale lightweight benchmark for 2d and 3d biomedical image classification. Scientific Data , 10(41), 2023. doi: 10.1038/ s41597-022-01721-8. [25] Dixi Yao, Liyao Xiang, Hengyuan Xu, Hangyu Ye, and Min Chen. Privacy-preserving split learning via patch shuffling over transformers. In Proceedings of the IEEE Inter-national Conference on Data Mining (ICDM) , pages 638–647, 2022. doi: 10.1109/ ICDM54844.2022.00074. [26] Hongyao Yu, Yixiang Qiu, Hao Fang, Tianqu Zhuang, Bin Chen, Sijin Yu, Bin Wang, Shu-Tao Xia, and Ke Xu. Rank matters: Understanding and defending model inver-sion attacks via low-rank feature filtering. arXiv preprint arXiv:2410.05814 , 2024. Accepted at KDD 2026. [27] Alexander Ziller, Dmitrii Usynin, Rickmer Braren, Marcus Makowski, and Georgios Kaissis. Medical imaging deep learning with differential privacy. Scientific Reports ,11:13524, 2021. doi: 10.1038/s41598-021-93030-0.

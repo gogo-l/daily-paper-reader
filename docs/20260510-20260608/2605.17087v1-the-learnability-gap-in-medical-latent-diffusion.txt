@@ -1,0 +1,174 @@
+Title: The Learnability Gap in Medical Latent Diffusion
+
+URL Source: https://arxiv.org/pdf/2605.17087v1
+
+Published Time: Tue, 19 May 2026 01:05:29 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# The Learnability Gap in Medical Latent Diffusion 
+
+Mischa Dombrowski 1 , Felix Nützel 1 , and Bernhard Kainz 1,2 
+
+> 1
+
+FAU Erlangen-Nürnberg, Erlangen, DE, mischa.dombrowski@fau.de  
+
+> 2
+
+Department of Computing, Imperial College London, London, UK 
+
+Abstract. Generative data augmentation with latent diffusion models is a promising strategy for addressing class imbalance in medical imaging, yet current approaches focus on perceptual fidelity and domain-specific autoencoder fine-tuning while neglecting a more fundamental bottleneck. We identify and formalize the learnability gap : large-scale pretrained au-toencoders faithfully encode discriminative features for medical classifi-cation, as evidenced by near-lossless performance in reconstruction space, yet their latent representations are structured in ways that are difficult for classifiers to learn from. Across five autoencoder families and four medical benchmarks spanning chest radiography, dermatoscopy, com-puted tomography, and echocardiography, we show that this gap per-sists regardless of architecture, initialization strategy, or hyperparame-ter tuning, and that medical-domain fine-tuning of the autoencoder does not close it. To probe and partially narrow the gap, we develop noise-conditioned latent classifiers with FiLM layers and image-space distil-lation that offer 64 × throughput and 120 × memory gains over image-space models while serving as diagnostic tools for latent space quality. Our analysis provides a new framework for evaluating autoencoder la-tent spaces and identifies their structure, rather than their fidelity or domain specificity, as the primary obstacle to closing the performance gap between real and synthetic medical training data. 
+
+Keywords: Image generation · Latent diffusion · Representation learn-ing · Long-tail classification. 
+
+1 Introduction 
+
+Clinical datasets follow long-tailed distributions almost universally: common di-agnoses dominate while rare but critical conditions populate the tail [14,15,22]. In chest radiography, “No Finding” can exceed 60% of studies while pneumo-mediastinum appears in fewer than 0.1% [16]. Similar imbalances arise in der-matoscopy [3,35], computed tomography [9], and congenital heart disease screen-ing [37]. Models trained on such distributions systematically underdiagnose rare conditions [2,17], and acquiring additional labeled examples is expensive and privacy-constrained [32]. Latent diffusion models [33,29,19] offer a compelling path: a hospital trains a generative model locally and shares synthetic samples on demand, a privacy-preserving alternative to federated learning [32,26]. The practical value of this  
+
+> arXiv:2605.17087v1 [cs.CV] 16 May 2026 2M. Dombrowski et al.
+
+pipeline depends on whether generated images carry the discriminative features downstream classifiers need, particularly for tail classes. Current work addresses this through perceptual fidelity (FID [11]) and domain-specific autoencoder fine-tuning [36], implicitly treating the latent space as a neutral intermediary. Re-cent studies on natural images challenge this assumption: latent spaces contain high-frequency artifacts [34], lack geometric equivariance [20,41], and benefit from alignment with pretrained representations [39,21,38,40,8]. The emerging view is that latent space structure actively shapes what a generative model can learn [1,7], yet the implications for class-conditional generation in long-tailed medical settings remain unexplored. We make this question precise through a systematic study across five au-toencoder families and four clinical benchmarks. Reconstruction-space classifiers match image-space performance ( p=0 .375 , Wilcoxon signed-rank test), confirm-ing that the autoencoders faithfully preserve discriminative information. Yet latent-space classifiers suffer a substantial drop despite extensive architecture search, distillation, and noise-conditional training ( p = 9 .5 × 10 −7, Wilcoxon across all 20 AE ×dataset pairs). We term this the learnability gap (Fig. 1): the information is present but structured in a way that resists direct learning. This gap propagates to generative augmentation: if the diffusion model cannot learn class-discriminative structure from the latents, its samples will lack the pathological markers classifiers rely on. Our contributions are: (1) We identify and quantify the learnability gap across five autoencoder families and four medical benchmarks, showing it is systematic ( p = 9 .5 × 10 −7) and independent of reconstruction fidelity, domain specificity, and initialization strategy. (2) We develop noise-conditioned latent classifiers with FiLM layers and image-space distillation that partially narrow the gap and offer 64 × throughput gains, making them practical for rejection sampling and quality filtering in generative pipelines. (3) We provide a controlled analysis isolating the sources of the gap through systematic ablations of fine-tuning, distillation, and noise conditioning, establishing latent space structure 
+
+as the bottleneck for long-tail medical synthesis. 
+
+Related work. Long-tailed medical classification has been extensively bench-marked [14,15,22], with LDAM [2], decoupled training [17], and focal loss [23] as standard remedies. Generative augmentation via class-balancing diffusion [31], guided adapters [27], synthetic pretraining [26], and diversity control [6] has shown promise. Latent diffusion [33,12,29,19] relies on autoencoder latent spaces whose structure significantly impacts generation quality through high-frequency artifacts [34], equivariance deficits [20,41], and spectral biases [7]. Representa-tion alignment methods [39,21,38,40,8] improve latent spaces using pretrained encoders such as DINOv2 [28], and latent-space learnability has been studied for natural images [1] and memorization detection [5]. Domain-specific autoen-coders preserve clinical features [36]. Classifier guidance at inference [4,13] and autoguidance [18] improve sample quality but do not address the underlying representation. We differ by providing the first systematic diagnosis of the learn-The Learnability Gap 3
+
+Fig. 1: Method overview. A frozen pretrained autoencoder maps images to latent space and back. The learnability gap: reconstruction-space classifiers match im-age space, but latent-space classifiers degrade substantially. A ConvNeXt-Tiny student classifier with FiLM-based noise conditioning is distilled from an image-space teacher. ability gap in medical latent spaces and by developing noise-conditioned latent classifiers as both diagnostic and practical tools for generative pipelines. 
+
+2 Method 
+
+An overview is given in Fig. 1. We operate in the latent space of a frozen pre-trained autoencoder. Let ximg denote an image, x = E(ximg ) its latent encoding, and ˜ximg = G(x) the decoded reconstruction. All latents are channel-wise nor-malized over the training set. 
+
+Three evaluation spaces. To isolate the effect of latent encoding from infor-mation loss, we define three evaluation spaces: image space (classifiers trained on original images ximg ), latent space (classifiers trained on latent codes x), and reconstruction space (classifiers trained on decoded reconstructions ˜ximg =
+
+G(E(ximg )) ). If latent-space classifiers underperform reconstruction-space clas-sifiers, the gap cannot be caused by missing information (since the decoder can recover it) but must instead reflect how the latent space structures that infor-mation. This three-way comparison is the core diagnostic tool of our analysis. 
+
+Noise-conditioned latent classifier. Our core component is a classifier fϕ(xσ , σ )
+
+that predicts the class label c from noisy latents at any noise level σ, forcing re-covery of semantic information even at low signal-to-noise ratios. We adopt a ConvNeXt-Tiny [24] backbone operating directly on the latent tensor, chosen for its strong performance in prior latent-space studies [5]. The noise level σ
+
+is embedded via Fourier features followed by an MLP with SiLU activations, and injected at the end of each ConvNeXt stage through Feature-wise Linear 4 M. Dombrowski et al. 
+
+Modulation (FiLM) [30]: γ, β = W e (σ); x′ = x ⊙ (1 + γ) + β. FiLM param-eters are zero-initialized so the backbone initially acts as an identity mapping and gradually learns noise-dependent modulation. The classifier is trained with 
+
+Lcls = Ex,ε,σ [CE( fϕ(x+σε, σ ), c )] .Our motivation for noise conditioning is twofold. First, it improves classi-fication by forcing the network to learn robust, noise-invariant features rather than overfitting to clean-latent statistics (Table 4). Second, noise-conditioned classifiers integrate naturally into diffusion model training as regularizers on the predicted clean latent ˆx0 or as guidance models during sampling, providing a practical path toward narrowing the learnability gap at the generative level. 
+
+Distillation from image space. Direct training of the latent classifier is lim-ited by the learnability gap itself. We therefore distill from a strong image-space teacher T operating on reconstructions ˜ximg . With teacher logits zT = T (˜ ximg )
+
+and student logits zS = fϕ(x), we optimize: 
+
+Ldistill = α CE( zS , c ) + (1 − α) ∥zS − zT ∥22, α = 0 .5, (1) combining ground-truth supervision with soft logit matching. This encourages the latent student to mimic the image-space decision boundary while retaining hard-label supervision. The combination of distillation and noise conditioning yields our strongest latent classifier, which we use both to quantify the learn-ability gap and as a practical component for downstream generative pipelines (e.g. rejection sampling, training-time regularization). 
+
+3 Experiments 
+
+Setup. We evaluate on four medical benchmarks: MIMIC-CXR long-tail (19 chest X-ray findings, N =111 k) [16], ISIC 2019 (8 skin lesion classes, N =25 k) [3,35], CT-RATE (13 CT findings, N =23 k) [9], and Cardium (CHD vs. normal, N =6 .6k) [37]. All datasets exhibit long-tailed distributions with imbalance ratios exceeding 50:1. We compare five autoencoder families: Stable Diffusion 1.4 (SD 1.4), Flux.1 dev, Flux.2 dev, MedVAE [36], and MedVAE fine-tuned on each target dataset (MedVAE-FT). Image-space and reconstruction-space classifiers use ImageNet-pretrained ResNet-50 [10] with LDAM loss [2] and deferred reweighting at epoch 10, trained for up to 60 epochs (patience 15). Latent classifiers use ConvNeXt-Tiny [24] with the input layer adapted to each autoencoder’s channel count. All results report 5-fold cross-validation on identical folds and seeds; we report mean ±std .We evaluate balanced accuracy (bACC), area under the ROC curve (AUC), and Matthews correlation coefficient (MCC). 
+
+The learnability gap is large and consistent. Table 1 presents the cen-tral finding. Across all five autoencoder families and four datasets, latent-space classifiers underperform their reconstruction-space counterparts. On ISIC-2019, the bACC gap exceeds 18 percentage points for every autoencoder (up to 27.8 for SD 1.4; p< 10 −4, paired t-test). On MIMIC-LT the gap ranges from 6 to 13 points, consistently significant ( p< 0.002 ). A Wilcoxon signed-rank test across all 20 AE ×dataset pairs confirms the gap is systematic ( p = 9.5 × 10 −7). The Learnability Gap 5
+
+Table 1: The learnability gap across autoencoder families (pretrained init., 5-fold CV). Latent space (LS) classifiers underperform reconstruction space (RS), which matches image space. † Paired t-test p< 0.05 ; ‡ p< 0.001 . Best LS per dataset in bold . Overall LS vs RS: Wilcoxon p = 9 .5 × 10 −7.
+
+CT-RATE ISIC-2019 MIMIC-LT Cardium 
+
+Method Sp. bACC AUC MCC bACC AUC MCC bACC AUC MCC bACC AUC MCC Image Space – .255 ±.018 .720 ±.017 .280 ±.033 .749 ±.021 .947 ±.008 .703 ±.027 .263 ±.010 .760 ±.015 .279 ±.017 .669 ±.028 .743 ±.036 .280 ±.061 
+
+SD 1.4 LS .156 ‡±.010 .635 ±.020 .147 ±.014 .468 ‡±.012 .835 ±.011 .428 ±.020 .135 ‡±.007 .656 ±.013 .191 ±.022 .624 ±.014 .676 ±.010 .202 ±.012 
+
+RS .246 ±.020 .727 ±.018 .257 ±.015 .746 ±.009 .943 ±.005 .700 ±.009 .261 ±.012 .769 ±.008 .285 ±.018 .662 ±.032 .723 ±.043 .270 ±.077 
+
+Flux.1 LS .167 ‡±.009 .639 ±.027 .153 ±.015 .496 ‡±.013 .853 ±.006 .466 ±.005 .132 ‡±.009 .662 ±.009 .197 ±.011 .627 ±.024 .682 ±.026 .209 ±.054 
+
+RS .252 ±.020 .725 ±.014 .279 ±.017 .744 ±.017 .943 ±.004 .697 ±.015 .263 ±.025 .773 ±.008 .274 ±.023 .667 ±.036 .724 ±.055 .287 ±.068 
+
+Flux.2 LS .169 †±.022 .653 ±.019 .174 ±.008 .552 ‡±.013 .884 ±.003 .527 ±.019 .166 ‡±.010 .703 ±.005 .221 ±.034 .639 ±.026 .690 ±.053 .223 ±.043 
+
+RS .242 ±.017 .726 ±.011 .260 ±.008 .755 ±.019 .951 ±.005 .714 ±.012 .247 ±.023 .767 ±.008 .282 ±.014 .666 ±.021 .722 ±.036 .268 ±.038 
+
+MedVAE LS .164 †±.014 .641 ±.010 .176 ±.007 .539 ‡±.021 .877 ±.008 .509 ±.018 .144 ‡±.006 .673 ±.008 .210 ±.013 .633 ±.053 .684 ±.068 .227 ±.074 
+
+RS .239 ±.015 .719 ±.011 .261 ±.017 .725 ±.018 .934 ±.007 .667 ±.013 .205 ±.011 .730 ±.011 .248 ±.029 .644 ±.028 .720 ±.051 .235 ±.059 
+
+MedVAE-FT LS .164 †±.021 .655 ±.010 .168 ±.018 .553 ‡±.015 .882 ±.006 .525 ±.013 .157 †±.006 .682 ±.004 .205 ±.018 .623 ±.029 .680 ±.048 .203 ±.047 
+
+RS .238 ±.019 .717 ±.019 .267 ±.011 .750 ±.021 .949 ±.008 .709 ±.018 .257 ±.027 .767 ±.013 .276 ±.017 .661 ±.046 .725 ±.048 .265 ±.074 
+
+Table 2: Recon. quality. High fidelity does not predict latent-space learnability: Flux.2 leads in PSNR but shows the largest LS gap on ISIC. 
+
+CT-RATE ISIC MIMIC Cardium SSIM PSNR SSIM PSNR SSIM PSNR SSIM PSNR SD 1.4 .924 34.2 .971 37.3 .983 35.2 .985 30.5 Flux.1 .946 40.8 .994 40.3 .997 40.5 .999 39.1 Flux.2 .941 40.6 .994 42.3 .997 41.9 .999 40.8 
+
+MedVAE .938 38.2 .963 24.9 .711 23.7 .991 32.7 MedVAE-FT .939 39.5 .991 41.1 .996 39.8 .996 35.2 
+
+Table 3: ImageNet, 24 h budget, single GH200. Latent training: 
+
+64 × faster, 120 × less memory. 
+
+Space bACC AUC MCC S/s MB Image .459 – – 50 20k Latent .630 .996 .629 3.2k 166 + Distill. .711 .993 .710 3.2k 166 
+
+Reconstruction-space performance is not significantly different from image space (p=0 .375 , Wilcoxon), confirming that discriminative information is faithfully preserved. Cardium is the only dataset where the gap does not reach signifi-cance, attributable to its binary nature and high cross-fold variance. 
+
+Reconstruction fidelity does not predict learnability. Table 2 reports re-construction quality for each autoencoder. Flux.2 achieves the highest PSNR (41.4 dB macro average) yet also exhibits a large LS gap, while MedVAE some-times has lower fidelity ( e.g. 23.7 dB on MIMIC) but a comparable classification gap. Fig. 3 confirms this visually: pixel-wise differences between originals and reconstructions are minimal across autoencoders, yet the classification gap per-sists. Fig. 2 makes this explicit: across all 20 AE ×dataset combinations, PSNR shows no predictive relationship with gap magnitude. This rules out information loss as the cause and implicates the structure of the latent space. 
+
+Medical fine-tuning does not close the gap. Comparing MedVAE with MedVAE-FT in Table 1 reveals that fine-tuning the autoencoder on in-domain data improves reconstruction quality substantially (PSNR from 29.9 to 38.9 dB on average, Table 2) but does not meaningfully improve latent-space classifica-tion: the macro-average LS bACC changes from .370 to .374, with significance on only one of four datasets (MIMIC-LT, p=0 .04 ; paired t-test). Meanwhile, RS 6 M. Dombrowski et al. 
+
+22 24 26 28 30 32 34 36 38 40 42 44 
+
+0
+
+10 
+
+20 
+
+30 
+
+PSNR (dB) bACC pp 
+
+CT-RATE ISIC MIMIC Cardium 
+
+Fig. 2: PSNR vs. learnability gap. Each point is one AE ×dataset pair. Higher fidelity does not reduce the gap; dataset difficulty dominates. Table 4: Latent classifier ablation on Flux.2 (5-fold CV). Each component helps incrementally, but the gap to RS persists, confirming its structural nature. 
+
+⋆ Significant vs. naïve ( p< 0.05 , paired t-test).                                                                                   
+
+> CT-RATE ISIC-2019 MIMIC-LT Cardium Macro Method bACC AUC MCC bACC AUC MCC bACC AUC MCC bACC AUC MCC AUC RS baseline .242 ±.017 .726 ±.011 .260 ±.008 .755 ±.019 .951 ±.005 .714 ±.012 .247 ±.023 .767 ±.008 .282 ±.014 .666 ±.021 .722 ±.036 .268 ±.038 .791 Naïve LS .169 ±.022 .653 ±.019 .174 ±.008 .552 ±.013 .884 ±.003 .527 ±.019 .166 ±.010 .703 ±.005 .221 ±.034 .639 ±.026 .690 ±.053 .223 ±.043 .731 + Distill. .174 ±.007 .664 ±.018 .202 ±.015 .581 ±.064 .898 ±.021 .565 ±.045 .152 ±.005 .697 ±.017 .228 ±.029 .653 ±.024 .728 ±.028 .260 ±.040 .747 + HP opt. ⋆.205 ±.015 .695 ±.018 .209 ±.018 .643 ±.021 .901 ±.012 .584 ±.039 .202 ±.010 .740 ±.007 .265 ±.022 .567 ±.093 .573 ±.159 .109 ±.151 .727 + Noise cond. .174 ±.028 .669 ±.027 .203 ±.028 .591 ±.043 .896 ±.008 .563 ±.020 .177 ±.011 .720 ±.014 .258 ±.012 .663 ±.020 .733 ±.009 .289 ±.021 .754
+
+benefits more from fine-tuning (MIMIC p=0 .008 , ISIC p=0 .02 ), widening the gap rather than closing it. This confirms that the learnability gap is structural, not a domain mismatch, and that investing compute in autoencoder fine-tuning is not an effective remedy. 
+
+Latent classifier ablation. Table 4 ablates strategies for training latent-space classifiers on Flux.2. Naïve training already exposes the full learnability gap. Sys-tematic hyperparameter optimization yields a distilled variant reaching a macro bACC of .404 ( p< 0.03 on 3 of 4 datasets), though it remains unstable on the data-limited Cardium task ( bACC = .567 ±.093 ). Introducing noise conditioning via FiLM layers slightly reduces macro bACC to .401 but substantially improves discriminative robustness: mean AUC rises from .727 to .754 and MCC from .292 to .328. This improvement is most notable on Cardium (MCC .223 → .289 ), con-firming that noise-aware training learns more robust decision boundaries. Despite these interventions, a gap of 4–11 bACC points relative to reconstruction space (RS) persists. This suggests the learnability gap is a structural property of the latent space rather than an artifact of suboptimal training. 
+
+Latent classifiers are fast. Table 3 demonstrates that latent classifiers, de-spite the learnability gap, offer compelling practical advantages. On ImageNet with a fixed 24-hour budget on a single NVIDIA GH200, latent ConvNeXt-Tiny reaches bACC .630 vs. .459 in image space, a 17-point gain from operating in the compressed domain. With distillation it reaches .711. Throughput increases 
+
+64 × (3.2k vs. 50 samples/sec) and memory drops 120 × (166 MB vs. 20 GB) The Learnability Gap 7
+
+Fig. 3: Reconstruction samples and pixel-wise absolute difference for long-tail classes across CT-RATE, MIMIC-LT, and ISIC. Reconstructions are near-identical to originals, confirming that the autoencoder preserves discriminative information despite the large classification gap in latent space. compared to image space classifiers which have to decode the latents first. This makes latent classifiers practical as fast quality filters for generated images and as components in training-time regularization schemes for diffusion models. 
+
+Why does the gap exist? Our experiments systematically rule out several potential explanations. Information loss is excluded by the RS ≈IS equivalence (p=0 .375 ). Domain mismatch is excluded by the failure of medical fine-tuning to close the gap despite improving reconstruction from 29.9 to 38.9 dB PSNR. In-sufficient classifier capacity is unlikely: ConvNeXt-Tiny achieves strong RS and image-space performance, and the gap persists or widens with stronger classifiers and extensive hyperparameter tuning. We hypothesize that autoencoders trained for pixel-wise reconstruction distribute class-discriminative features across high-frequency spatial patterns and inter-channel correlations that convolutional clas-sifiers struggle to exploit, while the decoder inverts these patterns precisely be-cause it was jointly trained with the encoder. This interpretation is consistent with recent findings on spectral biases [7] and high-frequency artifacts [34] in au-toencoder latent spaces. The gap is largest on ISIC-2019 (18-28 points), where fine-grained texture differences between lesion types may be particularly sus-ceptible to such encoding artifacts. These findings suggest that latent space restructuring, e.g. through class-conditional objectives, equivariance-aware ar-chitectures [20], or alignment with discriminative encoders [39], which is a more promising direction than improving reconstruction fidelity. 8 M. Dombrowski et al. 
+
+Discussion. Our results establish that the bottleneck in latent diffusion for med-ical long-tail synthesis is not the autoencoder’s representational capacity but the 
+
+learnability of its latent space. The gap is robust across five autoencoder families, four clinical modalities, and extensive hyperparameter tuning ( p = 9 .5 × 10 −7,Wilcoxon). This finding has direct implications for the field: efforts to improve synthetic medical data should prioritize latent space restructuring over recon-struction fidelity or domain-specific fine-tuning. Our noise-conditioned latent classifiers, while not fully closing the gap, provide both a diagnostic frame-work for evaluating latent space quality and practical components for generative pipelines through their 64 × throughput advantage. A limitation is that we di-agnose the gap but do not resolve it at the representation level. Removing this gap and validating with expert radiologist evaluation are natural next steps. 
+
+Broader impact. Our findings have practical implications for the deployment of generative models in clinical settings. The learnability gap means that current latent diffusion pipelines may systematically underrepresent rare pathologies in synthetic training data, potentially perpetuating the very diagnostic biases they are designed to mitigate. By identifying latent space structure as the bottleneck, we redirect optimization efforts away from expensive autoencoder fine-tuning toward more targeted interventions. Our noise-conditioned latent classifiers can serve as lightweight quality filters in privacy-preserving synthetic data sharing pipelines, enabling hospitals to verify the clinical plausibility of generated im-ages without exposing real patient data. Addressing the learnability gap could accelerate the adoption of generative augmentation for rare disease diagnosis, where data scarcity is most acute and the clinical need is greatest. 
+
+4 Conclusion 
+
+We introduced the learnability gap : a systematic discrepancy between the dis-criminative information preserved in autoencoder latent spaces and the ability of downstream models to access it. Through a comprehensive exploration spanning five autoencoder families, four long-tailed medical benchmarks, and multiple classifier training paradigms, we showed that this gap, i.e. not reconstruction fidelity or domain specificity, is the primary bottleneck limiting the utility of latent representations for medical data augmentation. The gap is highly sig-nificant ( p = 9 .5 × 10 −7) and is not remedied by medical-domain autoencoder fine-tuning. We developed noise-conditioned latent classifiers with FiLM layers and image-space distillation that partially narrow the gap and offer dramatic effi-ciency gains ( 64 × throughput, 120 × memory reduction), making them practical for quality filtering and rejection sampling in generative pipelines. We provide three actionable insights: (i) large-scale pretrained autoencoders are sufficient for medical synthesis without domain fine-tuning, as the bottleneck lies in latent space structure rather than domain specificity; (ii) latent-space classifiers are fast and useful but require careful training via distillation and noise condition-ing; and (iii) the persistent learnability gap identifies latent space restructuring as the critical open problem for advancing synthetic medical data augmentation. The Learnability Gap 9
+
+Acknowledgments. We acknowledge HPC resources from NHR@FAU (projects b143dc, b180dc), funded by federal and Bavarian state authorities and Gerhard Wellein’s HPC approach. NHR@FAU hardware is partially funded by DFG 440719683. Additional support was received from ERC projects MIA-NORMAL 101083647, DFG 513220538 and 512819079, and the state of Bavaria (HTA and the Bavarian Foundation Model Initiative). We further acknowledge resources provided by the Isambard-AI National AI Research Resource (AIRR), operated by the University of Bristol and funded by DSIT via UKRI and STFC [ST/AIRR/I-A-I/1023] [25]. We were supported by coding agents and LLMs from Anthropic, OpenAI, Google, and Mistral AI, for text polishing, coding, experiment orchestration, and cluster monitoring. 
+
+Disclosure of Interests. The authors have no relevant competing interests. 
+
+References 
+
+1. Black Forest Labs: FLUX.2: Analyzing and enhancing the latent space of FLUX (2025), https://bfl.ai/research/representation-comparison 
+
+2. Cao, K., Wei, C., Gaidon, A., Arechiga, N., Ma, T.: Learning imbalanced datasets with label-distribution-aware margin loss. Advances in neural information process-ing systems 32 (2019) 3. Codella, N.C., Gutman, D., Celebi, M.E., Helba, B., Marchetti, M.A., Dusza, S.W., Kalloo, A., Liopyris, K., Mishra, N., Kittler, H., et al.: Skin lesion analysis toward melanoma detection: A challenge at the 2017 international symposium on biomed-ical imaging (isbi), hosted by the international skin imaging collaboration (isic). In: 2018 IEEE 15th international symposium on biomedical imaging (ISBI 2018). pp. 168–172. IEEE (2018) 4. Dhariwal, P., Nichol, A.: Diffusion models beat gans on image synthesis. Advances in neural information processing systems 34 , 8780–8794 (2021) 5. Dombrowski, M., Nützel, F., Kainz, B.: LCMem: A universal model for robust image memorization detection. arXiv preprint arXiv:2512.14421 (2025) 6. Dombrowski, M., Zhang, W., Cechnicka, S., Reynaud, H., Kainz, B.: Image gen-eration diversity issues and how to tame them. In: Proceedings of the Computer Vision and Pattern Recognition Conference. pp. 3029–3039 (2025) 7. Falck, F., Pandeva, T., Zahirnia, K., Lawrence, R., Turner, R., Meeds, E., Zazo, J., Karmalkar, S.: A Fourier space perspective on diffusion models (2025) 8. Gui, M., Schusterbauer, J., Phan, T., Krause, F., Susskind, J., Bautista, M.A., Ommer, B.: Adapting self-supervised representations as a latent space for efficient generation. arXiv preprint arXiv:2510.14630 (2025) 9. Hamamci, I.E., Er, S., Wang, C., Almas, F., Simsek, A.G., Esirgun, S.N., Do-gan, I., Durugol, O.F., Hou, B., Shit, S., et al.: Developing generalist foundation models from a multimodal dataset for 3d computed tomography. arXiv preprint arXiv:2403.17834 (2024) 10. He, K., Zhang, X., Ren, S., Sun, J.: Deep residual learning for image recognition. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 770–778 (2016) 11. Heusel, M., Ramsauer, H., Unterthiner, T., Nessler, B., Hochreiter, S.: Gans trained by a two time-scale update rule converge to a local nash equilibrium. Advances in neural information processing systems 30 (2017) 10 M. Dombrowski et al. 12. Ho, J., Jain, A., Abbeel, P.: Denoising diffusion probabilistic models. Advances in neural information processing systems 33 , 6840–6851 (2020) 13. Ho, J., Salimans, T.: Classifier-free diffusion guidance. In: NeurIPS 2021 Work-shop on Deep Generative Models and Downstream Applications (2021), https: //openreview.net/forum?id=qw8AKxfYbI 
+
+14. Holste, G., Wang, S., Jiang, Z., Shen, T.C., Shih, G., Summers, R.M., Peng, Y., Wang, Z.: Long-tailed classification of thorax diseases on chest x-ray: A new bench-mark study. In: MICCAI Workshop on Data Augmentation, Labelling, and Imper-fections. pp. 22–32. Springer (2022) 15. Holste, G., Zhou, Y., Wang, S., Jaiswal, A., Lin, M., Zhuge, S., Yang, Y., Kim, D., Nguyen-Mau, T.H., Tran, M.T., et al.: Towards long-tailed, multi-label disease classification from chest x-ray: Overview of the cxr-lt challenge. Medical Image Analysis 97 , 103224 (2024) 16. Johnson, A.E., Pollard, T.J., Berkowitz, S.J., Greenbaum, N.R., Lungren, M.P., Deng, C.y., Mark, R.G., Horng, S.: Mimic-cxr, a de-identified publicly available database of chest radiographs with free-text reports. Scientific data 6(1), 317 (2019) 17. Kang, B., Xie, S., Rohrbach, M., Yan, Z., Gordo, A., Feng, J., Kalantidis, Y.: De-coupling representation and classifier for long-tailed recognition. In: International Conference on Learning Representations (2020), https://openreview.net/forum? id=r1gRTCVFvB 
+
+18. Karras, T., Aittala, M., Kynkäänniemi, T., Lehtinen, J., Aila, T., Laine, S.: Guid-ing a diffusion model with a bad version of itself. Advances in Neural Information Processing Systems 37 , 52996–53021 (2024) 19. Karras, T., Aittala, M., Lehtinen, J., Hellsten, J., Aila, T., Laine, S.: Analyzing and improving the training dynamics of diffusion models. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 24174– 24184 (2024) 20. Kouzelis, T., Kakogeorgiou, I., Gidaris, S., Komodakis, N.: EQ-VAE: Equivariance regularized latent space for improved generative image modeling. In: Forty-second International Conference on Machine Learning (2025), https://openreview.net/ forum?id=UWhW5YYLo6 
+
+21. Leng, X., Singh, J., Hou, Y., Xing, Z., Xie, S., Zheng, L.: Repa-e: Unlocking vae for end-to-end tuning of latent diffusion transformers. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 18262–18272 (2025) 22. Lin, M., Holste, G., Wang, S., Zhou, Y., Wei, Y., Banerjee, I., Chen, P., Dai, T., Du, Y., Dvornek, N.C., et al.: Cxr-lt 2024: A miccai challenge on long-tailed, multi-label, and zero-shot disease classification from chest x-ray. Medical Image Analysis p. 103739 (2025) 23. Lin, T.Y., Goyal, P., Girshick, R., He, K., Dollár, P.: Focal loss for dense object detection. In: Proceedings of the IEEE international conference on computer vision. pp. 2980–2988 (2017) 24. Liu, Z., Mao, H., Wu, C.Y., Feichtenhofer, C., Darrell, T., Xie, S.: A convnet for the 2020s. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 11976–11986 (2022) 25. McIntosh-Smith, S., Alam, S.R., Woods, C.: Isambard-ai: a leadership class super-computer optimised specifically for artificial intelligence (2024), https://arxiv. org/abs/2410.11199 
+
+26. Moroianu, S.L., Bluethgen, C., Chambon, P., Cherti, M., Delbrouck, J.B., Paschali, M., Price, B., Gichoya, J., Jitsev, J., Langlotz, C.P., et al.: Improving performance, The Learnability Gap 11 robustness, and fairness of radiographic ai models with finely-controllable synthetic data. arXiv preprint arXiv:2508.16783 (2025) 27. Nützel, F., Dombrowski, M., Kainz, B.: Grasp: Guided residual adapters with sample-wise partitioning. arXiv preprint arXiv:2512.01675 (2025) 28. Oquab, M., Darcet, T., Moutakanni, T., Vo, H., Szafraniec, M., Khalidov, V., Fernandez, P., Haziza, D., Massa, F., El-Nouby, A., et al.: Dinov2: Learning robust visual features without supervision. arXiv preprint arXiv:2304.07193 (2023) 29. Peebles, W., Xie, S.: Scalable diffusion models with transformers. In: Proceedings of the IEEE/CVF international conference on computer vision. pp. 4195–4205 (2023) 30. Perez, E., Strub, F., De Vries, H., Dumoulin, V., Courville, A.: Film: Visual rea-soning with a general conditioning layer. In: Proceedings of the AAAI conference on artificial intelligence. vol. 32 (2018) 31. Qin, Y., Zheng, H., Yao, J., Zhou, M., Zhang, Y.: Class-balancing diffusion models. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 18434–18443 (2023) 32. Rieke, N., Hancox, J., Li, W., Milletari, F., Roth, H.R., Albarqouni, S., Bakas, S., Galtier, M.N., Landman, B.A., Maier-Hein, K., et al.: The future of digital health with federated learning. NPJ digital medicine 3(1), 119 (2020) 33. Rombach, R., Blattmann, A., Lorenz, D., Esser, P., Ommer, B.: High-resolution image synthesis with latent diffusion models. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 10684–10695 (2022) 34. Skorokhodov, I., Girish, S., Hu, B., Menapace, W., Li, Y., Abdal, R., Tulyakov, S., Siarohin, A.: Improving the diffusability of autoencoders. arXiv preprint arXiv:2502.14831 (2025) 35. Tschandl, P., Rosendahl, C., Kittler, H.: The ham10000 dataset, a large collection of multi-source dermatoscopic images of common pigmented skin lesions. Scientific data 5(1), 180161 (2018) 36. Varma, M., Kumar, A., Van der Sluijs, R., Ostmeier, S., Blankemeier, L., Cham-bon, P., Bluethgen, C., Prince, J., Langlotz, C., Chaudhari, A.: Medvae: Efficient automated interpretation of medical images with large-scale generalizable autoen-coders. arXiv preprint arXiv:2502.14753 (2025) 37. Vega, D., Ceballos, H.V., Vera, J.S., Rodriguez, S., Perez, A., Castillo, A., Es-cobar, M., Londoño, D., Sarmiento, L.A., Castro, C.I., et al.: Cardium: Congen-ital anomaly recognition with diagnostic images and unified medical records. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 1193–1202 (2025) 38. Yao, J., Yang, B., Wang, X.: Reconstruction vs. generation: Taming optimization dilemma in latent diffusion models. In: Proceedings of the Computer Vision and Pattern Recognition Conference. pp. 15703–15712 (2025) 39. Yu, S., Kwak, S., Jang, H., Jeong, J., Huang, J., Shin, J., Xie, S.: Representation alignment for generation: Training diffusion transformers is easier than you think (2025) 40. Zheng, B., Ma, N., Tong, S., Xie, S.: Diffusion transformers with representation autoencoders (2025), https://arxiv.org/abs/2510.11690 
+
+41. Zhou, Y., Xiao, Z., Yang, S., Pan, X.: Alias-free latent diffusion models: Improv-ing fractional shift equivariance of diffusion latent space. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 34–44 (June 2025)

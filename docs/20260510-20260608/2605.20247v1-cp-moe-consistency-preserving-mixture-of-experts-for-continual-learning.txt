@@ -1,0 +1,851 @@
+Title: CP-MoE: Consistency-Preserving Mixture-of-Experts for Continual Learning
+
+URL Source: https://arxiv.org/pdf/2605.20247v1
+
+Published Time: Thu, 21 May 2026 00:02:28 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+Preprint. 
+
+# CP-M OE: C ONSISTENCY -P RESERVING MIXTURE -OF -E XPERTS FOR CONTINUAL LEARNING 
+
+Yang Liu, Toan Nguyen, Flora D. Salim ∗
+
+School of Computer Science and Engineering University of New South Wales Australia 
+
+flora.salim@unsw.edu.au 
+
+# ABSTRACT 
+
+Catastrophic forgetting remains a major obstacle to continual learning in large language models (LLMs) and vision–language models (VLMs). Although Mixture-of-Experts (MoE) architectures offer an efficient path to scaling, existing LoRA-based MoE continual learning methods still face a fundamental trade-off: they either isolate experts too aggressively, limiting knowledge transfer across tasks, or allow task-specific updates to overwrite important existing parameters, leading to se-vere forgetting. To address this, we propose CP-MoE , a continual learning framework built around a transient expert that captures early task-specific updates and guides their integration into stable experts. CP-MoE introduces a consistency-preserving routing bias, which uses the transient expert to estimate representation similarity with stable experts and steer routing towards more compatible expert selection, and a transient expert-guided regularisation mechanism, which selectively protects important historical parameters during merging. Together, these components reduce parameter inter-ference and forgetting while preserving cross-task knowledge transfer. We validate CP-MoE on both unimodal and multimodal continual learning benchmarks with LLM-based and VLM-based MoE models. On SuperNI benchmark, spanning diverse sequential language tasks, CP-MoE achieves state-of-the-art performance and stronger zero-shot transfer to unseen tasks. On VQA v2 dataset, it scales effectively to multimodal visual reasoning, consistently reduces forgetting, and outperforms strong MoE baselines. 
+
+# 1 INTRODUCTION 
+
+Large language models (LLMs) and vision–language models (VLMs) have demonstrated strong performance across a wide range of tasks (An et al., 2025; Liu et al., 2024; Touvron et al., 2023). Yet, unlike static benchmark settings, real-world deployment requires these models to continually adapt to non-stationary data streams, where tasks and data distributions evolve over time. This setting, known as continual learning (CL), requires a model to accumulate knowledge across a sequence of tasks without degrading previously acquired capabilities. Despite substantial progress, catastrophic forgetting remains a central challenge (McCloskey & Cohen, 1989; Yu et al., 2024a), as updates for new tasks can significantly overwrite earlier representations. To adapt large foundation models to new tasks efficiently, recent work has increasingly integrated sparse architectures, particularly Mixture-of-Experts (MoE) (Shazeer et al., 2017), into parameter-efficient fine-tuning (PEFT) paradigms. In these adapted models, the backbone is typically frozen to preserve core pre-trained knowledge, while adaptation is handled by a small set of trainable expert modules. The appeal of incorporating MoE lies in its partitioned param-eter space, which enables task-specific computation paths and provides a natural way to reduce interference across tasks (Aljundi et al., 2017). By utilizing parameter-efficient methods such as LoRA (Hu et al., 2022) as the experts, this gives rise to LoRA-MoE frameworks (Dou et al., 2023), which have emerged as a practical and scalable approach to continual adaptation. However, despite their structural sparsity and efficiency, such MoE-based adaptation methods still remain vulnerable to catastrophic forgetting under sequential task training. Despite their recent success, continual LoRA-MoE frameworks still face key limitations. Existing methods often pre-vent forgetting by isolating experts too aggressively (Liang et al., 2025), typically through a learn-and-freeze strategy that adds new LoRA experts for each task and then keeps them fixed. As a result, the model behaves as a static ensem-ble with limited cross-task knowledge transfer, leading to weaker generalisation on unseen tasks and poor scalability  
+
+> ∗Corresponding author.
+
+1
+
+> arXiv:2605.20247v1 [cs.LG] 18 May 2026
+
+Preprint. as the task sequence grows. Second, the load-balancing constraint commonly used in MoE architectures for hardware efficiency can be problematic in continual learning, as it tends to enforce unnecessary uniformity across experts and can limit task-specific specialisation. This calls for routing constraints that account for the semantic alignment be-tween task representations and experts. Finally, most current MoE-based continual learning methods lack mechanisms to protect important parameters during sequential updates, making them vulnerable to forgetting (Huai et al., 2025). To address these challenges, we propose CP-MoE , a continual learning framework built around a transient expert 
+
+that acts as a lightweight probe before updates are integrated into the stable expert pool. For each incoming task, the transient expert is briefly adapted on a small warm-up subset to capture early task-specific updates and assess its representation compatibility with existing experts. This design offers three key advantages. First, the transient ex-pert provides a local look-ahead signal of task-induced parameter displacement, enabling more selective integration without dynamic expert expansion. Second, it supports a consistency-preserving routing bias that favours experts with more compatible representations, mitigating the excessive uniformity imposed by standard load-balancing constraints and promoting stronger expert specialisation. Third, it enables a representation-guided regularisation mechanism that selectively protects important historical parameters during integration, thereby reducing interference and forgetting. Together, these components allow CP-MoE to preserve prior knowledge while maintaining effective knowledge trans-fer across related tasks. We show that this idea is highly effective in practice. Although CP-MoE introduces only a transient expert for each task, this module is used only during the short warm-up stage and is not retained thereafter, allowing the framework to improve performance without incurring persistent computational overhead. We evaluate CP-MoE on both unimodal and multimodal continual learning benchmarks with LLM-based and VLM-based MoE models, where it achieves state-of-the-art performance and strong zero-shot generalisation to out-of-distribution tasks. Our contributions are summarised as follows: • Transient expert for selective consolidation. We introduce a transient expert that briefly adapts to each in-coming task and serves as a lightweight probe of early task-specific updates and representation compatibility, enabling selective integration into a fixed pool of stable experts without dynamic expansion. • Consistency-preserving routing bias. We propose a routing mechanism that favours experts with more compatible representations, improving routing stability and promoting stronger expert specialisation beyond standard load balancing. • Representation-guided regularisation. We develop a dynamic regularisation scheme that selectively pro-tects important historical parameters during integration, thereby reducing interference and forgetting. • Strong empirical performance. We validate CP-MoE on SuperNI and VQA v2 with LLM-based and VLM-based methods. CP-MoE achieves state-of-the-art performance, stronger zero-shot transfer on unseen tasks, and consistently lower forgetting than strong baselines. 
+
+# 2 RELATED WORK 
+
+Continual Learning. Continual learning (CL) methods for mitigating catastrophic forgetting are commonly grouped into three paradigms: regularisation-based methods, which constrain updates to parameters deemed important for previous tasks (Kirkpatrick et al., 2017; Zenke et al., 2017; Nguyen et al., 2026); memory-based methods, which replay stored samples to preserve past decision boundaries (Lopez-Paz & Ranzato, 2017; Chaudhry et al., 2018; Nguyen et al., 2024; Buzzega et al., 2020); and expansion-based methods, which allocate task-specific parameters or network branches as new tasks arrive (Rusu et al., 2016; Von Oswald et al., 2019). While effective for smaller models, these approaches scale poorly to large language models (LLMs) and vision–language models (VLMs), where operating over the full parameter space is often prohibitively expensive in memory and computation. Moreover, many existing CL methods were developed primarily for image classification and do not transfer naturally to large-scale multimodal settings. 
+
+Parameter-Efficient Fine-Tuning in Continual Learning. Recent work has shown that parameter-efficient fine-tuning (PEFT) can improve continual learning performance by adapting large models with a small number of trainable parameters (Wang et al., 2022c;b; Hu et al., 2022). In particular, many continual learning methods adopt LoRA and allocate a new branch for each task while freezing previous branches to reduce forgetting (Liang & Li, 2024; Wang et al., 2023; Zhao et al., 2024). However, this design often results in a collection of isolated task-specific modules, limiting cross-task knowledge transfer and reducing adaptability. Recent approaches improve forgetting by combining parameter freezing with external gating to select transfer branches (Liang et al., 2025). Despite these gains, they still generalise poorly to unseen task domains and remain limited in representation fusion across tasks. 2Preprint. 
+
+Mixture-of-Experts in Continual Learning. Recent work has explored Mixture-of-Experts (MoE) architectures to improve stability in continual learning. Prior studies suggest that expert diversification can reduce generalisation error under sequential task learning (Li et al., 2025). Existing methods typically isolate task-specific knowledge through input-dependent routing, such as reconstruction-based selectors (Yu et al., 2024b) or dual-router designs (Huai et al., 2025). Other works regularise routing with auxiliary objectives, including consistency distillation (Dai et al., 2022) and orthogonality constraints (Feng et al., 2025), to improve stability and reduce representation collapse. However, these approaches remain vulnerable to semantic shift as new tasks alter the feature space and blur expert boundaries. More importantly, they lack a mechanism to assess representation compatibility before permanent consolidation, making expert updates more vulnerable to parameter interference and forgetting; CP-MoE addresses this gap directly. 
+
+# 3 METHOD 
+
+3.1 PRELIMINARIES 
+
+Problem Setup We consider continual adaptation of a pre-trained foundation model to a sequence of tasks in both unimodal and multimodal settings. Let T = {1, . . . , M } denote a sequence of tasks arriving sequentially, where each task t ∈ T is associated with a dataset 
+
+Dt = {(X(t) 
+
+> i
+
+, Y (t) 
+
+> i
+
+)}Nt
+
+> i=1
+
+.
+
+Here, X(t) 
+
+> i
+
+denotes the task input and Y (t) 
+
+> i
+
+the target output sequence. The input may be unimodal, e.g., a text prompt, or multimodal, e.g., an image-text pair. Let fΘfrozen ,Φ denote the pre-trained foundation model, where Θfrozen are frozen backbone parameters and Φ are trainable adaptation parameters. In continual learning, the model is fine-tuned sequentially: after task t−1, it is adapted to Dt without access to past datasets {D1, . . . , D t−1}. The objective is to learn the current task while preserving performance on previous ones. For autoregressive generation, the task loss is 
+
+Lt
+
+> task
+
+(Φ) = −E(X,Y )∼Dt
+
+ 
+
+> |Y|
+
+X
+
+> j=1
+
+log pΘfrozen ,Φ(Yj | X, Y <j )
+
+ . (1) We focus on parameter-efficient continual fine-tuning of large foundation models, where full-parameter updates are costly and prone to cross-task interference. In particular, we study LoRA-MoE , which combines low-rank adaptation with Mixture-of-Experts (MoE) for efficient and input-dependent adaptation. 
+
+Parameter-Efficient MoE (LoRA-MoE) Under this setting, the trainable parameters Φ are introduced as LoRA-MoE modules on top of a frozen backbone. For a frozen feed-forward network (FFN) block F (·; Θ FFN ) and an input hidden state x ∈ Rd, LoRA-MoE keeps ΘFFN fixed and augments the block with n parallel low-rank experts. The 
+
+i-th expert is defined as 
+
+Ei(x) = BiAix, (2) where Ai ∈ Rr×d and Bi ∈ Rk×r are trainable matrices with rank r ≪ min( d, k ). Each expert therefore defines a low-rank adaptation to the frozen FFN, so continual updates remain confined to the lightweight parameter set Φ.
+
+Sparse Gating and Routing The contribution of each expert is determined by a routing function 
+
+G(x) = Softmax( xW gate ), (3) where G(x)i denotes the routing weight of expert i. Let K(x) denote the indices of the top-m experts selected by 
+
+G(x). The adapted FFN output is 
+
+˜F (x) = F (x; Θ FFN ) + αr
+
+X
+
+> i∈K (x)
+
+G(x)i Ei(x), (4) where α is a scaling factor. This sparse activation enables input-dependent adaptation while decoupling total expert capacity from per-token computation (Zadouri et al., 2023; Huai et al., 2025). Despite these advantages, existing MoE-based adaptation strategies remain poorly suited to continual learning. In particular, they lack mechanisms to integrate new task knowledge into stable experts without harmful interference. As a result, they often face a trade-off: either experts are isolated too strongly, which limits knowledge transfer across related tasks (Liang et al., 2025), or expert knowledge is merged too aggressively, which overwrites important parameters and causes substantial forgetting (Huai et al., 2025). 3Preprint. 3.2 CP-M OE: C ONSISTENCY -P RESERVING MIXTURE -OF -E XPERTS 
+
+To address these limitations, we propose CP-MoE (Consistency-Preserving Mixture-of-Experts), a continual learning framework that integrates new task knowledge into stable experts while mitigating harmful interference and routing instability. Rather than directly updating experts from current-task signals, CP-MoE follows an assess-then-update 
+
+paradigm: it first identifies which experts are suitable for the new task and which parameters should be preserved, and only then performs constrained updates. In this way, CP-MoE avoids the two common failure modes of existing MoE-based continual learning methods: excessive expert isolation, which limits transfer, and overly aggressive merging, which causes forgetting. CP-MoE consists of two key components: 1. Transient Expert-Guided Parameter Protection. Before integrating new knowledge into stable experts, CP-MoE uses transient experts to capture task-specific adaptation signals. These signals are then used to estimate parameter importance and impose selective regularisation during updating: parameters important for previously acquired knowledge are strongly protected, while less critical parameters remain free to adapt. This enables knowledge transfer without indiscriminate overwriting. 2. Expert Representation Consistency Routing. To stabilise routing during continual adaptation, we introduce a routing objective that encourages consistency between the current input and expert representations. This steers inputs towards experts with compatible representations, while avoiding the rigid uniformity imposed by standard routing objectives and reducing the risk of expert collapse (Chi et al., 2022). Together, these two components couple routing and updating: CP-MoE routes inputs to compatible experts and updates them under explicit protection, enabling stable knowledge integration during continual adaptation. 3.2.1 TRANSIENT EXPERT 
+
+At the beginning of each task t, instead of updating the stable experts Φ immediately, we instantiate a transient expert 
+
+ϕTE  
+
+> t
+
+= {ATE  
+
+> t
+
+, B TE  
+
+> t
+
+}, implemented as a task-specific LoRA adapter. The transient expert is trained on a warm-up subset bDt ⊆ Dt, while keeping both the frozen backbone Θfrozen and the stable LoRA-MoE parameters Φ fixed. Let 
+
+bLt
+
+> task
+
+(ϕTE  
+
+> t
+
+) denote the task loss in Eq. 1, evaluated on bDt and viewed as a function of ϕTE  
+
+> t
+
+with (Θ frozen , Φ) fixed. The transient expert is updated as 
+
+ϕTE  
+
+> t,s +1
+
+= ϕTE  
+
+> t,s
+
+− η∇ϕ bLt
+
+> task
+
+(ϕTE  
+
+> t,s
+
+), s = 0 , . . . , S − 1, (5) with initialisation chosen such that the transient expert has zero initial effect, i.e., ETE  
+
+> t
+
+(x) = 0 at the start of optimi-sation, where η is the learning rate of the transient expert. Crucially, the transient expert is discarded after warm-up. Instead, we use its optimisation trajectory 
+
+{ϕTE  
+
+> t,s
+
+}Ss=0 
+
+to estimate prospective importance weights via the path-integral rule (Zenke et al., 2017). Let 
+
+∆ϕTE  
+
+> t,s
+
+= ϕTE  
+
+> t,s +1
+
+− ϕTE  
+
+> t,s
+
+, gt,s = ∇ϕ bLt
+
+> task
+
+(ϕTE  
+
+> t,s
+
+).
+
+For each parameter k, we accumulate 
+
+ωt,k =
+
+> S−1
+
+X
+
+> s=0
+
+− gt,s,k ∆ϕTE 
+
+> t,s,k
+
+. (6) After warm-up, the prospective importance is normalised as 
+
+Ωt,k = ωt,k 
+
+ ϕTE  
+
+> t,S,k
+
+− ϕTE 
+
+> t, 0,k
+
+2 + ξ , (7) where ξ > 0 is a damping constant. Collecting all entries yields a task-specific importance mask 
+
+Ωt = {Ωt,A , Ωt,B },
+
+corresponding to the two LoRA factors in ϕTE  
+
+> t
+
+= {ATE  
+
+> t
+
+, B TE  
+
+> t
+
+}. Since the transient and stable experts share the same low-rank parameterisation, Ωt can be transferred to the corresponding stable parameters for protected updating. Hence, the transient expert serves as a disposable look-ahead probe, revealing task-specific adaptation directions before any update is committed to the stable experts. 4Preprint. 
+
+Theorem 1 (Transient expert as a local look-ahead estimator) . Let bLt
+
+> task
+
+(ϕ) denote the task loss in Eq. 1, evaluated on the warm-up subset bDt, with (Θ frozen , Φ) fixed. Suppose that, in a neighbourhood containing the transient trajectory 
+
+{ϕTE  
+
+> t,s
+
+}Ss=0 , the warm-up objective admits the quadratic form 
+
+bLt
+
+> task
+
+(ϕ) = bLt
+
+> task
+
+(ϕTE  
+
+> t, 0
+
+) + g⊤ 
+
+> t
+
+(ϕ − ϕTE  
+
+> t, 0
+
+) + 12 (ϕ − ϕTE  
+
+> t, 0
+
+)⊤Ht(ϕ − ϕTE  
+
+> t, 0
+
+),
+
+where 
+
+gt = ∇ϕ bLt
+
+> task
+
+(ϕTE  
+
+> t, 0
+
+), Ht = ∇2 
+
+> ϕ
+
+bLt
+
+> task
+
+(ϕTE  
+
+> t, 0
+
+) ⪰ 0.
+
+If the transient expert is updated by Eq. 5 for S steps with step size η < 2/∥Ht∥2, then 
+
+ϕTE  
+
+> t,S
+
+− ϕTE  
+
+> t, 0
+
+= −η
+
+> S−1
+
+X
+
+> s=0
+
+(I − ηH t)sgt = −qS (Ht) gt, (8) 
+
+where qS (λ) = η PS−1 
+
+> s=0
+
+(1 − ηλ )s. Therefore, the transient expert induces a spectrally filtered multi-step adaptation direction for the warm-up objective on bDt.
+
+Theorem 1 shows that the transient expert captures more than an instantaneous gradient on the new task. Although trained only on bDt, its short warm-up trajectory induces a filtered multi-step adaptation direction for the local task ob-jective, making it a suitable probe for estimating prospective parameter importance before updating the stable experts. This differs from MAML-style look-ahead (Finn et al., 2017) in both role and optimisation. In MAML, the inner-loop updates are differentiated through to learn a meta-initialisation, which typically restricts the number of steps for effi-ciency. By contrast, the transient expert is not meta-optimised: its warm-up trajectory serves only as a task-local probe of the parameter displacement induced by the current task. 
+
+Why transient experts are preferable to direct look-ahead in MoE. CP-MoE performs task-specific look-ahead using a single transient expert, while keeping the stable experts fixed during assessment. This makes the procedure lightweight and avoids multi-step optimisation over the stable MoE system. By contrast, direct look-ahead on stable experts would require unrolling updates through routed experts, and potentially the router, making optimisation heavier and more susceptible to cross-expert interference. The transient expert therefore provides a cheap and isolated probe for estimating task-specific importance before protected updates are applied to the stable experts. 3.3 EXPERT REPRESENTATION CONSISTENCY ROUTING 
+
+3.3.1 MOTIVATION : T HE TENSION BETWEEN LOAD BALANCING AND REPRESENTATION CONSISTENCY 
+
+In modern Mixture-of-Experts (MoE) architectures, load balancing is essential for efficient expert utilisation and hardware efficiency. Earlier methods typically impose this through an auxiliary load-balancing loss (Laux ) (Lepikhin et al., 2021; Fedus et al., 2022), while more recent architectures use dynamic bias updates to reduce the optimisation interference of an explicit auxiliary objective (Wang et al., 2024). The issue in continual learning is therefore not whether load balancing is needed, but how it is enforced. Because continual data are sequential and highly non-stationary across tasks, overly rigid pressure towards uniform expert usage can conflict with expert specialisation. The router may then assign semantically mismatched inputs to historical experts simply to maintain balanced utilisation, exposing specialised experts to irrelevant updates and causing semantic interference. To resolve this, we propose CP-MoE , which preserves the benefits of load balancing while making routing 
+
+representation-consistent . Concretely, CP-MoE introduces a structural inductive bias that favours experts whose rep-resentations are more compatible with the incoming task, thereby enabling efficient expert usage without allowing load-balancing pressure to override expert specialisation. 3.3.2 CONSISTENCY -P RESERVING ROUTING BIAS (CP B IAS )We implement representation-consistent routing via a consistency-preserving (CP) bias. Specifically, we use the tran-sient expert (TE) from Sec. 3.2.1 as a task-specific probe, and measure its similarity to each stable expert (SE) using 
+
+Centered Kernel Alignment (CKA). Let ZTE ∈ RN ×D and ZSE  
+
+> i
+
+∈ RN ×D denote the centred activation matrices of the transient expert and the i-th stable expert, respectively, computed on the same warm-up tokens. We define the representation-consistency score of expert 5Preprint. 
+
+Figure 1: Overview of the CP-MoE Framework. (Left) Transient Expert Probing : A task-specific transient expert (TE) is optimised on warm-up tokens to derive the prospective importance mask Ωt. (Middle) Expert Representa-tion Consistency Routing : The Centered Kernel Alignment (CKA) between the TE and each stable expert (SE) is measured to produce the representation-consistency scores hCP  
+
+> i
+
+. These scores are subsequently injected as a struc-tural inductive bias to guide the router towards semantically compatible experts, ensuring that load-balancing pressure does not override expert specialisation. (Right) Transient Expert-Guided Parameter Protection : After training on the new task, the importance mask Ωt is selectively accumulated into the expert-specific importance matrices Ω(i)total .This accumulation is weighted by the representation-consistency scores hCP  
+
+> i
+
+, ensuring that stable experts with higher semantic alignment to the current task receive prioritised parameter protection to mitigate catastrophic forgetting. 
+
+i as 
+
+hCP  
+
+> i
+
+= CKA( ZTE , Z SE  
+
+> i
+
+) = ∥(ZSE  
+
+> i
+
+)⊤ZTE ∥2
+
+> F
+
+∥(ZTE )⊤ZTE ∥F ∥(ZSE  
+
+> i
+
+)⊤ZSE  
+
+> i
+
+∥F
+
+, (9) where ∥ · ∥ F denotes the Frobenius norm. This gives a task-dependent prior hCP  
+
+> i
+
+∈ [0 , 1] for each stable expert. We inject this prior into routing by biasing the router logits. For token t, let si,t = x⊤ 
+
+> t
+
+Wi denote the original routing logit for expert i, where xt is the token representation and Wi is the corresponding router parameter. We then define the biased logit 
+
+˜si,t = si,t + αh CP  
+
+> i
+
+, (10) where α ≥ 0 controls the strength of the CP bias. Let Kt be the set of top-K experts under {˜si,t }ni=1 . The final routing weights are 
+
+gi,t =
+
+
+
+exp(˜ si,t )
+
+P 
+
+> j∈K t
+
+exp(˜ sj,t ) , i ∈ K t,
+
+0, otherwise .
+
+(11) The CP bias acts as a stabilising prior: it favours experts whose representations are more compatible with the incoming task, while preserving sparse routing and standard load balancing. Consequently, expert utilisation remains efficient, but routing is less likely to send semantically mismatched inputs to historical experts, reducing routing instability and semantic interference during continual adaptation. 
+
+Load-Balancing Auxiliary Loss. While the CP bias stabilises routing by favouring representation-consistent ex-perts, a load-balancing constraint is still required to prevent expert collapse. We therefore retain the standard auxiliary load-balancing loss 
+
+Lt 
+
+> aux
+
+=
+
+> n
+
+X
+
+> i=1
+
+fiPi, (12) where fi is the fraction of tokens routed to expert i in the current batch, and Pi = 1
+
+> T
+
+PTt=1 Softmax( si,t ) is the mean native routing probability of expert i over the T tokens in the batch. Importantly, Pi is computed only from the native routing logits si,t , without the CP bias. This keeps load balancing decoupled from the consistency prior: the CP bias guides routing towards representation-compatible experts, while 
+
+Laux maintains balanced expert usage. 6Preprint. To mitigate catastrophic forgetting, CP-MoE penalises drift in stable expert parameters using accumulated importance weights. Rather than applying a binary mask, we maintain a continuous importance matrix that selectively regularises parameters according to their estimated relevance to previously acquired knowledge. 
+
+Importance accumulation. Let Ωt = {Ωt,A , Ωt,B } denote the task-specific prospective importance mask estimated from the transient expert. For each stable expert Ei, we accumulate importance as 
+
+Ω(i) 
+
+> A, total
+
+← Ω(i) 
+
+> A, total
+
++ hCP  
+
+> i
+
+Ωt,A , Ω(i) 
+
+> B, total
+
+← Ω(i) 
+
+> B, total
+
++ hCP  
+
+> i
+
+Ωt,B , (13) where hCP  
+
+> i
+
+is the CKA-based consistency score in Eq. 9. Thus, experts that are more aligned with the incoming task receive stronger protection, while unrelated experts are not over-constrained. 
+
+Regularisation on low-rank adapters. We apply the accumulated importance directly to the LoRA parameters of each stable expert. Let Aold  
+
+> i
+
+and Bold  
+
+> i
+
+denote the parameter snapshots saved after the previous task. The regularisation term is 
+
+Lreg =
+
+> n
+
+X
+
+> i=1
+
+D 
+
+Ω(i)
+
+> A, total
+
+, (Ai − Aold  
+
+> i
+
+)⊙2E
+
++
+
+D
+
+Ω(i)
+
+> B, total
+
+, (Bi − Bold  
+
+> i
+
+)⊙2E 
+
+, (14) where ⟨U, V ⟩ denotes the Frobenius inner product. This regulariser preserves historically important directions within the low-rank adaptation subspace. 
+
+Overall objective. For task t, the final training objective combines the task loss, the importance-weighted regulari-sation, and the auxiliary load-balancing loss: 
+
+Lt 
+
+> total
+
+= Lt 
+
+> task
+
++ λ Lt 
+
+> reg
+
++ γ Lt
+
+> aux
+
+, (15) where λ and γ are balancing coefficients. 
+
+# 4 EXPERIMENTS 
+
+Datasets. We evaluate CP-MoE on continual learning benchmarks in both unimodal language and multimodal vision–language settings. • Super-NaturalInstructions (SuperNI). To assess continual adaptation in long-sequence language tasks, we use SuperNI (Wang et al., 2022a), which covers diverse NLP tasks including summarization, information extraction, and dialogue generation. Each task is cast as an instruction-following text generation problem. • VQA v2. For multimodal evaluation, we use VQA v2 (Goyal et al., 2017), which contains over 200k images and 1.1M questions. Following the VQACL protocol (Zhang et al., 2023), we split the benchmark into 10 sequential tasks by reasoning type: recognition, location, judge, commonsense, count, action, color, type, subcategory, and causal. This setting tests whether CP-MoE can mitigate catastrophic forgetting in multi-modal representation learning. 
+
+Evaluation metrics. We report three metrics to capture the plasticity–stability trade-off: • Average Performance (AP): the average performance over all seen tasks after the final training stage, mea-sured by accuracy for VQA v2 and ROUGE-L for SuperNI. • Average Forgetting (AF): the average drop in performance for each task from its best historical performance to its final performance. • Zero-Shot Transfer (ZST): for SuperNI, the average performance on 7 unseen tasks after completing the 8-task training sequence, measuring the model’s out-of-distribution generalisation after continual learning. 
+
+Implementation details. For unimodal language experiments, we use Llama-2-7B (Touvron et al., 2023) as the backbone, while for multimodal experiments we use LLaVA-1.5-7B (Liu et al., 2023). In all settings, CP-MoE is instantiated with LoRA-based experts while the backbone remains frozen, and all methods are optimised with AdamW using a learning rate of 2 × 10 −4 and a cosine decay schedule. For unimodal experiments, each task is trained for 5 epochs with a per-device batch size of 16. The transient expert is warm-started for 10,000 tokens. We insert LoRA experts into all dense layers, including the self-attention projections 7Preprint. 
+
+(q_proj, k_proj, v_proj, o_proj) and MLP layers (gate_proj, up_proj, down_proj) . We use 8 experts with rank r = 4 and LoRA dropout 0.1. The CP-bias coefficient is set to α = 0 .2, while the balancing coefficients are λ = 5 × 10 3 and γ = 0 .1.For VQAv2, we keep the same base optimisation hyperparameters but adapt the architecture to the multimodal setting. Specifically, training is limited to 1 epoch, LoRA experts are injected only into the MLP layers, and we use a more compact configuration with 4 experts of rank r = 4 . In addition, the transient-expert warm-up is increased to 100,000 tokens to provide a more stable initialisation for multimodal routing. Table 1: Performance comparison on SuperNI. AP: Avg Performance, FT: Forgetting, ZS: Zero-shot. Bold indicates the best result.                                            
+
+> Method Order 1 Order 2 AP ↑FT ↓ZST ↑AP ↑FT ↓ZST ↑
+> InfLoRA (Liang & Li, 2024) 47.28 1.05 27.43 50.06 -0.28 30.79 O-LoRA (Wang et al., 2023) 50.12 -2.10 33.30 45.20 0.37 27.43 GainLoRA (Inf) (Liang et al., 2025) 45.57 -0.28 27.77 47.27 0.30 30.86 GainLoRA (O) (Liang et al., 2025) 49.60 0.82 33.80 51.54 -0.21 33.64
+> CP-MoE (Ours) 50.84 0.62 35.80 50.56 0.73 35.91
+
+4.1 MAIN RESULTS 
+
+Unimodal Language Generation and Zero-shot Generalisation. Table 1 compares CP-MoE against MoE-based fine-tuning baselines on SuperNI with LLaMA-7B. In Order 1, CP-MoE achieves the best overall results, attaining the highest Average Performance (AP) of 50.84% and Zero-shot Transfer (ZST) of 35.80%. In Order 2, CP-MoE again achieves a strong AP of 50.84%, remaining highly competitive with the best GainLoRA variant (51.54%). However, our analysis suggests that the apparent advantage of GainLoRA in this setting is partly attributable to misaligned evaluation metrics and instruction formatting, which lead to inflated scores. We provide a detailed case analysis in Appendix B.2. To further assess out-of-distribution generalisation, we evaluate zero-shot transfer on unseen tasks (Tasks 9–15). As shown in Table 1, CP-MoE achieves a ZST score of 35.80%, substantially outperforming GainLoRA-olora (33.80%) and GainLoRA-infolora (27.77%). These results suggest that grounding routing decisions in intrinsic consistency, rather than rigid load-balancing constraints, helps preserve a more stable and transferable representation space through continual updates. In addition, our importance-based parameter protection regularises weight updates to better retain pre-trained knowledge while allowing task-relevant adaptation. Together, these properties promote both stronger ex-pert specialisation and more effective knowledge transfer, which in turn lead to better out-of-distribution performance. 
+
+VQA v2 Benchmark. Table 2 reports the comparative results on the VQA v2 benchmark. CP-MoE consistently out-performs both rehearsal-based methods and recent MoE-based baselines in the multimodal task-incremental setting. In particular, CP-MoE achieves the best Average Performance (AP) of 62.30%. More importantly, it attains a near-zero 
+
+Average Forgetting (AF) of -0.35% , substantially improving over the previous state of the art, CL-MoE (-1.77%). These results show that CP-MoE not only delivers strong performance in unimodal language continual learning, but also generalises effectively to multimodal settings while mitigating catastrophic forgetting. This advantage over CL-MoE stems from two key design differences: first, CP-MoE explicitly accounts for representation similarity during routing, whereas CL-MoE ignores it; second, CP-MoE preserves task-specific important parameters, while CL-MoE relies on simple linear weighting that is more prone to overwriting previously acquired knowledge. 4.2 ABLATION STUDY 
+
+Due to space constraints, we present only the core ablations on the main components of CP-MoE, including the effect of the CKA-guided importance mask, in the main paper. Additional ablation studies are deferred to the Appendix. 
+
+Main components of CP-MoE. We examine the contribution of the key components of CP-MoE, namely Consistency-Preserving Bias (CP-Bias) and Transient Expert Regularisation (TE-Reg) in Table 3. Starting from the baseline (ACC 47.05%, AF 5.24%), adding TE-Reg substantially reduces Average Forgetting (AF) to 0.65% while im-proving Average Performance (ACC) to 50.04%. Incorporating CP-Bias further yields the best overall configuration, 8Preprint. Table 2: Performance (%) comparison on VQA v2. We compare CP-MoE against state-of-the-art continual learning methods. The top two sections cite results from (Huai et al., 2025). The bottom section reports our reproduction under a unified experimental setting to ensure fair comparison. Our CP-MoE achieves the highest Average Performance (AP) and minimal Average Forgetting (AF).                                                                                                                                                                                                               
+
+> Methods Various task in VQA v2 AP (↑)AF (↓)
+> Rec. Loc. Jud. Com. Cou. Act. Col. Typ. Sub. Cau.
+> VL-T5 based methods (Reported in (Huai et al., 2025))
+> Vanilla (Cho et al., 2021) 7.39 4.94 22.29 32.30 0.71 12.14 12.10 10.69 27.29 15.10 14.49 30.15 EWC (Kirkpatrick et al., 2017) 6.73 8.43 27.22 47.10 0.14 12.40 1.76 10.98 31.05 11.85 15.77 28.38 MAS (Aljundi et al., 2018) 30.81 8.07 25.50 4.00 31.90 32.39 26.24 24.75 19.85 2.75 20.56 21.97 ER (Chaudhry et al., 2019) 18.64 21.36 61.27 64.17 30.29 52.84 43.39 23.31 42.75 11.85 36.99 4.80 DER (Buzzega et al., 2020) 14.55 13.83 62.88 65.16 30.96 51.19 40.51 19.04 42.87 12.55 35.35 6.58 VS (Wan et al., 2022) 15.66 19.21 59.86 32.16 27.28 47.79 32.32 20.44 41.38 10.20 34.03 11.68 VQACL (Zhang et al., 2023) 20.47 28.02 62.55 68.61 29.35 50.66 44.45 26.36 44.65 12.60 38.77 2.90
+> LLaVA-7B based methods (Reported in (Huai et al., 2025))
+> Vanilla 19.25 14.81 54.59 56.97 24.23 46.20 27.58 26.09 36.47 18.89 32.51 20.69 EWC 28.12 23.02 61.50 61.08 26.13 54.29 23.65 32.25 44.97 17.83 37.28 15.27 MAS 31.54 22.09 60.85 46.32 32.48 56.47 30.05 35.69 42.73 18.83 37.71 14.91 ER 29.31 25.74 63.46 65.78 31.92 58.39 45.17 34.55 46.24 18.96 41.95 10.20 DER 26.95 21.43 64.88 66.17 31.01 55.92 44.60 32.85 47.09 20.74 41.16 11.28 VS 28.48 24.09 61.37 67.20 29.56 54.64 33.98 32.91 45.82 19.89 39.79 12.70 VQACL 34.14 32.19 66.15 63.00 33.01 60.91 34.64 38.48 47.94 24.42 43.49 9.10
+> Unified MoE Implementation (Ours)
+> CL-MoE Huai et al. (2025) 55.74 41.74 80.39 76.77 49.47 75.41 73.56 63.17 61.03 30.41 60.77 1.77
+> CP-MoE (Ours) 57.96 43.73 82.52 79.05 52.87 77.21 74.79 64.16 62.41 29.95 62.30 0.35
+
+Table 3: Ablation Study on SuperNI Main Tasks (1-8). CP Bias: Consistency-Preserving Bias, TE Reg.: Transient Expert Regularisation, CKA Mask: CKA-based Importance Mask. The third row represents CP-MoE without CKA-based gating. 
+
+Modules 1572 363 1290 181 002 1510 639 1729 ACC AF CP Bias TE Reg. 
+
+– – 8.55 89.00 25.67 65.33 61.81 98.33 12.21 15.50 47.05 5.24 – ✓ 32.45 88.00 28.70 56.08 69.98 98.33 9.81 16.99 50.04 0.65 
+
+✓ ✓ 32.93 88.00 28.66 61.77 71.64 98.25 8.90 16.56 50.84 0.62 with CKA 1572 363 1290 181 002 1510 639 1729 ACC AF 
+
+– 32.45 88.00 27.88 55.62 71.16 98.33 9.82 16.71 49.93 1.50 
+
+✓ 32.93 88.00 28.66 61.77 71.64 98.25 8.90 16.56 50.84 0.62 
+
+achieving 50.84% ACC and 0.62% AF. These consistent gains indicate that TE-Reg and CP-Bias play complemen-tary roles: TE-Reg protects previously acquired knowledge from being overwritten, while CP-Bias improves routing consistency, together mitigating catastrophic forgetting and improving overall performance. 
+
+Effect of the CKA-based consistency score. Table 3 also highlights the contribution of the CKA-based consistency score. When hCP  
+
+> i
+
+is removed and the same regularisation strength is applied to all experts, performance deteriorates noticeably: average forgetting rises from 0.62 to 1.50, while average accuracy drops by about 1%. This indicates that a uniform regularisation scheme cannot capture the different roles of individual experts. By contrast, the CKA-based consistency score modulates the regularisation strength according to representation alignment, leading to better preservation of task-specific knowledge and less cross-task interference. 9Preprint. 
+
+# 5 CONCLUSION 
+
+We presented CP-MoE , a continual learning framework for LoRA-based Mixture-of-Experts that mitigates forgetting while preserving effective knowledge transfer in both unimodal and multimodal settings. By introducing a transient expert as a lightweight probe, together with consistency-preserving routing and representation-guided regularisation, CP-MoE enables more selective consolidation and stronger protection of important historical knowledge without dy-namic expert expansion or persistent computational overhead. Experiments on SuperNI and VQA v2 showed that CP-MoE achieved state-of-the-art performance, lower forgetting, and stronger zero-shot generalisation than strong MoE and PEFT baselines. We hope this work encourages future research on more adaptive and scalable continual learning methods for MoE-based foundation models. 10 Preprint. 
+
+# REFERENCES 
+
+Rahaf Aljundi, Punarjay Chakravarty, and Tinne Tuytelaars. Expert gate: Lifelong learning with a network of experts. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , pp. 7120–7129, 2017. Rahaf Aljundi, Francesca Babiloni, Mohamed Elhoseiny, Marcus Rohrbach, and Tinne Tuytelaars. Memory aware synapses: Learning what (not) to forget. In Proceedings of the European Conference on Computer Vision (ECCV) ,pp. 139–154, 2018. Xiang An, Yin Xie, Kaicheng Yang, Wenkang Zhang, Xiuwei Zhao, Zheng Cheng, Yirui Wang, Songcen Xu, Changrui Chen, Didi Zhu, et al. Llava-onevision-1.5: Fully open framework for democratized multimodal training. arXiv preprint arXiv:2509.23661 , 2025. Pietro Buzzega, Matteo Boschini, Angelo Porrello, Davide Abati, and Simone Calderara. Dark experience for general continual learning: a strong, simple baseline. Advances in neural information processing systems , 33:15920–15930, 2020. Arslan Chaudhry, Marc’Aurelio Ranzato, Marcus Rohrbach, and Mohamed Elhoseiny. Efficient lifelong learning with a-gem. arXiv preprint arXiv:1812.00420 , 2018. Arslan Chaudhry, Marcus Rohrbach, Mohamed Elhoseiny, Thalaiyasingam Ajanthan, P Dokania, P Torr, and M Ran-zato. Continual learning with tiny episodic memories. In Workshop on Multi-Task and Lifelong Reinforcement Learning , 2019. Zewen Chi, Li Dong, Shaohan Huang, Damai Dai, Shuming Ma, Barun Patra, Saksham Singhal, Payal Bajaj, Xia Song, Xian-Ling Mao, et al. On the representation collapse of sparse mixture of experts. Advances in Neural Information Processing Systems , 35:34600–34613, 2022. Jaemin Cho, Jie Lei, Hao Tan, and Mohit Bansal. Unifying vision-and-language tasks via text generation. In Interna-tional Conference on Machine Learning , pp. 1931–1942. PMLR, 2021. Damai Dai, Li Dong, Shuming Ma, Bo Zheng, Zhifang Sui, Baobao Chang, and Furu Wei. StableMoE: Stable routing strategy for mixture of experts. In Smaranda Muresan, Preslav Nakov, and Aline Villavicencio (eds.), Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pp. 7085– 7095, Dublin, Ireland, May 2022. Association for Computational Linguistics. doi: 10.18653/v1/2022.acl-long.489. URL https://aclanthology.org/2022.acl-long.489/ .Shihan Dou, Enyu Zhou, Yan Liu, Songyang Gao, Jun Zhao, Wei Shen, Yuhao Zhou, Zhiheng Xi, Xiao Wang, Xiaoran Fan, Shiliang Pu, Jiang Zhu, Rui Zheng, Tao Gui, Qi Zhang, and Xuanjing Huang. Loramoe: Alleviate world knowledge forgetting in large language models via MoE-style plugin. arXiv preprint arXiv:2312.09979 , 2023. William Fedus, Barret Zoph, and Noam Shazeer. Switch transformers: Scaling to trillion parameter models with simple and efficient sparsity. In J. Machine Learning Research , 2022. Jinyuan Feng, Zhiqiang Pu, Tianyi Hu, Dongmin Li, Xiaolin Ai, and Huimu Wang. Omoe: Diversifying mixture of low-rank adaptation by orthogonal finetuning. arXiv preprint arXiv:2501.10062 , 2025. Chelsea Finn, Pieter Abbeel, and Sergey Levine. Model-agnostic meta-learning for fast adaptation of deep networks. In International conference on machine learning , pp. 1126–1135. PMLR, 2017. Yash Goyal, Tejas Khot, Douglas Summers-Stay, Dhruv Batra, and Devi Parikh. Making the v in vqa matter: Elevating the role of image understanding in visual question answering. In Proceedings of the IEEE conference on computer vision and pattern recognition , pp. 6904–6913, 2017. Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Liang Wang, Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. Iclr , 1(2):3, 2022. T. Huai, J. Zhou, X. Wu, Q. Chen, Q. Bai, Z. Zhou, and L. He. Cl-moe: Enhancing multimodal large language model with dual momentum mixture-of-experts for continual visual question answering. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2025. James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the national academy of sciences , 114(13):3521–3526, 2017. 11 Preprint. Dmitry Lepikhin et al. Gshard: Scaling giant models with conditional computation and automatic sharding. In Proc. Int. Conf. Learning Representations (ICLR) , 2021. Hongbo Li, Sen Lin, Lingjie Duan, Yingbin Liang, and Ness Shroff. Theory on mixture-of-experts in continual learning. In International Conference on Learning Representations , volume 2025, pp. 8169–8206, 2025. Yan-Shuo Liang and Wu-Jun Li. Inflora: Interference-free low-rank adaptation for continual learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 23638–23647, 2024. Yan-Shuo Liang, Jia-Rui Chen, and Wu-Jun Li. Gated integration of low-rank adaptation for continual learning of large language models. arXiv preprint arXiv:2505.15424 , 2025. Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Chenggang Zhao, Chengqi Deng, Chenyu Zhang, Chong Ruan, et al. Deepseek-v3 technical report. arXiv preprint arXiv:2412.19437 , 2024. Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. Advances in neural information processing systems , 36:34892–34916, 2023. David Lopez-Paz and Marc’Aurelio Ranzato. Gradient episodic memory for continual learning. In Advances in neural information processing systems , volume 30, 2017. Michael McCloskey and Neal J Cohen. Catastrophic interference in connectionist networks: The sequential learning problem. Psychology of learning and motivation , 24:109–165, 1989. Toan Nguyen, Duc Kieu, Bao Duong, Tung Kieu, Kien Do, Thin Nguyen, and Bac Le. Class-incremental learning with causal relational replay. Expert Systems with Applications , 250:123901, 2024. Toan Nguyen, Yang Liu, Celso De Melo, and Flora D Salim. Hypertokens: Controlling token dynamics for continual video-language understanding. arXiv preprint arXiv:2603.06662 , 2026. Andrei A Rusu, Neil C Rabinowitz, Guillaume Desjardins, Hubert Soyer, James Kirkpatrick, Koray Kavukcuoglu, Razvan Pascanu, and Raia Hadsell. Progressive neural networks. arXiv preprint arXiv:1606.04671 , 2016. Noam Shazeer, Azalia Mirhoseini, Piotr Maziarz, Andy Davis, Quoc V. Le, Geoffrey E. Hinton, and Jeff Dean. Outrageously large neural networks: The sparsely-gated mixture-of-experts layer. In Proc. Int. Conf. Learning Representations (ICLR) , 2017. Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. 
+
+arXiv preprint arXiv:2307.09288 , 2023. Johannes Von Oswald, Christian Henning, Benjamin F Grewe, and João Sacramento. Continual learning with hyper-networks. arXiv preprint arXiv:1906.00695 , 2019. Timmy ST Wan, Jun-Cheng Chen, Tzer-Yi Wu, and Chu-Song Chen. Continual learning for visual search with backward consistent feature embedding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 16702–16711, 2022. Lean Wang, Huazuo Gao, Chenggang Zhao, Xu Sun, and Damai Dai. Auxiliary-loss-free load balancing strategy for mixture-of-experts. arXiv preprint arXiv:2408.15664 , 2024. Xiao Wang, Tianze Chen, Qiming Ge, Han Xia, Rong Bao, Rui Zheng, Qi Zhang, Tao Gui, and Xuanjing Huang. Orthogonal subspace learning for language model continual learning, 2023. URL https://arxiv.org/abs/ 2310.14152 .Yizhong Wang, Swaroop Mishra, Pegah Alipoormolabashi, Yeganeh Kordi, Amirreza Mirzaei, Atharva Naik, Arjun Ashok, A S Dhanasekaran, et al. Super-naturalinstructions: Generalization via declarative instructions on 1600+ nlp tasks. In Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing , pp. 5085–5109, 2022a. Zifeng Wang, Zizhao Zhang, Sayna Ebrahimi, Ruoxi Sun, Han Zhang, Chen-Yu Lee, Xiangyu Ren, Guolong Su, Vincent Perot, Jennifer Dy, and Tomas Pfister. Dualprompt: Complementary prompting for rehearsal-free continual learning. In European Conference on Computer Vision (ECCV) , pp. 631–648, 2022b. 12 Preprint. Zifeng Wang, Zizhao Zhang, Chen-Yu Lee, Han Zhang, Ruoxi Sun, Xiangyu Ren, Guolong Su, Vincent Perot, Jennifer Dy, and Tomas Pfister. Learning to prompt for continual learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 139–149, 2022c. Dianzhi Yu, Xinni Zhang, Yankai Chen, Aiwei Liu, Yifei Zhang, Philip S Yu, and Irwin King. Recent advances of multimodal continual learning: A comprehensive survey. arXiv preprint arXiv:2410.05352 , 2024a. Jiazuo Yu, Yunzhi Zhuge, Lu Zhang, Ping Hu, Dong Wang, Huchuan Lu, and You He. Boosting continual learning of vision-language models via mixture-of-experts adapters. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024b. Ted Zadouri, Ahmet Üstün, Arash Ahmadian, Beyza Ermi¸ s, Acyr Locatelli, and Sara Hooker. Pushing mixture of experts to the limit: Extremely parameter efficient moe for instruction tuning, 2023. URL https://arxiv. org/abs/2309.05444 .Friedemann Zenke, Ben Poole, and Surya Ganguli. Continual learning through synaptic intelligence. In Proc. Int. Conf. Machine Learning (ICML) , pp. 3987–3995, 2017. Xi Zhang, Feifei Zhang, and Changsheng Xu. Vqacl: A novel visual question answering continual learning setting. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 19102–19112, June 2023. Weixiang Zhao, Shilong Wang, Yulin Hu, Yanyan Zhao, Bing Qin, Xuanyu Zhang, Qing Yang, Dongliang Xu, and Wanxiang Che. Sapt: A shared attention framework for parameter-efficient continual learning of large language models. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pp. 11641–11661, 2024. 13 Preprint. 
+
+# A THEORETICAL RESULTS 
+
+A.1 PROOF FOR THEOREM 1
+
+Proof. Under the quadratic model, 
+
+∇ϕ bLt
+
+> task
+
+(ϕ) = gt + Ht(ϕ − ϕTE  
+
+> t, 0
+
+).
+
+Define 
+
+δs := ϕTE  
+
+> t,s
+
+− ϕTE  
+
+> t, 0
+
+.
+
+Then δ0 = 0 , and the update in Eq. 5 becomes 
+
+δs+1 = δs − η gt + Htδs
+
+ = ( I − ηH t)δs − ηg t.
+
+Unrolling this recursion from δ0 = 0 yields 
+
+δS = −η
+
+> S−1
+
+X
+
+> s=0
+
+(I − ηH t)sgt.
+
+Since δS = ϕTE  
+
+> t,S
+
+− ϕTE  
+
+> t, 0
+
+, we obtain 
+
+ϕTE  
+
+> t,S
+
+− ϕTE  
+
+> t, 0
+
+= −η
+
+> S−1
+
+X
+
+> s=0
+
+(I − ηH t)sgt.
+
+Now define 
+
+qS (λ) := η
+
+> S−1
+
+X
+
+> s=0
+
+(1 − ηλ )s.
+
+By polynomial functional calculus, 
+
+qS (Ht) = η
+
+> S−1
+
+X
+
+> s=0
+
+(I − ηH t)s,
+
+hence 
+
+ϕTE  
+
+> t,S
+
+− ϕTE  
+
+> t, 0
+
+= −qS (Ht) gt.
+
+To interpret this operator, let Ht = U ΛU ⊤, where Λ = diag( λ1, . . . , λ d) with λj ≥ 0. Then 
+
+qS (Ht) = U q S (Λ) U ⊤, qS (Λ) = diag  qS (λ1), . . . , q S (λd).
+
+Thus each eigendirection of Ht is rescaled by the scalar gain qS (λ). Moreover, for λ > 0,
+
+qS (λ) = 1 − (1 − ηλ )S
+
+λ , qS (0) = ηS. 
+
+Hence flatter directions ( λ small) are accumulated more strongly across the S warm-up steps, while higher-curvature directions are relatively attenuated. Therefore, the transient expert does not merely follow the one-step gradient gt,but estimates a local multi-step adaptation direction that favours directions remaining useful under repeated descent on bDt. This proves the claim. 
+
+# B DETAILED EXPERIMENTAL SETUP 
+
+Implementation Details Following the established protocols in GainLoRA, all methods in our SuperNI experiments are implemented using the instruction tuning paradigm. Models are optimised using the AdamW optimiser. All experiments are conducted on NVIDIA H200 GPUs to ensure consistent computational environments. 
+
+SuperNI Benchmark Tasks To evaluate the zero-shot generalisation and continual learning capabilities, we select 15 tasks from the SuperNI benchmark. These tasks are categorised into five types, as detailed in Table 4. For generation tasks, we report ROUGE-L ; for classification tasks, we report Accuracy .
+
+Task Sequences (Orders) In line with the methodology of GainLoRA, we evaluate CP-MoE under two distinct task sequences (Order 1 and Order 2) to ensure the robustness of our results. The specific sequences of Task IDs are presented in Table 5. 14 Preprint. Table 4: Details of the 15 selected tasks in the SuperNI Benchmark. 
+
+## Task ID Dataset Name Task Type Metric 
+
+## 1572 samsum_summary Question Answering Rouge-L 363 sst2_polarity_classification Sentiment Analysis Accuracy 1290 xsum_summarization Question Answering Rouge-L 181 outcome_extraction Info Extraction Rouge-L 002 quoref_answer_generation Dialogue Gen Rouge-L 1510 evaluation_relation_extraction Info Extraction Rouge-L 639 multi_woz_user_utterance_generation Summarization Rouge-L 1729 personachat_generate_next Summarization Rouge-L 073 commonsenseqa_answer_generation Dialogue Gen Rouge-L 1590 diplomacy_text_generation Summarization Rouge-L 748 glucose_reverse_cause_event_detection Info Extraction Rouge-L 511 reddit_tifu_long_text_summarization Question Answering Rouge-L 591 sciq_answer_generation Dialogue Gen Rouge-L 1687 sentiment140_classification Sentiment Analysis Accuracy 875 emotion_classification Sentiment Analysis Accuracy 
+
+Table 5: Task sequences for the SuperNI benchmark. 
+
+## Benchmark Order Task Sequence 
+
+## SuperNI 1task1572 → task363 → task1290 → task181 → task002 →
+
+## task1510 → task639 → task1729 → task073 → task1590 →
+
+## task748 → task511 → task591 → task1687 → task875 2task748 → task073 → task1590 → task639 → task1572 →
+
+## task1687 → task591 → task363 → task1510 → task1729 →
+
+## task181 → task511 → task002 → task1290 → task875 
+
+B.1 HYPERPARAMETER SENSITIVITY ANALYSIS 
+
+We conduct a sensitivity analysis on the routing bias coefficient ( α) and the rigidity constraint weight ( λ). As shown in Table 6, CP-MoE maintains consistently high Average Performance (AP) and low Average Forgetting (AF) across a broad range of configurations. The model experiences severe forgetting only when α → 0 (effectively removing the CKA-guided semantic consistency), validating that our structural inductive bias is the primary driver of performance rather than meticulous hyperparameter tuning. Table 6: Hyperparameter Sensitivity Analysis. Performance on VQA v2 when varying the routing bias ( α) and rigidity constraint ( λ). The optimal configuration is highlighted in bold.                                                    
+
+> Bias (α)Rigidity (λ)AP (↑)AF (↓)Zero-shot (↑)0.1 5×10 350.485 0.67 36.17 0.2 5×10 350.84 0.61 35.80 0.3 5×10 350.08 1.46 36.09 0.4 5×10 350.38 0.88 35.14 0.2 1×10 351.07 0.43 35.62 0.2 5×10 350.84 0.61 35.80
+> 0.2 1×10 450.15 1.43 35.39
+
+15 Preprint. B.2 EVALUATION METRICS AND INSTRUCTION ANALYSIS 
+
+While CP-MoE exhibits lower automated scores (e.g., ROUGE, Exact Match) on specific QA datasets compared to the aggressively fine-tuned LoRA branch, a manual review reveals that these static metrics systematically misrepresent the actual knowledge retention of the models. The performance gap predominantly stems from formatting misalignment and metric rigidity rather than catastrophic forgetting. 
+
+Task Instruction Setup During evaluation, models are prompted with the following instruction: 
+
+Definition: Given a scientific question, generate a correct answer to it. Now complete the following example -Input: {Question} Output: 
+
+This instruction requires the model to generate a correct answer but does not impose any hard constraints on the output length (e.g., restricting the answer to 1-2 words). This open-ended formulation allows for both concise entities and complete explanatory sentences. As illustrated in the case studies below, n-gram matching metrics fail to capture semantic equivalence and actively penalise grammatically complete answers. 
+
+Case 1: False Positives via Lexical Overlap 
+
+• Question: Particulates cause lung diseases. They can also increase the risk of heart disease and the number of what? • Ground Truth: asthma attacks • LoRA Branch: heart attacks • CP-MoE: strokes 
+
+Analysis: Medical consensus links particulate pollution to an increased risk of strokes. CP-MoE outputs a factually correct prediction. The LoRA branch repeats the word “heart” from the prompt, producing a redundant prediction. However, because the LoRA prediction shares the token “attacks” with the ground truth, it receives an artificially high ROUGE score, whereas CP-MoE scores zero. The metric registers a false positive based on spurious lexical overlap while penalising factual accuracy. 
+
+Case 2: Penalising Semantic Variation and Syntactic Completeness 
+
+• Question: Why do birds need a light-weight body? • Ground Truth: to stay aloft • LoRA Branch: to fly • CP-MoE: Birds need light-weight bodies to fly efficiently. 
+
+Analysis: While “stay aloft” accurately targets the fundamental aerodynamic requirement of overcoming gravity, CP-MoE provides a valid, evolutionarily consistent semantic variation (“fly efficiently”) embedded in a grammatically complete sentence. Since the prompt instruction does not limit the output to isolated phrases, CP-MoE’s response is perfectly aligned with the task. However, the metric fails here on two fronts: it cannot recognise valid semantic paraphrasing, and it mathematically penalises the precision score due to the length of CP-MoE’s conversational format. The LoRA branch achieves a higher F1 score strictly because its truncated answer (“to fly”) shares the preposition “to” and has a smaller denominator, not because it demonstrates superior knowledge retention. 
+
+Conclusion These cases confirm that CP-MoE effectively preserves high-resolution continuous knowledge. The apparent degradation in metrics is an artefact of the evaluation method’s inability to assess semantic equivalence and its mathematical sensitivity to sequence length and exact token overlap. B.3 PARAMETER EFFICIENCY AND COMPUTATIONAL COST 
+
+As a PEFT-based framework, CP-MoE is designed to balance superior resistance to catastrophic forgetting with high computational efficiency. Its modular architecture allows for flexible configurations: a comprehensive Full-projection 16 Preprint. setup for complex instructions (e.g., SuperNI) and an optimised FFN-only setup for domain-specific tasks (e.g., VQA v2). The trainable parameters of CP-MoE consist of three core components: the split-expert LoRA branch ( PSE ), the transient expert branch ( PTE ), and the routing logic ( PRouter ). For a target linear module with input dimension in and output dimension out , given a total LoRA rank r and E experts (where re = r/E is the rank per expert), the parameter count for each component is: 
+
+PSE (in, out ) = E · (in · re + re · out ) = r(in + out ) (16) 
+
+PTE (in, out ) = re(in + out ) (17) 
+
+PRouter (in ) = in × E (18) Specifically, for our SuperNI configuration on Llama-2-7B ( L = 32 , d = 4096 , m = 11008 ), we apply CP-MoE to all seven projection layers ( q, k, v, o, gate, up, down ) with r = 32 and E = 8 . Substituting these values, the total trainable parameters Ptotal are derived as: 
+
+Ptotal = L ·
+
+h
+
+4 ·  PSE (d, d ) + PTE (d, d ) + PRouter (d)
+
++ 2 ·  PSE (d, m ) + PTE (d, m ) + PRouter (d)
+
++  PSE (m, d ) + PTE (m, d ) + PRouter (m)i (19) yielding Ptotal = 99 , 057 , 664 ≈ 99 .06M , which represents 1.48% of the backbone parameters. For the VQA v2 task, we employ an FFN-only configuration ( r = 16 , E = 4 ), resulting in 31 .46M trainable parameters ( 0.47% ). Notably, as shown in Table 7, the trainable parameter count for CL-MoE is identical to that of LoRA-MoE . This is because the task-level router in the official implementation of CL-MoE (Zhang et al., 2023) functions as a statistical heuristic for counting expert activations rather than a trainable neural layer. Our experimental setup strictly follows this official implementation protocol. Table 7 summarises the computational overhead measured on two NVIDIA H200 GPUs. While the transient expert introduces slight computational costs, the overhead remains within a manageable range. For instance, in VQA v2, CP-MoE incurs approximately 4% additional training time compared to CL-MoE while providing significantly better knowledge retention. Table 7: Computational Overhead and Parameter Efficiency. Measured on two NVIDIA H200 GPUs. % Train-able denotes the proportion of trainable parameters relative to the full model. 
+
+## Dataset Method Train Time / Epoch Trainable Params % Trainable SuperNI 
+
+## GainLoRA-infLoRA 96.47 min 39.75 M 0.59% GainLoRA-O-LoRA 74.21 min 83.26 M 1.24% 
+
+## CP-MoE (Ours) 114.35 min 99.06 M 1.48% 
+
+## VQA v2 
+
+## LoRA-MoE 635.12 min 25.66 M 0.38% CL-MoE 628.89 min 25.66 M 0.38% 
+
+## CP-MoE (Ours) 657.43 min 31.46 M 0.47% 
+
+Table 8: Continual learning performance on SuperNI Main Tasks (1-8) Order 1. 
+
+Task ID 1572 363 1290 181 002 1510 639 1729 ACC AF 
+
+CP-MoE 32.93 88.00 28.66 61.77 71.64 98.25 8.90 16.56 50.84 0.62 
+
+GainLoRA-infolora 37.89 85.00 17.15 34.5 67.38 98.75 8.53 15.34 45.57 -0.28 GainLoRA-olora 42.65 88.00 26.2184 52.38 62.43 99.04 8.35 17.73 49.60 0.82 
+
+B.4 DETAILED PER -T ASK PERFORMANCE ON SUPER NI O RDER 1Tables 8 and 9 provide the detailed per-task breakdown for the SuperNI benchmark under Order 1. 17 Preprint. Table 9: Zero-shot Transfer performance on SuperNI Tasks (9-15) Order 1. Method Task 073 Task 1590 Task 748 Task 511 Task 591 Task 1687 Task 875 AVG 
+
+CP-MoE 42.00 10.31 34.78 16.83 29.61 70.00 47.00 35.80 
+
+GainLoRA-infolora 24.93 11.35 34.08 11.95 36.55 37.18 38.33 27.77 GainLoRA-olora 35 12.33 27.68 14.52 47.44 55.00 44.67 33.80 
+
+In the main continual learning sequence (Table 8), CP-MoE demonstrates distinct advantages on specific tasks. No-tably, on Task 181 and Task 002, it achieves scores of 61.77 and 71.64 respectively, substantially outperforming the GainLoRA variants. Across the remaining main tasks, CP-MoE maintains highly competitive performance, yielding the highest overall Average Performance (ACC) of 50.84 and a robust Average Forgetting (AF) of 0.62. CP-MoE also demonstrates superior zero-shot generalisation (Table 9). On unseen domains, CP-MoE exhibits signif-icant performance spikes, particularly on Task 073 (42.00) and Task 1687 (70.00), where it outperforms the strongest baseline by large margins. For the rest of the zero-shot sequence, CP-MoE remains consistently competitive, resulting in a state-of-the-art average transfer score of 35.80. B.5 ABLATION STUDY FOR VQAV2 BENCHMARK 
+
+Table 10: Ablation study of the CP-MoE on VQAV2. Modules Metrics CP Bias TE Reg. Rec. Loc. Jud. Com. Cou. Act. Col. Typ. Sub. Cau. AVG – – 57.96 43.45 78.96 74.57 45.96 73.07 66.95 56.15 58.67 28.57 58.43 – ✓ 56.31 41.17 80.85 76.53 50.74 75.69 73.93 62.76 61.85 28.11 60.79 
+
+✓ ✓ 57.96 43.73 82.52 79.05 52.87 77.21 74.79 64.16 62.41 29.95 62.30 
+
+As shown in Table 10, an ablation study on the core components of CP-MoE was conducted on the VQAV2 dataset to evaluate the impact of CP Bias and TE Regularisation. The baseline model without any additional modules achieves an average accuracy of 58.43%. Introducing only TE Regularisation increases the average accuracy to 60.79%, with distinct improvements in metrics such as Col. (+6.98%) and Typ. (+6.61%). Integrating both the CP Bias and TE Regularisation modules brings the model to optimal performance across all 10 evaluation metrics, resulting in a peak average accuracy of 62.30%. This confirms that CP Bias works jointly with the regularisation module to improve logical judgment and reasoning capabilities. 
+
+Feature Space Isolation. We further extract the output representations of the experts and project them into a 2D space using t-SNE, as shown in Figure 2. The baseline MoE exhibits severe feature entanglement, where representa-tions from previous and current tasks overlap significantly, explaining the catastrophic forgetting. CP-MoE exhibits significantly reduced overlap among expert activation regions, with several experts forming more compact and visually separated clusters. 
+
+Aggregated Load Balancing in Continual Learning. Figure 3 illustrates the aggregated expert load across all lay-ers (0-31) and experts (0-7) for CP-MoE after completing the continual learning task sequence. The heatmap demon-strates that CP-MoE achieves effective computational load distribution, maintaining reasonable activation proportions across experts. When evaluated alongside the high Average Performance and near-zero Average Forgetting, this dis-tributed activation confirms that CP-MoE effectively balances system load while preserving historical task parameters to prevent catastrophic forgetting. 
+
+# C LIMITATIONS AND FUTURE WORK 
+
+While CP-MoE demonstrates strong performance in mitigating catastrophic forgetting, we acknowledge a key limi-tation regarding the sampling scale ( N ) of the Transient Expert (TE). In our current implementation, we empirically 18 Preprint. 
+
+Figure 2: t-SNE Visualisation of Expert Representations. Left: CP-MoE maintains clear geometric boundaries with more compact and separated clusters, preventing semantic interference. Right: The LoRA-MoE baseline exhibits severe feature entanglement and overlapping representations. 
+
+Figure 3: Overall expert load for CP-MoE 19 Preprint. fix the warm-up sampling size across all tasks to maintain computational efficiency. However, preliminary observa-tions indicate that the optimal sampling scale is highly sensitive to the dataset’s intrinsic complexity and modality. For instance, tasks with high variance in their semantic distribution may require a larger N to accurately capture the geometric manifold, whereas simpler tasks could converge with significantly fewer tokens. In future work, we plan to design an adaptive sampling mechanism that dynamically determines the optimal N based on real-time gradient variance, further optimising the trade-off between representation accuracy and computational overhead. 20

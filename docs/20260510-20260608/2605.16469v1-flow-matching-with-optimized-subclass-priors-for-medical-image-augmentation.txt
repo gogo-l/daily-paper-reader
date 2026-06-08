@@ -1,0 +1,229 @@
+Title: Flow Matching with Optimized Subclass Priors for Medical Image Augmentation
+
+URL Source: https://arxiv.org/pdf/2605.16469v1
+
+Published Time: Tue, 19 May 2026 00:07:50 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Flow Matching with Optimized Subclass Priors for Medical Image Augmentation 
+
+Felix Nützel 1 , Mischa Dombrowski 1 , and Bernhard Kainz 1,2 
+
+> 1
+
+Department of Artificial Intelligence in Biomedical Engineering, Friedrich-Alexander-Universität Erlangen-Nürnberg, 91052 Erlangen, Germany 
+
+felix.nuetzel@fau.de  
+
+> 2
+
+Department of Computing, Imperial College London, London SW7 2AZ, UK 
+
+Abstract. Rare diseases dominate the diagnostic challenge in medical imaging yet are severely underrepresented in clinical datasets, causing classifiers to fail on exactly the conditions where reliable detection mat-ters most. Generative augmentation can supply the missing tail-class coverage, but coarse disease labels aggregate diverse subtypes and acqui-sition settings into multi-modal conditionals that bias generators toward dominant submodes, while a shared Gaussian source forces rare sub-populations through disproportionately long transport paths. We pro-pose an offline strategy that introduces informative priors at two levels: first, we partition each coarse label into coherent submodes via Gaus-sian mixture modeling in the generative model’s latent space; second, we learn subclass-conditioned source distributions that re-center and re-scale the starting distribution per submode, shortening trajectories and reducing within-subclass dispersion. To prevent degenerate solutions we impose explicit geometric control, moderately concentrating normal-ized displacement directions around learnable prototypes while capping path-length outliers. On long-tailed chest X-ray (MIMIC-LT, NIH-LT) and CT slice (CT-RATE) benchmarks the proposed method consistently improves tail-class generation fidelity and diversity (FID, IRS) and is a promising augmentation strategy that reliably improves downstream balanced accuracy and macro-F1 over a non-augmented baseline across modalities. Code is available at https://github.com/Felix-012/OptPrio rFM 
+
+Keywords: Flow Matching · Image Augmentation · Medical Imaging. 
+
+## 1 Introduction 
+
+The classification of medical images under severe long-tail imbalance remains a central obstacle in clinical machine learning. Real-world datasets in chest ra-diography [9,33], computed tomography [8], and other modalities are dominated by “no finding” or common conditions, while clinically urgent but easily over-looked findings such as small pneumothoraces or pneumomediastinum on chest radiographs and bronchiectasis on CT occur at very low prevalence. Standard discriminative training therefore overfits to head classes and underrepresents rare  
+
+> arXiv:2605.16469v1 [eess.IV] 15 May 2026 2F. Nützel et al.
+
+findings, producing classifiers that perform worst precisely where diagnostic ac-curacy is most consequential [9]. Generative data augmentation can, in principle, supply the missing tail-class coverage, and diffusion-based synthesis has shown encouraging results in radiology [27], ultrasound [4], and across histopathology and dermatology [14]. In practice, however, conditional generators trained with coarse disease labels face two compounding difficulties. First, a single diagnostic label often aggregates diverse subtypes, acquisition protocols, and comorbidities into multi-modal conditionals that bias the generator toward dominant sub-modes [2,21], effectively truncating rare but clinically valid variation. Second, drawing every generation trajectory from a shared standard Gaussian source forces some subpopulations through disproportionately long transport paths, in-flating regression difficulty and degrading tail fidelity [17,25]. Recent analyses of source distribution design for flow matching confirm that the geometry of the learned transport strongly affects generation quality, but also that naive direc-tional objectives can encourage degenerate behavior such as norm inflation or overly concentrated paths [11,15,13]. We address both issues with an offline strategy that introduces informa-tive priors at two levels. For each coarse label c we fit a Gaussian mixture model in the generative model’s latent space to induce hard subclass assign-ments k, partitioning heterogeneous conditionals into coherent submodes with lower conditional variance. We show that this subclass conditioning cannot in-crease the Bayes-optimal flow-matching risk; the improvement equals the ex-pected between-subclass variability of the conditional mean displacement (Eq. 2). We then learn subclass-dependent source distributions π0(· | c, k ) that re-center and re-scale the starting distribution per subclass, shortening typical trajec-tories and reducing within-subclass dispersion. We control the geometry of the induced displacements by encouraging moderate angular compactness of normal-ized directions around learnable subclass prototypes while capping path-length outliers to prevent norm-inflation shortcuts. The underlying process of creating subclasses and increasing their alignment has a direct analogy in long-tailed rep-resentation learning [10]: our method effectively learns a better representation of the interpolation paths induced by the latent representation of the target. 
+
+Contributions. (i) We introduce a subclass-conditional formulation for long-tailed medical image generation that partitions multi-modal conditionals via GMM-induced hard assignments. (ii) We propose subclass-dependent learned sources as informative priors that reshape conditional transport and reduce within-subclass dispersion. (iii) We develop a practical proxy objective that en-courages moderate angular compactness while explicitly controlling path-length outliers, preventing norm-inflation shortcuts and avoiding overly restrictive di-rectional collapse. (iv) We empirically demonstrate improved tail coverage and downstream long-tail classification on chest X-ray and CT benchmarks. 
+
+Related Work. Generative augmentation for imbalanced medical imaging has advanced rapidly, with diffusion-based synthesis improving classification in pe-diatric chest X-rays [27], breast ultrasound subtyping [4], and histopathology and dermatology with demonstrated fairness gains [14]; lesion-focused diffusion Flow Matching with Subclass Priors 31. Initial Setup μ1μ22. Subclass Discovery          
+
+> π1
+> π2
+> π3
+> π43. Prior Optimization
+> Fig. 1. Left: Coarse conditionings and a single source yield a large variance of condi-tional probability paths. Middle: We obtain finer conditionings by fitting a mixture on the residual directions from the class centers. Right: We obtain better directional alignment by assigning a source to each subclass and optimizing them to a common direction, each bounded by a radial cap.
+
+enables controllable pathology synthesis [34] and causal disentanglement targets long-tail robustness [22]. Flow matching [17] has emerged as an efficient alterna-tive, further improved by minibatch optimal-transport couplings [25], with ap-plications to defect classification [24] and reweighted long-tailed generation via unbalanced optimal transport [30]. To improve long-tail generation, guidance strategies attempt to recover modes at sampling time [28,31,20,32] but can-not recover modes never learned by the model; training-time remedies include class-balanced objectives [26], conditioning strategies [7], expert adapter mod-ules [23], reinforcement learning [19], knowledge transfer [35], and label-noise robust training [21]. Refining conditioning by clustering or pseudo-labels has proven effective [1], with hierarchical generative clustering exploiting latent tree structure [29] and theoretical analyses confirming that partitioning multi-modal distributions into simpler components improves learnability [2]. However, none of these split existing coarse medical labels into directional subclasses. Separately, data-dependent priors accelerate convergence in audio synthesis [16], conditional prior distributions map conditions to Gaussian mixture sources [11], and recent work uses online condition-dependent source optimization [13] and analyzes risks of overly concentrated source designs [15]. Our approach complements these per-spectives by introducing subclass conditioning with geometry-regularized source design, tailored to long-tailed, multi-modal medical conditionals. 
+
+## 2 Method 
+
+An overview is shown in Fig. 1. In long-tailed regimes, a coarse condition c typi-cally hides a second layer of imbalance: samples within π1(· | c) exhibit attribute-wise long tails in which frequent attributes dominate and rare attributes are sparsely observed. This within-condition skew biases learning toward dominant modes and truncates rare but semantically valid directions of variation. We ad-dress this at three levels: (i) we refine coarse labels by inducing hard subclass assignments that partition heterogeneous conditionals into coherent submodes, (ii) we learn subclass-dependent source distributions that re-center and re-scale 4 F. Nützel et al. 
+
+Table 1. Split summary based on the EBIC criterion. B = #base classes, K = #subclasses. “split” means Kc=1 ; “split” means Kc>1.Dataset B K #split |split max | | split min | min nc,k ∈ split MIMIC-LT 19 91 6 254 609 106 NIH-LT 20 80 6 213 229 95 CT-RATE 15 53 7 244 335 97 
+
+Table 2. Geometric diagnostics (be-fore → after source optimization). Dataset cos mean ,w ↑
+
+> directional alignment
+
+rrel ,w ↓
+
+> radial spread
+
+MIMIC-LT 0.00 → 0.68 0.08 → 0.04 
+
+NIH-LT 0.00 → 0.68 0.09 → 0.05 
+
+CT-RATE 0.00 → 0.69 0.07 → 0.03 
+
+Fig. 2. Left: Close sources produce noisy directions; too distant sources produce en-tangled paths. Right: We balance angu-lar concentration and distance to targets. 
+
+Table 3. Aggregate confounder-probe re-sults on MIMIC-LT subclasses. Macro av-erages are unweighted over base classes (n=13 ); weighted averages use per-class sample counts. NearChanceShare: fraction of classes with ∆bAcc ≤ 0.03 .Aggregation bAcc PermbAcc ∆bAcc NearChance Macro (over labels) 0.273 0.235 0.038 0.385 Weighted (by samples) 0.157 0.117 0.040 0.385 
+
+the starting distribution per submode, and (iii) we impose explicit geometric con-trol on the resulting displacements to prevent degenerate solutions (see Fig. 2). 
+
+Irreducible error in flow matching. Given a source π0 and a class-conditional target π1(· | c), linear conditional flow matching interpolates xt = (1 −t) x0 + t x 1
+
+with t ∼ U [0 , 1] and fits a velocity field vθ (xt, t | c) by minimizing E∥vθ (xt, t |
+
+c) − d∥2 where d = x1 − x0 is the per-sample displacement. The Bayes-optimal minimizer is v∗(x, t | c) = E[d | xt=x, t, c ], and the irreducible (Bayes-optimal) risk equals the expected conditional variance of d:
+
+min  
+
+> v(·)
+
+E∥v(xt, t | c) − d∥2 = E[Var( d | xt, t, c )] . (1) Any mechanism that reduces Var( d | xt, t, c ) therefore directly lowers the irre-ducible regression error. 
+
+Subclass conditioning. We refine c by inducing a discrete subclass label k
+
+in the VAE latent space used by the flow-matching model. We use the frozen FLUX1.dev VAE and compute deterministic latents x1 via the encoder mean. For each class c we compute the training-split class center μc = E[x1 | c] and fit a diagonal Gaussian mixture model to the residual latents ˜x1 := x1 − μc, selecting the number of components Kc by EBIC with γ=0 .5 (Table 1). Each sample receives a hard assignment k = aϕ(x1, c ) := arg max j qϕ(j | ˜x1, c ), inducing a partition Sc,k = {x : aϕ(x, c ) = k} with empirical subclass distributions π1(x1 |
+
+c, k ) := π1(x1 | c, x 1 ∈ Sc,k ) and weights π1(k | c) := P[x1 ∈ Sc,k | c], so the class-conditional distribution decomposes exactly as π1(x1 | c) = PKc 
+
+> k=1
+
+π1(k |
+
+c) π1(x1 | c, k ). We then condition the velocity field on (c, k ) and allow the source to depend on the refined label via π0(· | c, k ), while retaining the linear interpolation xt = (1 −t) x0 + t x 1.Flow Matching with Subclass Priors 5
+
+Performing subclass induction and all source optimization directly in the same latent space as the flow-matching model ensures that the induced sub-classes, the learned sources, and the resulting probability paths share the same geometry, while avoiding any split leakage in subclass discovery. 
+
+Subclassing cannot increase the Bayes risk. Conditioning on the refined label k cannot increase the Bayes-optimal risk. Let A = ( xt, t, c ) and B =
+
+k. The law of total variance gives Var( d | A) = E[Var( d | A, B ) | A] +Var( E[d | A, B ] | A) . Taking expectations over A and applying (1) yields the exact improvement decomposition 
+
+E[Var( d | xt, t, c )] − E[Var( d | xt, t, c, k )] = E[Var( E[d | xt, t, c, k ] | xt, t, c )] ≥ 0.
+
+(2) The improvement is strict whenever k changes the conditional mean displace-ment on a set of nonzero measure, i.e. , whenever P Var( E[d | xt, t, c, k ] | xt, t, c ) >
+
+0 > 0. At sampling time conditioned on class c, we draw k ∼ ˆp(k | c) from the empirical mixture weights, sample x0 ∼ π0(· | c, k ), and integrate the learned velocity field conditioned on (c, k ). This realizes the class-conditional generator as a mixture pθ (x | c) = PKc 
+
+> k=1
+
+ˆp(k | c) pθ (x | c, k ), avoiding any need to infer k
+
+from a target sample at test time. 
+
+Subclass-dependent source optimization. Subclassing reduces ambiguity between modes, but within each (c, k ) the displacement d = x1 − x0 can still be highly dispersed and heavy-tailed in norm when a single global source is used, increasing irreducible regression difficulty and yielding outlier trajectories. We therefore learn a subclass-dependent source π0(· | c, k ) = N (μc,k , diag( σ2
+
+> c,k
+
+)) 
+
+with learnable μc,k ∈ RD and σc,k ∈ RD 
+
+> +
+
+(optimizing log σc,k ), so that for z ∼N (0 , I ) we sample x0 = μc,k + σc,k ⊙ z.Directly minimizing E[Var( d | xt, t, c, k )] with respect to the source param-eters is intractable because xt = (1 −t) x0 + t x 1 depends on x0 and hence on the source itself. We therefore optimize an offline proxy on d = x1 − x0 that targets two goals: improved directional structure of normalized displacements and explicit control of path-length outliers. The sources are initialized at their empirical class means, if this lowers angular subclass overlap and reduces the radial variance. This is motivated by recent analyses showing that directional objectives can simplify transport but admit degenerate solutions when radial behavior is unconstrained [13]. 
+
+Directional compactness with fixed outlier caps. Write d = r u with r =
+
+∥d∥ and u = d/ ∥d∥. We introduce a learnable unit prototype vc,k ∈ SD−1 per subclass and encourage moderate angular compactness via Lout = E[1 −⟨ u, v c,k ⟩].A key failure mode of purely angular losses is that they can be trivially improved by increasing r (norm inflation), since larger displacements make u less sensitive to additive variability in x0. To prevent this, we impose an explicit penalty on path-length outliers using a fixed, subclass-specific cap rcap  
+
+> c,k
+
+= Q0.99 (∥x1 −
+
+μc∥ | c, k ), the 99th percentile of distances to the class center among samples assigned to (c, k ), computed once and held constant during optimization: Lpath =
+
+Esoftplus( ∥d∥/r cap  
+
+> c,k
+
+− 1) 2. Since rcap  
+
+> c,k
+
+is fixed, this loss cannot be circumvented by inflating the cap, serving as a guardrail against norm-inflation shortcuts. To 6 F. Nützel et al. 
+
+prevent trivial collapse or explosion of the diagonal scales, we regularize log-scales toward a unit reference via Ldet = E[∥ log σc,k ∥22]. The final offline objective is 
+
+L = λout Lout +λpath Lpath +λdet Ldet , which empirically reduces within-subclass dispersion and suppresses heavy-tailed trajectories (Tab. 2). 
+
+## 3 Experiments 
+
+Datasets. We validate our method on two medical long-tailed benchmarks span-ning different imaging modalities. For chest radiography, we use MIMIC-LT [9] and NIH-LT [9], the single-label long-tailed variants of MIMIC-CXR [12] and NIH-CXR [33]. For computed tomography, we extract axial slices from CT-RATE [8] restricted to single-pathology slices following [6], yielding a heavily imbalanced dataset of 14 classes and 22,305 samples. We additionally confirm consistent improvements on a synthetic 2D benchmark. Evaluation of generative quality is provided by Fréchet Inception Distance (FID) and generation diversity with IRS [7], both computed using domain-specific DenseNet feature extractors (a CT-RATE slice classifier [5] and a CXR classifier [6]). Downstream classifica-tion is assessed by balanced accuracy (bAcc) and macro-F1. 
+
+Implementation details. Source optimization runs for 2,500 steps with λout =1 ,
+
+λpath =λdet =0 .1. Each FLUX transformer flow-matching model (i.e., baselines, method, and ablations) was trained for 48 h on 8 ×H100 GPUs with three seeds. Subclass induction and source optimization are fully offline and take less than one GPU-hour per dataset, negligible relative to flow-matching training. Down-stream ResNet-50 classifiers were trained with three seeds per generative seed (nine seeds total per method), with early stopping after 15 epochs without validation improvement. Generative metrics compare 50,000 synthetic samples against training splits. All baselines use the same FLUX architecture, optimiza-tion settings, and a learned class-token conditioning. We compare against vanilla FM, CBFM [26], and CPD [11] as the most directly comparable offline source-modification baseline. We use targeted class balancing based on training-split frequencies. nc is the count of class c, c⋆ the dominant class, and m = median( {nc : c̸ = c⋆}).Classes are partitioned into ULT ( n < m/ 4), LT ( m/ 4 ≤ n < m/ 2), MT (m/ 2 ≤ n < 5m/ 2), and Head ( n ≥ 5m/ 2). Only ULT/LT/MT classes are augmented with targets tULT = min( ⌈0.5m⌉, 10 n), tLT = min( ⌈1.0m⌉, 10 n),
+
+tMT = min( ⌈2.5m⌉, 5n); Head classes and No Finding are unchanged. This yields 9,094 synthetic samples for MIMIC-LT, 5,454 samples for NIH-LT, and 2,784 for CT-RATE. 
+
+Downstream classification. Tab. 4 shows the classification results. Our method achieves the best bAcc and macro-F1 on all three datasets (MIMIC-LT: 0.162 ;CT-RATE: 0.193 ; NIH-LT: 0.107 ) and is the only augmentation strategy that consistently improves over the non-augmented baseline across both modalities. Vanilla FM and CBFM can hurt classification on MIMIC-LT, while CPD im-proves on MIMIC-LT but is less consistent across datasets. Our method also exhibits the lowest variance across seeds, suggesting more stability. Qualitative Flow Matching with Subclass Priors 7
+
+Table 4. Downstream classification on MIMIC-LT, CT-RATE, and NIH-LT. Best per column in bold , second best underlined. Two-sided Wilcoxon signed-rank p-values on bAcc compare Ours to each baseline (paired over nine runs). MIMIC-LT CT-RATE NIH-LT Method bAcc ↑ p (bAcc) F1 ↑ bAcc ↑ p (bAcc) F1 ↑ bAcc ↑ p (bAcc) F1 ↑                                             
+
+> Real (no aug.) 0.157 ±0.014 –0.158 ±0.013 0.176 ±0.009 –0.164 ±0.012 0.098 ±0.028 –0.096 ±0.035
+> Vanilla FM 0.149 ±0.008 0.0039 0.153 ±0.008 0.191 ±0.012 1.0000 0.171 ±0.023 0.098 ±0.028 0.5703 0.096 ±0.035
+> CBFM [26] 0.150 ±0.009 0.0039 0.153 ±0.009 0.179 ±0.017 0.0251 0.165 ±0.019 0.087 ±0.025 0.1641 0.078 ±0.031
+> CPD [11] 0.159 ±0.013 0.5527 0.159 ±0.017 0.189 ±0.012 0.4961 0.173 ±0.014 0.091 ±0.029 0.2031 0.088 ±0.037
+> Ours 0.162 ±0.005 –0.163 ±0.006 0.193 ±0.014 –0.177 ±0.011 0.107 ±0.022 –0.107 ±0.033
+
+Table 5. Generative metrics on MIMIC-LT, CT-RATE, and NIH-LT (mean ±std over three seeds). Best per metric column in bold , second best underlined. MIMIC-LT CT-RATE NIH-LT Method FID ↓ IRS ↑ FID ↓ IRS ↑ FID ↓ IRS ↑
+
+Vanilla FM 0.048 ±0.002 0.615 ±0.017 27 .11 ±1.25 0.694 ±0.022 0.067 ±0.001 0.680 ±0.020 
+
+CBFM [26] 0.047 ±0.003 0.626 ±0.020 27 .00 ±0.94 0.713 ±0.019 0.065 ±0.001 0.649 ±0.008 
+
+CPD [11] 0.052 ±0.003 0.564 ±0.007 28 .48 ±0.70 0.671 ±0.039 0.072 ±0.002 0.631 ±0.004 
+
+Ours 0.045 ±0.000 0.668 ±0.011 29 .06 ±0.36 0.712 ±0.022 0.062 ±0.001 0.555 ±0.052 
+
+examples in Fig. 3 illustrate that our method produces visually coherent tail-class samples while preserving intra-subclass diversity. 
+
+Ablation. Tab. 6 isolates the two pipeline stages. On MIMIC-LT, optimiza-tion alone lifts bAcc from 0.149 to 0.158 , while subclassing (with or without optimization) reaches 0.162 . On CT-RATE, optimization without subclassing degrades performance ( 0.173 ) by averaging over conflicting modes, whereas the full pipeline recovers and improves the baseline ( 0.193 ). On NIH-LT, gains arise only from combining both stages, improving from 0.098 to 0.107 .
+
+Generative metrics. Tab. 5 shows the generative metrics. On MIMIC-LT our method yields the best FID ( 0.045 ) and IRS ( 0.668 ), indicating simultaneous gains in fidelity and diversity. On CT-RATE, CBFM achieves a marginally bet-ter FID ( 27 .00 vs. 29 .06 ), yet IRS scores similar ( 0.713 vs. 0.712 ). With its lower classification performance on MIMIC-LT, this suggests that CBFM’s FID gain on CT-RATE likely reflects memorization of rare samples rather than true dis-tributional coverage. On NIH-LT, we obtain the best FID ( 0.062 ), which paired with the classifier results, suggests improved fidelity. 
+
+Subclass analysis. To verify that induced subclasses capture pathology-relevant structure rather than acquisition metadata, we train metadata-only multinomial logistic regression to predict k, using grouped stratified 5-fold cross-validation with subject_id grouping to prevent leakage. Tab. 3 shows that confounders are detectable but not dominant: the macro ∆bAcc over a permutation baseline is only 0.038 , and 5 of 13 evaluated classes are at permutation-level performance (NearChance = 0 .385 ). Tab. 7 further confirms non-random subclass structure: kNN purity of learned subclasses exceeds matched random partitions by +0 .164 
+
+(CXR DenseNet) and +0 .100 (BioViL), measured in two embedding spaces. 8 F. Nützel et al. 
+
+Table 6. Ablation: bAcc (mean ±std over 9 seeds). Both stages contribute; their com-bination is best.                 
+
+> Sub. Opt. MIMIC-LT CT-RATE NIH-LT
+> 0.149 ±0.008 0.191 ±0.012 0.098 ±0.028
+> ✓0.158 ±0.007 0.173 ±0.016 0.098 ±0.030
+> ✓0.162 ±0.006 0.182 ±0.017 0.099 ±0.023
+> ✓✓0.162 ±0.005 0.193 ±0.014 0.107 ±0.022
+
+Table 7. Weighted kNN purity: learned subclasses vs. matched random partitions in two independent embeddings.           
+
+> Embedding Learned ↑Random ∆↑
+> CXR DenseNet [5] 0.295 0.131 0.164 BioViL [3] 0.231 0.131 0.100
+
+Real Vanilla FM CBFM Ours Ours (Diversity) 
+
+> Pneumothorax Pneumomediastinum Bronchiectasis
+> Intra-subclass diversity
+> (Pneumothorax)
+
+Fig. 3. Qualitative comparison of real and generated tail-class images. Row 1: MIMIC-LTtail class; Row 2: NIH-LT tail class; Row 3: CT-RATE tail class. Right: five random draws from a single subclass of our method, illustrating intra-subclass diversity. 
+
+Discussion. Subclasses are induced in a learned latent space and may partially reflect acquisition-related variation alongside pathology; our confounder probes show this effect is present but not dominant. Extremely small tail subclasses can yield unstable partitions, which we mitigate via EBIC model selection with a conservative γ and minimum-size constraints. The offline nature of our approach (under one GPU-hour per dataset) makes it straightforward to integrate into existing flow-matching pipelines without modifying the training loop. 
+
+## 4 Conclusion 
+
+We introduced a subclass-conditional flow-matching framework for long-tailed medical image generation that partitions heterogeneous labels, learns subclass-dependent sources, and enforces geometric control of transport. This principled, fully offline strategy reduces conditional ambiguity and stabilizes trajectories at negligible cost. Across chest X-ray and CT benchmarks, it consistently improves tail fidelity, diversity, and downstream balanced accuracy over strong baselines, Flow Matching with Subclass Priors 9
+
+highlighting source design and conditional refinement as effective levers for ro-bust generative augmentation in clinical long-tail settings. 
+
+Acknowledgments. We acknowledge HPC resources from NHR@FAU (projects b143dc, b180dc), funded by federal and Bavarian state authorities and Gerhard Wellein’s HPC approach. NHR@FAU hardware is partially funded by DFG 440719683. Additional support was received from ERC projects MIA-NORMAL 101083647, DFG 513220538 and 512819079, and the state of Bavaria (HTA and the Bavarian Foundation Model Initiative). We further acknowledge resources provided by the Isambard-AI National AI Research Resource (AIRR), operated by the University of Bristol and funded by DSIT via UKRI and STFC [ST/AIRR/I-A-I/1023] [18]. We were supported by coding agents and LLMs from Anthropic, OpenAI, Google, and Mistral AI, for text polishing, coding, experiment orchestration, and cluster monitoring. 
+
+Disclosure of Interests. The authors have no relevant competing interests. 
+
+## References 
+
+1. Adaloglou, N., Kaiser, T., Michels, F., Kollmann, M.: Rethinking cluster-conditioned diffusion models for label-free image synthesis. In: WACV’25. pp. 3603–3613. IEEE (2025) 2. Bao, F., Li, C., Sun, J., Zhu, J.: Why are conditional generative models better than unconditional ones? In: NeurIPS’22 Workshop on Score-Based Methods (2022) 3. Boecking, B., Usuyama, N., Bannur, S., Castro, D.C., Schwaighofer, A., Hyland, S., Wetscherek, M., Naumann, T., Nori, A., Alvarez-Valle, J., Poon, H., Oktay, O.: Making the most of text semantics to improve biomedical vision–language processing. In: ECCV’22. pp. 1–21. Springer (2022) 4. Chen, S., Zhou, X., Wang, Y., Huang, Y., Chang, A., Ni, D., Huang, R.: Sub-typing breast lesions via generative augmentation based long-tailed recognition in ultrasound. In: MICCAI’25. LNCS, vol. 15967, pp. 519–529. Springer (2025) 5. Dombrowski, M., Kainz, B.: Enabling PSO-secure synthetic data sharing using diversity-aware diffusion models. In: BRIDGE/DeCaF @ MICCAI’25. LNCS, vol. 16135, pp. 25–35. Springer (2026) 6. Dombrowski, M., Nützel, F., Kainz, B.: LCMem: A universal model for robust image memorization detection (2025) 7. Dombrowski, M., Zhang, W., Cechnicka, S., Reynaud, H., Kainz, B.: Image gener-ation diversity issues and how to tame them. In: CVPR’25. pp. 3029–3039 (2025) 8. Hamamci, I.E., Er, S., Almas, F., Simsek, A.G., Esirgun, S.N., Dogan, I., Das-delen, M.F., Durugol, O.F., Wittmann, B., Amiranashvili, T., Simsar, E., Sim-sar, M., Erdemir, E.B., Alanbay, A., Sekuboyina, A., Lafci, B., Bluethgen, C., Ozdemir, M.K., Menze, B.: Developing generalist foundation models from a mul-timodal dataset for 3D computed tomography (2024) 9. Holste, G., Wang, S., Jiang, Z., Shen, T.C., Shih, G., Summers, R.M., Peng, Y., Wang, Z.: Long-tailed classification of thorax diseases on chest X-ray: A new bench-mark study. In: MICCAI-DALI’22. pp. 22–32. Springer (2022) 10. Hou, C., Zhang, J., Wang, H., Zhou, T.: Subclass-balancing contrastive learning for long-tailed recognition. In: ICCV’23. pp. 5372–5384. IEEE (2023) 11. Issachar, N., Salama, M., Fattal, R., Benaim, S.: Designing a conditional prior distribution for flow-based generative models (2025) 10 F. Nützel et al. 12. Johnson, A., Lungren, M., Peng, Y., Lu, Z., Mark, R., Berkowitz, S., Horng, S.: MIMIC-CXR-JPG — chest radiographs with structured labels. PhysioNet (2024), version 2.1.0 13. Kim, J., Park, J., Jeon, S., Kim, S.: Better source, better flow: Learning condition-dependent source distribution for flow matching (2026) 14. Ktena, I., Wiles, O., Albuquerque, I., Rebuffi, S.A., Tanno, R., Roy, A.G., Azizi, S., Belgrave, D., Kohli, P., Cemgil, T., Karthikesalingam, A., Gowal, S.: Generative models improve fairness of medical classifiers under distribution shifts. Nat. Med. 
+
+30 (4), 1166–1173 (2024) 15. Lee, J., Kim, K., Lee, J.: Is there a better source distribution than gaussian? Exploring source distributions for image flow matching. TMLR (2026) 16. gil Lee, S., Kim, H., Shin, C., Tan, X., Liu, C., Meng, Q., Qin, T., Chen, W., Yoon, S., Liu, T.Y.: PriorGrad: Improving conditional denoising diffusion models with data-dependent adaptive prior. In: ICLR’22 (2022) 17. Lipman, Y., Chen, R.T.Q., Ben-Hamu, H., Nickel, M., Le, M.: Flow matching for generative modeling. In: ICLR’23 (2023) 18. McIntosh-Smith, S., Alam, S.R., Woods, C.: Isambard-ai: a leadership class super-computer optimised specifically for artificial intelligence (2024) 19. Miao, Z., Wang, J., Wang, Z., Yang, Z., Wang, L., Qiu, Q., Liu, Z.: Training diffusion models towards diverse image generation with reinforcement learning. In: CVPR’24. pp. 10844–10853 (2024) 20. Morshed, M.M., Boddeti, V.: DiverseFlow: Sample-efficient diverse mode coverage in flows. In: CVPR’25. pp. 23303–23312 (2025) 21. Na, B., Kim, Y., Bae, H., Lee, J.H., Kwon, S.J., Kang, W., chul Moon, I.: Label-noise robust diffusion models. In: ICLR’24 (2024) 22. Nie, W., Zhang, Z., Wang, W., Lepri, B., Liu, A., Sebe, N.: Causal disentanglement for robust long-tail medical image generation. arXiv preprint arXiv:2504.14450 (2025) 23. Nützel, F., Dombrowski, M., Kainz, B.: GRASP: Guided residual adapters with sample-wise partitioning (2025) 24. Oh, H., Choi, S., Baek, J., Kim, D.J., Joung, J.: FlawMatch: Conditional defect image generation via flow matching for improved surface defect classification. Adv. Eng. Inform. 68 , 103704 (2025) 25. Pooladian, A.A., Ben-Hamu, H., Domingo-Enrich, C., Amos, B., Lipman, Y., Chen, R.T.Q.: Multisample flow matching: Straightening flows with minibatch couplings. In: ICML’23. vol. 202, pp. 28100–28127. PMLR (2023) 26. Qin, Y., Zheng, H., Yao, J., Zhou, M., Zhang, Y.: Class-balancing diffusion models. In: CVPR’23. pp. 18434–18443 (2023) 27. Rajaraman, S., Liang, Z., Xue, Z., Antani, S.K.: Addressing class imbalance with latent diffusion-based data augmentation for improving disease classification in pediatric chest X-rays. In: IEEE BIBM’24. pp. 5059–5066. IEEE (2024) 28. Sehwag, V., Hazirbas, C., Gordo, A., Ozgenel, F., Ferrer, C.C.: Generating high fidelity data from low-density regions using diffusion models. In: CVPR’22. pp. 11482–11491 (2022) 29. da Silva Gonçalves, J., Manduchi, L., Vandenhirtz, M., Vogt, J.E.: TreeDiffusion: Hierarchical generative clustering for conditional diffusion. In: ECML PKDD’25. LNCS, vol. 16013, pp. 447–462. Springer (2026) 30. Song, H., Gim, M., Choi, J.: Reweighted flow matching via unbalanced optimal transport for long-tailed generation. In: NeurIPS’25 Workshop: Reliable ML from Unreliable Data (2025) Flow Matching with Subclass Priors 11 31. Um, S., Lee, S., Ye, J.C.: Don’t play favorites: Minority guidance for diffusion models. In: ICLR’24 (2024) 32. Um, S., Ye, J.C.: Self-guided generation of minority samples using diffusion models. In: ECCV’24. pp. 414–430. Springer (2025) 33. Wang, X., Peng, Y., Lu, L., Lu, Z., Bagheri, M., Summers, R.M.: ChestX-Ray8: Hospital-scale chest X-ray database and benchmarks on weakly-supervised classi-fication and localization of common thorax diseases. In: CVPR’17. pp. 2097–2106 (2017) 34. Zhang, H., Liu, Y., Yang, J., Wan, S., Wang, X., Peng, W., Fua, P.: LeFusion: Controllable pathology synthesis via lesion-focused diffusion models. In: ICLR’25 (2025) 35. Zhang, T., Zheng, H., Yao, J., Wang, X., Zhou, M., Zhang, Y., Wang, Y.: Long-tailed diffusion models with oriented calibration. In: ICLR’24 (2024)
