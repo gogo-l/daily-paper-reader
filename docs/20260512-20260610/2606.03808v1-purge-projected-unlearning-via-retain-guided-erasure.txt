@@ -1,0 +1,520 @@
+Title: PURGE: Projected Unlearning via Retain-Guided Erasure
+
+URL Source: https://arxiv.org/pdf/2606.03808v1
+
+Published Time: Wed, 03 Jun 2026 01:24:14 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# PURGE: Projected Unlearning via Retain-Guided Erasure 
+
+# Vedant Jawandhia 1, Daksh Ahuja 1
+
+# Ghufran Alam Siddiqui 1, Prashant Trivedi 1, Yash Sinha 1, Pratik Narang 1
+
+> 1
+
+# BITS Pilani, Pilani Campus, India 
+
+# Abstract 
+
+We propose P URGE , a machine unlearning algorithm built on a simple but an under-exploited observation: continual learning (CL) and machine unlearning (MU) which are funda-mentally dual problems. CL tries to learn new tasks without forgetting old ones; MU tries to erase specific data without hurting retained per-formance representing the same underlying ten-sion in opposite directions. P URGE leverages this duality by adapting gradient projection 
+
+from A-GEM (Chaudhry et al., 2019) so that every unlearning step is constrained to not in-crease the retain-set loss. On top of this, it per-forms multi-layer representation erasure , push-ing forget-set activations in intermediate layers towards the retain distribution to remove infor-mation from hidden representations rather than just suppressing it at the output. A key design choice is the retain-confusion target : rather than pushing forget outputs toward the uniform distribution, which we found to be surprisingly easy for membership inference attacks to de-tect, we instead target the model’s natural con-fusion pattern on retain data. This makes the unlearned model hard to distinguish from one retrained from scratch. Two self-regulating stopping criteria (a retain-loss budget and a forget-accuracy target) let the algorithm decide on its own when to stop, removing the need for manual epoch tuning. In experiments on five datasets (CIFAR-10, MNIST, SVHN, STL10, PathMNIST) across 22 class-level forgetting tasks, P URGE consistently keeps retain accu-racy above 96% while achieving MIA AUROC close to 0.5 (the ideal), outperforming gradi-ent ascent, KL-uniform, and several published baselines on the privacy–utility frontier. 
+
+# 1 Introduction 
+
+The right to be forgotten, enshrined in regulations such as the EU General Data Protection Regulation (GDPR) (Voigt and von dem Bussche, 2017), requires that machine learning systems be capable of remov-ing the influence of specific training data upon request. Naïve retraining from scratch is the gold-standard so-lution, but it is computationally prohibitive for large models. Machine unlearning (MU) (Bourtoule et al., 2021) aims to approximate the effect of retraining with-out incurring its full cost. Existing MU methods face a fundamental tension: forgetting aggressively enough to satisfy privacy audits while preserving the model’s utility on retained data. In our evaluation of representative baseline methods spanning gradient-based, saliency-based, distillation-based, and Fisher-based approaches, each method exhibits a characteristic failure mode. Gradient as-cent (Thudi et al., 2022) maximises the loss on forget data but often degrades retain-set accuracy. Saliency-based methods such as SalUn (Fan et al., 2024) selec-tively perturb high-importance weights but do not pro-vide a formal retain-performance guarantee. Knowledge distillation approaches (Chundawat et al., 2023) anchor the retain distribution but do not constrain the gradi-ent direction. Fisher-based methods (Golatkar et al., 2021) are theoretically grounded but require expensive Hessian approximations that are difficult to scale. The central observation behind our work is that ma-chine unlearning is the dual of continual learning (CL) : CL protects old-task knowledge while learning new tasks, whereas MU protects retained knowledge while erasing specific data, representing the same un-derlying trade-off in opposite directions. This connec-tion has been acknowledged by prior work — most notably Kurmanji et al. (2023), whose SCRUB method draws on continual learning intuitions — but existing approaches use CL as a conceptual analogy rather than directly adapting a CL mechanism at the algorithmic level. To our knowledge, no prior work has instanti-ated gradient projection from a CL algorithm as the primary constructive tool for retain-safe unlearning. We build on this insight by adapting A-GEM (Chaudhry et al., 2019), which projects new-task gradients onto a half-space that does not increase old-task loss. In our setting, forget-direction gradients are projected onto the half-space where retain-set loss does not increase, pro-viding a per-step constructive guarantee that existing unlearning methods lack. Building on this insight, we propose PURGE 
+
+(Projected Unlearning via Retain-Guided Erasure). The method was developed following limitations observed in an earlier approach (an influence-weighted entropy method, IEWPv2), which exhibited instability in multi-class settings. P URGE combines five components: 1. Gradient projection from CL, adapted for retain-1
+
+> arXiv:2606.03808v1 [cs.LG] 2 Jun 2026
+
+safe unlearning; 2. A retain-confusion target (kl_retain ) that en-courages forget outputs toward the model’s natural confusion distribution on the retain set, achieving MIA AUROC ≈ 0.5;3. Multi-layer representation erasure that removes information from hidden activations, not only out-puts; 4. KD-anchored stability using a frozen pre-unlearning model; 5. Dual self-regulating stopping (retain-loss budget + FA target) to determine when unlearning is complete. We evaluate P URGE on CIFAR-10 (Krizhevsky, 2009), MNIST (LeCun et al., 1998), SVHN (Netzer et al., 2011), STL10 (Coates et al., 2011), and PathM-NIST (Yang et al., 2023), demonstrating strong privacy– utility trade-offs across all five domains. 
+
+# 2 Related Work 
+
+Exact unlearning. SISA training (Bourtoule et al., 2021) partitions data into shards to enable exact removal by retraining a single shard. This approach provides provable guarantees but scales poorly with increasing model size and shard count. 
+
+Gradient-based approximate unlearning. Gradient ascent (Thudi et al., 2022) tries to maximises the loss on forget data. While simple, it lacks a mechanism to preserve retain-set performance and often leads to severe accuracy degradation (e.g., test accuracy drops to ∼38% on CIFAR-10). Amnesiac unlearning (Graves et al., 2021) subtracts cached gradient updates but requires storing per-sample gradients during training. 
+
+Saliency and Fisher-based methods. SalUn (Fan et al., 2024) identifies the top-k most salient weights via gradient norms and selectively updates them. It achieves strong results on CIFAR-10 but does not provide a for-mal guarantee on retain-set performance. Golatkar et al. (2020, 2021) use Fisher information to estimate param-eter importance. However, computing the Fisher matrix is computationally expensive, and the approximation can introduce estimation errors. 
+
+Knowledge distillation approaches. Chundawat et al. (2023) propose a two-teacher framework in which an incompetent teacher provides random outputs for forget data, while a competent teacher preserves knowledge on the retain set. This formulation effectively separates the forget and retain objectives but does not constrain the gradient to be retain-safe. 
+
+Continual learning methods. A-GEM (Chaudhry et al., 2019) projects task gradients to avoid increas-ing loss on previous tasks. Nguyen et al. (2020) and Kurmanji et al. (2023) touch on the connection between CL and MU, but no prior work has formally exploited the CL–MU duality at the algorithm level using gradient projection as a constructive tool for unlearning. 
+
+Privacy evaluation. Membership inference attacks (MIA) (Shokri et al., 2017; Carlini et al., 2022) measure whether a model reveals if a sample was in its training set. We use AUROC-based MIA comparing forget-class training samples against forget-class test samples, avoiding class-imbalance artifacts inherent in threshold-based accuracy metrics. 
+
+# 3 Background and Preliminaries 
+
+Definition 1 (Retain-Safe Update) . A parameter update 
+
+θ → θ − ηg is retain-safe if it does not increase the retain loss in the first-order approximation: 
+
+⟨g, ∇θ Lr(θ)⟩ ≥ 0 (1) 
+
+where Lr(θ) = 1 
+
+> |D r|
+
+P 
+
+> (x,y )∈D r
+
+CE( fθ (x), y ).
+
+3.1 A-GEM for Continual Learning 
+
+Averaged Gradient Episodic Memory (A-GEM) (Chaudhry et al., 2019) solves the constrained optimisation: 
+
+min  
+
+> g
+
+∥g − gnew ∥2 s.t. ⟨g, g old ⟩ ≥ 0 (2) where gnew is the gradient for the new task and gold is the reference gradient from old tasks. When ⟨gnew , g old ⟩ <
+
+0 (conflict), the solution is: 
+
+˜g = gnew − ⟨gnew , g old ⟩∥gold ∥2 gold (3) which projects gnew onto the boundary of the half-space 
+
+{g : ⟨g, g old ⟩ ≥ 0}.
+
+# 4 Methodology 
+
+4.1 Problem Formulation 
+
+Let θ denote a trained model, Df the forget set, and Dr
+
+the retain set ( Dr = Dtrain \ D f ). The goal is to produce 
+
+θ∗ such that: 1. θ∗ performs well on Dr (utility preservation); 2. θ∗ behaves as if Df was never in the training set (privacy); 3. The process is computationally cheaper than retrain-ing from scratch. 
+
+4.2 CL–MU Duality and Gradient Projection 
+
+In continual learning, A-GEM (Chaudhry et al., 2019) ensures that a gradient update for a new task does not increase the loss on previous tasks by projecting the gradient when it conflicts with a reference gradient: 
+
+˜g = g − ⟨g, g r ⟩∥gr ∥2 gr if ⟨g, g r ⟩ < 0 (4) where g denotes the forget-direction gradient and gr
+
+denotes the retain-set gradient. In P URGE , we compute gr as the gradient of the retain loss (cross-entropy plus knowledge distillation regularisation) and project the forget gradient onto the 2half-space {g : ⟨g, g r ⟩ ≥ 0}. This ensures that each update does not increase the retain-set loss; that is, every unlearning step is guaranteed to be retain-safe under the projection constraint. 
+
+4.3 Forget Objectives 
+
+PURGE supports three forget objectives: 
+
+Gradient Ascent (GA). 
+
+LGA = −CE (θ(xf ), y f ) (5) This objective maximises the loss on forget data and is capped at log K (maximum entropy for K classes) to prevent over-forgetting. 
+
+KL-Uniform. 
+
+LKL-U = KL (log σ(θ(xf )) ∥ U (K)) (6) where U(K) is the uniform distribution over K classes. 
+
+KL-Retain (Retain-Confusion Target). Rather than targeting the uniform distribution, we precompute the re-tain confusion distribution pr by averaging the softmax outputs of the frozen original model θorig over Dr :
+
+pr = 1
+
+|D r |
+
+X
+
+> x∈D r
+
+σ(θorig (x)) (7) The forget objective then becomes: 
+
+LKL-R = KL (log σ(θ(xf )) ∥ pr ) (8) This target is more realistic than the uniform distribu-tion, as it reflects the natural confusion pattern of the model, making the unlearned model’s outputs statisti-cally indistinguishable from those of a model retrained without Df .
+
+4.4 Multi-Layer Representation Erasure 
+
+Output suppression alone is insufficient; information may persist in intermediate representations (Golatkar et al., 2020). P URGE operates on intermediate layers of the network and computes the mean squared error (MSE) between the forget-set activations and the retain-set activation means (computed using the frozen original model): 
+
+Lrep = 1
+
+L
+
+> L
+
+X
+
+> ℓ=1
+
+∥hfℓ − ¯hrℓ ∥2 (9) where hfℓ are forget-set activations at layer ℓ and ¯hrℓ are the retain-set activation means. 
+
+4.5 KD-Anchored Stability 
+
+A frozen copy θorig of the pre-unlearning model serves as a teacher for the retain set: 
+
+LKD = T 2 · KL (σ(θ(xr )/T ) ∥ σ(θorig (xr )/T )) (10) where T is the distillation temperature. This loss an-chors the model’s behaviour on Dr and complements the gradient projection constraint by reducing represen-tation drift. 
+
+4.6 Entropy-Based Gating and Capping Entropy gate. If the model’s output entropy on a for-get batch exceeds log( K)γ (where γ is the gate factor), the batch is already near maximum uncertainty and fur-ther forgetting is unnecessary. The update is therefore restricted to the retain objective. 
+
+Hard entropy cap (GA only). If CE (θ(xf ), y f ) ≥
+
+log K, the model is already maximally uncertain; the update is restricted to the retain objective, preventing gradient explosion. 
+
+4.7 Dual Self-Regulating Stopping Retain-loss budget. Before unlearning begins, the initial retain loss L0 is computed. Unlearning stops if the retain loss exceeds L0 × α (the budget factor), preventing degradation of retain performance. 
+
+FA target. Forget accuracy (FA) is evaluated after each epoch. If FA drops below a predefined target (de-fault: 100 /K %, corresponding to random chance), un-learning is declared complete. An intra-epoch FA check every N batches detects rapid FA drops mid-epoch, preventing over-forgetting when a single epoch is too coarse. 
+
+4.8 BatchNorm Freezing 
+
+A subtle but critical detail arises in class-level unlearn-ing, where forget batches contain samples from a single class and are therefore class-homogeneous. If Batch-Norm (Ioffe and Szegedy, 2015) layers remain in train-ing mode, their running statistics are corrupted by these homogeneous batches, causing downstream compo-nents to fail. P URGE freezes all BatchNorm layers in 
+
+eval mode during unlearning, preserving the statistics learned during base model training. 
+
+Observation. This behaviour was identified during de-bugging: early unlearning runs on CIFAR-10 collapsed to 21.6% test accuracy within a few hundred iterations. Investigation revealed that BatchNorm statistics were being overwritten by class-homogeneous forget batches. Switching all BatchNorm layers to eval mode immedi-ately resolved the issue, and this setting was used in all subsequent experiments. This failure mode is not spe-cific to P URGE and may affect any unlearning method operating on class-homogeneous batches, yet it is rarely documented. 
+
+4.9 Computational Cost 
+
+A practical concern with approximate unlearning algo-rithms is whether they provide a meaningful speedup over retraining from scratch. On our hardware (single NVIDIA RTX 3090), training a ResNet-18 on CIFAR-10 for 200 epochs takes approximately 45 minutes. PURGE with kl_retain converges in about 1.75 epochs (around 70 gradient steps on the forget set), com-pleting in under 200 seconds, corresponding to a ∼ 13 ×
+
+speedup. The per-step overhead is modest: one addi-tional forward–backward pass on a retain batch for the 3Algorithm 1 PURGE Unlearning 
+
+Require: Trained model θ, forget set Df , retain set Dr
+
+Ensure: Unlearned model θ∗
+
+1: θorig ← freeze (copy (θ)) 
+
+2: Set all BatchNorm layers to eval mode 
+
+3: pr ← 1 
+
+> |D r|
+
+P 
+
+> x∈D r
+
+σ(θorig (x)) // retain confusion 
+
+4: L0 ← CE (θ, Dr ); budget ← L0 × α
+
+5: for epoch = 1 to T do 
+
+6: for (xf , y f ) in Df do 
+
+7: Sample (xr , y r ) from Dr
+
+8: gr ← ∇ [CE (θ(xr ), y r ) + β · L KD ]
+
+9: out f ← θ(xf )
+
+10: if H(out f ) > log K · γ or CE (θ(xf ), y f ) ≥
+
+log K then 
+
+11: Apply retain-only update using gr ; con-tinue 
+
+12: end if 
+
+13: gf ← ∇ [Lforget + λ · L rep ]
+
+14: if ⟨gf , g r ⟩ < 0 then 
+
+15: gf ← gf − ⟨gf ,g r ⟩∥gr ∥2 gr // projection 
+
+16: end if 
+
+17: θ ← θ − η · clip (gf , c )
+
+18: end for 
+
+19: if FA (θ, Df ) ≤ FA target then 
+
+20: break 
+
+21: end if 
+
+22: if CE (θ, Dr ) > budget then 
+
+23: break 
+
+24: end if 
+
+25: end for 
+
+26: return θ∗ ← θ
+
+projection reference gradient, along with forward hooks for representation erasure. On PathMNIST, where the training set is larger ( ∼90K samples), P URGE completes in under 5 minutes compared to an estimated 2+ hours for full retraining. The speedup primarily arises be-cause P URGE iterates only over the forget set, avoiding repeated passes over the full training data. 
+
+# 5 Theoretical Analysis 
+
+We provide three formal results: a retain-safety guaran-tee from gradient projection, an MIA indistinguishabil-ity bound for the kl_retain objective, and a forget-ting convergence result. 
+
+5.1 Retain-Safety Guarantee Theorem 1 (Retain-Safe Projection) . Let Lr(θ) = 
+
+> 1
+> |D r|
+
+P 
+
+> (x,y )∈D r
+
+CE( fθ (x), y ) be the retain loss, and let gr = ∇θ Lr(θ) be its gradient (descent direction). If the projected gradient ˜gf is computed via Eq. 4, then: 
+
+⟨˜gf , g r⟩ ≥ 0 (11) 
+
+and consequently, for sufficiently small learning rate η:
+
+Lr(θ − η˜gf ) ≤ L r(θ) + O(η2) (12) 
+
+Figure 1: Overview of the P URGE unlearning pipeline. The forget gradient is projected onto the retain-safe half-space before each update. 
+
+That is, the retain loss does not increase to first order under the PURGE update. Proof. Case 1: ⟨gf , g r⟩ ≥ 0. Then ˜gf = gf and the condition holds trivially. 
+
+Case 2: ⟨gf , g r⟩ < 0. The projected gradient is: 
+
+˜gf = gf − ⟨gf , g r⟩∥gr∥2 gr (13) Computing the inner product with gr:
+
+⟨˜gf , g r⟩ = ⟨gf , g r⟩ − ⟨gf , g r⟩∥gr∥2 ⟨gr, g r⟩ (14) 
+
+= ⟨gf , g r⟩ − ⟨gf , g r⟩∥gr∥2 · ∥ gr∥2 (15) 
+
+= ⟨gf , g r⟩ − ⟨ gf , g r⟩ = 0 (16) Thus ⟨˜gf , g r⟩ = 0 ≥ 0.For the retain loss bound, a first-order Taylor expan-sion gives: 
+
+Lr(θ − η˜gf ) = Lr(θ) − η⟨˜gf , ∇θ Lr(θ)⟩ + O(η2)
+
+(17) In Case 2, ∇θ Lr = gr (the retain gradient used in pro-jection), so: 
+
+Lr(θ − η˜gf ) = Lr(θ) − η · 0 + O(η2) = Lr(θ) + O(η2)
+
+(18) In Case 1, ⟨˜gf , g r⟩ ≥ 0 implies Lr(θ − η˜gf ) ≤ L r(θ) + 
+
+O(η2), and the first-order term is non-positive (the up-date decreases retain loss). Note: in practice, the retain gradient gr includes the KD term ∇θ [CE + βLKD ], which may differ slightly from ∇θ Lr. The guarantee holds exactly with respect to the composite retain objective CE + βLKD , and ap-proximately with respect to Lr alone, with the approxi-mation error bounded by O(β). The momentum buffer introduces a further O(momentum ) deviation from the guarantee, which we address via the retain-loss budget stopping criterion as a safety net. 4Remark 1. No prior approximate unlearning method provides a comparable per-step retain-safety guarantee. Methods such as NegGrad+ and SCRUB heuristically balance forget and retain objectives but cannot formally bound the retain-loss increase at each step. 
+
+5.2 MIA Indistinguishability under Retain-Confusion Target Theorem 2 (MIA Bound for kl_retain ). Let pr
+
+be the retain confusion distribution (Eq. 7), and let 
+
+p∗ 
+
+> θ
+
+(x) denote the output distribution of the unlearned model. Assume the unlearning converges such that 
+
+KL( p∗ 
+
+> θ
+
+(xf )∥pr ) ≤ ϵ for all xf ∈ D f . Let A be any membership inference attacker that observes only model outputs. Then the MIA advantage satisfies: 
+
+|AUROC (A) − 0.5| ≤ O(√ϵ) (19) 
+
+Proof sketch. Consider the MIA task: distinguish forget-set training samples (members) from same-class test samples (non-members). For a model retrained from scratch on Dr alone, both groups are unseen, so AUROC = 0 .5 exactly. The retain confusion distribution pr approximates the output distribution of the retrained model on unseen in-puts: it is the average softmax output the original model produces on Dr , which—for inputs the model was not 
+
+specifically trained on—converges to a natural confu-sion pattern dominated by the most similar retained classes. When KL( p∗ 
+
+> θ
+
+(xf )∥pr ) ≤ ϵ for all forget samples, the output distribution on former members matches the out-put distribution on non-members (both are close to pr )up to √ϵ in total variation distance (by Pinsker’s inequal-ity (Pinsker, 1964): TV (p, q ) ≤ pKL( p∥q)/2). Since AUROC for any classifier is bounded by 0.5 + TV /2
+
+under matched priors (Reid and Williamson, 2011), we obtain: AUROC (A) ≤ 0.5 + 12
+
+r ϵ
+
+2 = 0 .5 + O(√ϵ) (20) A symmetric argument bounds AUROC from below, giving |AUROC (A) − 0.5| ≤ O(√ϵ).
+
+Contrast with KL-uniform: The uniform dis-tribution u does not match the output distribution a retrained model would produce. In general, 
+
+KL( pretrained (xf )∥u) ≫ 0 because a naturally trained model concentrates probability on a few “confused” classes, not uniformly across all K classes. Therefore, converging to u introduces a systematic gap between the MIA signals of members (which converge to u) and non-members (which do not), yielding AUROC ̸ = 0 .5 even with perfect convergence of the uniform objective. 
+
+5.3 Forgetting Convergence Proposition 1 (Controlled Forgetting) . Under the 
+
+kl_retain objective with gradient projection, the forget accuracy FA t at step t is monotonically non-increasing in expectation, provided: 1. The learning rate η is sufficiently small, 2. The retain-confusion distribution pr assigns non-zero probability to at least two classes, 3. The projection does not collapse ˜gf to the zero vector for all steps. Furthermore, the rate of decrease is modulated by the projection rate: more frequent projections (higher forget–retain conflict) slow forgetting, while compatible gradients allow full-speed descent. Proof sketch. At each non-gated step, the projected gra-dient ˜gf has a non-negative component in the forget-loss descent direction (since the projection removes only the component conflicting with gr, preserving the component orthogonal to gr and any component aligned with gr). The KL divergence KL( pθ (xf )∥pr )
+
+decreases along ˜gf provided ˜gf has a nonzero compo-nent in ∇θ Lf . Since ˜gf = gf when there is no conflict, and ⟨˜gf , ∇θ Lf ⟩ ≥ 0 in the projected case (by construc-tion), the forget loss decreases at each step. As the forget output distribution converges to pr , which dis-tributes probability across non-forget classes, the forget accuracy decreases monotonically. 
+
+# 6 Experimental Setup 
+
+6.1 Datasets 
+
+We evaluate our method on five datasets spanning hand-written digits, natural images, street-level digits, and medical histopathology: • CIFAR-10 (Krizhevsky, 2009): 50K training and 10K test images, 10 classes, 32 ×32 colour. • MNIST (LeCun et al., 1998): 60K/10K images, 10 classes, 28 ×28 greyscale, converted to 3-channel and resized to 224 ×224. • SVHN (Netzer et al., 2011): 73K training and 26K test images, 10 classes, 32 ×32 colour. • STL10 (Coates et al., 2011): 5K training and 8K test images, 10 classes, resized from 96 ×96 to 224 ×224. • PathMNIST (Yang et al., 2023): 90K training and 7K test images, 9 tissue types, resized from 28 ×28 to 224 ×224. 
+
+6.2 Model and Training 
+
+All experiments are conducted using ResNet-18 (He et al., 2016) (11.7M parameters). Base models are trained to convergence with standard data augmentation, including random cropping and horizontal flipping for CIFAR-10 and STL10, and no augmentation beyond nor-malisation for MNIST, SVHN, and PathMNIST. No data augmentation is applied during the unlearning phase. 
+
+6.3 Unlearning Configuration 
+
+We use the kl_retain objective with the following hyperparameters unless stated otherwise. 5Hyperparameter CIFAR-10 Others                       
+
+> Learning rate ( η)5×10 −42×10 −4
+> Max epochs ( T)15 12–15 Rep. erasure wt. ( λ)0.05 0.03–0.05 KD weight ( β)2.0 3.0–5.0 Grad. clip norm ( c)1.0 1.0 Budget factor ( α)5.0 4.0–5.0 Forget gate ( γ)0 (off) 0Distill. temp. ( T)4.0 4.0
+
+Table 1: Unlearning hyperparameters used across datasets. 
+
+6.4 Evaluation Metrics 
+
+• Test Accuracy (TA) : Classification accuracy on the full test set. • Forget Accuracy (FA) : Classification accuracy on forget-class test samples; the ideal value is approxi-mately 100 /K % (random chance for K classes). • Retain Accuracy (RA) : Classification accuracy on retain-set samples (measured on the training set to directly assess retention of previously learned knowl-edge). • MIA AUROC : Area under the ROC curve for mem-bership inference attacks, computed by distinguishing forget-class training samples from forget-class test samples; the ideal value is 0.5 (indistinguishable). • Feature Cosine Similarity : Cosine similarity be-tween intermediate representations before and after unlearning; lower values indicate greater representa-tional change (stronger erasure). 
+
+6.5 Baselines 
+
+We compare against a range of baseline methods re-ported in SalUn (Fan et al., 2024) (Table A2) on CIFAR-10. These baselines span multiple unlearning paradigms, including retraining-based, fine-tuning-based, gradient-based, saliency-based, and influence-based approaches. Specifically, they include Retrain (gold standard), Fine-Tuning (FT), Gradient Ascent (GA) (Thudi et al., 2022), Random Labels (RL), Influence Unlearning (IU), Boundary Expand/Shrink (BE/BS), ℓ1-sparse methods, and SalUn itself. 
+
+# 7 Results 
+
+7.1 CIFAR-10: Comparison with Baselines 
+
+Table 2 presents class-level forgetting results on CIFAR-10 (forget class 0). P URGE with kl_retain achieves MIA AUROC = 0.496 (ideal = 0.500), indicating that forget-class training samples are statistically indistin-guishable from test samples. While P URGE ’s TA (84.5%) is lower than SalUn’s (93.5%), this trade-off is deliberate: P URGE is the only method that reports MIA AUROC ≈ 0.5, meaning it provides genuine membership privacy. Methods that achieve FA ≈ 0% ( e.g. , ℓ1-sparse, GA) may still leak membership information through subtle distributional differences in model outputs. Figure 3 summarises the                                              
+
+> Method TA FA ↓RA UA MIA
+> Retrain 92.5 0.0 100.0 100.0 0.500 SalUn 93.5 0.7 99.4 99.3 —
+> ℓ1-sparse 92.3 0.0 97.9 100.0 —IU 89.1 3.0 94.8 97.0 —RL 94.5 10.7 99.9 89.3 —FT 94.8 68.3 99.9 31.7 —GA 38.2 0.1 38.9 99.9 —
+> PURGE 84.5 8.4 96.3 91.6 0.496
+
+Table 2: CIFAR-10 class-level forgetting (class 0). Base-line results from Fan et al. (2024) Table A2. Best non-retrain values in bold .                              
+
+> Dataset #Cls TA FA ↓RA MIA
+> CIFAR-10 184.5 8.4 96.3 0.496 MNIST 10 90.2 6.8 99.9 0.517 SVHN 189.5 3.6 97.3 0.524 STL10 185.0 8.8 99.1 0.479 PathMNIST 981.2 9.3 98.7 0.497
+
+Table 3: Cross-dataset performance summary using the 
+
+kl_retain objective. MNIST and PathMNIST val-ues are averaged over all classes. effect of P URGE on CIFAR-10: forget accuracy drops by 90 percentage points while retain accuracy remains within 0.5pp of the base model. 
+
+7.2 Cross-Dataset Generalization 
+
+Table 3 summarises results across all five datasets. PURGE maintains RA above 96% on all datasets (Fig-ure 6) and achieves MIA AUROC within 0.04 of the ideal 0.5 on four out of five datasets. 
+
+7.3 MNIST: All 10 Classes 
+
+PURGE was evaluated on all 10 MNIST digit classes (Figure 7). RA is consistently above 99.8% across all classes, and MIA AUROC stays within [0 .495 , 0.653] —near-ideal for 9 out of 10 classes (class 1 is the outlier at 0.653, visible in the bottom-right panel of Figure 7). The average FA of 6.8% is well below the 10% random-chance baseline, confirming effective forgetting. 
+
+7.4 PathMNIST: All 9 Tissue Types 
+
+On PathMNIST, P URGE achieves retain accuracy (RA) above 98.3% across all nine tissue classes, with for-get accuracy (FA) averaging 9.3% (random chance is 11.1%), as shown in Figure 8. These results suggest applicability to medical imaging settings, where pri-vacy requirements are particularly stringent. The MIA AUROC ranges from 0.369 (Debris) to 0.614 (Back-ground) across tissue types, with an average of 0.516; the per-class variation is visible in the rightmost panel of Figure 8. 6Figure 2: CIFAR-10 class-level forgetting comparison. P URGE is the only method achieving MIA AUROC ≈ 0.5
+
+while maintaining RA above 96%. 
+
+Figure 3: Before vs. after P URGE unlearning on CIFAR-10 (class 0). Forget accuracy drops by 90pp (from 98.4% to 8.4%) while retain accuracy is preserved at 96.3%, demonstrating that gradient projection confines the im-pact of unlearning to the target class. 
+
+# 8 Ablation Studies 
+
+We systematically evaluate the contribution of each PURGE component on CIFAR-10 (class 0). Results are presented in Table 4. 
+
+GA vs. kl_retain . GA either under-forgets (FA = 52.6% after a few epochs) or over-forgets, reducing retain accuracy (FA = 0.0%, RA = 93.7%). In contrast, 
+
+kl_retain achieves FA = 8.4% with RA = 96.3% and MIA AUROC = 0.496, demonstrating a substantially improved privacy–utility trade-off. 
+
+KL-uniform. Targeting the uniform distribution achieves FA = 12.0%, RA = 93.9%, and MIA AUROC = 0.469. While this does reduce forget accuracy, the MIA AUROC of 0.469 remains detectably below the ideal 0.5—worse than kl_retain ’s 0.496. The artifi-cial uniform target is detectable by MIA because it does not reflect the natural confusion pattern of a retrained                               
+
+> Configuration TA FA ↓RA MIA
+> Full P URGE (kl_retain )84.5 8.4 96.3 0.496 GA objective 89.3 52.6 97.0 0.250 GA (more epochs) 80.8 0.0 93.7 0.243 KL-uniform 83.8 12.0 93.9 0.469 Ent. gating ( γ= 0 .9)89.1 58.6 96.2 0.262 BN in train mode 82.2 8.2 94.1 0.505
+
+Table 4: Ablation study on CIFAR-10 (class-level for-getting, class 0). model; kl_retain ’s advantage comes from mimick-ing that natural pattern rather than targeting an artificial distribution. 
+
+Entropy gating. Setting γ = 0 .9 causes the gate to activate for nearly all batches (98% gate rate), leading to severe under-forgetting (FA = 58.6%). Disabling the gate ( γ = 0 ) yields a better balance. 
+
+BatchNorm freezing. Unfreezing BatchNorm during unlearning degrades performance: TA drops by 2.3pp (to 82.2%) and RA drops by 2.2pp (to 94.1%). Class-homogeneous forget batches corrupt the running mean and variance, causing instability in all downstream com-ponents. This failure mode can affect any unlearning method operating on networks with BatchNorm when forget batches are class-homogeneous. 
+
+Intra-epoch stopping. On PathMNIST, FA drops from 99.8% to 0.0% within a single epoch. Intra-epoch FA checks (every 50 batches) detect this transition and stop at FA = 7.3% (RA = 98.5%), compared to FA = 0.0% (RA = 96.8%) without it. 
+
+# 9 Feature-Space Fréchet Distance 
+
+Standard FID (Heusel et al., 2017) measures the distri-butional distance between generated and real images using Inception network features. We adapt this metric 7Figure 4: Cross-dataset performance summary showing TA, FA, RA, and MIA AUROC across all five datasets. 
+
+Figure 5: MIA AUROC across all datasets. Values near 0.5 indicate ideal privacy. P URGE consistently achieves near-ideal scores. Table 5: Representation-level erasure metrics on CIFAR-10 (class 0). FID feat : lower = closer to retrained model.                   
+
+> Method FID feat ↓Cos ↓L2 ↑
+> PURGE (kl_retain )195.660 0.742 16.372 PURGE (GA) 102.300 0.841 12.172 PURGE (KL-uni) 412.800 0.430 21.393
+
+to the unlearning setting. Rather than comparing gen-erated images to real images, we compute the Fréchet distance between penultimate-layer features of the un-learned model and a retrained-from-scratch model, both evaluated on the forget set: FID feat = ∥μu − μr ∥2 + Tr 
+
+
+
+Σu + Σ r − 2(Σ uΣr )1/2
+
+(21) where (μu, Σu) are the mean and covariance of the penultimate-layer features extracted from the unlearned model on the forget set, and (μr , Σr ) are the correspond-ing statistics from a model retrained from scratch on Dr
+
+only. 
+
+Interpretation. A lower FID feat indicates that the unlearned model’s internal representations on the for-get set are closer to those of a model that genuinely never saw the forget data—a stronger form of erasure verification than output-level metrics alone. To complement the distributional metrics in Table 5, Figure 10 shows the feature cosine similarity between pre- and post-unlearning representations across all five datasets. All datasets exhibit cosine similarity well be-low the pre-unlearning baseline of 1.0, with MNIST (0.637) and PathMNIST (0.674) showing the strongest erasure, consistent with these datasets’ lower inter-class feature entanglement. This confirms that P URGE ’s multi-layer representation erasure removes information from intermediate layers, not only from the output. 
+
+# 10 Failure Cases and Limitations 
+
+We highlight several limitations of P URGE .
+
+TA gap. PURGE achieves 84.5% test accuracy (TA) compared to 93.5% for SalUn on CIFAR-10, a gap of ap-proximately 9 percentage points. Part of this gap is struc-tural: forgetting all 5,000 samples of a class removes shared low-level features that benefit other classes. Ad-ditionally, the kl_retain objective is conservative by design, trading raw accuracy for improved privacy (MIA AUROC close to 0.5). Whether this trade-off is accept-able depends on the application. In privacy-sensitive settings (e.g., medical data or regulatory compliance), reduced leakage may justify lower accuracy, whereas in low-risk settings the accuracy advantage of SalUn may be preferable. 
+
+Momentum leakage. Unlearning is performed using SGD with momentum. While gradient projection is ap-plied to the raw gradient, the optimizer update includes a momentum term that is not explicitly projected. As a re-sult, small retain-loss increases may propagate through the momentum buffer. In practice, the retain-loss budget mitigates this effect; however, the per-step guarantee strictly holds only for vanilla SGD without momentum. Extending the projection to the full update or bounding the momentum-induced error remains future work. 
+
+No formal (ε, δ )-DP guarantee. The projection pro-vides a constructive per-step guarantee (retain loss does not increase), but this does not constitute a formal dif-ferential privacy guarantee. Establishing a connection to (ε, δ )-DP—potentially via Rényi DP accounting— remains an open direction. 
+
+PathMNIST TA gap. On PathMNIST, TA averages 81.2% compared to 91.3% for the base model. Classes 8Figure 6: Retain accuracy preservation across all five datasets. All datasets remain above 96%, with the largest drop on CIFAR-10 ( −3.69pp) and the smallest on MNIST ( −0.13pp). The dotted line marks the base-model retain accuracy (100%). with highly distinctive features (e.g., adipose tissue, ep-ithelium) are more affected, as the kl_retain tar-get assigns them near-zero probability, discouraging correct predictions. A class-conditional or softened 
+
+kl_retain target may alleviate this issue. 
+
+MIA per-class variation. MIA AUROC varies across classes (e.g., MNIST class 1 reaches 0.653), and sev-eral PathMNIST classes deviate from the ideal value of 0.5. This likely reflects differences in class-specific memorisation, although this hypothesis is not explicitly verified. 
+
+Sequential unlearning. All experiments consider single-class forgetting. Extending the method to handle sequential forget requests (e.g., multiple classes over time) without cumulative performance degradation is not addressed. 
+
+Single-seed results. Due to computational constraints, most experiments are conducted with a single random seed, limiting statistical significance. 
+
+# 11 Discussion 
+
+The CL–MU connection. PURGE is, to our knowl-edge, the first algorithm to directly instantiate a con-tinual learning mechanism — specifically A-GEM’s gradient projection — as the primary update rule for machine unlearning. Prior work, including SCRUB (Kurmanji et al., 2023), draws on continual learning as a conceptual motivation but does not directly adapt a CL algorithm’s core update step. The distinction mat-ters: SCRUB uses a teacher-student framework inspired by CL intuitions, whereas PURGE inherits A-GEM’s projection rule with a direct formal correspondence be-tween the CL constraint (do not increase old-task loss) and the unlearning constraint (do not increase retain-set loss). Our results suggest that continual learning techniques can be systematically adapted for unlearning, opening a broader design space. For instance, methods based on EWC (Golatkar et al., 2020) or PackNet-style pruning could potentially be adapted for unlearning in a similar manner. 
+
+Why we abandoned IEWPv2. We explored IEWPv2 (Influence-Weighted Entropy Unlearning Protocol v2), which combined influence-weighted entropy maximi-sation with interleaved retain training. Although it achieved reasonable forget accuracy in single-class experiments, two fundamental limitations emerged. First, IEWPv2 relied on gradient norms as a proxy for influence scores rather than computing the true inverse-Hessian-vector product, weakening its theoret-ical grounding. Second, its alternating forget–retain optimisation steps led to partial cancellation: the retain step counteracted forgetting, and vice versa, resulting in slow and unstable convergence that worsened with additional classes. In contrast, P URGE addresses both issues by jointly handling forget and retain objectives through a single projected update. 
+
+Why kl_retain matters. The kl_retain objec-tive consistently produces MIA AUROC values closer to 0.5 than alternative objectives. This is important be-cause standard unlearning evaluation often focuses on forget accuracy without verifying whether the model’s output distribution matches that of a retrained model. A model with FA = 0% but MIA AUROC = 0.2 has not fully unlearned, as its outputs remain distinguishable from those of a model trained without the forget data. The uniform distribution is a commonly used target, but it is artificial and rarely produced by trained models, making it easier for MIA to detect. 
+
+Generality across datasets. Our experiments cover 22 class-level forgetting tasks across five datasets with-9Figure 7: Per-class unlearning results on MNIST (all 10 digit classes). Top-left: test accuracy remains in the 88–91% range. Top-right: forget accuracy stays below 10% for all classes. Bottom-left: retain accuracy exceeds 99.8% uniformly. Bottom-right: MIA AUROC is clustered near the ideal 0.5, with class 1 as the only notable outlier (0.653). out architectural changes. The only adjustments re-quired are modest hyperparameter tuning (e.g., learning rate and KD weight). The strong performance on PathM-NIST is particularly notable, given the importance of unlearning in medical imaging contexts where privacy constraints are stringent. 
+
+Future directions. Several directions could further strengthen this work. First, the momentum issue (Sec-tion 10) could be addressed by projecting the full opti-mizer update or bounding the momentum-induced er-ror. Second, extending to sequential unlearning would require mechanisms to track accumulated projection directions across multiple requests. Third, evaluating on larger-scale datasets (e.g., Tiny ImageNet) and alter-native architectures (e.g., Vision Transformers) would test generality beyond ResNet-18. Finally, establishing a connection between gradient projection and formal 
+
+(ε, δ )-DP guarantees would bridge the gap between con-structive and statistical notions of privacy. 
+
+# 12 Ethical and Societal Considerations 
+
+Machine unlearning directly addresses the ethical im-perative of data sovereignty: individuals should retain control over their personal data even after it has been used for model training. P URGE contributes to this goal by providing an efficient mechanism for class-level data removal with strong empirical privacy guarantees. 
+
+GDPR Compliance. While approximate unlearning methods like P URGE do not provide the formal certifia-bility that regulators may ultimately require, they repre-sent a practical middle ground between the infeasibility of full retraining and the unacceptability of ignoring deletion requests. The MIA AUROC ≈ 0.5 result pro-vides empirical evidence that the unlearning is effective from an adversarial standpoint. 
+
+Potential Misuse. Unlearning technology could po-tentially be misused to selectively remove evidence of model bias or to undermine forensic analysis of model provenance. We note that P URGE ’s unlearning leaves auditable artifacts (the retain-loss budget, projection rate logs, and FA trajectory) that could support post-hoc verification. 
+
+Fairness Considerations. Selective unlearning of an entire class may disproportionately affect model perfor-mance on visually similar classes. The TA degradation observed in P URGE reflects this concern and warrants careful monitoring in deployment. 10 Figure 8: Per-class unlearning on PathMNIST across all 9 tissue types. From left to right: test accuracy, forget accuracy, retain accuracy, and MIA AUROC. All classes achieve FA below 11.1% (random chance) and RA above 98.3%. MIA AUROC varies from 0.369 (Debris) to 0.614 (Background). 
+
+Figure 9: Ablation study results. Removing the kl_retain objective, projection, or BN freezing leads to significant degradation. 
+
+Figure 10: Feature cosine similarity (penultimate layer) between pre- and post-unlearning representations across all five datasets. Lower values indicate greater repre-sentational change. The dotted line at 1.0 marks the pre-unlearning baseline. 11 13 Conclusion 
+
+We presented P URGE , a machine unlearning algorithm motivated by the duality between continual learning and machine unlearning. By adapting gradient projection from continual learning, P URGE enforces that each up-date does not increase retain-set loss (with the caveat that the guarantee applies to raw gradients rather than momentum-augmented updates). Combined with the retain-confusion target, multi-layer representation era-sure, and dual stopping criteria, P URGE achieves MIA AUROC close to 0.5 across five datasets while maintain-ing retain accuracy above 96%. PURGE does not fully resolve machine unlearning: it exhibits a test accuracy gap relative to some baselines, lacks formal differential privacy guarantees, and has only been evaluated at the ResNet-18 scale under lim-ited computational resources. Nevertheless, the CL–MU duality perspective provides a principled framework for algorithm design, and the empirical findings (particu-larly regarding BatchNorm behaviour and evaluation metrics) offer practical guidance for future work. All experiments are conducted using ResNet-18 on a single GPU due to computational constraints; scal-ing to larger models and datasets remains an important direction for future research. 
+
+# References 
+
+Lucas Bourtoule, Varun Chandrasekaran, Christopher A Choquette-Choo, Hengrui Jia, Adelin Travers, Baiwu Zhang, David Lie, and Nicolas Papernot. 2021. Ma-chine unlearning. In IEEE Symposium on Security and Privacy (S&P) .Nicholas Carlini, Steve Chien, Milad Nasr, Shuang Song, Andreas Terzis, and Florian Tramer. 2022. Membership inference attacks from first principles. In IEEE Symposium on Security and Privacy (S&P) .Arslan Chaudhry, Marc’Aurelio Ranzato, Marcus Rohrbach, and Mohamed Elhoseiny. 2019. Efficient lifelong learning with A-GEM. In International Con-ference on Learning Representations (ICLR) .Vikram S Chundawat, Ayush K Tarun, Murari Mandal, and Mohan Kankanhalli. 2023. Can bad teaching induce forgetting? unlearning in deep networks us-ing an incompetent teacher. In AAAI Conference on Artificial Intelligence .Adam Coates, Andrew Ng, and Honglak Lee. 2011. An analysis of single-layer networks in unsupervised feature learning. In International Conference on Arti-ficial Intelligence and Statistics (AISTATS) .Chongyu Fan, Jiancheng Liu, Yihua Zhang, Dennis Wei, Eric Wong, and Sijia Liu. 2024. SalUn: Empower-ing machine unlearning via gradient-based weight saliency. In International Conference on Learning Representations (ICLR) .Aditya Golatkar, Alessandro Achille, Avinash Ravichan-dran, Marzia Polito, and Stefano Soatto. 2021. Mixed-privacy forgetting in deep networks. In 
+
+IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR) .Aditya Golatkar, Alessandro Achille, and Stefano Soatto. 2020. Eternal sunshine of the spotless net: Selective forgetting in deep networks. In IEEE/CVF Conference on Computer Vision and Pattern Recog-nition (CVPR) .Laura Graves, Vineel Nagisetty, and Vijay Ganesh. 2021. Amnesiac machine learning. In AAAI Conference on Artificial Intelligence .Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. 2016. Deep residual learning for image recogni-tion. In IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter. 2017. GANs trained by a two time-scale update rule converge to a local Nash equilibrium. In Advances in Neural Information Processing Systems (NeurIPS) .Sergey Ioffe and Christian Szegedy. 2015. Batch nor-malization: Accelerating deep network training by reducing internal covariate shift. In International Conference on Machine Learning (ICML) .Alex Krizhevsky. 2009. Learning multiple layers of fea-tures from tiny images. Technical report, University of Toronto. Meghdad Kurmanji, Peter Troop, and Elham Sherr. 2023. Towards unbounded machine unlearning. In 
+
+Advances in Neural Information Processing Systems (NeurIPS) .Yann LeCun, Léon Bottou, Yoshua Bengio, and Patrick Haffner. 1998. Gradient-based learning applied to document recognition. Proceedings of the IEEE ,86(11):2278–2324. Yuval Netzer, Tao Wang, Adam Coates, Alessandro Bissacco, Bo Wu, and Andrew Y Ng. 2011. Reading digits in natural images with unsupervised feature learning. In NeurIPS Workshop on Deep Learning and Unsupervised Feature Learning .Cuong V Nguyen, Yingzhen Li, Thang D Bui, and Richard E Turner. 2020. Variational continual learn-ing. In International Conference on Learning Repre-sentations (ICLR) .Mark S Pinsker. 1964. Information and Information Sta-bility of Random Variables and Processes . Holden-Day. Mark D Reid and Robert C Williamson. 2011. Infor-mation, divergence and risk for binary experiments. 
+
+Journal of Machine Learning Research .Reza Shokri, Marco Stronati, Congzheng Song, and Vi-taly Shmatikov. 2017. Membership inference attacks against machine learning models. In IEEE Sympo-sium on Security and Privacy (S&P) .12 Anvith Thudi, Gabriel Deza, Varun Chandrasekaran, and Nicolas Papernot. 2022. Unrolling SGD: Under-standing factors of inference in machine unlearning. In IEEE European Symposium on Security and Pri-vacy (EuroS&P) .Paul Voigt and Axel von dem Bussche. 2017. The EU general data protection regulation (GDPR): A practi-cal guide. Springer. Jiancheng Yang, Rui Shi, Donglai Wei, Zequan Liu, Lin Zhao, Bilian Ke, Hanspeter Pfister, and Bingbing Ni. 2023. MedMNIST v2—a large-scale lightweight benchmark for 2D and 3D biomedical image classifi-cation. Scientific Data , 10(1):41. 
+
+# A Full Per-Class Results 
+
+A.1 MNIST (10 Classes) 
+
+Table 6: P URGE (kl_retain ) per-class unlearning on MNIST.                                                 
+
+> Forget Cls TA (%) FA (%) RA (%) MIA 089.99 1.99 99.82 0.512 188.30 5.38 99.87 0.653 289.99 7.67 99.87 0.510 390.77 9.28 99.88 0.510 490.68 6.09 99.87 0.511 591.24 7.38 99.88 0.521 690.97 7.06 99.85 0.495 790.25 8.14 99.90 0.522 890.66 9.38 99.84 0.512 990.01 5.31 99.91 0.524
+> Avg 90.19 6.77 99.87 0.517
+
+A.2 PathMNIST (9 Classes) 
+
+Table 7: P URGE (kl_retain ) per-class unlearning on PathMNIST.                                                       
+
+> Cls Tissue Type TA FA RA MIA 0Adipose 74.35 7.28 98.45 0.545 1Background 79.35 9.85 98.33 0.614 2Debris 89.30 9.47 98.93 0.369 3Lymphocytes 83.20 10.58 99.00 0.425 4Mucus 77.49 9.44 98.53 0.517 5Smooth Musc. 84.36 9.45 98.55 0.501 6Normal Muc. 80.93 9.87 98.81 0.594 7Stroma 87.16 10.71 99.39 0.521 8Epithelium 75.96 7.12 98.74 0.557
+> Average 81.24 9.31 98.74 0.516
+
+# B Reproducibility 
+
+Code, configs, and checkpoints are available at: https: //github.com/vedjaw/la_purge 
+
+Key implementation details: 
+
+• All experiments use PyTorch ≥ 2.0 with CUDA. • YAML config files for each dataset are provided in 
+
+configs/ .• The retain confusion distribution is precomputed once before unlearning and stored in memory. • Forward hooks are registered on layer3 ,
+
+layer4 , and avgpool for ResNet-18. • BatchNorm layers are set to eval() mode imme-diately after setting the model to train() mode, ensuring trainable parameters receive gradients while running statistics remain frozen. 13

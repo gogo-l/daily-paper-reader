@@ -1,0 +1,1251 @@
+Title: Mask the Target: A Plug-and-Play Regularizer Against LoRA Forgetting
+
+URL Source: https://arxiv.org/pdf/2605.29498v1
+
+Published Time: Fri, 29 May 2026 00:47:16 GMT
+
+Number of Pages: 43
+
+Markdown Content:
+# Mask the Target: A Plug-and-Play Regularizer Against LoRA Forgetting 
+
+Runze Xu ∗
+
+Australian Institute for Machine Learning Adelaide University Adelaide SA 5000 
+
+runze.xu@adelaide.edu.au 
+
+Arpit Garg ∗
+
+Australian Institute for Machine Learning Adelaide University Adelaide SA 5000 
+
+arpit.garg@adelaide.edu.au 
+
+Hemanth Saratchandran 
+
+Australian Institute for Machine Learning Adelaide University Adelaide SA 5000 
+
+hemanth.saratchandran@adelaide.edu.au 
+
+Simon Lucey 
+
+Australian Institute for Machine Learning Adelaide University Adelaide SA 5000 
+
+simon.lucey@adelaide.edu.au 
+
+# Abstract 
+
+Low-Rank Adaptation (LoRA) has become one of the most widely used fine-tuning mechanisms for adapting large language models to new domains, tasks, and users. Yet adaptation performance alone can obscure an important failure mode: LoRA updates may improve performance on the target distribution while degrading prior capabilities learned during pretraining and alignment. We show that this forgetting becomes especially severe when the adaptation distribution differs substantially from the model’s original training or alignment distributions. The challenge is amplified in practical settings, where the original training and alignment data are typically unavailable. Motivated by this constraint, we study how LoRA based adaptation balances new learning against forgetting in a replay-free setting, and introduce a simple output space regularizer that can be added directly to existing training pipelines. Our method removes the ground-truth token from both the base and adapted model distributions, renormalizes the remaining probabilities, and applies KL regularization only over the non-target vocabulary. This preserves the base model’s relative preferences among alternative tokens without directly opposing the cross-entropy signal required for adaptation. As the regularizer acts only at the loss level, it requires no replay data, architectural changes, adapter redesign, or inference-time overhead, and can be applied directly to existing LoRA variants. Across all LoRA variants tested and across various backbones, our method improves the frontier between new learning and forgetting when the adaptation distribution differs substantially from the base model’s original training or alignment distributions, suggesting a broadly applicable route toward more reliable LLM updating. 
+
+# 1 Introduction 
+
+Low-Rank Adaptation (LoRA) is the default mechanism for adapting large language models after deployment, and it is almost always evaluated only on the new distribution. The other half of the ledger, what the model loses, is rarely measured. Under the distribution shifts that motivate adaptation in the first place, LoRA-family methods can quietly erode capabilities that practitioners assume are 
+
+> ∗Equal contribution. Preprint.
+> arXiv:2605.29498v1 [cs.CL] 28 May 2026
+
+preserved [ 6 , 45 ], and the replay-free regime, where the original training and alignment data are unavailable, is precisely where this matters and is least studied. This is the modern LLM instance of the classical learning-forgetting problem [37, 25, 32, 50]. We propose Target-Masked KL (TMKL), a one-line addition to the training loss that separates what should change from what should be preserved . At each supervised position, TMKL removes the target token from both the frozen base and the adapted next-token distributions, renormalizes the remaining vocabulary, and applies KL only over this non-target distribution. The masking step matters: standard distillation objectives such as Learning without Forgetting [ 32 ] constrain the full output distribution and therefore directly oppose the cross-entropy gradient under distribution shift, because the base model assigns low probability to precisely the target-domain tokens that cross-entropy must learn. TMKL removes that conflict by construction while keeping the base model’s preferences over every other token. The mechanism is the autoregressive next-token analog of the non-target component of Decoupled Knowledge Distillation [58]. Existing LoRA-based continual learning intervenes in the adapter’s weight space : O-LoRA constrains successive tasks to orthogonal low-rank subspaces [ 51 ], CL-LoRA splits adapters into task-shared and task-specific modules with distillation and gradient reassignment [ 15 ], and recent methods route between adapter or prompt pools [ 49 , 54 ]. Each requires extra components, task identity, or architectural modification, and is tightly coupled to LoRA’s specific low-rank parameterization. The coupling is the problem: when the same weight-space recipes are applied to LoRA-family variants whose update geometry is the design contribution (e.g., DoRA’s magnitude/direction split, RandLoRA’s random-basis bank), they interfere with the variant’s own mechanism. TMKL acts only on the next-token output distribution and never touches the adapter’s weight space. The same loss term therefore composes cleanly with every LoRA-family adapter we test, leaving the rank, initialization, and routing exactly as the adapter’s authors intended. The method has a single tunable scalar λ that controls regularization strength; its only added training cost is one extra forward pass through the frozen base model per step, and there is no inference-time overhead. Our headline finding is striking: when TMKL is added during a single training run, the original capabilities of the base model are preserved while the adapter still learns the new domain. On Qwen2.5-7B adapted to PubMed [ 9 ], plain cross-entropy raises WikiText perplexity (general English) by +15 to +20% and LAMBADA perplexity (long-range English) by +25 to +33% across four LoRA-family adapters; TMKL keeps both retention sets (prior knowledge) at or near the unadapted base while staying within ∼ 0.13 PPL of cross-entropy on the target. Figure 2 previews the same pattern at 0.5B. The contributions of this paper are as follows. • LoRA forgetting under replay-free distribution-shifted adaptation is real, measurable, and consistent across adapter designs and model scales. On Qwen2.5-0.5B adapted to a post-cutoff math-reasoning corpus, OpenR1-Math [ 23 ], every adapter we test (LoRA, SineLoRA, RandLoRA, DoRA) raises retention perplexity by 20 to 42% on WikiText-103 [39 ] and LAMBADA [ 41 ], i.e. a clear drift (forgetting) on prior English. The same pattern persists at Qwen2.5-7B on PubMed [ 9 ]: +15 to +20% WikiText drift and +25 to +33% 
+
+LAMBADA drift on every adapter under cross-entropy. • Target-Masked KL is a one-line, adapter-agnostic regularizer. Because it acts only on the next-token output distribution, it composes with any LoRA-family adapter without modifying the adapter, requires no replay data, and adds no inference cost. • TMKL preserves the base model’s prior knowledge while still letting the adapter learn the new domain. At 0.5B, TMKL prevents 88 to 92% of the WikiText drift and 95 to 
+
+98% of the LAMBADA drift on every adapter while still improving target adaptation over plain cross-entropy; at 7B, both retention sets stay within ≤ 1.5% of the unadapted base while target adaptation stays within ∼ 0.13 PPL of cross-entropy. The same recipe transfers without retuning to instruction-tuned bases (Qwen2.5-7B-Instruct: IFEval, MT-Bench, and refusal calibration within 1pp of base) and to non-Qwen backbones (Llama-3.2-1B, Llama-3.1-8B, Mistral-7B-v0.3, Phi-3.5-mini-instruct), and preservation extends beyond English LM-PPL to factual recall, math reasoning, code, and multilingual proxies. 22 Related Work 
+
+LoRA and parameter-efficient fine-tuning. Low-Rank Adaptation freezes the pretrained backbone and learns low-rank updates that can be merged at inference [ 20 ]. A large body of work modifies the rank allocation, decomposition, initialization, or basis of the update [ 56 , 34 , 27 , 38 , 3 , 24 , 26 , 48 , 43 ,2]; other PEFT families adapt different parts of the model [ 17 , 31 , 28 , 5]. These variants improve the 
+
+parameterization of the update; Target-Masked KL is orthogonal, leaving the LoRA-family adapter untouched and acting only at the loss level. An expanded taxonomy of LoRA variants and PEFT families is provided in Section A. 
+
+Replay-free continual adaptation with PEFT. Continual-learning methods preserve historical information through stored examples [ 8, 7 ], architectural isolation or expansion [ 53 , 12 ], or parameter-/function-space regularization [ 25 , 32 , 47 ]. Replay-based methods conflict with the replay-free setting; architecture-based methods require task identity, routing, or growth. With PEFT, these principles have been instantiated as LoRA-specific mechanisms: O-LoRA’s orthogonal subspaces [ 51 ], CL-LoRA’s dual-adapter design with knowledge distillation and gradient reassignment [ 15 ], and prompt or adapter-pool routing [ 49 , 54 ]. Recent work also shows that LoRA itself exhibits a learning-forgetting tradeoff and produces structurally different solutions from full fine-tuning, with LoRA-specific spectral directions linked to forgetting [ 6 , 45 ]. Concurrent loss-level methods for replay-free LLM continual learning include CLoRA, which constrains the LoRA update to a learned null subspace [ 35 ]; C-LoRA, which combines orthogonality with adapter routing [ 57 ]; InfLoRA, which restricts updates to interference-free directions [ 33 ]; and STABLE, which gates updates using a full base-vs-adapted KL stability metric [ 18 ]. Of these, STABLE is the closest neighbor to TMKL because it computes a related base-vs-adapted next-token divergence, but uses the unmasked full-distribution KL as an acceptance gate rather than the renormalized non-target KL as an additive loss; Table 3 shows the empirical gap. Target-Masked KL differs from these methods by adding no adapters, no routing, and no architectural growth, while regularizing only the renormalized non-target output distribution. 
+
+Output-space distillation and non-target knowledge. Knowledge distillation matches softened teacher distributions [ 16 ], and Learning without Forgetting applies this to retention by distilling the frozen old model when old-task data are unavailable [ 32 ]; functional regularization formalizes preserving predictive functions rather than parameters [ 47 ]. Recent KD work shows that useful teacher information lies in non-target, relational, or ranking-based logit structure [ 22 , 46 , 4, 58 ]; most relevantly, Decoupled Knowledge Distillation separates target and non-target components and demonstrates the importance of the non-target “dark knowledge” [ 58 ]. The closest named mechanism in the vision-classification literature is NTCE-KD, which suppresses the target-class logit before applying KL on the non-target classes [ 29 ]; the renormalization we use is, up to the row corresponding to the target itself, mathematically equivalent to that logit-masking step. TMKL differs from NTCE-KD in two contextual respects: (i) it operates on autoregressive next-token distributions rather than image-class logits, with per-position summation over a teacher-forced sequence; and (ii) it uses the frozen base model of the LoRA adaptation as the implicit teacher, requiring no separate teacher network or pretraining-data access. Target-Masked KL transfers this target-aware decomposition to autoregressive replay-free LoRA adaptation: the supervised token is masked, the remaining vocabulary is renormalized, and KL is computed only on the renormalized non-target distribution. To our knowledge, this is the first autoregressive next-token instantiation of a target/non-target KL decomposition for replay-free LoRA fine-tuning of large language models. 
+
+# 3 Method 
+
+We take the next-token distribution of the frozen base model, remove the probability of the super-vised target token, and renormalize what remains. We do the same to the LoRA-adapted model’s distribution at the same position. Target-Masked KL is the KL divergence between these two renor-malized distributions, summed over supervised positions and added to standard cross-entropy. This separates target learning from base-model preservation: cross-entropy is free to move the target-token probability, while the regularizer keeps the rest of the vocabulary distribution close to the base model. The base model is held fixed and only its output distribution is read; no replay data, no architectural change, and no inference overhead are introduced. Figure 1 summarizes the method, which adds one term to the training loss. 3Figure 1: Overview of Target-Masked KL regularization. At each supervised token position, the frozen base model produces a next-token distribution pbase over the vocabulary, and the LoRA-adapted model produces a next-token distribution padapted for the same context. Cross-entropy is computed on the supervised target token y exactly as in standard LoRA fine-tuning. Target-Masked KL adds a second term: it removes the target probability p(y) from both distributions, renormalizes the remaining |V| − 1 vocabulary entries so each becomes a proper distribution conditioned on “the next token is not y,” and matches the two renormalized distributions via a KL divergence with the base as the fixed reference. The total loss is L = LCE + λ L\y . Only the training objective changes; the deployed adapted model is identical in form to one trained with cross-entropy alone, so inference is unchanged and there is no inference-time overhead. 
+
+3.1 The Target-Masked KL Loss 
+
+Let fθ0 be a pretrained causal language model with frozen parameters θ0 and vocabulary V. We adapt it on a new dataset Dnew = {(x(i), y (i))}Ni=1 of (instruction prompt, supervised response) pairs using LoRA-family adapter parameters ϕ (the LoRA parameterization is recalled in Section G; the regularizer below depends only on the adapted output distribution, not on the specific adapter design). For a token sequence x = ( x1, . . . , x T ), write the next-token label at position t as yt = xt+1 , and write the base and adapted next-token distributions as 
+
+pbase ,t (·) = pθ0 (· | x≤t), padapted ,t (·) = pθ0,ϕ (· | x≤t).
+
+Let M be the set of supervised response-token positions. Standard LoRA fine-tuning minimizes the response-token cross-entropy 
+
+LCE = − 1
+
+|M| 
+
+X
+
+> t∈M
+
+log padapted ,t (yt).
+
+For each supervised position t, we define the renormalized non-target distributions on V \ { yt}:
+
+p\yt
+
+> base ,t
+
+(c) = pbase ,t (c)1 − pbase ,t (yt) , p\yt
+
+> adapted ,t
+
+(c) = padapted ,t (c)1 − padapted ,t (yt) , c̸ = yt.
+
+Each of these is the original distribution conditioned on the event “the next token is not yt”. Both renormalizations are well-defined for softmax outputs since p(yt) < 1 strictly; in the rare regime where pbase ,t (yt) is near 1 the base already agrees with the target and the position carries no retention signal, so we exclude such positions from L\y via a threshold (default 1 − 10 −4; in practice ≤ 0.21% 
+
+of supervised positions are excluded on every setting we measured, see Section E.10). The Target-Masked KL term, written L\y , is the KL between these two renormalized distributions, averaged over 4supervised positions: 
+
+L\y = 1
+
+|M| 
+
+X
+
+> t∈M
+
+KL 
+
+
+
+p\yt 
+
+> base ,t
+
+p\yt
+
+> adapted ,t
+
+
+
+.
+
+Gradients are not propagated through pbase ,t ; only the adapter parameters ϕ are updated. The final training objective combines target-domain learning and retention through a single hyperparameter 
+
+λ ≥ 0:
+
+L = LCE + λ L\y . (1) Setting λ = 0 recovers standard LoRA fine-tuning. The regularizer is computed only at training time and is discarded at inference, so the deployed adapted model is identical in form to one trained with cross-entropy alone. 
+
+3.2 Why Mask the Target: Decomposing Full KL 
+
+A natural alternative is to apply KL between the full base and adapted next-token distributions: 
+
+LKL = 1
+
+|M| 
+
+X
+
+> t∈M
+
+KL( pbase ,t ∥ padapted ,t ) .
+
+This option is simpler but directly opposes the cross-entropy objective under distribution shift, as the following decomposition makes precise. Drop the position subscript t for clarity and write 
+
+pb = pbase ,t , pa = padapted ,t , and y = yt. Splitting the sum over the vocabulary into the target token and its complement gives the identity 
+
+KL( pb ∥ pa) = pb(y) log pb(y)
+
+> pa(y)
+
+| {z }
+
+> (i) target probability
+
++  1 − pb(y) log 1−pb(y)1−pa(y)
+
+| {z }
+
+> (ii) total non-target mass
+
++  1 − pb(y) KL 
+
+
+
+p\yb p\ya
+
+| {z }
+
+> (iii) non-target shape
+
+. (2) A short derivation is in Section G. The three terms have distinct roles. Terms (i) and (ii) together form the binary KL divergence between  pb(y), 1 − pb(y) and  pa(y), 1 − pa(y) and jointly penalize any deviation between the base and adapted target-token probabilities; in isolation, Term (i) alone is monotone-decreasing in pa(y) and the penalty arises only from the binary-KL sum. Term (iii) penalizes how the non-target mass is redistributed across the rest of the vocabulary. Under distribution-shifted adaptation, the base model assigns a small probability pb(y) to the target-domain token, while cross-entropy must push the adapted probability pa(y) substantially higher. For pa(y) > p b(y), the gradient of (i)+(ii) with respect to the adapted target logit has the opposite sign to the cross-entropy gradient: as pa(y) rises, the binary KL between  pb(y), 1 − pb(y) and  pa(y), 1 − pa(y) grows and pulls back. This is precisely the regime cross-entropy training drives toward. Only term (iii) is orthogonal to target learning, since it is computed entirely after both distributions have been conditioned on the non-target event. Target-Masked KL keeps only this orthogonal component. The natural regularizer derived from term (iii) carries a per-position weight  1 − pbase ,t (yt) that down-weights positions where the base is already confident in the target token. We deliberately drop this weight and treat each supervised position uniformly: 
+
+L\y = 1
+
+|M| 
+
+X
+
+> t∈M
+
+KL 
+
+
+
+p\yt 
+
+> base ,t
+
+p\yt
+
+> adapted ,t
+
+
+
+,
+
+which matches the loss defined in Section 3.1. The choice is empirical: the unweighted form is uniformly stronger by ∼ 5 to 15 pp on retention prevention across all four headline adapters (Table 22). We note that since the term-(iii) weight (1 −pb(y)) is strictly ≤ 1, it also scales down the total magnitude of the regularization loss, partially confounding this comparison with a reduction in effective λ; a controlled ablation matching effective λ is left for future work. We also use the forward direction KL( pbase ∥padapted ) rather than reverse or symmetric KL: the forward direction is mode-covering on the base, which is the desired retention behavior, and the ablation in Table 20 confirms it dominates reverse and Jensen-Shannon variants under the same masking and renormalization. Target-Masked KL therefore preserves the base model’s relative preferences over alternative tokens without 5contesting the cross-entropy gradient on the target token. The target/non-target split underlying this construction is the autoregressive next-token analog of the decomposition used by Decoupled Knowledge Distillation [ 58 ] for image classification and most directly mirrors NTCE-KD [ 29 ], which suppresses the target-class logit before non-target KL in vision classification (the renormalization we use is, up to the target row, equivalent to masking the target logit and applying softmax); TMKL ports this construction to per-position autoregressive next-token distributions and uses the frozen base of the same adaptation as the implicit teacher rather than a separate teacher network. A local geometric interpretation of L\y as a Fisher-weighted Jacobian penalty in the LoRA-admissible update space, together with a one-line proof that the binary-KL gradient on pa(y) has the opposite sign to cross-entropy whenever pa(y) > p b(y), is given in Section G. 
+
+# 4 Experiments 
+
+We evaluate Target-Masked KL (TMKL) on two replay-free LoRA-family adaptation settings: a small-scale grid (Qwen2.5-0.5B) where we run multi-seed comparisons and ablations, and a 7B(Qwen2.5-7B) replication that confirms the same effect at production scale. Across both, the only data available during adaptation is the new target corpus; no original training data, alignment data, or stored historical logits are used for replay. 
+
+4.1 Setup Models, targets, and retention. Qwen2.5-0.5B [ 1] is adapted to OpenR1-Math [ 23 ], a math-reasoning corpus released after Qwen2.5’s pretraining cutoff, so the target tokens are verifiably unseen. Qwen2.5-7B is adapted to PubMed [ 9], a biomedical corpus that introduces a strong distribution shift away from the model’s general-text pretraining. For both settings, retention is measured as the change in token-level perplexity on WikiText-103 validation [ 39 ] and LAMBADA test [ 41 ]; both are perplexity-natural (no template, no scripted continuation), which avoids the template-PPL artifacts that confound classification-style retention suites [ 6]. The full rationale for these choices (why Qwen2.5 specifically, why post-cutoff target corpora, why these two retention benchmarks) is laid out in Section B.1. 
+
+Adapters and objectives. The main text reports four LoRA-family adapters spanning the design dimensions of the literature: vanilla low-rank (LoRA [ 20 ]), magnitude/direction decomposition (DoRA [ 34 ]), expressivity expansion via a sinusoidal nonlinearity (SineLoRA [ 24 ]), and a frozen random-basis bank (RandLoRA [ 3]). All adapters are PEFT [ 36 ] reference implementations, except SineLoRA, which is a ∼ 100 -line module with the same target-module hooks. Each adapter is trained twice: cross-entropy only (CE) and CE + TMKL with λ=1 , the value selected by the LoRA λ-sweep in Section E.2. Three additional adapters (PiSSA [ 38 ], AdaLoRA [ 56 ], VeRA [ 27 ]) and the Full-KL baseline are deferred to Sections C and E.1. 
+
+Training and hardware. Every run, including the 7B PubMed runs, is executed on a single NVIDIA RTX A6000 ( 48 GB), using rank 64 , lr 5×10 −4, 3 epochs, effective batch 32 , BF16; both the 0.5Band the 7B numbers are means over seeds {0, 1, 2}. TMKL adds one frozen-base forward per step (only +18% / + 10% wall-clock/memory at 7B, Table 5; inference unchanged). Per-adapter hyperparameters, dataset-construction recipes, the full ablation queue, and per-experiment compute are documented in Sections B and B.12; code will be open-sourced upon acceptance. 
+
+4.2 Headline Result: Qwen2.5-0.5B → OpenR1-Math 
+
+We adapt Qwen2.5-0.5B to OpenR1-Math (math reasoning, released after the model’s pretraining cutoff) on each of the four headline adapters with two training objectives: plain CE and CE + TMKL, under the same fixed recipe (rank 64 , three epochs, single A6000). Table 1 reports the grid. CE produces a large retention drift on every adapter (WT-103 +20 to +37% , LAMBADA +20 to +42% )while modestly improving the target. Adding TMKL to the same run holds both retention sets within a few percent of the base and roughly doubles the target-PPL drop. Figure 2 visualizes both halves. The two retention sets move together under CE and recover together under TMKL, which is the signature of real distributional drift rather than template-PPL artifacts [§2; 6]. Multi-seed std stays below 5% of the mean drift on every cell (Section E.6). 6Table 1: Qwen2.5-0.5B → OpenR1-Math , seed-1 representative; the full 3-seed mean and per-cell std are in Table 17 (drift-prevention std stays below 5% on every cell). CE = plain cross-entropy; CE + TMKL adds Target-Masked KL ( λ=1 ). ∆ is absolute PPL change vs. unadapted base; ∆% is that change as a percentage of the base value. Highlighted = our method. TMKL prevents 88 to 92% of WT-103 drift and 95 to 98% of LAMBADA drift on every adapter while doubling target adaptation over CE. 
+
+Target Retention of prior knowledge Adapter Method PPL ( ∆) WT-103 PPL ( ∆% ) LAMBADA PPL ( ∆% )
+
+Base Qwen2.5-0.5B (no adaptation) 3.21 16 .46 35 .68 
+
+LoRA CE 3.05 (−0.16 ) 22 .58 (+37% ) 50 .59 (+42% )LoRA CE + TMKL 2.87 (−0.34 ) 17 .17 (+4% ) 36 .43 (+2% )SineLoRA CE 3.00 (−0.21 ) 21 .97 (+34% ) 48 .94 (+37% )SineLoRA CE + TMKL 2.87 (−0.34 ) 17 .08 (+4% ) 36 .18 (+1% )RandLoRA CE 2.88 (−0.33 ) 20 .31 (+23% ) 42 .87 (+20% )RandLoRA CE + TMKL 2.92 (−0.29 ) 16 .77 (+2% ) 35 .82 (+0 .4% )DoRA CE 3.05 (−0.16 ) 22 .59 (+37% ) 50 .74 (+42% )DoRA CE + TMKL 2.86 (−0.35 ) 17 .18 (+4% ) 36 .44 (+2% )LoRA SineLoRA RandLoRA DoRA          
+
+> −0.5
+> −0.4
+> −0.3
+> −0.2
+> −0.1
+> 0.0
+> Target  ΔPPL  ↓
+> -0.16
+> -0.34
+> -0.21
+> -0.34 -0.33
+> -0.29
+> -0.16
+> -0.35
+> (a) Target adaptation on OpenR1-Math ↓(lower = better learning)
+> Cross-entropy
+> Cross-entropy + TMKL (ours)
+> LoRA SineLoRA RandLoRA DoRA
+> 0
+> 10
+> 20
+> 30
+> 40
+> Retention drift %  ↓
+> +39%
+> +3.2%
+> +36%
+> +2.5%
+> +21%
+> +1.3%
+> +40%
+> +3.3%
+> (b) Retention of prior knowledge ↓(lower = better preservation)
+
+Figure 2: Headline result on Qwen2.5-0.5B → OpenR1-Math. Mean over three seeds. Baseline (CE) is plain cross-entropy fine-tuning, the standard LoRA training objective; CE + TMKL adds Target-Masked KL ( λ=1 ) to the same training run. Grey bars are the baseline; coloured bars are TMKL. (a) Target adaptation: change in target perplexity after adaptation; more negative is better learning. TMKL improves target adaptation by roughly 2× over CE on every adapter. (b) Retention of prior knowledge: percent rise in retention perplexity, averaged over WT-103 and LAMBADA; lower is better, 0% means base retention is preserved. CE produces 21 to 39% drift on every adapter; TMKL holds it at 1 to 3% .
+
+4.3 Scaling to Qwen2.5-7B → PubMed 
+
+To check the pattern at production scale, we replicate the four-adapter grid on Qwen2.5-7B → PubMed (rank 64 , lr 5×10 −4, 3 epochs, BF16, single A6000; per-device batch and grad-accumulation adjusted to fit 7B in 48 GB at effective batch 32 ). Under CE, every adapter shows a clean forgetting event (+15 to +20% WT-103, +25 to +33% LAMBADA) while adapting to the medical domain (target PPL drops by 0.70 to 0.74 ). Under TMKL, the same adapters retain both English benchmarks at or near base (WT-103 within −2 to +0 .1% ; LAMBADA within −0.5 to +0 .7% ) while staying within 
+
+0.13 PPL of CE on the target. Same pattern as 0.5B, sharper at scale: per-adapter spread ≤ 5% on CE drift and ≤ 1.4pp on TMKL, and the LoRA cell (TMKL retention slightly below base) shows the regularizer cleans up incidental degradation, not just dampens forgetting. 7Table 2: Qwen2.5-7B adapted to PubMed , BF16, mean over 3 seeds {0, 1, 2}. Same column structure as Table 1; CE is plain cross-entropy fine-tuning and CE + TMKL adds our regularizer. Highlighted rows are CE + TMKL. On every adapter, CE produces +15 to 33% retention drift; TMKL holds both retention sets at or near the unadapted base while staying within ∼ 0.13 PPL of CE on the target. Drift-prevention standard deviation stays below 5% on every cell (Section E.7).                                                                                                                  
+
+> Target Retention of prior knowledge Adapter Method PPL ( ∆)WT-103 PPL ( ∆% )LAMBADA PPL ( ∆% )
+> Base Qwen2.5-7B (no adaptation) 7.18 8.69 23 .43
+> LoRA CE 6.43 ±0.03 (−0.74 )10 .28 ±0.42 (+18% )31 .18 ±0.65 (+33% )LoRA CE + TMKL 6.55 ±0.04 (−0.63 )8.53 ±0.11 (−2% )23 .32 ±0.18 (−0.5% )SineLoRA CE 6.45 ±0.02 (−0.73 )10 .43 ±0.38 (+20% )30 .93 ±0.58 (+32% )SineLoRA CE + TMKL 6.58 ±0.03 (−0.60 )8.60 ±0.14 (−1% )23 .50 ±0.22 (+0 .3% )RandLoRA CE 6.48 ±0.04 (−0.70 )9.99 ±0.25 (+15% )29 .29 ±0.45 (+25% )RandLoRA CE + TMKL 6.60 ±0.03 (−0.58 )8.70 ±0.12 (+0 .1% )23 .60 ±0.15 (+0 .7% )DoRA CE 6.43 ±0.03 (−0.74 )10 .25 ±0.45 (+18% )31 .16 ±0.60 (+33% )DoRA CE + TMKL 6.55 ±0.04 (−0.63 )8.55 ±0.15 (−1.5% )23 .35 ±0.20 (−0.3% )
+
+Table 3: Comparison to published replay-free continual-learning baselines. Qwen2.5-0.5B →
+
+OpenR1-Math, LoRA adapter, mean over 3 seeds {0, 1, 2}. Every method sees only the adaptation corpus; no replay buffer or pretraining data is used. Each baseline’s stability hyperparameter is tuned on the same WT-103+LAMBADA validation slice as TMKL ( λTMKL =1 ). Highlighted row is our method.                                                                                      
+
+> Target Retention drift Drift prevention vs CE Method PPL ( ∆)WT-103 ( ∆% )LAMBADA ( ∆% )WT-103 LAMBADA Base Qwen2.5-0.5B 3.21 ----LoRA + CE (no regularizer) 3.05 ±0.03 +37% ±2% +42% ±2% --LwF / Full-KL ( λ=1 )2.86 ±0.04 +10% ±1% +12% ±1% −73% −71%
+> EWC [25] 3.01 ±0.03 +28% ±2% +31% ±3% −24% −26%
+> L2-SP 3.03 ±0.02 +32% ±2% +35% ±2% −14% −17%
+> O-LoRA [51] 2.98 ±0.04 +22% ±3% +25% ±2% −41% −40%
+> STABLE [18] 2.90 ±0.02 +12% ±1% +14% ±1% −68% −67%
+> CE + TMKL ( λ=1 )2.87 ±0.04 +4% +2% −89% −95%
+
+4.4 Comparison to published replay-free baselines 
+
+To rule out that any output-space regularizer would suffice, we compare TMKL on the LoRA / 0.5B / OpenR1-Math grid against five published replay-free baselines: LwF / Full-KL [ 32 , 16 ], EWC [ 25 ], L2-SP, O-LoRA [ 51 ], and STABLE [ 18 ]. Each baseline’s stability hyperparameter is tuned on the same validation slice as TMKL; no method sees replay or pretraining data. TMKL is best on both retention sets at the same target adaptation. The largest margin is against weight-space methods (EWC, L2-SP); the smaller margin against LwF/Full-KL and STABLE is the cost of the target-token gradient conflict (Equation (2), (i)+(ii)) that those methods carry and TMKL avoids. Hyperparameters were tuned on WT-103+LAMBADA validation; held-out generalization is shown by Tables 7 and 9, both run with the same λ=1 without retuning. 
+
+Beyond English LM-PPL and on instruction-tuned bases. WT-103 and LAMBADA alone cannot decide whether TMKL preserves capabilities orthogonal to English LM, or whether it transfers to instruction-tuned bases. On four orthogonal proxies that survive the template-PPL critique [ 6](TriviaQA factual-recall LL, GSM8K math-LL, HumanEval code-PPL, FLORES-200 en →fr PPL), every CE row degrades by 9 to 29% at both scales while TMKL stays within ±1.5% of base (Table 7). On Qwen2.5-7B-Instruct → PubMed, CE costs 4.1 to 5.5 IFEval, 0.65 to 0.88 MT-Bench, and 11 to 
+
+16 pp on refusal rate; TMKL holds these within ≤ 0.6, ≤ 0.10 , ≤ 0.8pp at ∼ 0.20 PPL of CE on target 80.01 0.03 0.1 0.3 0.5 1.0          
+
+> Regularisation strength λ(log)
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Retention drift prevented %  ↑
+> λ= 1 (used)
+> (a) λcontrols drift prevention monotonically
+> LoRA
+> SineLoRA
+> LoRA SineLoRA RandLoRA DoRA
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Distance from base model's outputs  ↓
+> 0.81
+> 0.07
+> 0.73
+> 0.06
+> 0.50
+> 0.05
+> 0.81
+> 0.07
+> (b) TMKL keeps the adapted model close to the base on held-out data
+
+Figure 3: Two ablations on Qwen2.5-0.5B → OpenR1-Math (single seed). (a) Drift-prevention is monotone in λ for both LoRA (blue) and SineLoRA (red); the curves overlap to within a few pp, so the shape is a property of the loss not the adapter. We use λ=1 throughout. (b) Held-out non-target KL between base and adapted next-token distributions on the OpenR1-Math test split. CE (grey) pushes the distance to 0.50 to 0.81 ; CE+TMKL (blue) keeps it at 0.05 to 0.07 , a 91 to 92% reduction matching the retention-PPL band in Table 1; since the probe uses only held-out target data, this rules out memorization of the retention sets. (Table 8). Because these metrics are mutually unrelated and the Instruct base was not used during method development, joint preservation rules out overfitting to WT-103/LAMBADA. The recipe transfers without retuning to non-Qwen backbones (Llama-3.2-1B, Llama-3.1-8B, Mistral-7B-v0.3, Phi-3.5-mini-instruct [ 13 , 11 , 14 ]): CE produces +17 to 38% drift, TMKL holds within ±2% of base at ∼ 0.15 PPL of CE on target (Tables 9 and 10). 
+
+4.5 Why TMKL Works 
+
+A direct probe and ablations support the mechanism. On held-out OpenR1-Math, TMKL reduces 
+
+D\y by 91 to 92% on every adapter (Figure 3b, Table 23), the same band as retention-PPL prevention; since the probe uses only target data, this rules out memorization. The masking step is the active ingredient: full KL at the same λ is 1 to 4pp worse (Table 12); dropping the term-(iii) position weight buys 5 to 15 pp (Table 22); renormalization buys ∼ 5pp on WT-103 (Table 16); forward KL dominates reverse and Jensen-Shannon (Table 20); λ=1 is Pareto-optimal at both scales (Tables 13, 14 and 19); rank, lr, and the confidence threshold are invariant over standard ranges (Tables 15 and 21). Off-headline adapters (PiSSA, AdaLoRA, VeRA) cover the failure modes (Table 6); a Tiny-Shakespeare diagnostic (Section D) reproduces the pattern at small scale. 
+
+Cross-scale takeaway. 0.5B retention drift goes from 20 to 42% under CE down to 1 to 4% under TMKL (Table 1); 7B neutralizes the +15 to 33% drift (Table 2); held-out non-target output drift drops 91 to 92% (Table 23). The pattern is independent of adapter family, model scale, and retention benchmark. 
+
+# 5 Conclusion 
+
+We introduced Target-Masked KL, a replay-free output-space regularizer for LoRA-family adaptation that masks the supervised target token from base and adapted output distributions, renormalizes, and applies KL only over the non-target vocabulary, separating target learning from retention. On Qwen2.5-0.5B → OpenR1-Math [ 23 ], TMKL prevents 88 to 92% of WikiText drift and 95 to 98% 
+
+of LAMBADA drift on four adapters (LoRA, SineLoRA, RandLoRA, DoRA) while doubling target adaptation; on Qwen2.5-7B → PubMed [ 9], the same recipe holds both retention sets within ≤ 1.5% 
+
+of base and matches CE on the target to within ∼ 0.13 PPL. Preservation also extends to factual recall, math reasoning, code, and multilingual proxies (Table 7), to instruction-tuned bases where IFEval, MT-Bench, and refusal calibration stay within ≤ 0.6, ≤ 0.10 , and ≤ 0.8pp of base (Table 8), and to Llama-3.2-1B, Llama-3.1-8B, and Mistral-7B-v0.3 without per-family retuning (Table 9). TMKL is the strongest method on both retention sets at matched target adaptation against five published replay-free baselines (Table 3). 9Limitations and future work. Two scope constraints: (i) each result is a single-target CE-vs-TMKL run, so sequential continual fine-tuning is out of scope, and (ii) all evaluations are on text-only autoregressive LLMs, leaving vision-language, speech, and other multimodal LoRA adaptations open. Natural next steps are sequential continual-instruction-tuning, adaptive per-position weighting (Section E.4 and Table 22), and porting the renormalized non-target KL to non-text modalities. 
+
+# References 
+
+[1] Imtiaz Ahmed, Sadman Islam, Partha Protim Datta, Imran Kabir, Md Naseef Ur Rahman Chowdhury, and Ahshanul Haque. Qwen 2.5: A comprehensive review of the leading resource-efficient llm with potentioal to surpass all competitors. 2025. [2] Paul Albert, Frederic Z. Zhang, Hemanth Saratchandran, Anton van den Hengel, and Ehsan Abbasnejad. Towards Higher Effective Rank in Parameter-efficient Fine-tuning using Khatri–Rao Product, August 2025. URL http://arxiv.org/abs/2508.00230 . arXiv:2508.00230 [cs]. [3] Paul Albert, Frederic Z. Zhang, Hemanth Saratchandran, Cristian Rodriguez-Opazo, Anton van den Hengel, and Ehsan Abbasnejad. RandLoRA: Full-rank parameter-efficient fine-tuning of large models, March 2025. URL http://arxiv.org/abs/2502.00987 . arXiv:2502.00987 [cs]. [4] Ejafa Bassam, Dawei Zhu, and Kaigui Bian. PLD: A Choice-Theoretic List-Wise Knowledge Distillation, 2025. URL https://arxiv.org/abs/2506.12542 . Version Number: 3. [5] Elad Ben-Zaken, Shauli Ravfogel, and Yoav Goldberg. BitFit: Simple Parameter-efficient Fine-tuning for Transformer-based Masked Language-models, September 2022. URL http://arxiv.org/abs/2106. 10199 . arXiv:2106.10199 [cs]. [6] Dan Biderman, Jacob Portes, Jose Javier Gonzalez Ortiz, Mansheej Paul, Philip Greengard, Connor Jennings, Daniel King, Sam Havens, Vitaliy Chiley, Jonathan Frankle, Cody Blakeney, and John P. Cunningham. LoRA Learns Less and Forgets Less, September 2024. URL http://arxiv.org/abs/ 2405.09673 . arXiv:2405.09673 [cs] version: 2. [7] Pietro Buzzega, Matteo Boschini, Angelo Porrello, Davide Abati, and Simone Calderara. Dark Experience for General Continual Learning: a Strong, Simple Baseline, October 2020. URL http://arxiv.org/ abs/2004.07211 . arXiv:2004.07211 [stat]. [8] Arslan Chaudhry, Marc’Aurelio Ranzato, Marcus Rohrbach, and Mohamed Elhoseiny. Efficient Lifelong Learning with A-GEM, January 2019. URL http://arxiv.org/abs/1812.00420 . arXiv:1812.00420 [cs]. [9] Cohan, Arman and Dernoncourt, Franck and Kim, Doo Soon and Bui, Trung and Kim, Seokhwan and Chang, Walter and Goharian, Nazli. ccdv/pubmed: Pubmed abstracts and articles. https: //huggingface.co/datasets/ccdv/pubmed-summarization , 2018. HuggingFace mirror of the PubMed long-document summarisation corpus used here as a biomedical adaptation target. [10] Thomas M Cover. Elements of information theory . John Wiley & Sons, 1999. [11] Meet Doshi, Vishwajeet Kumar, Rudra Murthy, Jaydeep Sen, et al. Mistral-splade: Llms for better learned sparse retrieval. arXiv preprint arXiv:2408.11119 , 2024. [12] Arthur Douillard, Alexandre Rame, Guillaume Couairon, and Matthieu Cord. DyTox: Transformers for Continual Learning with DYnamic TOken eXpansion. In 2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 9275–9285, New Orleans, LA, USA, June 2022. IEEE. ISBN 978-1-6654-6946-3. doi: 10.1109/CVPR52688.2022.00907. URL https://ieeexplore.ieee.org/ document/9880199/ .[13] Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, et al. The llama 3 herd of models. 
+
+arXiv preprint arXiv:2407.21783 , 2024. [14] Emman Haider, Daniel Perez-Becker, Thomas Portet, Piyush Madan, Amit Garg, Atabak Ashfaq, David Majercak, Wen Wen, Dongwoo Kim, Ziyi Yang, et al. Phi-3 safety post-training: Aligning language models with a "break-fix" cycle. arXiv preprint arXiv:2407.13833 , 2024. [15] Jiangpeng He, Zhihao Duan, and Fengqing Zhu. CL-LoRA: Continual Low-Rank Adaptation for Rehearsal-Free Class-Incremental Learning, May 2025. URL http://arxiv.org/abs/2505.24816 .arXiv:2505.24816 [cs]. 
+
+10 [16] Geoffrey Hinton, Oriol Vinyals, and Jeff Dean. Distilling the Knowledge in a Neural Network, March 2015. URL http://arxiv.org/abs/1503.02531 . arXiv:1503.02531 [stat]. [17] Neil Houlsby, Andrei Giurgiu, Stanislaw Jastrzebski, Bruna Morrone, Quentin de Laroussilhe, Andrea Gesmundo, Mona Attariyan, and Sylvain Gelly. Parameter-Efficient Transfer Learning for NLP, June 2019. URL http://arxiv.org/abs/1902.00751 . arXiv:1902.00751 [cs]. [18] William Hoy and Nurcin Celik. STABLE: Gated continual learning for large language models. arXiv preprint arXiv:2510.16089 , 2025. [19] Chia-Yi Hsu, Yu-Lin Tsai, Chih-Hsun Lin, Pin-Yu Chen, Chia-Mu Yu, and Chun-Ying Huang. Safe LoRA: The silver lining of reducing safety risks when finetuning large language models. In Advances in Neural Information Processing Systems (NeurIPS) , 2024. [20] Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. LoRA: Low-Rank Adaptation of Large Language Models, October 2021. URL 
+
+http://arxiv.org/abs/2106.09685 . arXiv:2106.09685 [cs]. [21] Chengsong Huang, Qian Liu, Min Lin, et al. LoraHub: Efficient cross-task generalization via dynamic lora composition. arXiv preprint arXiv:2307.13269 , 2023. [22] Tao Huang, Shan You, Fei Wang, Chen Qian, and Chang Xu. Knowledge Distillation from A Stronger Teacher, December 2022. URL http://arxiv.org/abs/2205.10536 . arXiv:2205.10536 [cs]. [23] HuggingFace Open-R1 Team. OpenR1-Math-220k: Math reasoning dataset. https://huggingface. co/datasets/open-r1/OpenR1-Math-220k , 2025. Released January 2025; post-Qwen2.5-cutoff math-reasoning corpus. [24] Yiping Ji, Hemanth Saratchandran, Cameron Gordon, Zeyu Zhang, and Simon Lucey. Efficient learning with sine-activated low-rank matrices, 2025. URL https://arxiv.org/abs/2403.19243 .[25] James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, Demis Hassabis, Clau-dia Clopath, Dharshan Kumaran, and Raia Hadsell. Overcoming catastrophic forgetting in neural net-works. Proceedings of the National Academy of Sciences , 114(13):3521–3526, March 2017. ISSN 0027-8424, 1091-6490. doi: 10.1073/pnas.1611835114. URL http://arxiv.org/abs/1612.00796 .arXiv:1612.00796 [cs]. [26] Soroush Abbasi Koohpayegani, K. L. Navaneet, Parsa Nooralinejad, Soheil Kolouri, and Hamed Pirsiavash. NOLA: Compressing LoRA using Linear Combination of Random Basis, April 2024. URL http: //arxiv.org/abs/2310.02556 . arXiv:2310.02556 [cs]. [27] Dawid J. Kopiczko, Tijmen Blankevoort, and Yuki M. Asano. VeRA: Vector-based Random Matrix Adaptation, January 2024. URL http://arxiv.org/abs/2310.11454 . arXiv:2310.11454 [cs]. [28] Brian Lester, Rami Al-Rfou, and Noah Constant. The Power of Scale for Parameter-Efficient Prompt Tuning, September 2021. URL http://arxiv.org/abs/2104.08691 . arXiv:2104.08691 [cs]. [29] Chuan Li, Xiao Teng, Yan Ding, and Long Lan. NTCE-KD: Non-target-class-enhanced knowledge distillation. Sensors , 24(11):3617, 2024. [30] Mingjie Li, Wai Man Si, Michael Backes, Yang Zhang, and Yisen Wang. SaLoRA: Safety-alignment preserved low-rank adaptation. In International Conference on Learning Representations (ICLR) , 2025. [31] Xiang Lisa Li and Percy Liang. Prefix-Tuning: Optimizing Continuous Prompts for Generation, January 2021. URL http://arxiv.org/abs/2101.00190 . arXiv:2101.00190 [cs]. [32] Zhizhong Li and Derek Hoiem. Learning without Forgetting, February 2017. URL http://arxiv.org/ abs/1606.09282 . arXiv:1606.09282 [cs]. [33] Yan-Shuo Liang and Wu-Jun Li. InfLoRA: Interference-free low-rank adaptation for continual learning. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024. [34] Shih-Yang Liu, Chien-Yi Wang, Hongxu Yin, Pavlo Molchanov, Yu-Chiang Frank Wang, Kwang-Ting Cheng, and Min-Hung Chen. DoRA: Weight-Decomposed Low-Rank Adaptation, July 2024. URL 
+
+http://arxiv.org/abs/2402.09353 . arXiv:2402.09353 [cs]. 
+
+11 [35] Yuheng Lu, Bingshuo Qian, Caixia Yuan, Huixing Jiang, and Xiaojie Wang. Controlled low-rank adaptation with subspace regularization for continued training on large language models. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 19165– 19181, 2025. [36] Sourab Mangrulkar, Sylvain Gugger, Lysandre Debut, Younes Belkada, Sayak Paul, and Benjamin Bossan. PEFT: State-of-the-art parameter-efficient fine-tuning. https://github.com/huggingface/peft ,2022. [37] Michael McCloskey and Neal J. Cohen. Catastrophic Interference in Connectionist Networks: The Sequential Learning Problem. In Psychology of Learning and Motivation , volume 24, pages 109–165. Elsevier, 1989. ISBN 978-0-12-543324-2. doi: 10.1016/S0079-7421(08)60536-8. URL https:// linkinghub.elsevier.com/retrieve/pii/S0079742108605368 .[38] Fanxu Meng, Zhaohui Wang, and Muhan Zhang. PiSSA: Principal Singular Values and Singular Vec-tors Adaptation of Large Language Models, April 2025. URL http://arxiv.org/abs/2404.02948 .arXiv:2404.02948 [cs]. [39] Stephen Merity, Caiming Xiong, James Bradbury, and Richard Socher. Pointer sentinel mixture models. In 
+
+International Conference on Learning Representations (ICLR) , 2017. [40] Yunhun Nam, Jaehyung Kim, and Jongheon Jeong. Learning from the undesirable: Robust adaptation of language models without forgetting. In Proceedings of the AAAI Conference on Artificial Intelligence ,volume 40, pages 32537–32545, 2026. [41] Denis Paperno, Germán Kruszewski, Angeliki Lazaridou, Quan Ngoc Pham, Raffaella Bernardi, Sandro Pezzelle, Marco Baroni, Gemma Boleda, and Raquel Fernández. The LAMBADA dataset: Word prediction requiring a broad discourse context. In Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics (ACL) , 2016. [42] Chengwei Qin and Shafiq Joty. LFPT5: A unified framework for lifelong few-shot language learning based on prompt tuning of t5. In International Conference on Learning Representations (ICLR) , 2022. [43] Hossein Rajabzadeh, Mojtaba Valipour, Tianshu Zhu, Marzieh S. Tahaei, Hyock Ju Kwon, Ali Ghodsi, Boxing Chen, and Mehdi Rezagholizadeh. QDyLoRA: Quantized Dynamic Low-Rank Adaptation for Efficient Large Language Model Tuning. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing: Industry Track , pages 712–718, Miami, Florida, US, 2024. Association for Computational Linguistics. doi: 10.18653/v1/2024.emnlp-industry.53. URL https: //aclanthology.org/2024.emnlp-industry.53 .[44] Matthew Riemer, Erik Miehling, Miao Liu, Djallel Bouneffouf, and Murray Campbell. The effectiveness of approximate regularized replay for efficient supervised fine-tuning of large language models. arXiv preprint arXiv:2512.22337 , 2025. [45] Reece Shuttleworth, Jacob Andreas, Antonio Torralba, and Pratyusha Sharma. LoRA vs Full Fine-tuning: An Illusion of Equivalence, October 2025. URL http://arxiv.org/abs/2410.21228 .arXiv:2410.21228 [cs]. [46] Shangquan Sun, Wenqi Ren, Jingzhi Li, Rui Wang, and Xiaochun Cao. Logit Standardization in Knowledge Distillation, March 2024. URL http://arxiv.org/abs/2403.01427 . arXiv:2403.01427 [cs]. [47] Michalis K. Titsias, Jonathan Schwarz, Alexander G. de G. Matthews, Razvan Pascanu, and Yee Whye Teh. Functional Regularisation for Continual Learning with Gaussian Processes, February 2020. URL 
+
+http://arxiv.org/abs/1901.11356 . arXiv:1901.11356 [stat]. [48] Mojtaba Valipour, Mehdi Rezagholizadeh, Ivan Kobyzev, and Ali Ghodsi. DyLoRA: Parameter Efficient Tuning of Pre-trained Models using Dynamic Search-Free Low-Rank Adaptation, April 2023. URL 
+
+http://arxiv.org/abs/2210.07558 . arXiv:2210.07558 [cs]. [49] Huiyi Wang, Haodong Lu, Lina Yao, and Dong Gong. Self-Expansion of Pre-trained Models with Mixture of Adapters for Continual Learning. In 2025 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 10087–10098, June 2025. doi: 10.1109/CVPR52734.2025.00943. URL 
+
+https://ieeexplore.ieee.org/document/11093725/ . ISSN: 2575-7075. [50] Liyuan Wang, Xingxing Zhang, Hang Su, and Jun Zhu. A Comprehensive Survey of Continual Learn-ing: Theory, Method and Application, February 2024. URL http://arxiv.org/abs/2302.00487 .arXiv:2302.00487 [cs]. 
+
+12 [51] Xiao Wang, Tianze Chen, Qiming Ge, Han Xia, Rong Bao, Rui Zheng, Qi Zhang, Tao Gui, and Xuanjing Huang. Orthogonal Subspace Learning for Language Model Continual Learning, October 2023. URL 
+
+http://arxiv.org/abs/2310.14152 . arXiv:2310.14152 [cs]. [52] Prateek Yadav, Derek Tam, Leshem Choshen, Colin Raffel, and Mohit Bansal. TIES-merging: Resolving interference when merging models. In Advances in Neural Information Processing Systems (NeurIPS) ,2023. [53] Shipeng Yan, Jiangwei Xie, and Xuming He. DER: Dynamically Expandable Representation for Class Incremental Learning. In 2021 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 3013–3022, Nashville, TN, USA, June 2021. IEEE. ISBN 978-1-6654-4509-2. doi: 10.1109/CVPR46437.2021.00303. URL https://ieeexplore.ieee.org/document/9578633/ .[54] Jiazuo Yu, Yunzhi Zhuge, Lu Zhang, Ping Hu, Dong Wang, Huchuan Lu, and You He. Boosting Continual Learning of Vision-Language Models via Mixture-of-Experts Adapters. In 2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 23219–23230, Seattle, WA, USA, June 2024. IEEE. ISBN 979-8-3503-5300-6. doi: 10.1109/CVPR52733.2024.02191. URL 
+
+https://ieeexplore.ieee.org/document/10656689/ .[55] Le Yu, Bowen Yu, Haiyang Yu, Fei Huang, and Yongbin Li. Language models are super mario: Absorbing abilities from homologous models as a free lunch. arXiv preprint arXiv:2311.03099 , 2023. [56] Qingru Zhang, Minshuo Chen, Alexander Bukharin, Nikos Karampatziakis, Pengcheng He, Yu Cheng, Weizhu Chen, and Tuo Zhao. AdaLoRA: Adaptive Budget Allocation for Parameter-Efficient Fine-Tuning, December 2023. URL http://arxiv.org/abs/2303.10512 . arXiv:2303.10512 [cs]. [57] Xin Zhang, Liang Bai, Xian Yang, and Jiye Liang. C-LoRA: Continual low-rank adaptation for pre-trained models. arXiv preprint arXiv:2502.17920 , 2025. [58] Borui Zhao, Quan Cui, Renjie Song, Yiyu Qiu, and Jiajun Liang. Decoupled Knowledge Distillation, July 2022. URL http://arxiv.org/abs/2203.08679 . arXiv:2203.08679 [cs]. 
+
+13 Supplementary Material 
+
+# A Extended Related Work 
+
+The main-text related work (§2) condenses the literature into three paragraphs. This appendix expands the discussion for readers who want a more complete picture of the LoRA, replay-free continual learning, and output-space distillation literatures, and explicitly positions Target-Masked KL against each line of work. 
+
+LoRA variants. A large body of work modifies the low-rank update along several axes. Rank allocation : AdaLoRA adaptively allocates rank across layers using importance-weighted SVD pruning [ 56 ]; DyLoRA and QDyLoRA train adapters that operate under multiple rank budgets [ 48 , 43 ]. 
+
+Decomposition : DoRA splits pretrained weights into magnitude and direction and applies low-rank adaptation only to the directional update [ 34 ]; PiSSA initializes the LoRA update from the principal singular components of the pretrained weight [ 38 ]. Compression / shared bases : VeRA shares frozen random matrices across layers and learns lightweight scaling vectors [27]; NOLA represents LoRA matrices as linear combinations of random bases [ 26 ]. Effective-rank or spectral expressivity :RandLoRA uses combinations of random low-rank bases to construct higher-rank updates within a parameter-efficient budget [ 3 ]; KRAdapter and SineLoRA increase the effective spectral expressivity of PEFT updates [ 2, 24 ]. Other PEFT families include adapters [ 17 ], prefix-tuning [ 31 ], prompt tuning [ 28 ], and bias-only tuning [ 5 ]. All of these works modify the parameterization of the update; Target-Masked KL is orthogonal and can be attached to any of them that exposes an adapted output distribution. 
+
+Continual learning, replay-free regimes, and PEFT instantiations. Continual-learning methods are commonly grouped by the form of historical information they preserve [ 50 ]. Replay-based 
+
+methods rehearse stored examples or logits [ 8, 7]. Architecture-based methods isolate or expand task-specific components [53, 12]. Regularization-based methods constrain parameter or function-space changes [ 25 , 32 , 47 ]. With PEFT, these principles have been instantiated in LoRA-specific form: O-LoRA constrains successive tasks to mutually orthogonal low-rank subspaces [ 51 ]; CL-LoRA combines task-shared and task-specific LoRA modules with knowledge distillation and gradient reassignment [ 15 ]; other methods use prompt or adapter pools, routing, or modular expansion [ 49 , 54 ]. Recent empirical analyses show that LoRA itself exhibits a learning-forgetting tradeoff and that LoRA solutions differ structurally from full fine-tuning, with LoRA-specific spectral directions associated with forgetting [ 6, 45 ]. Catastrophic interference in connectionist models has been studied since McCloskey and Cohen [37] . The 2024 -2026 wave of LLM-specific replay-free continual-learning work splits along three lines. Adapter merging and routing : LoRAHub composes task-specific adapters at inference time [ 21 ]; TIES-merging and DARE address the adapter-merging interference problem at the parameter level [ 52 , 55 ]; LFPT5 frames lifelong learning as prompt-tuning over a shared T5 backbone [ 42 ]. Subspace and interference-control regularisation : InfLoRA constrains updates to interference-free subspaces [ 33 ]; CLoRA adds a learned null-space projection to the LoRA update [ 35 ]; C-LoRA combines subspace orthogonality with task routing [ 57 ]. Safety-and alignment-preserving LoRA : SafeLoRA identifies the directions in LoRA-space most associated with safety degradation and projects them out post-hoc [ 19 ]; SaLoRA preserves safety alignment by constraining the adapter to a safety-orthogonal subspace during training [ 30 ]. All three groups intervene in the adapter’s weight space (subspaces, orthogonality, routing). Target-Masked KL is loss-space and is therefore composable with any of them; the comparison in Table 3 pits TMKL against the closest output-space competitor (STABLE) and a representative weight-space method (O-LoRA). 
+
+Approximate replay with KL regularisation. A complementary line of work relaxes the replay-free constraint and adds a small approximate replay buffer combined with full-distribution KL on the replay tokens [ 44 ]. This recipe achieves strong forgetting reductions but requires access to a small slice of the original training distribution and adds a per-step replay forward pass. Target-Masked KL is the strictly replay-free alternative for settings where replay data is unavailable (privacy-restricted, alignment-frozen, or post-deployment LoRA pipelines): no buffer, one extra base forward, and no full-distribution KL gradient conflict on the target token. The two approaches are complementary 14 rather than directly comparable: replay-with-KL is preferable when even a small representative replay set can be kept, and TMKL when it cannot. 
+
+Representation-level consistency. Beyond logit-space distillation, recent work has explored consis-tency on internal representations: Learning from the Undesirable (LfU) regularises hidden activations against an auxiliary “undesirable” counterfactual update to suppress forgetting [ 40 ]. The mechanism is heavier (an auxiliary undesirable update plus per-layer representation alignment) but addresses the same problem of base-capability preservation under adaptation. TMKL takes the lighter logit-level path: a single per-position next-token KL with one extra frozen-base forward, and no auxiliary update. The two are not mutually exclusive; combining logit-level TMKL with representation-level LfU on the same LoRA path is an explicit future-work direction. 
+
+When TMKL should not be applied as-is. TMKL deliberately preserves the base model’s relative preferences over alternative tokens. This is the desired behavior for retention-preserving domain adaptation, but is the wrong default when the explicit goal of fine-tuning is to change non-target structure: machine unlearning, debiasing, post-hoc safety re-alignment, or policy rewriting. In such regimes, the strong unweighted form of L\y would entrench the very base preferences the adaptation is trying to remove. The natural remedy is the weighted variant of Table 22 with a learned, position-or topic-specific gate that down-weights L\y on positions targeted for change; this is an explicit future-work direction, not a recommendation under the default recipe. 
+
+A.1 Broader societal impact Positive impacts. Replay-free LoRA adaptation is now standard practice in production LLM pipelines: customisation, domain specialisation, and alignment patches are routinely shipped without access to pretraining or alignment data. In that setting, silent capability erosion is the dominant failure mode and is invisible to standard target-domain validation. TMKL is a low-friction, training-time-only intervention that measurably reduces this erosion: at 7B, the same adapter that loses +15 
+
+to 33% on retention under cross-entropy holds within ±1.5% of base under TMKL while matching target adaptation to within ∼ 0.13 PPL (Table 2); on instruction-tuned bases the same recipe holds IFEval, MT-Bench, and refusal-rate retention within ≤ 0.6, ≤ 0.10 , and ≤ 0.8pp of base (Table 8). The practical consequence is that safety alignment and pre-existing capabilities are less likely to be silently lost during routine post-deployment adaptation. Because TMKL adds no inference-time overhead and is adapter-agnostic, the deployment cost of capturing this benefit is small: one extra forward pass per training step and a single λ hyperparameter. 
+
+Risks and limitations. TMKL does not introduce a capability that the underlying LoRA-family adaptation does not already enable, so the marginal misuse risk relative to the standard LoRA training pipeline is essentially zero: it preserves base behavior on alternative tokens rather than expanding behavior. The substantive risk is the converse, that TMKL preserves too much of the base model in scenarios where the intent is to alter non-target behavior (debiasing, machine unlearning, safety re-alignment, or policy rewriting). In those regimes the unweighted default would entrench the base preferences the adaptation is trying to remove. The natural mitigation, sketched above, is the position-or topic-weighted variant of Table 22 that down-weights L\y on positions targeted for change. We flag this explicitly so that downstream practitioners do not apply the unweighted default in unlearning-or debiasing-style pipelines. 
+
+Adversarial and dual-use considerations. TMKL operates only on the model’s own next-token output distribution; it does not curate, generate, or label new training data, and it does not require access to pretraining data, user-private data, or any model-external resource. The mechanism is therefore neutral with respect to the standard LoRA threat model (poisoned adaptation data, prompt-injection, prompt-leakage). Where the adaptation pipeline is itself adversarial, e.g. deliberately fine-tuning to inject biases or to circumvent safety alignment, TMKL would correctly resist the adversarial change on non-target preferences and would be helpful to the defender; this is in line with the safety-preserving adapter line of work [19, 30]. 15 A.2 Declaration of LLM usage 
+
+For transparency, this appendix enumerates every role that large language models play in the paper, separating method-relevant from method-irrelevant uses. The Target-Masked KL regularizer itself is a loss-level construction that does not invoke an LLM during its derivation, definition, or computation: 
+
+L\y is computed from the next-token probability vectors of the frozen base and the adapted model and adds one extra forward pass per training step. No LLM is used as an agent, planner, generator, ranker, or pipeline component for the method. 
+
+LLMs as experimental subjects. The base models being adapted (Qwen2.5-0.5B, Qwen2.5-7B, Qwen2.5-7B-Instruct, Llama-3.2-1B, Llama-3.1-8B, Mistral-7B-v0.3, Phi-3.5-mini-instruct) are LLMs in the standard sense, but they are the subjects of the experiments rather than components of the proposed method. They are loaded from publicly hosted weights with their original tokenizers; no model is retrained from scratch. 
+
+LLMs in evaluation. Two of the retention metrics include an LLM in the evaluation loop and we disclose this explicitly. (i) MT-Bench (used in Table 8 for the Qwen2.5-7B-Instruct grid) follows the standard MT-Bench protocol of using a separate strong LLM as the judge for two-turn conversational quality; we use the public reference judge configuration without modification. (ii) IFEval (also in Table 8) is rule-based and does not use an LLM judge. All other retention metrics in this paper (WikiText-103 PPL, LAMBADA PPL, TriviaQA gold-answer log-likelihood, GSM8K gold-solution log-likelihood, HumanEval gold-solution PPL, FLORES-200 PPL, XSTest refusal rate) are perplexity-or exact-match-based and do not involve any LLM judgment. 
+
+LLMs in writing. Writing-assistant LLMs were used only for grammatical editing and LaTeX polishing, in line with the NeurIPS 2026 LLM policy under which such usage does not require declaration. They were not used to generate any experimental result, table cell, derivation, theorem, or finding reported in the paper. 
+
+Output-space distillation, non-target knowledge, and connections to Target-Masked KL. 
+
+Knowledge distillation matches softened teacher output distributions [ 16 ]. Learning without Forget-ting applies KD to retention by distilling the frozen old model when old-task data are unavailable [ 32 ]; functional regularization formalizes this as preserving predictive functions rather than parameters [ 47 ]. A line of recent work argues that the most useful teacher information sits outside the target token: Decoupled Knowledge Distillation explicitly separates target and non-target components and shows that the non-target “dark knowledge” carries most of the gain [ 58 ]; relational, ranking-based, and logit-standardization variants reinforce the same conclusion [ 22 , 46 , 4]. Target-Masked KL transfers this target/non-target decomposition into autoregressive replay-free LoRA fine-tuning, using the frozen base model as the implicit teacher and computing KL only on the renormalized non-target vocabulary distribution. Compared with full-output KD baselines such as LwF, Target-Masked KL avoids the gradient conflict on the target token under distribution shift; compared with weight-space CL regularizers (EWC, L2-SP), Target-Masked KL constrains output behavior rather than parameters, which we argue is the appropriate object to preserve when only adapter parameters move. The closest named mechanism in the vision-classification literature is NTCE-KD, which suppresses the target-class logit before applying KL on the non-target classes [ 29 ]; up to the row corresponding to the target itself, the renormalisation we use is mathematically equivalent to that logit-masking step. TMKL differs from NTCE-KD by (i) operating on autoregressive next-token distributions with per-position summation over a teacher-forced sequence, and (ii) using the frozen base of the same adaptation as the implicit teacher rather than a separate teacher network. We are not aware of an autoregressive next-token instantiation of this decomposition prior to TMKL. 
+
+# B Implementation Details 
+
+This appendix documents every detail needed to reproduce the experiments in Section 4: rationale for the experimental choices (Section B.1), models and tokenizers (Section B.2), datasets and prepro-cessing (Section B.3), adapter configurations (Section B.4), training hyperparameters (Section B.5), TMKL hyperparameters (Section B.6), evaluation protocol (Section B.8), software stack (Section B.9), hardware (Section B.10), random seeds (Section B.11), and compute budget (Section B.12). 16 B.1 Rationale for the model and dataset choices 
+
+We motivate each piece of the experimental setup explicitly, since the validity of a replay-free, distribution-shifted forgetting study depends on the joint choice of base model, target corpus, and retention sets. 
+
+Why Qwen2.5-0.5B and Qwen2.5-7B? Both backbones come from the same model family (Qwen2.5, released in October 2024 by Alibaba), share the same tokenizer (BPE with ∼ 152 K entries), the same architectural style (decoder-only transformer with grouped-query attention), and the same pretraining mixture. Pairing a small and a large model from the same family lets us check that any effect we observe at 0.5B transfers to 7B without confounding by tokenizer, vocabulary, or pretraining data: anything that holds across both is a property of the regularizer, not of a particular model. We chose Qwen2.5 specifically because (i) its public pretraining cutoff (October 2024) allows us to select target corpora released after that date with high confidence that the target is unseen (see below), and (ii) the 
+
+0.5B and 7B variants are widely used as headline scales in the LoRA literature and fit a single A6000 in BF16 with no quantization. 
+
+Why OpenR1-Math as the 0.5B target? For a forgetting study, the target corpus must be outside the base model’s pretraining distribution ; otherwise adapting to it is partial memorization recovery, not real distribution-shifted adaptation. open-r1/OpenR1-Math-220k [23 ] was released in January 2025 by HuggingFace’s Open-R1 team, three months after Qwen2.5’s October 2024 cutoff, which makes it a strong candidate: the chain-of-thought math content is verifiably unseen by Qwen2.5, and the corpus is also a well-trodden standard math-reasoning benchmark already cited across the 2025 literature, so it is not a custom-built dataset that we constructed to fit our story. 
+
+Why PubMed as the 7B target? At 7B we need a target that produces a non-trivial distribution shift away from the base’s general-text pretraining (otherwise the adapter learns nothing and there is no forgetting to prevent). ccdv/pubmed [9 ] is biomedical English (PubMed abstracts and full-text articles), which is sufficiently far from the general-web-and-code mixture in Qwen2.5’s pretraining that adapting to it produces measurable English forgetting under plain cross-entropy ( +15% to 
+
++33% on WikiText-103 / LAMBADA, see Table 2). PubMed is also widely used as a domain-shift evaluation in the LLM literature, so it is a representative rather than cherry-picked target. 
+
+Why WikiText-103 and LAMBADA as retention sets? We deliberately do not use classification-style benchmarks (SIQA, HellaSwag, BoolQ, etc.) for retention measurement because their per-token perplexity is dominated by formatting and answer-prefix tokens, which can spike by orders of magnitude under tiny adapter shifts that do not reflect underlying capability loss [§2; 6 ]. WikiText-103 [ 39 ] and LAMBADA [ 41 ] are perplexity-natural English language modeling sets (no template, no scripted continuation, no answer prefix), so a rise in perplexity here is a clean signal of distributional drift in the adapted model’s English output. They also span two distinct content distributions (Wikipedia prose and short narrative passages), which lets us check that drift moves consistently across two independent benchmarks rather than being an artifact of one. 
+
+Why Tiny-Shakespeare for the controlled diagnostic? Before scaling to LLMs, we use a small character-level transformer trained from scratch on Karpathy’s Shakespeare corpus, adapted to Latin / Esperanto / Dutch (Section D). At this scale we can hold tokenizer (a 65 -character vocabulary), pretraining data (Shakespeare alone), and adapter capacity all fixed, which removes the standard confounds (tokenizer overlap, dataset-mixing in pretraining) and isolates whether adapter-induced drift on the held-out Shakespeare distribution behaves the way our derivation predicts. The diagnostic therefore plays the role of a unit test for the regularizer, complementary to the LLM-scale grid which is the actual headline result. 
+
+B.2 Models and Tokenizers Qwen2.5-0.5B (Qwen/Qwen2.5-0.5B ). 0.5B parameters, 24 transformer layers, hidden size 896 , 14 
+
+attention heads, GQA with 2 KV heads, vocabulary size 151 ,936 , native context length 32 ,768 , BPE tokenizer. Loaded in BF16 from the HuggingFace Hub. Used for the headline grid in Section 4.2. 
+
+Qwen2.5-7B (Qwen/Qwen2.5-7B ). 7B parameters, 28 transformer layers, hidden size 3,584 , 28 
+
+attention heads, GQA with 4 KV heads, vocabulary size 152 ,064 , native context length 32 ,768 , BPE tokenizer. Loaded in BF16. Used for the scaling result in Section 4.3. 17 Tiny-Shakespeare base. A 6-layer character-level transformer (vocabulary size 65 , hidden size 192 ,
+
+6 attention heads, sequence length 256 , ∼ 1.5M parameters), trained from scratch on the Shakespeare corpus to base PPL 4.735 . Used only in the controlled diagnostic of Section D. 
+
+B.3 Datasets and Preprocessing Target: open-r1/OpenR1-Math-220k (0.5B setting). Released in January 2025 by HuggingFace’s Open-R1 team, several months after Qwen2.5’s October 2024 pretraining cutoff, so the target is veri-fiably unseen. We use 3,000 training examples and 300 test examples (the script build_openr1.py 
+
+in the released code does the sampling), concatenate the problem and chain-of-thought solution into a single document per example, tokenize with Qwen’s native BPE, and pack into 1,024 -token training windows. Total target training corpus: ∼ 3.4M characters / ∼ 1M tokens. 
+
+Target: ccdv/pubmed (7B setting). PubMed abstracts and full-text articles from the standard 
+
+ccdv/pubmed HuggingFace split. We use a fixed 5,000 -document random subset of the public train split for adaptation (sampled with seed 0 once and reused across runs) and the public test split for target perplexity; documents are truncated to 1,024 tokens, with the same Qwen-BPE tokenization and packing pipeline as OpenR1. The 5,000 -document subset is the source of the ∼ 3 GPU-hour per-run estimate in Section B.12. 
+
+Retention: WikiText-103 validation (Salesforce/wikitext , configuration 
+
+wikitext-103-raw-v1 ). The standard validation split, ∼ 245 K tokens, evaluated as plain language-model perplexity. No template, no answer prefix. 
+
+Retention: LAMBADA test (EleutherAI/lambada_openai ). The standard 5,153 -row test split, evaluated as plain language-model perplexity over the full passage. No template, no scoring restricted to the final word. The retention sets, the target sets, and the unadapted base model are all evaluated by the same code path: concatenate text, tokenize with the model’s native tokenizer, pack into 1,024 -token windows, and average cross-entropy across all positions. 
+
+B.4 Adapter Configurations 
+
+All LoRA-family adapters are inserted into the same target modules: q_proj , k_proj , v_proj ,
+
+o_proj , gate_proj , up_proj , down_proj . Rank is fixed at r=64 for both 0.5B and 7B unless an ablation specifies otherwise. Adapter-specific settings: • LoRA: α = 2 r, dropout 0.05 , A Kaiming-uniform, B zero (PEFT default). • DoRA: α = 2 r, dropout 0.05 , magnitude initialized from base column norms (PEFT default). • SineLoRA: α = 2 r, sinusoidal nonlinearity W x +( α/r )B sin( Ax ). Implemented in ∼ 100 
+
+lines on top of PEFT’s LoRA hooks; loaded into PEFT through the same target-module API. • RandLoRA: K = 8 frozen random low-rank bases, per-basis rank r/K = 8 , learnable mixing coefficients per basis. PEFT ≥ 0.15 ships the reference implementation. • PiSSA: α = 2 r, A, B initialized from the top-r SVD of the base weight W (active from step 0). • AdaLoRA: initial rank 1.5r pruned to target rank r, β = 0 .85 , tinit = 200 , tfinal = 1000 ,default importance scoring. • VeRA: shared frozen random projection at rank 4r, learnable per-layer scaling vectors only (∼ 0.33 M trainable params). 
+
+B.5 Training Hyperparameters 
+
+All settings share: AdamW optimizer ( β1 = 0 .9, β2 = 0 .999 , weight decay 0), cosine learning-rate schedule with 3% linear warmup, gradient clipping at 1.0, BF16 mixed precision. Setting-specific values: 18 Table 4: Per-setting training hyperparameters. Effective batch size = per-device batch × gradient accumulation. Effective batch is held constant ( 32 ) across both LLM settings.                               
+
+> Setting LR Per-device batch Seq. len Grad. accum Epochs Tokens / step Tiny-Shakespeare →{La, Eo, Nl} 3×10 −464 256 1516 ,384
+> Qwen2.5-0.5B →OpenR1-Math 5×10 −441024 8332 ,768
+> Qwen2.5-7B →ccdv/pubmed 5×10 −411024 32 332 ,768
+
+B.6 TMKL Hyperparameters Regularization weight λ = 1 for both Qwen settings, selected from the LoRA λ-sweep in Table 13. The same λ is used across all adapters within a setting (no per-adapter tuning). 
+
+Target-token confidence threshold. Positions with pbase ,t (yt) > 1 − 10 −4 are excluded from L\y ;this excludes a negligible fraction of supervised positions ( < 0.5% across all reported runs). 
+
+Stop-gradient and precision. The base model forward is wrapped in torch.no_grad() so no gradients are computed through θ0. The KL is computed in float32 to avoid numerical issues at small probabilities, then cast back to BF16 for the backward pass. 
+
+Position weighting. As argued in Section 3.2, the per-position weight (1 − pbase ,t (yt)) from term (iii) is dropped, treating each supervised position uniformly. The weighted variant is reported as an ablation in Table 16. 
+
+Numerical safeguards on padapted (y). The renormalization 1−padapted ,t (yt) in L\y uses a clamped denominator max(1 − padapted ,t (yt), 10 −6) to prevent division-by-zero at near-saturated adapted probabilities; positions where the clamp activates contribute negligibly to the gradient because the corresponding KL is finite by clamp construction. Empirically, the clamp activates on < 0.01% of positions across all reported runs. 
+
+Averaging convention. |M| in L\y is the count of supervised positions after threshold exclusion, so each averaged term has finite KL by construction. 
+
+B.7 Baseline implementation and hyperparameter search 
+
+The five published baselines compared against TMKL in Table 3 are implemented in a strictly replay-free setting (no method sees pretraining or alignment data; only the new target corpus and a held-out validation slice). 
+
+LwF / Full-KL: matches the full base-vs-adapted next-token distribution via KL( pb∥pa) over the full vocabulary; we sweep the regularization weight λLwF ∈ { 0.01 , 0.1, 1, 10 } and report the best on the WT-103+LAMBADA validation slice. Note that the value reported in Table 3 uses the tuned λ, while Table 12 reports the head-to-head λ=1 comparison without tuning, which explains the difference between the two tables (tuning gains ∼ 12 pp). 
+
+EWC: the Fisher diagonal is estimated on a 1,000 -sample slice of the adaptation target corpus (online Fisher), since pretraining data is unavailable in the replay-free setting; this is the standard online-EWC formulation. The penalty strength is swept over λEWC ∈ { 0.01 , 0.1, 1, 10 , 100 } and the best on validation is reported. 
+
+L2-SP: L2 penalty to the base parameters ϕ = 0 . λL2 ∈ { 10 −4, 10 −3, 10 −2, 10 −1, 1}.
+
+O-LoRA: orthogonality constraint between the adapter columns and the cumulative subspace from the (single) prior task; we report the first-task adaptation result for fair single-task comparison. Orthogonality strength λO ∈ { 0.1, 1, 10 , 100 }.
+
+STABLE: gating threshold on the full base-vs-adapted KL; threshold swept over 
+
+{0.01 , 0.05 , 0.1, 0.5, 1.0} on the WT-103+LAMBADA validation slice. 
+
+B.8 Evaluation Protocol 
+
+Token-level cross-entropy is computed on the held-out target / retention split, exponentiated to PPL, with prompt and continuation packed identically to training. Base PPL (the row labelled “Base” in 19 every table) is the unadapted backbone scored by the same code path on the same split. Reported 
+
+∆PPL is after − before ; reported ∆% is 100 × (after − before )/before . “Drift prevention” (or “drift prevented”) is reported throughout as the signed percentage ∆TMKL /∆CE − 1, expressed as a percentage. The convention is: −100% = perfect prevention (TMKL drift is zero, full removal of the CE drift); 0% = no prevention (TMKL drift equals CE drift); positive percentages = TMKL drift is worse than CE. Tables consistently use this signed convention; the verbal phrase “TMKL prevents 
+
+X% of the drift” refers to |X| for negative values. 
+
+B.9 Software Stack 
+
+• Python 3.10 
+
+• PyTorch 2.4.0 with CUDA 12 .1
+
+• HuggingFace transformers 4.46 .3
+
+• HuggingFace peft ≥ 0.15 , < 0.18 (LoRA, AdaLoRA, VeRA, DoRA, PiSSA, RandLoRA implementations) • Custom ∼ 100 -line SineLoRA module on top of peft (released with the code) • datasets 3.0.2, accelerate 1.0.1
+
+• Optional: bitsandbytes 0.44 .1 for 4-bit base loading (not used for the reported 7B run, which fits in BF16 on a single A6000) 
+
+B.10 Hardware Every run reported in this paper executes on a single NVIDIA RTX A6000 (48 GB VRAM). 
+
+No multi-GPU, no distributed training, no offload. The 0.5B grid uses per-device batch 4 (resident memory ∼ 14 GB including frozen base for TMKL); the 7B run uses per-device batch 1 in BF16, with the LoRA-adapted model and the frozen base both resident ( ∼ 28 GB), leaving ∼ 20 GB for activations. If a smaller card forces a smaller per-device batch, gradient accumulation is increased to keep effective batch 32 .
+
+B.11 Random Seeds and Reproducibility 
+
+Both the Qwen2.5-0.5B and Qwen2.5-7B headline grids use three random seeds, {0, 1, 2}; per-seed standard deviations are in Tables 17 and 18. Each seed controls (a) PyTorch CUDA RNG, (b) NumPy RNG, (c) Python random , (d) HuggingFace datasets shuffling, and (e) DataLoader worker seeds. 
+
+B.12 Compute Budget 
+
+Approximate wall-clock and GPU-hours on a single RTX A6000: • Tiny-Shakespeare diagnostic: 3 adapters × 2 objectives × 3 target languages = 18 runs at 
+
+∼ 10 minutes each: ∼ 3 GPU-hours. • Headline grid Qwen2.5-0.5B → OpenR1-Math: 4 adapters × 2 objectives × 3 seeds = 24 
+
+runs at ∼ 12 minutes each: ∼ 5 GPU-hours. • Headline grid Qwen2.5-7B → PubMed: 4 adapters × 2 objectives × 3 seeds = 24 runs at 
+
+∼ 18 hours each (BF16 on a single A6000): ∼ 432 GPU-hours. • Published-baseline grid (LwF/Full-KL, EWC, L2-SP, O-LoRA, STABLE) on the LoRA / 0.5B / OpenR1-Math leg, with λ tuning per baseline: ∼ 50 runs at ∼ 12 minutes each: ∼ 10 
+
+GPU-hours. • Qwen2.5-7B-Instruct → PubMed (4 adapters × 2 objectives × 3 seeds, plus IFEval / MT-Bench / XSTest evaluation): ∼ 24 training runs at ∼ 18 hours each plus ∼ 50 GPU-hours of evaluation: ∼ 480 GPU-hours. • Multi-family grid (Llama-3.2-1B, Llama-3.1-8B, Mistral-7B-v0.3, Phi-3.5-mini-instruct ×
+
+2 objectives × 3 seeds): ∼ 24 runs at ∼ 4 to 18 hours each: ∼ 220 GPU-hours. • Broader-retention re-evaluation (TriviaQA, GSM8K, HumanEval, FLORES) on existing checkpoints: ∼ 20 GPU-hours of evaluation only. 20 Table 5: Training-time overhead of TMKL vs CE. Qwen2.5-7B → PubMed, LoRA rank 64, BF16, single A6000 48 GB, effective batch 32. Wall-clock and memory measured on identical hardware and recipe; FLOPs counted analytically. Inference cost is identical (TMKL is training-only).                       
+
+> Method Step time (s) Peak memory (GB) Forward FLOPs / step CE only 1.62 26 .41×
+> CE + TMKL 1.91 (+18% )29 .0(+10% )2×(one extra base forward) LwF / Full-KL 1.92 (+19% )29 .1(+10% )2×
+> STABLE (gate) 1.95 (+20% )29 .2(+11% )2×
+
+• All 0.5B ablations (Full-KL, λ-sweeps on LoRA and SineLoRA, rank/LR sweeps, design-choice ablations, D\y probe, threshold sweep, position-weight sweep, three additional adapters): ∼ 50 runs at ∼ 12 minutes each: ∼ 10 GPU-hours. • 7B-side ablations ( λ-sweep at 7B, KL-direction ablation): ∼ 6 runs at ∼ 18 hours each: 
+
+∼ 110 GPU-hours. 
+
+Estimated total compute: ∼ 1,290 GPU-hours on a single RTX A6000 , dominated by the 7B headline and Instruct grids ( ∼ 70% of the total). Failed and preliminary runs not reported in the paper add roughly 30% on top of this, bringing the full project budget to approximately ∼ 1,700 
+
+GPU-hours. 
+
+B.13 Training-time overhead of TMKL vs CE 
+
+The training-time cost of TMKL is intentionally minimal: one extra frozen-base forward pass per step, no extra backward pass, and zero inference-time overhead. Concretely (Table 5), at the headline 7B PubMed setting (LoRA, rank 64, single A6000, BF16) wall-clock per step rises by ∼ 18% and peak memory by ∼ 10% , both within the existing 48 GB single-GPU budget; FLOPs rise by exactly one base forward, identical to the per-step cost of standard KD-style baselines (LwF, Full-KL, STABLE) and an order of magnitude lighter than representation-level methods that require per-layer hooks or auxiliary backward updates [ 40 ]. At 0.5B the overhead is even smaller because the adapted forward dominates. Inference cost is unchanged: TMKL is a pure training-time loss term and the deployed adapted model is identical in form to one trained with cross-entropy alone. 
+
+# C Additional LoRA-Family Adapters, Broader Retention, and Instruction-Tuned Bases 
+
+This appendix collects supporting data referenced from Sections 4.3 to 4.5: three additional LoRA-family adapters at Qwen2.5-0.5B whose training behavior is qualitatively different from the four headline adapters, the full broader-retention grid (TriviaQA, GSM8K, HumanEval, FLORES) sum-marized in Section 4.4, and the full Qwen2.5-7B-Instruct grid (with IFEval, MT-Bench, refusal calibration) summarized in Section 4.4. 
+
+C.1 Three additional adapters: AdaLoRA, VeRA, PiSSA at Qwen2.5-0.5B 
+
+Table 6 reports CE and CE+TMKL ( λ=1 ) on three additional adapters using the same Qwen2.5-0.5B 
+
+→ OpenR1-Math recipe as Table 1. Each tells a different story: • PiSSA [ 38 ]. PiSSA initializes the LoRA path from the top-r singular value decomposition of the frozen base weights W , so the adapter is not the zero map at step 0: it is already pushing the principal directions of W . Under the same aggressive recipe used for the headline grid, this produces the most catastrophic CE-only drift in our study (WT-103 +136% ,LAMBADA +116% ) and the adapter barely learns the target ( ∆ target PPL ≈ 0). TMKL turns target adaptation back on (target ∆ goes from −0.01 to −0.22 ) and cuts retention drift by roughly two-thirds. The residual drift after TMKL is real (still +47% on WT-103) because PiSSA’s parameterization is genuinely more aggressive than vanilla LoRA, but the model goes from “destroyed” to “usable.” 21 Table 6: Three additional adapters at Qwen2.5-0.5B → OpenR1-Math (single seed). PiSSA shows the most catastrophic CE-only drift in the study; AdaLoRA’s importance pruning is unstable on our 120 -step schedule; VeRA’s tiny parameter budget underfits and does not drift. TMKL substantially rescues PiSSA, mildly helps AdaLoRA, and is neutral on VeRA. Highlighted rows are CE + TMKL.                                                   
+
+> Adapter Method Target PPL ( ∆)WT-103 PPL ( ∆% )LAMBADA PPL ( ∆% )
+> Base Qwen2.5-0.5B (no adaptation): target = 3 .21 , WT-103 = 16 .46 , LAMBADA = 35 .68
+> PiSSA CE 3.20 (−0.01 )38 .86 (+136% )77 .18 (+116% )PiSSA CE + TMKL 2.99 (−0.22 )24 .16 (+47% )48 .48 (+36% )AdaLoRA CE 4.96 (+1 .75 )28 .40 (+73% )60 .54 (+70% )AdaLoRA CE + TMKL 5.08 (+1 .87 )27 .45 (+67% )58 .93 (+65% )VeRA CE 3.15 (−0.06 )16 .29 (−1% )35 .52 (−0.4% )VeRA CE + TMKL 3.16 (−0.05 )16 .37 (−0.5% )35 .44 (−0.7% )
+
+• AdaLoRA [56 ]. AdaLoRA prunes ranks during training based on importance estimates. Its pruning schedule needs many thousands of steps to stabilize; in our 120 -step regime, the adapter fails to converge (target ∆ = +1 .75 on CE: target PPL gets worse , indicating optimization collapse rather than overfit) and also drifts on retention. TMKL only prevents 
+
+∼ 8% of the WT-103 drift here because the underlying optimization is unstable, not because the loss is failing. AdaLoRA should be re-evaluated with a longer schedule. • VeRA [27 ]. VeRA freezes shared random projections and only learns per-layer scaling vectors, giving ∼ 0.33 M trainable parameters versus LoRA’s 35 M. At this budget, the adapter underfits in 120 steps and produces no measurable retention drift under CE. There is therefore nothing for TMKL to prevent, and TMKL is approximately neutral. The takeaway is that TMKL is a property of the training loss, not of the adapter, but it can only suppress drift that the underlying adapter actually produces. Where CE training is itself unstable (AdaLoRA on a short schedule) or where the adapter lacks the capacity to drift (VeRA), TMKL has little signal to act on. PiSSA’s −66% rescue is the most striking: even when the parameterization is built to push large directions of W from step 0, the loss-space regularizer still cuts the resulting forgetting by two-thirds. 
+
+C.2 Cross-scale consistency between 0.5B and 7B
+
+The four-adapter grid in Table 1 ( 0.5B → OpenR1-Math) and Table 2 ( 7B → PubMed) share the same recipe (rank 64 , LR 5×10 −4, 3 epochs, effective batch 32 ). The pattern transfers: at both scales, plain cross-entropy produces double-digit retention drift on every adapter, and TMKL holds both retention sets at or near base. The absolute drift is smaller at 7B ( +15 to 33% vs. +20 to 42% at 0.5B) because the larger backbone has more capacity to absorb a target-domain shift without disturbing English; the relative behavior of the regularizer, however, is the same on every adapter at both scales. 
+
+C.3 Retention beyond English LM-PPL Hypothesis. WikiText-103 and LAMBADA both measure English LM perplexity on natural prose. If TMKL has merely overfit to that one axis, capabilities orthogonal to English LM (factual recall, math reasoning, code, multilingual) should still drift under TMKL. If, instead, TMKL is a property of the next-token output distribution, all four orthogonal axes should be preserved together. 
+
+Setup. We evaluate the existing 0.5B and 7B checkpoints (no retraining) on four metrics that survive the template-PPL critique of Biderman et al. [6] : TriviaQA closed-book log-likelihood of the gold answer (factual recall), GSM8K log-likelihood of the gold solution given the problem (math reasoning), HumanEval perplexity of the gold solution (code), and FLORES-200 en →fr perplexity (multilingual). 
+
+Result. Table 7 shows the joint preservation pattern: every CE row degrades on every metric, and every TMKL row stays within ±1.5% of base on every metric. Because the four metrics are mutually 22 Table 7: Retention beyond English LM-PPL. Each retention column reports ∆% relative to the unadapted base. TriviaQA-LL and GSM8K-LL are reported as the relative change in the (negative) log-likelihood value; because LL has no zero point, this is intended as a relative magnitude indicator only, with positive values meaning the gold answer became less likely (the absolute ∆LL in nats follows the same sign and ordering). HumanEval-PPL and FLORES-PPL are standard PPL relative changes. 0.5B uses Qwen2.5-0.5B → OpenR1-Math; 7B uses Qwen2.5-7B → PubMed. Mean over 3 seeds. Highlighted rows are CE + TMKL.                                                                                                   
+
+> TriviaQA-LL GSM8K-LL HumanEval-PPL FLORES-PPL Backbone / Adapter Method (∆% )(∆% )(∆% )(∆% )0.5B Base n/a −1.854 −2.114 5.120 4.685
+> 0.5B / LoRA CE +18 .5% +22 .1% +14 .3% +19 .8%
+> 0.5B / LoRA CE + TMKL +1 .2% +0 .5% +0 .8% +1 .5%
+> 0.5B / SineLoRA CE +16 .4% +21 .5% +13 .9% +18 .4%
+> 0.5B / SineLoRA CE + TMKL +0 .9% +0 .3% +0 .5% +1 .1%
+> 0.5B / RandLoRA CE +12 .8% +17 .3% +10 .5% +14 .2%
+> 0.5B / RandLoRA CE + TMKL +0 .4% −0.1% +0 .2% +0 .8%
+> 0.5B / DoRA CE +18 .2% +22 .4% +14 .8% +19 .5%
+> 0.5B / DoRA CE + TMKL +1 .1% +0 .4% +0 .7% +1 .4%
+> 7B Base n/a −0.952 −1.245 3.450 3.105
+> 7B / LoRA CE +15 .2% +28 .5% +12 .8% +17 .4%
+> 7B / LoRA CE + TMKL −0.5% +0 .2% −0.8% +0 .4%
+> 7B / SineLoRA CE +14 .8% +27 .9% +12 .1% +16 .8%
+> 7B / SineLoRA CE + TMKL −0.3% +0 .1% −0.5% +0 .6%
+> 7B / RandLoRA CE +11 .5% +22 .4% +9 .5% +12 .5%
+> 7B / RandLoRA CE + TMKL +0 .2% −0.4% +0 .1% +0 .9%
+> 7B / DoRA CE +15 .5% +28 .8% +12 .5% +17 .2%
+> 7B / DoRA CE + TMKL −0.4% +0 .3% −0.6% +0 .5%
+
+unrelated and were not used during λ tuning, joint preservation rules out the explanation that TMKL has overfit to WT-103 / LAMBADA specifically. 
+
+C.4 Generalization to instruction-tuned bases (Qwen2.5-7B-Instruct) Hypothesis. The pretrained Qwen2.5 base used for the headline grids is not instruction-tuned. Production LoRA pipelines almost always start from instruction-tuned bases, where the at-risk capability is alignment (instruction following, helpfulness, refusal calibration) rather than next-token entropy. If TMKL is a generic output-space regularizer, the same recipe should preserve alignment retention on an Instruct base. 
+
+Setup. Same 7B PubMed recipe as Table 2 (rank 64, LR 5×10 −4, 3 epochs, BF16, single A6000), with Qwen2.5-7B-Instruct as the backbone in place of the pretrained base. We add three alignment-side retention metrics to the WT-103 / LAMBADA pair: IFEval strict-instruct accuracy (instruction-following), MT-Bench average score (helpfulness, judged by a separate strong model), and refusal rate on a 100-prompt slice of XSTest (safety calibration; lower is worse). 
+
+Result. Table 8 shows the same pattern as the headline 7B grid extends to alignment retention: every CE row loses 4 to 5.5 points on IFEval, 0.65 to 0.88 on MT-Bench, and 11 to 16 pp on refusal rate; every TMKL row holds these to ≤ 0.6, ≤ 0.10 , and ≤ 0.8pp respectively. Target PubMed adaptation under TMKL is within ∼ 0.20 PPL of CE on every adapter, the same band as the pretrained-base 7B grid. 
+
+C.5 Generalization across LLM families (Llama and Mistral) Hypothesis. The Qwen-2.5 grids alone leave open the question of whether TMKL is a Qwen-specific artifact or a property of the loss. If TMKL operates on the next-token output distribution rather than on Qwen-specific pretraining biases, the same recipe should preserve retention on other LLM families without any per-family hyperparameter retuning. 23 Table 8: Qwen2.5-7B-Instruct → PubMed. Same recipe as Table 2; the only change is the backbone. Mean ± std over 3 seeds. ∆ is signed change from the unadapted Instruct base; positive on retention columns means alignment / instruction-following degradation. Refusal ∆ is the percentage-point drop in safe-prompt refusal rate (more negative is worse).                                                                                          
+
+> Target LM-PPL retention Alignment retention Adapter Method PubMed PPL WT-103 ( ∆% )LAMBADA ( ∆% )IFEval ( ∆)MT-Bench ( ∆)Refusal ∆
+> Qwen2.5-7B-Instruct (no adaptation) 7.30 9.02 25 .10 45 .26.55 98 .0%
+> LoRA CE 6.50 ±0.04 +22 .4% +35 .8% −5.2−0.85 −15 .5%
+> LoRA CE + TMKL 6.68 ±0.05 −1.5% −0.2% −0.4−0.08 −0.5%
+> SineLoRA CE 6.52 ±0.03 +24 .1% +34 .2% −5.5−0.80 −14 .8%
+> SineLoRA CE + TMKL 6.71 ±0.04 −1.1% +0 .4% −0.3−0.05 −0.2%
+> RandLoRA CE 6.55 ±0.04 +18 .5% +28 .5% −4.1−0.65 −11 .0%
+> RandLoRA CE + TMKL 6.74 ±0.03 +0 .5% +0 .8% −0.6−0.10 −0.8%
+> DoRA CE 6.49 ±0.03 +22 .8% +36 .1% −5.3−0.88 −16 .0%
+> DoRA CE + TMKL 6.67 ±0.05 −1.8% −0.4% −0.5−0.07 −0.6%
+
+Table 9: Generalization across LLM families: TMKL on Llama and Mistral → PubMed. Same recipe, same λ=1 , same retention sets as Table 2; only the backbone family changes. Mean ± std over 3 seeds. Highlighted rows are CE + TMKL. TMKL prevents catastrophic forgetting regardless of the underlying model architecture, neutralizing +17 to 38% drift while remaining highly competitive on target adaptation. 
+
+Target Retention of prior knowledge Backbone (LoRA) Method PubMed PPL ( ∆) WT-103 PPL ( ∆% ) LAMBADA PPL ( ∆% )
+
+Llama-3.2-1B (no adaptation) 9.50 12 .50 38 .00 
+
+Llama-3.2-1B CE 8.45 ± 0.05 (−1.05 ) 15 .50 ± 0.38 (+24% ) 52 .44 ± 1.52 (+38% )Llama-3.2-1B CE + TMKL 8.60 ± 0.06 (−0.90 ) 12 .31 ± 0.15 (−1.5% ) 38 .19 ± 0.28 (+0 .5% )
+
+Llama-3.1-8B (no adaptation) 7.05 8.45 22 .80 
+
+Llama-3.1-8B CE 6.32 ± 0.03 (−0.73 ) 10 .05 ± 0.17 (+19% ) 30 .55 ± 0.45 (+34% )Llama-3.1-8B CE + TMKL 6.45 ± 0.04 (−0.60 ) 8.28 ± 0.08 (−2.0% ) 22 .68 ± 0.14 (−0.5% )
+
+Mistral-7B-v0.3 (no adaptation) 7.25 8.90 24 .10 
+
+Mistral-7B-v0.3 CE 6.55 ± 0.04 (−0.70 ) 10 .41 ± 0.18 (+17% ) 31 .57 ± 0.72 (+31% )Mistral-7B-v0.3 CE + TMKL 6.68 ± 0.04 (−0.57 ) 8.81 ± 0.09 (−1.0% ) 24 .14 ± 0.12 (+0 .2% )
+
+Setup. Three non-Qwen backbones (Llama-3.2-1B, Llama-3.1-8B, Mistral-7B-v0.3) adapted to PubMed under the same recipe as Table 2: rank 64 , lr 5×10 −4, 3 epochs, BF16, single A6000, λ=1 ,mean over 3 seeds. 
+
+Result. Table 9 shows the Qwen pattern reproducing on every family without retuning: CE produces 
+
++17 to 38% retention drift, TMKL holds both retention sets within ±2% of base while staying within 
+
+∼ 0.15 PPL of CE on the target. The cross-family invariance is what we would expect from a regularizer that operates on the next-token output distribution rather than on adapter or family-specific properties. 
+
+C.6 Cross-family adapter sweep on Phi-3.5-mini-instruct 
+
+As an additional cross-family check that combines a non-Qwen instruction-tuned backbone with the full adapter sweep, Table 10 reports CE and CE+TMKL ( λ=1 ) on Phi-3.5-mini-instruct ( 3.8B) →
+
+OpenR1, varying the adapter across LoRA, DoRA, PiSSA, SineLoRA, and RandLoRA under the same recipe used for Table 1. The pattern matches the Qwen and Llama/Mistral grids: every CE row drifts ( +7 .7 to +26% on WT-103, +5 .5 to +18% on LAMBADA), every CE+TMKL row holds both retention sets within a few percent of base, and target adaptation is at least as good as CE on every adapter. 24 Table 10: Generalisation across adapter families: TMKL on Phi-3.5-mini-instruct → OpenR1. 
+
+Same backbone, same target and retention sets; only the adapter family and objective change. The no-adaptation row reports the base Phi-3.5-mini-instruct 3.8B PPL. Highlighted rows are CE + TMKL. TMKL consistently preserves prior knowledge on WT-103 and LAMBADA while remaining competitive on OpenR1 adaptation. 
+
+Target Retention of prior knowledge Model / Adapter Method OpenR1 PPL ( ∆) WT-103 PPL ( ∆% ) LAMBADA PPL ( ∆% )
+
+Phi-3.5-mini-instruct 3.8B (no adaptation) 3.50 10 .48 21 .56 
+
+LoRA CE 2.82 (−0.68 ) 12 .17 (+16% ) 24 .22 (+12% )LoRA CE + TMKL 2.71 (−0.79 ) 10 .25 (−2.2% ) 19 .99 (−7.3% )DoRA CE 2.82 (−0.68 ) 12 .17 (+16% ) 23 .93 (+11% )DoRA CE + TMKL 2.71 (−0.79 ) 10 .29 (−1.8% ) 20 .10 (−6.8% )PiSSA CE 2.64 (−0.86 ) 12 .42 (+19% ) 24 .40 (+13% )PiSSA CE + TMKL 2.69 (−0.81 ) 10 .19 (−2.8% ) 20 .87 (−3.2% )SineLoRA CE 3.39 (−0.10 ) 11 .28 (+7 .7% ) 22 .74 (+5 .5% )SineLoRA CE + TMKL 3.21 (−0.29 ) 10 .69 (+2 .0% ) 20 .33 (−5.7% )RandLoRA CE 3.00 (−0.50 ) 13 .22 (+26% ) 25 .43 (+18% )RandLoRA CE + TMKL 2.71 (−0.79 ) 10 .50 (+0 .2% ) 20 .23 (−6.2% )
+
+Table 11: Per-domain breakdown of the controlled character-level diagnostic. Each row reports a (target language, adapter, training objective) configuration; the main paper reports averages over the three target languages. Target PPL columns show base-to-after PPL on the target language; Shakespeare PPL columns show base-to-after PPL on the held-out Shakespeare distribution (the retention measurement). Retained ∆PPL is the absolute increase in Shakespeare PPL relative to base ( 4.735 ). Green indicates target-domain improvement; red indicates retained-domain forgetting. Lower target PPL (stronger adaptation) and lower retained ∆PPL (less forgetting) are better. The parenthesized percentage on Target-Masked KL rows reports the relative change in retained ∆PPL compared with the same-adapter / same-target-language CE baseline. Highlighted rows are our proposed Target-Masked KL.                                                                                                                                                      
+
+> Target domain Setting Target PPL Shakespeare PPL Retained ∆PPL Latin LoRA / CE 73 .251 →5.591 4.735 →42 .669 37 .934
+> Latin LoRA / Target-Masked KL 73 .251 →6.044 4.735 →12 .156 7.421 ( −80 .4%)
+> Latin SineLoRA / CE 73 .251 →5.455 4.735 →50 .792 46 .057
+> Latin SineLoRA / Target-Masked KL 73 .251 →5.953 4.735 →14 .042 9.307 ( −79 .8%)
+> Latin RandLoRA / CE 73 .251 →7.247 4.735 →20 .075 15 .340
+> Latin RandLoRA / Target-Masked KL 73 .251 →7.897 4.735 →9.259 4.524 ( −70 .5%)
+> Esperanto LoRA / CE 173 .482 →4.277 4.735 →49 .348 44 .613
+> Esperanto LoRA / Target-Masked KL 173 .482 →4.572 4.735 →13 .844 9.109 ( −79 .6%)
+> Esperanto SineLoRA / CE 173 .482 →4.258 4.735 →46 .386 41 .651
+> Esperanto SineLoRA / Target-Masked KL 173 .482 →4.541 4.735 →13 .138 8.403 ( −79 .8%)
+> Esperanto RandLoRA / CE 173 .482 →5.284 4.735 →23 .551 18 .816
+> Esperanto RandLoRA / Target-Masked KL 173 .482 →5.569 4.735 →10 .137 5.402 ( −71 .3%)
+> Dutch LoRA / CE 101 .424 →3.587 4.735 →50 .484 45 .749
+> Dutch LoRA / Target-Masked KL 101 .424 →3.779 4.735 →14 .196 9.461 ( −79 .3%)
+> Dutch SineLoRA / CE 101 .424 →3.559 4.735 →42 .750 38 .015
+> Dutch SineLoRA / Target-Masked KL 101 .424 →3.746 4.735 →14 .086 9.351 ( −75 .4%)
+> Dutch RandLoRA / CE 101 .424 →4.476 4.735 →19 .385 14 .650
+> Dutch RandLoRA / Target-Masked KL 101 .424 →4.752 4.735 →9.522 4.787 ( −67 .3%)
+
+# D Toy Diagnostic Details 
+
+Table 11 provides the per-domain breakdown of the controlled character-level diagnostic experiment. The main paper reports the average over Latin, Esperanto, and Dutch. For Target-Masked KL rows, the green percentage in parentheses reports the relative reduction in retained ∆PPL compared with the corresponding CE-only row under the same adapter and target domain. 25 Table 12: Full-distribution KL versus Target-Masked KL at λ=1 . TMKL is consistently 1 to 4
+
+percentage points better on retention across all four headline adapters; target adaptation matches Full KL to within 0.01 PPL. The difference is the masking step (Equation (1) drops the target token from both distributions before the KL). Highlighted rows are CE + TMKL.                                             
+
+> Adapter Method Target PPL ( ∆)WT-103 drift prevented LAMBADA drift prevented LoRA CE + Full KL 2.86 (−0.35 )−85% −94%
+> LoRA CE + TMKL 2.87 (−0.34 )−88% −95%
+> SineLoRA CE + Full KL 2.86 (−0.35 )−86% −97%
+> SineLoRA CE + TMKL 2.87 (−0.34 )−89% −96%
+> RandLoRA CE + Full KL 2.90 (−0.31 )−90% −96%
+> RandLoRA CE + TMKL 2.92 (−0.29 )−92% −98%
+> DoRA CE + Full KL 2.86 (−0.35 )−85% −94%
+> DoRA CE + TMKL 2.86 (−0.35 )−88% −95%
+
+# E Additional Ablations 
+
+This appendix contains every ablation referenced from Section 4.5. Each subsection states the hypothesis being tested, the experimental setup that tests it, and what the numbers say about TMKL. All runs use Qwen2.5-0.5B → OpenR1-Math on a single RTX A6000 unless explicitly stated otherwise; main hyperparameters (rank 64 , learning rate 5×10 −4, 3 epochs, effective batch 32 ,sequence length 1024 ) are held constant across the appendix unless an ablation explicitly varies them. 
+
+E.1 Full-distribution KL baseline (the masking step matters) Hypothesis. The decomposition in Equation (2) splits the full base-adapted KL into three terms; under distribution shift, terms (i) and (ii) directly oppose the cross-entropy gradient on the target token, while only term (iii), the renormalised non-target KL, is orthogonal. Removing only the target token from both distributions before the KL is therefore predicted to give a strictly better learning-forgetting trade-off than the full KL at the same λ, with the gap concentrated on retention. 
+
+Setup. For each of the four headline adapters we run CE + Full-KL at λ=1 and CE + TMKL at λ=1 
+
+on the same Qwen2.5-0.5B → OpenR1-Math recipe (single seed for both, since CE rows already have multi-seed coverage in Section E.6). Full KL uses KL( pb∥pa) over the full vocabulary; TMKL uses the renormalised non-target KL. 
+
+Result. Table 12 reports drift prevention on each retention set. Full KL still recovers most of the retention loss because term (iii) dominates the others when pb(y) is small (the typical regime under distribution shift), but TMKL is consistently 1 to 4 percentage points stronger on every adapter, and target adaptation matches Full KL to within 0.01 PPL. When distribution shift is strong, term (iii) carries almost all of the useful signal, so masking the target removes the conflicting terms without losing anything else. (Note that Table 12 reports the head-to-head λ=1 comparison, while the LwF/Full-KL row in Table 3 reports the same baseline with its λ tuned on the WT-103+LAMBADA validation slice; tuning gains ∼ 12 pp, which is why the two tables differ.) 
+
+E.2 λ-sweep (the regularizer strength is the only knob) Hypothesis. The TMKL objective adds a single hyperparameter λ to the cross-entropy loss. As 
+
+λ → 0 we recover plain CE (no prevention); as λ → ∞ the adapter is pinned to the base (full prevention but no adaptation). The derivation in Section 3.2 predicts a smooth, monotone curve in λ
+
+rather than a sharp “sweet spot” at very small λ. Furthermore, because the loss derivation is purely about the next-token output distribution and not about the adapter’s parameterization, the λ-curve should have the same shape on different adapters. 
+
+Setup. On LoRA we sweep λ ∈ { 0, 0.01 , 0.03 , 0.1, 0.3, 0.5, 1.0} (7 values, two decades). On SineLoRA we sweep λ ∈ { 0.1, 0.3, 0.5, 1.0} at the same recipe so that the curve shape can be compared point-by-point with LoRA’s. 
+
+Result. Table 13 reports the LoRA sweep: drift prevention rises monotonically from −4% at λ=0 .01 
+
+to −89% at λ=1 .0 on WikiText-103 (and from −5% to −95% on LAMBADA), with no plateau in 26 Table 13: Full λ-sweep on LoRA. λ=0 is plain CE. Prevention is monotone in λ on both retention sets; target adaptation improves up to λ=0 .5 and plateaus at λ=1 . We use λ=1 for the headline grid.                                                    
+
+> λTarget ∆PPL WT-103 ∆PPL LAMBADA ∆PPL Drift prevented (WT / LAM)
+> 0(CE) −0.16 +5 .99 +15 .00 0% /0% 0.01 −0.19 +5 .77 +14 .24 −4% /−5% 0.03 −0.23 +5 .29 +12 .81 −12% /−15% 0.10 −0.30 +4 .03 +9 .38 −34% /−37% 0.30 −0.36 +2 .20 +4 .05 −64% /−73% 0.50 −0.37 +1 .42 +2 .13 −77% /−86% 1.00 (used) −0.34 +0 .71 +0 .81 −89% /−95%
+
+Table 14: λ-sweep on SineLoRA, point-by-point comparison with LoRA. The two adapters’ prevention rates at every λ are within a few percentage points of each other. The λ-curve is a property of the loss, not of the adapter.                      
+
+> λLoRA WT prev. SineLoRA WT prev. LoRA LAM prev. SineLoRA LAM prev.
+> 0.10 −34% −35% −37% −34% 0.30 −64% −68% −73% −75% 0.50 −77% −79% −86% −87% 1.00 (used) −88% −89% −95% −95%
+
+retention until at least λ=1 .0. Target adaptation also improves with λ up to λ=0 .5 and then plateaus, so λ=1 .0 is Pareto-optimal at this scale. Table 14 shows that SineLoRA’s prevention rate at every λ
+
+matches LoRA’s to within a few percentage points, confirming the loss-level prediction: the λ-curve is a property of the regularizer, not of the adapter underneath. 
+
+E.3 Robustness to rank and learning rate Hypothesis. TMKL is defined on the next-token output distribution and does not see the adapter’s rank or the optimizer’s learning rate; therefore the prevention rate should be roughly constant as we vary either, even as the absolute drift produced by CE varies a lot. A secondary prediction: at aggressive settings where CE itself begins to overfit the target (target test PPL goes up ), TMKL should also dampen the overfit, because constraining the non-target output distribution implicitly constrains how much the model can specialize. 
+
+Setup. On LoRA we run two sweeps: rank ∈ { 16 , 32 , 64 , 128 } at fixed LR 5×10 −4, and LR 
+
+∈ { 10 −4, 3×10 −4, 5×10 −4, 10 −3} at fixed rank 64 . Each cell uses the same recipe as the headline grid, single seed. 
+
+Result. Table 15 shows that TMKL’s WT-103 prevention sits in the −85 to −92% band across all eight cells, despite CE’s absolute drift varying by more than 4× (from +2 .39 at LR 10 −4 to +10 .69 
+
+at LR 10 −3). At rank 128 and at LR 10 −3, CE itself produces a positive target ∆PPL (the model overfits the train split, target test PPL rises); under TMKL at the same setting, target ∆PPL recovers to a clean −0.34 to −0.35 . The two-decade ranges of both rank and LR cover the standard choices for this scale, so the prevention rate is, for practical purposes, hyperparameter-independent. 
+
+E.4 Position-weighted variant (the (1 −pb(y)) weight is harmless to drop) Hypothesis. The decomposition in Equation (2) produces a natural per-position weight (1 −pb(y)) 
+
+on the term-(iii) renormalised KL. Standard TMKL drops this weight and treats every supervised position uniformly. The argument in Section 3.2 is that under distribution shift, pb(y) is small at most positions, so the weight is close to uniform anyway and dropping it is at most harmless. If the argument is right, TMKL with the weight ( tmkl_pw ) should not noticeably outperform the unweighted version we use. 
+
+Setup. We run tmkl_pw at λ=1 on LoRA and SineLoRA, single seed, with the same recipe as the headline grid; the only difference is that the per-position KL is multiplied by (1 −pbase ,t (yt)) before averaging. 27 Table 15: Rank and learning-rate robustness on LoRA. TMKL’s prevention rate is roughly constant ( −85 to −92% ) across both sweeps. At the most aggressive settings (rank 128 , LR 10 −3), CE overfits the target and TMKL also rescues the target side.                                                        
+
+> Setting CE target ∆TMKL target ∆CE WT ∆TMKL WT ∆WT prevention
+> Rank sweep (LR fixed at 5×10 −4):
+> r=16 −0.38 −0.31 +2 .95 +0 .35 −88%
+> r=32 −0.31 −0.33 +3 .98 +0 .41 −90%
+> r=64 −0.16 −0.34 +5 .99 +0 .71 −88%
+> r=128 +0 .05 (overfits) −0.35 (rescued) +10 .54 +1 .25 −88%
+> Learning-rate sweep (rank fixed at 64 ):
+> 10 −4−0.38 −0.29 +2 .39 +0 .20 −92% 3×10 −4−0.31 −0.33 +4 .22 +0 .45 −89% 5×10 −4−0.16 −0.34 +5 .99 +0 .71 −88% 10 −3+0 .04 (overfits) −0.34 (rescued) +10 .69 +1 .59 −85%
+
+Result. The first two rows of Table 16 show that the unweighted TMKL is in fact ∼ 4 to 9 percentage points better on retention than the position-weighted variant on both adapters (and the same direction holds across all four adapters with three seeds in Table 22), while target adaptation is unchanged. We note an important confound: since (1 −pbase (y)) ≤ 1 strictly, the position-weighted variant uniformly scales down the magnitude of L\y and is therefore equivalent in magnitude to the unweighted variant at a smaller effective λ; some of the observed gap may be attributable to that effective-λ reduction rather than to the per-position weighting itself. A controlled ablation matching effective λ between the two variants is left for future work. We use the unweighted form in the main paper. 
+
+E.5 No-renorm variant (the renormalisation step matters slightly) Hypothesis. TMKL renormalizes the non-target distributions p\yb and p\ya over c̸ = y so they sum to 1
+
+before the KL. A simpler variant ( tmkl_nr ) takes the KL directly on the raw non-target probabilities 
+
+pb(c), p a(c) for c̸ = y without renormalizing. The renormalized version is the principled one (it is the conditional-on-non-target distribution) but the difference may be empirically small if pb(y) is uniformly small. 
+
+Setup. We run tmkl_nr at λ=1 on LoRA and SineLoRA, single seed, with the same recipe as the headline grid; the only difference is the missing renormalization step. 
+
+Result. The last two rows of Table 16 show that renormalization buys ∼ 4 to 5 percentage points on WT-103 prevention and ∼ 1 percentage point on LAMBADA prevention, on both adapters. The improvement is consistent in direction but small in magnitude, which is consistent with the prediction: in the distribution-shifted regime pb(y) is uniformly small, so the renormalized and raw distributions agree to first order. There is also a clean algebraic reason renormalization is theoretically preferred: the un-renormalized KL on raw non-target probabilities is exactly equal to the sum of term (ii) (the non-target mass term) and the unweighted term (iii) of Equation (2); since term (ii) is part of the binary KL that opposes cross-entropy under distribution shift (Section G.2), the no-renorm variant explicitly re-introduces the cross-entropy conflict that masking was designed to remove. We use the renormalized version because it is the principled one and empirically slightly better. 
+
+E.6 Multi-seed standard deviations (the headline numbers are not single-seed accidents) Hypothesis. The headline four-adapter numbers in Table 1 are means; if TMKL is a real property of the loss rather than a single-seed accident, repeating each cell with different RNG seeds (which controls dataset shuffling, dropout masks, and weight initialization noise) should give tightly clustered results. 
+
+Setup. For each of the four headline adapters and each of the two objectives (CE, CE + TMKL), we run seeds {0, 1, 2} on the headline recipe ( 24 runs total). Table 17 reports the mean ± standard deviation per cell. 28 Table 16: Design choices on LoRA and SineLoRA, single seed: position weighting and renor-malisation. Pos-weighted : keeps the (1 −pb(y)) weight from term (iii). No-renorm : takes the KL on raw non-target probabilities, no renormalisation. The unweighted, renormalised variant used in the main paper is the strongest of the three on both adapters.                                 
+
+> Adapter Variant WT prevention LAM prevention Notes LoRA TMKL (used) −89% −95% uniform weight, renormalised LoRA TMKL pos-weighted −80% −89% keeps (1 −pb(y)) weight LoRA TMKL no-renorm −84% −94% raw non-target probs SineLoRA TMKL (used) −89% −96% uniform weight, renormalised SineLoRA TMKL pos-weighted −81% −92% keeps (1 −pb(y)) weight SineLoRA TMKL no-renorm −85% −95% raw non-target probs
+
+Table 17: Multi-seed mean ± std (3 seeds: {0, 1, 2}). Drift prevention has standard deviation 
+
+≤ 5% on every adapter; absolute drift std is ≤ 0.7 PPL on the worst CE cell and ≤ 0.16 PPL on every TMKL cell.                                                       
+
+> Adapter CE WT ∆TMKL WT ∆WT prevention LAM prevention LoRA +5 .99 ±0.43 +0 .67 ±0.03 −89% ±4% −95% ±1%
+> SineLoRA +5 .54 ±0.15 +0 .53 ±0.11 −90% ±3% −95% ±2%
+> RandLoRA +3 .69 ±0.16 +0 .33 ±0.05 −91% ±2% −97% ±1%
+> DoRA +6 .03 ±0.49 +0 .70 ±0.02 −88% ±5% −95% ±1%
+
+Result. On every cell, drift-prevention standard deviation is ≤ 5% of the mean prevention. The absolute-drift standard deviation is ≤ 0.5 PPL on the worst CE cell and ≤ 0.16 PPL on every TMKL cell. The headline −88 to −95% prevention numbers are not seed-specific. 
+
+E.7 Multi-seed standard deviations at 7B (Qwen2.5-7B → PubMed) Hypothesis. The 7B headline numbers in Table 2 are means over 3 seeds; if TMKL is a real property of the loss at production scale, the cell-wise standard deviation should be small relative to the CE-vs-TMKL gap. 
+
+Setup. For each of the four headline adapters and each of the two objectives (CE, CE + TMKL), we run seeds {0, 1, 2} on the 7B PubMed recipe ( 24 runs total). Table 18 reports the mean ± standard deviation per cell. 
+
+Result. On every cell, drift-prevention standard deviation is ≤ 4% of the mean prevention. The absolute-drift standard deviation is ≤ 0.65 PPL on the worst CE cell and ≤ 0.22 PPL on every TMKL cell. The 7B prevention pattern is not seed-specific. 
+
+E.8 λ sensitivity at 7B Hypothesis. The 0.5B λ-sweep on LoRA and SineLoRA (Tables 13 and 14) is monotone in λ with 
+
+λ=1 Pareto-optimal. If the curve is a property of the loss rather than of the model scale, the same monotone shape should appear at 7B. 
+
+Setup. Qwen2.5-7B → PubMed, LoRA, single seed, λ ∈ { 0, 0.1, 0.3, 1, 3, 10 }. The recipe is otherwise identical to the headline 7B grid. 
+
+Result. Table 19 shows monotone retention prevention from 0% at λ=0 to 109% at λ=10 (the curve crosses 100% near λ=1 because TMKL drives 7B retention slightly below the unadapted base, the same effect noted for the LoRA cell of Table 2). Target adaptation degrades smoothly above λ=1 
+
+(PubMed PPL rises from 6.55 at λ=1 to 6.95 at λ=10 ), so λ=1 remains Pareto-optimal at 7B. 
+
+E.9 KL direction (forward, reverse, symmetric) Hypothesis. TMKL uses the forward direction KL( pbase ∥padapted ), which is mode-covering on the base. Retention is asymmetric: we want the adapted model to put mass everywhere the base 29 Table 18: Qwen2.5-7B → PubMed multi-seed mean ± std (3 seeds: {0, 1, 2}). Drift prevention has standard deviation ≤ 4% on every adapter; absolute drift std is ≤ 0.65 PPL on the worst CE cell and ≤ 0.22 PPL on every TMKL cell.                                                       
+
+> Adapter CE WT ∆TMKL WT ∆WT prevention LAM prevention LoRA +1 .59 ±0.42 −0.16 ±0.11 −110% ±3% −101% ±2%
+> SineLoRA +1 .74 ±0.38 −0.09 ±0.14 −105% ±4% −99% ±2%
+> RandLoRA +1 .30 ±0.25 +0 .01 ±0.12 −99% ±2% −97% ±1%
+> DoRA +1 .56 ±0.45 −0.14 ±0.15 −109% ±3% −101% ±2%
+
+Table 19: λ sensitivity at Qwen2.5-7B → PubMed (LoRA, single seed). Each row is one full training run. The minimum mean retention drift sits at λ ≈ 1.0, validating the λ=1 choice at scale; the curve is monotone in λ on both retention sets.                                       
+
+> λPubMed PPL WT-103 ( ∆% )LAMBADA ( ∆% )Mean retention drift Drift prevention vs λ=0 0(CE) 6.43 +18 .5% +33 .1% +25 .8% 0% 0.16.46 +12 .2% +22 .5% +17 .35% 32 .7% 0.36.49 +5 .4% +10 .2% +7 .8% 69 .7% 1.0(used) 6.55 −2.1% −0.5% −1.3% 105 .0% 3.06.70 −3.2% −1.1% −2.15% 108 .3% 10 .06.95 −3.5% −1.4% −2.45% 109 .4%
+
+does, not the reverse. The forward direction should therefore dominate the reverse and symmetric (Jensen-Shannon) variants under the same masking and renormalization. 
+
+Setup. Qwen2.5-0.5B → OpenR1-Math, LoRA, λ=1 , single seed. All variants apply the renor-malized non-target masking; only the divergence direction differs. The reverse-KL variant uses 
+
+KL( p\ya ∥p\yb ) and the JS variant uses 12
+
+KL( p\yb ∥m) + KL( p\ya ∥m) with m = 12 (p\yb + p\ya ).
+
+Result. Table 20 shows the forward direction is uniformly best, with the reverse direction roughly half as effective (mode-seeking in the adapted distribution permits the adapter to drop low-base-probability tokens entirely) and JS sitting between the two as expected from its symmetric averaging. 
+
+E.10 Confidence-threshold robustness Hypothesis. TMKL excludes positions where pbase (y) > 1 − τ from L\y , with default τ = 10 −4.The denominator 1 − pbase (y) would otherwise underflow at saturated positions. Excluded positions are by definition ones where the base already agrees with the target token, so they carry no retention signal; the loss should be insensitive to τ over a wide range, with at most a small dip at very large τ
+
+(where useful positions get excluded too). 
+
+Setup. Qwen2.5-0.5B → OpenR1-Math, LoRA, λ=1 , single seed; τ ∈{10 −2, 10 −3, 10 −4, 10 −5, 10 −6}. We also report the fraction of supervised positions excluded at each threshold. 
+
+Result. Table 21 confirms the prediction: between τ =10 −4 and τ =10 −6 the loss is invariant, with 
+
+≤ 0.1% of positions excluded; at τ =10 −2 where ∼ 1% of positions are excluded, prevention drops by only 6pp on WT-103. The threshold is a numerical guard, not a load-bearing hyperparameter. 
+
+Cross-setting trigger-rate diagnostic. The default-τ exclusion rate is small in every setting we measured: 0.10% of supervised positions on Qwen2.5-0.5B → OpenR1-Math, 0.13% on Qwen2.5-7B → PubMed, and 0.21% on Qwen2.5-7B-Instruct → PubMed (the modest rise on the Instruct base reflects sharper next-token distributions over template tokens). Bias is minimal because the exclusion correlates with positions on which TMKL has no retention signal in the first place: the D\y value at excluded positions, before exclusion, is ≤ 10 −4 nats on every setting (versus a population mean of ∼ 0.07 under TMKL training on held-out OpenR1-Math). The numerical-guard interpretation is therefore consistent with the empirical behavior of the threshold. 30 Table 20: KL direction ablation. Qwen2.5-0.5B → OpenR1-Math, LoRA, λ=1 , single seed. All variants apply the renormalised non-target masking; only the divergence direction differs.                        
+
+> Divergence variant Target PPL WT-103 ( ∆% )LAMBADA ( ∆% )Mean prevention CE only (no regularizer) 3.05 +37% +42% 0%
+> Forward KL( pb∥pa)(TMKL, default) 2.87 +4% +2% −92%
+> Reverse KL( pa∥pb)2.89 +15% +18% −58%
+> Symmetric Jensen-Shannon 2.88 +8% +9% −78%
+
+Table 21: Confidence-threshold ablation for L\y . Positions with pbase (y) > 1 − τ are excluded (denominator 1 − pbase (y) underflows). Default τ = 10 −4. The fraction of supervised positions excluded is ≤ 0.1% at the default; the loss is insensitive to τ over four decades.                                
+
+> τPositions excluded Target PPL WT-103 ( ∆% )LAMBADA ( ∆% )Mean prevention
+> 10 −21.2% 2.89 +6% +5% −86% 10 −30.4% 2.88 +5% +3% −89% 10 −4(default) 0.1% 2.87 +4% +2% −92% 10 −50.03% 2.87 +4% +2% −92% 10 −60.01% 2.87 +4% +2% −92%
+
+E.11 Position-weight ablation, all four headline adapters Hypothesis. The position-weight ablation in Section E.4 and Table 16 was run on LoRA and SineLoRA only and on a single seed. Extending to all four headline adapters with three seeds checks whether the unweighted variant’s ∼ 4 to 9pp advantage on retention is consistent across adapter families. 
+
+Setup. Qwen2.5-0.5B → OpenR1-Math, λ=1 , mean over 3 seeds, four adapters. tmkl_pw multiplies the per-position KL by (1 − pbase (y)) ; tmkl drops it. 
+
+Result. The unweighted variant is uniformly better on every adapter (Table 22): WT-103 prevention is 5 to 15 pp stronger and LAMBADA prevention is 5 to 11 pp stronger, while target adaptation is statistically indistinguishable. The pattern across four adapters with three seeds confirms the design choice in Section 3.2: the term-(iii) weight (1 − pbase (y)) down-weights exactly the easy positions where TMKL has no work to do, so dropping it is empirically harmless and slightly helpful. 
+
+E.12 Predicted behaviour under larger target sets and longer schedules 
+
+The headline grids fix the data budget (Section B.3: ∼ 1M target tokens for OpenR1-Math at 0.5B, 
+
+5,000 documents truncated to 1,024 tokens for PubMed at 7B) and the optimisation budget (3 epochs, effective batch 32). A reasonable concern is whether the small CE-vs-TMKL target-PPL gap ( ≤ 0.13 
+
+at 7B, often inverted at 0.5B) widens as adaptation pressure grows, e.g. under 10 × more target data or longer schedules. The Fisher–Jacobian analysis (Section G.3) makes a concrete prediction: at fixed λ, the TMKL-induced shrinkage of the LoRA update behaves as δϕ ∗ ∝ 1/λ in the strong-regularisation regime, so the residual retention drift scales as 1/λ (empirically verified to slope −0.94 on WT-103, see the scaling-law paragraph in Section G.3). When the target loss component grows (more data × more steps), the effective regularisation strength at fixed λ shrinks proportionally, and the predicted target-PPL gap closes monotonically toward CE while the retention prevention degrades smoothly. This is qualitatively the same behaviour as the empirical λ-curves at 0.5B (Table 13) and 7B (Table 19), where doubling the target-side weight has the same effect as halving λ. The practical implication is that under aggressive long-schedule adaptation λ should be re-swept in the 1 to 5 band rather than held at the default λ=1 ; the λ axis is the natural knob for trading target adaptation against retention. We did not run a 10 ×-data experiment because of the GPU budget; the prediction is falsifiable within 
+
+∼ 30 A6000-hours and is left as future work. 31 Table 22: Position-weight ablation, all four adapters. Qwen2.5-0.5B → OpenR1-Math, λ=1 ,mean over 3 seeds. tmkl_pw multiplies the per-position KL by (1 − pbase (y)) (the weight that falls out of decomposition term (iii)); tmkl drops it. The unweighted variant is uniformly better, refuting the implicit theoretical preference for the weighted form.                                                              
+
+> Adapter Variant Target PPL WT-103 ( ∆% )LAMBADA ( ∆% )Mean prevention LoRA tmkl_pw (weighted) 2.86 ±0.04 +9% +7% −77%
+> LoRA tmkl (unweighted, default) 2.87 ±0.04 +4% +2% −92%
+> SineLoRA tmkl_pw (weighted) 2.86 ±0.03 +10% +8% −75%
+> SineLoRA tmkl (unweighted, default) 2.87 ±0.05 +4% +1% −92%
+> RandLoRA tmkl_pw (weighted) 2.90 ±0.03 +7% +5% −70%
+> RandLoRA tmkl (unweighted, default) 2.92 ±0.03 +2% +0 .4% −94%
+> DoRA tmkl_pw (weighted) 2.85 ±0.04 +10% +8% −75%
+> DoRA tmkl (unweighted, default) 2.86 ±0.04 +4% +2% −92%
+
+Table 23: Non-target output drift D\y on the held-out OpenR1-Math test split, single seed. 
+
+TMKL reduces D\y by 91 to 92% on every adapter, the same band as the 88 to 95% retention-PPL prevention reported in Table 1. The probe uses only the held-out target test set, so this rules out the alternative explanation that TMKL has somehow memorised the retention sets. 
+
+Adapter CE D\y TMKL D\y Reduction LoRA 0.805 0.066 −92% 
+
+SineLoRA 0.734 0.063 −91% 
+
+RandLoRA 0.501 0.047 −91% 
+
+DoRA 0.806 0.067 −92% 
+
+# F Output-Drift Probe 
+
+To verify that TMKL directly controls the quantity it regularises, we measure non-target output drift on the held-out target test set: 
+
+D\y = Et∈M 
+
+h
+
+KL 
+
+
+
+p\yt 
+
+> base ,t
+
+p\yt
+
+> adapted ,t
+
+i 
+
+.
+
+This is the validation-set version of the TMKL training objective. If TMKL is doing what the derivation in Section 3.2 claims, then this number should drop dramatically under TMKL training relative to CE training, regardless of any retention-set perplexity. The same magnitude and direction as the retention-PPL prevention in Table 1, computed on a completely independent quantity (no retention data is involved in the probe), supports the inter-pretation that the retention gains come from suppressing non-target output drift rather than from under-adaptation. Figure 3 (in Section 4.5) visualises both the λ monotonicity and the held-out D\y
+
+reduction graphically. 
+
+# G Method Derivations and Local Interpretation 
+
+This appendix collects the derivations referenced in Section 3.1 and Section 3.2: the LoRA-family parameterization recalled for completeness, the algebraic derivation of the full-KL decomposition (Equation (2)), and a local geometric interpretation of L\y as a Fisher-weighted Jacobian penalty in the LoRA-admissible update space. 
+
+G.1 LoRA-Family Adapter Parameterization 
+
+For each selected linear layer with pretrained weight W 0 
+
+> ℓ
+
+∈ Rdout ×din , vanilla LoRA introduces a trainable low-rank update 
+
+Wℓ(ϕ) = W 0 
+
+> ℓ
+
++ sℓBℓAℓ, Aℓ ∈ Rr×din , Bℓ ∈ Rdout ×r ,
+
+where r ≪ min( din , d out ), sℓ = α/r is the LoRA scaling factor, and ϕ = {Aℓ, B ℓ}ℓ collects all trainable adapter parameters. The pretrained weights θ0 remain frozen throughout adaptation. For the other LoRA-family adapters evaluated in this paper (AdaLoRA, VeRA, DoRA, SineLoRA, PiSSA, 32 RandLoRA), ϕ denotes the corresponding trainable adapter parameters in each case. Target-Masked KL does not depend on the specific adapter parameterization: it only requires the adapted model distribution padapted ,t .
+
+G.2 Derivation of the Full-KL Decomposition 
+
+We restate Equation (2): for two distributions pb, p a on a finite vocabulary V and a designated target token y ∈ V , with renormalized non-target distributions p\yb (c) = pb(c)/(1 − pb(y)) and 
+
+p\ya (c) = pa(c)/(1 − pa(y)) for c̸ = y,
+
+KL( pb ∥ pa) = pb(y) log pb(y)
+
+pa(y) +  1 − pb(y) log 1 − pb(y)1 − pa(y)+  1 − pb(y) KL 
+
+
+
+p\yb p\ya
+
+
+
+.
+
+(3) 
+
+Derivation. Split the KL sum at the target token: 
+
+KL( pb ∥ pa) = X
+
+> c∈V
+
+pb(c) log pb(c)
+
+pa(c) = pb(y) log pb(y)
+
+pa(y) + X
+
+> c̸=y
+
+pb(c) log pb(c)
+
+pa(c) .
+
+For c̸ = y, by definition of the renormalized distributions, 
+
+pb(c) =  1 − pb(y) p\yb (c), pa(c) =  1 − pa(y) p\ya (c).
+
+Substituting, 
+
+log pb(c)
+
+pa(c) = log 1 − pb(y)1 − pa(y) + log p\yb (c)
+
+p\ya (c) .
+
+Multiplying by pb(c) = (1 − pb(y)) p\yb (c) and summing over c̸ = y,
+
+X
+
+> c̸=y
+
+pb(c) log pb(c)
+
+pa(c) =  1 − pb(y) log 1 − pb(y)1 − pa(y) · X
+
+> c̸=y
+
+p\yb (c)
+
+| {z }
+
+> =1
+
++  1 − pb(y) X 
+
+> c̸=y
+
+p\yb (c) log p\yb (c)
+
+p\ya (c)
+
+| {z }  
+
+> =KL( p\yb∥p\ya)
+
+.
+
+Combining with the target-token term gives Equation (3). □
+
+Each term is non-negative when summed in the natural pairing: terms (i) and (ii) together form the binary KL divergence between  pb(y), 1 − pb(y) and  pa(y), 1 − pa(y), and term (iii) is a non-negative weighted KL on the non-target simplex. Individually, terms (i) and (ii) can take either sign; only their sum is constrained to be non-negative. 
+
+Lemma (binary-KL gradient opposes cross-entropy). Let K(pb, p a) := pb(y) log pb(y) 
+
+> pa(y)
+
++ (1 −
+
+pb(y)) log 1−pb(y)1−pa(y) denote the sum of terms (i) and (ii) in Equation (3), viewed as a function of pa(y)
+
+at fixed pb(y) ∈ (0 , 1) . Then 
+
+∂K ∂p a(y) = pa(y) − pb(y)
+
+pa(y)  1 − pa(y) ,
+
+which is strictly positive whenever pa(y) > p b(y). The cross-entropy gradient ∂pa(y)
+
+ − log pa(y) =
+
+−1/p a(y) is strictly negative. Hence whenever the adapted target probability exceeds the base target probability (the regime cross-entropy actively drives toward under distribution shift), the binary-KL gradient and the cross-entropy gradient have opposite signs, and a full-distribution KL regularizer fights cross-entropy on the very token cross-entropy is trying to learn. Target-Masked KL drops K
+
+from the regularizer by construction (Equation (1)) and therefore avoids the conflict globally, not just locally near pa(y) ≈ pb(y).33 Derivation of the lemma. Differentiating K in pa(y) at fixed pb(y):
+
+∂K ∂p a(y) = − pb(y)
+
+pa(y) + 1 − pb(y)1 − pa(y) = −pb(y) 1 − pa(y) + pa(y) 1 − pb(y)
+
+pa(y) 1 − pa(y) = pa(y) − pb(y)
+
+pa(y) 1 − pa(y) ,
+
+which has the sign of pa(y) − pb(y). □
+
+G.3 Local LoRA-Space Interpretation as a Fisher-Weighted Jacobian Penalty 
+
+We give a local interpretation of L\y as a quadratic form on the adapter perturbation δϕ , with curvature determined by the LoRA Jacobian and the Fisher information of the non-target categorical distribution. Let zadapted ,t ∈ R|V| denote the adapted logits at token position t, and let z\yt 
+
+> adapted ,t
+
+denote the logits restricted to the non-target vocabulary. Around the frozen base model, a first-order expansion in the adapter parameters gives 
+
+z\yt 
+
+> adapted ,t
+
+≈ z\yt 
+
+> base ,t
+
++ Jϕt, \yt δϕ, 
+
+where Jϕt, \yt is the Jacobian of the non-target logits with respect to ϕ. Because the base weights are frozen, this Jacobian contains only directions reachable by the LoRA adapters; this is what we mean by “LoRA-admissible” updates. Note that for a softmax output, the renormalized non-target distribution p\y equals the softmax of the non-target logit subvector z\y (the target logit drops out of the partition function), so the Fisher information of p\y with respect to z\y is the standard categorical Fisher of the non-target distribution. For small adapter-induced logit changes, the KL divergence between two categorical distributions admits a standard second-order local approximation in the logits (the first-order term vanishes at 
+
+za = zb since ∂za KL( pb∥pa) = pa − pb, and the Hessian ∂2 
+
+> za
+
+KL( pb∥pa) = F (pa) equals F (pb) at the expansion point): 
+
+KL 
+
+
+
+p\yt 
+
+> base ,t
+
+p\yt
+
+> adapted ,t
+
+
+
+≈ 12 δϕ ⊤ 
+
+Jϕt, \yt
+
+⊤
+
+F
+
+
+
+p\yt
+
+> base ,t
+
+
+
+Jϕt, \yt δϕ, 
+
+where 
+
+F
+
+
+
+p\yt
+
+> base ,t
+
+
+
+= Diag 
+
+
+
+p\yt
+
+> base ,t
+
+
+
+− p\yt
+
+> base ,t
+
+
+
+p\yt
+
+> base ,t
+
+⊤
+
+is the Fisher information matrix of the non-target categorical distribution with respect to its logits. The expansion is valid for ∥δϕ ∥ small enough that ∥z\yt 
+
+> adapted ,t
+
+− z\yt
+
+> base ,t
+
+∥ remains in the regime where the second-order Taylor expansion of KL in logits is accurate. Under this approximation, Target-Masked KL penalizes adapter directions δϕ that, after projection through the LoRA Jacobian, induce large changes in the base model’s non-target predictive geometry. Two consequences follow. First, Target-Masked KL is a local output-space regularizer rather than a parameter-space constraint: the penalty depends on the LoRA adapters only through their effect on the non-target logits. Second, LoRA determines the admissible update directions through Jϕt, \yt , and Target-Masked KL discourages those directions from inducing large non-target distributional changes. Together these two observations explain why Target-Masked KL is compatible with any LoRA-family parameterization that exposes a differentiable map from ϕ to the adapted output distribution. 
+
+Strong-regularisation scaling law and empirical check. The same quadratic approximation makes a non-trivial prediction. Writing H = (1 /|M| ) P
+
+> t∈M
+
+ Jϕt, \yt
+
+⊤F  p\yt
+
+> base ,t
+
+Jϕt, \yt , in the strong-regularization regime the equilibrium adapter perturbation δϕ ∗ that minimizes LCE + λ L\y
+
+satisfies λHδϕ ∗ ≈ −∇L CE (in the column space of H, where the LoRA-admissible directions live), so ∥δϕ ∗∥ ∝ 1/λ . Retention drift in held-out PPL is, to first order, linear in δϕ ∗ around the base, so 
+
+∆PPL ≈ ∇ PPL ⊤δϕ ∗ ∝ 1/λ . (Note that the regularizer value itself, L\y (δϕ ∗) = 12 (δϕ ∗)⊤Hδϕ ∗ ∝
+
+1/λ 2, is one order steeper than the drift; we do not test the regularizer value, only the drift.) This predicts a log -log slope of −1 for residual retention drift versus λ in the strong-regularization regime. Fitting the LoRA λ-sweep in Table 13 for λ ∈ [0 .3, 1] gives an empirical WT-103 slope of −0.94 ,within 6% of the theoretical −1; LAMBADA gives −1.35 , consistent in direction but suggesting beyond-leading-order Fisher structure on LAMBADA positions. The closeness of the WT-103 slope to the predicted value is direct empirical support for the local-geometry interpretation. 34 G.4 Pinsker bound: from L\y to a capability-retention guarantee 
+
+The held-out output-drift probe (Table 23) shows empirically that minimising L\y at training time tightly controls the same quantity at evaluation time. The link between this surrogate and a guarantee on any downstream capability that depends on the non-target distribution is one application of Pinsker’s inequality [10, Lemma 11.6.1]. For each supervised position t, 
+
+> 12
+
+p\yt 
+
+> base ,t
+
+− p\yt 
+
+> adapted ,t
+> 2TV
+
+≤ KL  p\yt 
+
+> base ,t
+
+p\yt
+
+> adapted ,t
+
+.
+
+Averaging over M and applying Jensen’s inequality, 
+
+Et∈M 
+
+h
+
+p\yt 
+
+> base ,t
+
+− p\yt 
+
+> adapted ,t TV
+
+i
+
+≤
+
+q
+
+2 L\y .
+
+Any bounded statistic of the conditional non-target distribution (e.g., the probability assigned to a specified non-target candidate, or a likelihood ratio between two non-target alternatives) therefore deviates by at most p2L\y in expectation. With our held-out values of L\y ≈ 0.05 to 0.07 nats under TMKL (Table 23), this bound is ≤ 0.37 TV per position. The bound is loose (Pinsker is tight only for binary distributions), but it makes the surrogate-to-capability link explicit: any downstream task whose decision rule is a bounded function of the conditional non-target distribution inherits a TV-distance guarantee from the same surrogate that TMKL minimises. This is information-theoretically consistent with the empirical preservation of factual recall, math reasoning, code, and multilingual capabilities under TMKL (Table 7). 
+
+G.5 Training-Time Cost 
+
+Computing L\y requires one forward pass through the frozen base model fθ0 in addition to the standard forward and backward passes through the LoRA-adapted model. The base-model forward pass is cached once per training batch, has no associated backward pass (no gradients are propagated through θ0), and can be run in inference mode (no activation memory for backward, optional half-precision). The renormalization and KL computation themselves are O(|V| ) per supervised position and add negligible overhead relative to the forward pass. At inference time the regularizer is discarded entirely, and the deployed adapted model is identical in form to one trained with cross-entropy alone. 35 NeurIPS Paper Checklist 
+
+1. Claims 
+
+Question: Do the main claims made in the abstract and introduction accurately reflect the paper’s contributions and scope? Answer: [Yes] Justification: The abstract and Section 4 state that we propose a replay-free output-space regularizer (Target-Masked KL) that prevents forgetting under LoRA-family adaptation. The experiments in Sections 4.2, 4.3 and 4.5 substantiate this at 0.5B and 7B (Tables 1 and 2); cross-family generalisation is shown on Llama-3.2-1B, Llama-3.1-8B, Mistral-7B-v0.3, and Phi-3.5-mini-instruct (Tables 9 and 10); transfer to instruction-tuned bases is shown on Qwen2.5-7B-Instruct with IFEval, MT-Bench, and refusal-rate metrics (Table 8); and broader retention (factual recall, math reasoning, code, multilingual) is shown in Table 7. Every claim in the abstract and contribution bullets is backed by a specific table reference. Guidelines: • The answer [N/A] means that the abstract and introduction do not include the claims made in the paper. • The abstract and/or introduction should clearly state the claims made, including the contributions made in the paper and important assumptions and limitations. A [No] or [N/A] answer to this question will not be perceived well by the reviewers. • The claims made should match theoretical and experimental results, and reflect how much the results can be expected to generalize to other settings. • It is fine to include aspirational goals as motivation as long as it is clear that these goals are not attained by the paper. 2. Limitations 
+
+Question: Does the paper discuss the limitations of the work performed by the authors? Answer: [Yes] Justification: An explicit Limitations and future work paragraph at the end of Section 5 discusses the two scope constraints (single-task adaptation rather than sequential continual fine-tuning, and text-only autoregressive LLMs rather than vision-language or speech). On the methodological side, the training-time cost (one extra frozen-base forward pass per training step, no inference cost) is reported in Section G.5, the local Fisher-Jacobian interpretation is explicitly stated as valid only in a small-δϕ regime in Section G.3, and the position-weight ablation has a noted effective-λ confound discussed in Section E.4. Both the Qwen2.5-0.5B and Qwen2.5-7B numbers are mean over three seeds {0, 1, 2}, with per-cell standard deviations reported in Sections E.6 and E.7. Guidelines: • The answer [N/A] means that the paper has no limitation while the answer [No] means that the paper has limitations, but those are not discussed in the paper. • The authors are encouraged to create a separate “Limitations” section in their paper. • The paper should point out any strong assumptions and how robust the results are to violations of these assumptions (e.g., independence assumptions, noiseless settings, model well-specification, asymptotic approximations only holding locally). The authors should reflect on how these assumptions might be violated in practice and what the implications would be. • The authors should reflect on the scope of the claims made, e.g., if the approach was only tested on a few datasets or with a few runs. In general, empirical results often depend on implicit assumptions, which should be articulated. • The authors should reflect on the factors that influence the performance of the approach. For example, a facial recognition algorithm may perform poorly when image resolution is low or images are taken in low lighting. Or a speech-to-text system might not be used reliably to provide closed captions for online lectures because it fails to handle technical jargon. • The authors should discuss the computational efficiency of the proposed algorithms and how they scale with dataset size. 36 • If applicable, the authors should discuss possible limitations of their approach to address problems of privacy and fairness. • While the authors might fear that complete honesty about limitations might be used by reviewers as grounds for rejection, a worse outcome might be that reviewers discover limitations that aren’t acknowledged in the paper. The authors should use their best judgment and recognize that individual actions in favor of transparency play an impor-tant role in developing norms that preserve the integrity of the community. Reviewers will be specifically instructed to not penalize honesty concerning limitations. 3. Theory assumptions and proofs 
+
+Question: For each theoretical result, does the paper provide the full set of assumptions and a complete (and correct) proof? Answer: [Yes] Justification: Four theoretical results are made, each with full assumptions and proof. (i) The full-KL decomposition (Equation (2)) is an exact identity, derived step by step in Section G.2. (ii) The local Fisher-Jacobian interpretation in Section G.3 states the small-δϕ 
+
+regime explicitly and justifies the Hessian evaluation point. (iii) The strong-regularisation scaling law in the same appendix derives ∆PPL ∝ 1/λ from the quadratic approximation and reports an empirical WT-103 slope of −0.94 as a falsifiable test. (iv) The Pinsker bound in Section G.4 ties the held-out value of L\y to a TV-distance guarantee on the conditional non-target distribution under standard regularity assumptions. No other theoretical claims are made. Guidelines: • The answer [N/A] means that the paper does not include theoretical results. • All the theorems, formulas, and proofs in the paper should be numbered and cross-referenced. • All assumptions should be clearly stated or referenced in the statement of any theorems. • The proofs can either appear in the main paper or the supplemental material, but if they appear in the supplemental material, the authors are encouraged to provide a short proof sketch to provide intuition. • Inversely, any informal proof provided in the core of the paper should be complemented by formal proofs provided in appendix or supplemental material. • Theorems and Lemmas that the proof relies upon should be properly referenced. 4. Experimental result reproducibility 
+
+Question: Does the paper fully disclose all the information needed to reproduce the main ex-perimental results of the paper to the extent that it affects the main claims and/or conclusions of the paper (regardless of whether the code and data are provided or not)? Answer: [Yes] Justification: Section B documents models and tokenizers, dataset preprocessing, adapter configurations and ranks, training hyperparameters per setting, Target-Masked KL hyper-parameters (the position-confidence threshold and stop-gradient mechanics), evaluation protocol, software stack with version numbers, the hardware (single NVIDIA RTX A6000 48 GB), random seeds, and the per-experiment compute budget. Guidelines: • The answer [N/A] means that the paper does not include experiments. • If the paper includes experiments, a [No] answer to this question will not be perceived well by the reviewers: Making the paper reproducible is important, regardless of whether the code and data are provided or not. • If the contribution is a dataset and/or model, the authors should describe the steps taken to make their results reproducible or verifiable. • Depending on the contribution, reproducibility can be accomplished in various ways. For example, if the contribution is a novel architecture, describing the architecture fully might suffice, or if the contribution is a specific model and empirical evaluation, it may be necessary to either make it possible for others to replicate the model with the same 37 dataset, or provide access to the model. In general. releasing code and data is often one good way to accomplish this, but reproducibility can also be provided via detailed instructions for how to replicate the results, access to a hosted model (e.g., in the case of a large language model), releasing of a model checkpoint, or other means that are appropriate to the research performed. • While NeurIPS does not require releasing code, the conference does require all submis-sions to provide some reasonable avenue for reproducibility, which may depend on the nature of the contribution. For example (a) If the contribution is primarily a new algorithm, the paper should make it clear how to reproduce that algorithm. (b) If the contribution is primarily a new model architecture, the paper should describe the architecture clearly and fully. (c) If the contribution is a new model (e.g., a large language model), then there should either be a way to access this model for reproducing the results or a way to reproduce the model (e.g., with an open-source dataset or instructions for how to construct the dataset). (d) We recognize that reproducibility may be tricky in some cases, in which case authors are welcome to describe the particular way they provide for reproducibility. In the case of closed-source models, it may be that access to the model is limited in some way (e.g., to registered users), but it should be possible for other researchers to have some path to reproducing or verifying the results. 5. Open access to data and code 
+
+Question: Does the paper provide open access to the data and code, with sufficient instruc-tions to faithfully reproduce the main experimental results, as described in supplemental material? Answer: [Yes] Justification: All datasets used (OpenR1-Math, PubMed, WikiText-103, LAMBADA, Trivi-aQA, GSM8K, HumanEval, FLORES-200, IFEval, MT-Bench, XSTest) are publicly avail-able, and all base models (Qwen2.5-7B, Qwen2.5-7B-Instruct, Qwen2.5-0.5B) are publicly hosted on the HuggingFace Hub; identifiers are listed in Sections B.2 and B.3. Training, evaluation, and Target-Masked KL implementation code will be released in an anonymised repository upon acceptance and de-anonymised at camera-ready. Guidelines: • The answer [N/A] means that paper does not include experiments requiring code. • Please see the NeurIPS code and data submission guidelines ( https://neurips.cc/ public/guides/CodeSubmissionPolicy ) for more details. • While we encourage the release of code and data, we understand that this might not be possible, so [No] is an acceptable answer. Papers cannot be rejected simply for not including code, unless this is central to the contribution (e.g., for a new open-source benchmark). • The instructions should contain the exact command and environment needed to run to reproduce the results. See the NeurIPS code and data submission guidelines ( https: //neurips.cc/public/guides/CodeSubmissionPolicy ) for more details. • The authors should provide instructions on data access and preparation, including how to access the raw data, preprocessed data, intermediate data, and generated data, etc. • The authors should provide scripts to reproduce all experimental results for the new proposed method and baselines. If only a subset of experiments are reproducible, they should state which ones are omitted from the script and why. • At submission time, to preserve anonymity, the authors should release anonymized versions (if applicable). • Providing as much information as possible in supplemental material (appended to the paper) is recommended, but including URLs to data and code is permitted. 6. Experimental setting/details 
+
+Question: Does the paper specify all the training and test details (e.g., data splits, hyperpa-rameters, how they were chosen, type of optimizer) necessary to understand the results? 38 Answer: [Yes] Justification: Section B.5 gives the per-setting optimizer (AdamW), learning rate, batch size, sequence length, gradient accumulation, and epoch count for every experiment. Section B.4 specifies adapter ranks and per-family hyperparameters. Section B.6 specifies the Target-Masked KL weight λ, the position confidence threshold, the stop-gradient mechanics, and the position-weighting design choice. Guidelines: • The answer [N/A] means that the paper does not include experiments. • The experimental setting should be presented in the core of the paper to a level of detail that is necessary to appreciate the results and make sense of them. • The full details can be provided either with the code, in appendix, or as supplemental material. 7. Experiment statistical significance 
+
+Question: Does the paper report error bars suitably and correctly defined or other appropriate information about the statistical significance of the experiments? Answer: [Yes] Justification: Both the Qwen2.5-0.5B and the Qwen2.5-7B headline grids report the mean over three seeds {0, 1, 2} with per-cell standard deviations in Tables 17 and 18. Error bars are 1-σ across seeds, controlling for dataset shuffling, dropout masks, and weight initialisation noise. Section B.11 documents the seed plan and per-seed-control mechanics. Guidelines: • The answer [N/A] means that the paper does not include experiments. • The authors should answer [Yes] if the results are accompanied by error bars, confidence intervals, or statistical significance tests, at least for the experiments that support the main claims of the paper. • The factors of variability that the error bars are capturing should be clearly stated (for example, train/test split, initialization, random drawing of some parameter, or overall run with given experimental conditions). • The method for calculating the error bars should be explained (closed form formula, call to a library function, bootstrap, etc.) • The assumptions made should be given (e.g., Normally distributed errors). • It should be clear whether the error bar is the standard deviation or the standard error of the mean. • It is OK to report 1-sigma error bars, but one should state it. The authors should preferably report a 2-sigma error bar than state that they have a 96% CI, if the hypothesis of Normality of errors is not verified. • For asymmetric distributions, the authors should be careful not to show in tables or figures symmetric error bars that would yield results that are out of range (e.g., negative error rates). • If error bars are reported in tables or plots, the authors should explain in the text how they were calculated and reference the corresponding figures or tables in the text. 8. Experiments compute resources 
+
+Question: For each experiment, does the paper provide sufficient information on the com-puter resources (type of compute workers, memory, time of execution) needed to reproduce the experiments? Answer: [Yes] Justification: Section B.10 describes the hardware (single NVIDIA RTX A6000 48 GB) and the precision settings (BF16). Section B.12 gives per-experiment wall-clock estimates. The full project budget (Qwen2.5-0.5B and Qwen2.5-7B headline grids each with four adapters, two objectives, and three seeds; the published-baseline grid; the broader-retention re-evaluations; the Instruct-base grid; the Llama-3.2-1B, Llama-3.1-8B, and Mistral-7B-v0.3 multi-family grid; and all ablations) totals approximately 1,300 GPU-hours, including pilot runs and failed experiments. 39 Guidelines: • The answer [N/A] means that the paper does not include experiments. • The paper should indicate the type of compute workers CPU or GPU, internal cluster, or cloud provider, including relevant memory and storage. • The paper should provide the amount of compute required for each of the individual experimental runs as well as estimate the total compute. • The paper should disclose whether the full research project required more compute than the experiments reported in the paper (e.g., preliminary or failed experiments that didn’t make it into the paper). 9. Code of ethics 
+
+Question: Does the research conducted in the paper conform, in every respect, with the NeurIPS Code of Ethics https://neurips.cc/public/EthicsGuidelines ?Answer: [Yes] Justification: The research uses publicly released pretrained models and standard public benchmarks for adaptation and evaluation. No new data was collected from human subjects; no models were retrained from scratch; no data crawling or scraping was performed. Guidelines: • The answer [N/A] means that the authors have not reviewed the NeurIPS Code of Ethics. • If the authors answer [No], they should explain the special circumstances that require a deviation from the Code of Ethics. • The authors should make sure to preserve anonymity (e.g., if there is a special consid-eration due to laws or regulations in their jurisdiction). 10. Broader impacts 
+
+Question: Does the paper discuss both potential positive societal impacts and negative societal impacts of the work performed? Answer: [Yes] Justification: A dedicated broader-impact discussion is provided in Section A.1, covering positive impacts (reduced silent capability erosion in replay-free post-deployment LoRA adaptation, with retained alignment metrics on instruction-tuned bases), risks and limita-tions (TMKL deliberately preserves base preferences and is therefore the wrong default for unlearning, debiasing, or safety re-alignment, with a documented weighted-variant remedy), and adversarial / dual-use considerations (TMKL adds no new capability beyond the underlying LoRA pipeline and is neutral with respect to standard LoRA threats). Guidelines: • The answer [N/A] means that there is no societal impact of the work performed. • If the authors answer [N/A] or [No], they should explain why their work has no societal impact or why the paper does not address societal impact. • Examples of negative societal impacts include potential malicious or unintended uses (e.g., disinformation, generating fake profiles, surveillance), fairness considerations (e.g., deployment of technologies that could make decisions that unfairly impact specific groups), privacy considerations, and security considerations. • The conference expects that many papers will be foundational research and not tied to particular applications, let alone deployments. However, if there is a direct path to any negative applications, the authors should point it out. For example, it is legitimate to point out that an improvement in the quality of generative models could be used to generate Deepfakes for disinformation. On the other hand, it is not needed to point out that a generic algorithm for optimizing neural networks could enable people to train models that generate Deepfakes faster. • The authors should consider possible harms that could arise when the technology is being used as intended and functioning correctly, harms that could arise when the technology is being used as intended but gives incorrect results, and harms following from (intentional or unintentional) misuse of the technology. 40 • If there are negative societal impacts, the authors could also discuss possible mitigation strategies (e.g., gated release of models, providing defenses in addition to attacks, mechanisms for monitoring misuse, mechanisms to monitor how a system learns from feedback over time, improving the efficiency and accessibility of ML). 11. Safeguards 
+
+Question: Does the paper describe safeguards that have been put in place for responsible release of data or models that have a high risk for misuse (e.g., pre-trained language models, image generators, or scraped datasets)? Answer: [N/A] Justification: We release no pretrained model weights, no scraped datasets, and no new high-misuse-risk artifacts. All experiments operate on already-public Hugging Face models and datasets. Guidelines: • The answer [N/A] means that the paper poses no such risks. • Released models that have a high risk for misuse or dual-use should be released with necessary safeguards to allow for controlled use of the model, for example by requiring that users adhere to usage guidelines or restrictions to access the model or implementing safety filters. • Datasets that have been scraped from the Internet could pose safety risks. The authors should describe how they avoided releasing unsafe images. • We recognize that providing effective safeguards is challenging, and many papers do not require this, but we encourage authors to take this into account and make a best faith effort. 12. Licenses for existing assets 
+
+Question: Are the creators or original owners of assets (e.g., code, data, models), used in the paper, properly credited and are the license and terms of use explicitly mentioned and properly respected? Answer: [Yes] Justification: All pretrained models, datasets, and software libraries used in the paper are cited and listed in Sections B.2, B.3 and B.9 with their original sources and HuggingFace identifiers. We use each asset under its respective public license as published on the corresponding model card, dataset card, or repository, and within the terms of use those sources specify. No asset is redistributed. Guidelines: • The answer [N/A] means that the paper does not use existing assets. • The authors should cite the original paper that produced the code package or dataset. • The authors should state which version of the asset is used and, if possible, include a URL. • The name of the license (e.g., CC-BY 4.0) should be included for each asset. • For scraped data from a particular source (e.g., website), the copyright and terms of service of that source should be provided. • If assets are released, the license, copyright information, and terms of use in the package should be provided. For popular datasets, paperswithcode.com/datasets 
+
+has curated licenses for some datasets. Their licensing guide can help determine the license of a dataset. • For existing datasets that are re-packaged, both the original license and the license of the derived asset (if it has changed) should be provided. • If this information is not available online, the authors are encouraged to reach out to the asset’s creators. 13. New assets 
+
+Question: Are new assets introduced in the paper well documented and is the documentation provided alongside the assets? 41 Answer: [N/A] Justification: No new assets (code, datasets, or model weights) are released at submission time. The proposed Target-Masked KL loss is fully documented in the paper itself: the loss is derived in Sections 3.1 and G, all training, adapter, and TMKL hyperparameters are specified in Sections B.4 to B.6, and per-setting compute and hardware are listed in Sections B.10 and B.12. As stated in checklist item 4, training, evaluation, and Target-Masked KL implementation code will be released in an anonymised repository upon acceptance and de-anonymised at camera-ready. Guidelines: • The answer [N/A] means that the paper does not release new assets. • Researchers should communicate the details of the dataset/code/model as part of their submissions via structured templates. This includes details about training, license, limitations, etc. • The paper should discuss whether and how consent was obtained from people whose asset is used. • At submission time, remember to anonymize your assets (if applicable). You can either create an anonymized URL or include an anonymized zip file. 14. Crowdsourcing and research with human subjects 
+
+Question: For crowdsourcing experiments and research with human subjects, does the paper include the full text of instructions given to participants and screenshots, if applicable, as well as details about compensation (if any)? Answer: [N/A] Justification: The paper does not involve crowdsourcing or research with human subjects. Guidelines: • The answer [N/A] means that the paper does not involve crowdsourcing nor research with human subjects. • Including this information in the supplemental material is fine, but if the main contribu-tion of the paper involves human subjects, then as much detail as possible should be included in the main paper. • According to the NeurIPS Code of Ethics, workers involved in data collection, curation, or other labor should be paid at least the minimum wage in the country of the data collector. 15. Institutional review board (IRB) approvals or equivalent for research with human subjects 
+
+Question: Does the paper describe potential risks incurred by study participants, whether such risks were disclosed to the subjects, and whether Institutional Review Board (IRB) approvals (or an equivalent approval/review based on the requirements of your country or institution) were obtained? Answer: [N/A] Justification: The paper does not involve crowdsourcing or research with human subjects. Guidelines: • The answer [N/A] means that the paper does not involve crowdsourcing nor research with human subjects. • Depending on the country in which research is conducted, IRB approval (or equivalent) may be required for any human subjects research. If you obtained IRB approval, you should clearly state this in the paper. • We recognize that the procedures for this may vary significantly between institutions and locations, and we expect authors to adhere to the NeurIPS Code of Ethics and the guidelines for their institution. • For initial submissions, do not include any information that would break anonymity (if applicable), such as the institution conducting the review. 16. Declaration of LLM usage 
+
+42 Question: Does the paper describe the usage of LLMs if it is an important, original, or non-standard component of the core methods in this research? Note that if the LLM is used only for writing, editing, or formatting purposes and does not impact the core methodology, scientific rigor, or originality of the research, declaration is not required. Answer: [Yes] Justification: A dedicated declaration of LLM usage is provided in Section A.2. In summary: the proposed Target-Masked KL regularizer is a loss-level construction that does not invoke any LLM during derivation, definition, or computation. LLMs appear in the paper in three roles: (i) as the experimental subjects being adapted (Qwen2.5-0.5B/7B/7B-Instruct, Llama-3.2-1B, Llama-3.1-8B, Mistral-7B-v0.3, Phi-3.5-mini-instruct); (ii) inside the standard MT-Bench evaluation protocol as the LLM-judge for the instruction-tuned retention grid (Table 8), used unmodified; (iii) for grammatical editing and LaTeX polishing, within the scope explicitly exempted from declaration by the NeurIPS 2026 LLM policy. No experimental result, table cell, derivation, or finding was generated by an LLM. Guidelines: • The answer [N/A] means that the core method development in this research does not involve LLMs as any important, original, or non-standard components. • Please refer to our LLM policy in the NeurIPS handbook for what should or should not be described. 43

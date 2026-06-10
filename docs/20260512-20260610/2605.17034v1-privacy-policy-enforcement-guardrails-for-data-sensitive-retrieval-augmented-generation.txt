@@ -1,0 +1,725 @@
+Title: Privacy Policy Enforcement Guardrails for Data-Sensitive Retrieval-Augmented Generation
+
+URL Source: https://arxiv.org/pdf/2605.17034v1
+
+Published Time: Tue, 19 May 2026 01:00:38 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Privacy Policy Enforcement Guardrails for Data-Sensitive Retrieval-Augmented Generation 
+
+Osama Zafar 
+
+Dept. of Computer and Data Sciences Case Western Reserve University 
+
+Cleveland, USA oxz23@case.edu 
+
+Alexander Nemecek 
+
+Dept. of Computer and Data Sciences Case Western Reserve University 
+
+Cleveland, USA ajn98@case.edu 
+
+Yiqian Zhang 
+
+Dept. of Computer and Data Sciences Case Western Reserve University 
+
+Cleveland, USA yxz3283@case.edu 
+
+Wenbiao Li 
+
+Dept. of Computer and Data Sciences Case Western Reserve University 
+
+Cleveland, USA wxl387@case.edu 
+
+Debargha Ganguly 
+
+Dept. of Computer and Data Sciences Case Western Reserve University 
+
+Cleveland, USA dxg512@case.edu 
+
+Vikash Singh 
+
+Dept. of Computer and Data Sciences Case Western Reserve University 
+
+Cleveland, USA vxs465@case.edu 
+
+Vipin Chaudhary 
+
+Dept. of Computer and Data Sciences Case Western Reserve University 
+
+Cleveland, USA vxc204@case.edu 
+
+Erman Ayday 
+
+Dept. of Computer and Data Sciences Case Western Reserve University 
+
+Cleveland, USA exa208@case.edu 
+
+Abstract —Retrieval-augmented generation (RAG) has become the default deployment pattern in medicine, finance, and law, domains where every generated answer is grounded in corpora that are sensitive in nature. The privacy defenses are primarily constructed under the assumption that data leakage manifests as a Social Security number, an email address, or a name. However, this is not invariably the case. The most perilous form of leakage is contextual in nature, which standard token-level Personally Identifiable Information (PII) filters fail to detect. For instance, the sentence “52-year-old female litigator from Omaha with two children and a recent custody filing” contains five attributes, none of which are individually regulated, that collectively identify a single individual. Token-level filters and named-entity pipelines are blind to this by construction, and emerging representation-based detectors often learn the style of leaky text rather than the leak itself, achieving high benchmark scores while missing the underlying threat. We address this gap with a privacy policy enforcement framework (PPE) for quasi-identifier (QI) cluster leakage in RAG outputs, built on a dual one-class density estimator over fused text embeddings with a calibrated abstain region for inputs that are out-of-distribution to both the safe and unsafe densities. Because real breaches cannot provide training data at the required scale, we introduce an axis-stratified (non-overlapping subsets of a domain), multi-LLM synthetic data generation pipeline and instantiate it across three independent domains: medicine, finance, and law. This three-domain setup exposes a case-style confound: a Gaussian Mixture baseline reaches AUROC ≥ 0.94 within-distribution, but collapses to [0.72 - 0.79] on a borderline-safe stress test that strips the QIs but maintains the tone referring to the client, patient, or matter. The detector has been latching onto the register, not content. A T3 detector (proposed by Ganguly et al. [1]) with one-class SVM (T3+OCSVM) trained on the safe distribution data, augmented with borderline-safe records, achieves a promising borderline AUROC of 0.93 or higher across all three domains. It also significantly lowers the borderline false positive rate at a 95% true positive rate (FPR 95 ) by 44–55 percentage points, while keeping abstention rates below 11% and operating at millisecond-level latency. Our framework is benchmarked against a supervised MLP classifier and a 14-billion-parameter large language model serving as an evaluative judge. While they offer comparable levels of accuracy, neither is appropriate for operational deployment. The supervised classifier abstains in 70–85% of borderline sensitive cases, and the LLM judge cannot be calibrated to a specific operational point and exhibits significant latency. The borderline-safe stress test we propose as a methodological contribution extends beyond contextual privacy and applies to any classifier trained on synthetically generated positive and negative classes. 
+
+Index Terms —component, formatting, style, styling, insert 
+
+I. I NTRODUCTION 
+
+Retrieval-augmented generation (RAG) changes the unit at which privacy must be enforced. In a conventional system, privacy policies attach to stored objects: a patient note, a transaction record, a legal memorandum. In a RAG system, the object exposed to the user is a generated answer. That answer may quote, summarize, combine, or infer from protected records, and its privacy status is not automatically inherited from the access controls on the underlying corpus. The privacy enforcement problem, therefore, moves from document access to output composition. The easy case to handle is direct leakage, the explicit disclosure of a name, Social Security number, medical record number, account number, docket number, e-mail address, or 
+
+> arXiv:2605.17034v1 [cs.LG] 16 May 2026
+
+phone number. Existing personally identifiable information PII filters, NER systems, and regular-expression pipelines provide a natural first line of defense (Layer 1). These mechanisms are imperfect, but the violation has a local signature: some token or span is itself disallowed. The harder case is contextual leak-age. Consider an answer that describes a “52-year-old female litigator from Omaha with two children and a recent custody filing.” No token is a direct identifier. Yet the conjunction may be identifying [2], [3]. The privacy violation is not a string; it is a composition of quasi-identifiers. This constitutes the Layer-2 challenge explored here: detection of re-identifying QI clusters in generated RAG outputs that have already passed direct-identifier filtering. At first glance, contextual privacy appears to be a natural setting for distribution-based guardrails like Trust the Typical 
+
+(T3) [1]. T3 builds guardrails by learning what acceptable behavior typically looks like and rejecting outputs outside that support. This is attractive for RAG privacy because real privacy breaches are rare, sensitive, and unavailable at the training scale. But T3 is calibrated against the assumption that unsafe content looks atypical, and that assumption fails here. The difficulty is that privacy-violating answers do not necessarily look unusual. In clinical, financial, and legal RAG, case-oriented professional language is not an anomaly. A leaky answer may therefore be typical in tone, domain, and task. What makes it unsafe is not its style, but the way it binds ordinary attributes; age, location, occupation, family structure, assets, diagnoses, or matter details to a referential subject. The guardrail has to distinguish between professional text that is non-identifying and professional text whose attribute composition points back to a person, household, client, patient, or matter. Applied naively, a T3-style detector trained against synthetic unsafe examples in patient/client/matter voice and synthetic safe examples in public educational voice will sep-arate registers , not privacy boundaries, while reporting high within-distribution AUROC. Another challenge is the data itself, real-world RAG breach data does not exist at the scale required to train such a detector, so the unsafe class must be synthesized. We address this with a layered framework. First, we construct borderline-safe examples: counterfactual negatives that preserve the professional voice of the unsafe class but remove the QI clusters. They turn the synthetic benchmark into a stress test that asks whether the detector responds to composition once style is no longer predictive of the label. Second, we situate the stress test inside an axis-stratified (non-overlapping subsets of a domain), multi-LLM pipeline that produces aligned safe, unsafe, and borderline-safe partitions across medicine, finance, and law, so the diagnostic and the fix can be evaluated against domain variation. Third, we extend T3’s safe-side typicality with a parallel one-class detector on the unsafe side, exposing a calibrated abstention region for inputs that lie in neither distribution, a regime that T3-style guardrails alone do not characterize. Finally, we benchmark this dual-density detector against a supervised MPL classifier and a 14B LLM-as-judge on the same evaluation substrate. This paper makes three main contributions. 
+
+C1 An axis-stratified synthetic data generation pipeline .We introduce a multi-LLM generation framework that transforms public seed corpora into aligned safe, unsafe, and borderline-safe Q&A partitions. It is parameterized by a seed corpus, an 8-class Quasi-Identifier (QI) tax-onomy, and domain-specific validators. We instantiate it across three high-stakes domains: medicine, finance, and law (see Section IV, Tables I and III). 
+
+C2 The case-style confound and the borderline-safe stress test. We provide a critical diagnostic finding: across three independently constructed domains, our Gaussian Mix-ture baseline achieves within-distribution AUROC geq 
+
+0.94; however, it collapses to [0.72, 0.79] on a borderline-safe stress test that strips quasi-identifiers but preserves the referential tone, indicating that the T3+GMM detector had been measuring style rather than content. We propose the borderline-safe stress test as a methodological con-tribution that extends beyond contextual privacy to any classifier trained on synthetically constructed positive and negative classes (see Section VI-D and Figure 4). 
+
+C3 A Robust Solution. We present a novel solution to mitigate stylistic confounding: a one-class SVM estima-tor on the safe side, augmented with 4,000 borderline-safe records during training. This recovers a borderline AUROC to ≥ 0.93 across all three domains, reduces borderline FPR95 by 44–55 percentage points, and keeps abstain rates below 11% at the operational threshold, below which Layer 2 becomes deployable rather than aspirational. (see Section VIII-A). The remainder of this paper is organized as follows. We begin in Section II by surveying the background and relevant literature, followed by a formalization of the threat model in Section III. A high-level system overview is provided in Section III-E (Figure 1). Detailed specifications for our axis-stratified data pipeline (Figure 2) and the dual-density detector architecture (Figure 3) are presented in Section IV and Sec-tion V, respectively. Our experimental setup and core results are reported in Section VI. Section VII compares the pro-posed detector to two architectural alternatives (a supervised binary classifier and an LLM-as-judge baseline). Section VIII synthesizes the cross-domain and cross-architecture findings and discusses operating-point selection. We address limitations in Section IX and offer concluding remarks in Section X. Supplementary per-domain taxonomies and implementation details are provided in Appendix A. II. B ACKGROUND AND RELATED WORK 
+
+The integration of Large Language Models (LLMs) into clinical and professional workflows has necessitated robust frameworks for privacy preservation. This section situates our work within the evolving landscape of RAG security, safety guardrails, and statistical anomaly detection. A. Privacy Risks and Memorization in LLMs 
+
+A foundational body of research has demonstrated that LLMs are prone to memorizing sensitive training data which can subsequently be extracted through various adversarial techniques [3], [4]. Extraction attacks have revealed that even infrequent strings in the training set can be elicited via prefix-based prompting [5]. Membership inference attacks (MIA) further allow an adversary to determine if a specific record was present in the model history [6], [7], including domain-specific instantiations against clinical LLMs fine-tuned on EHR data [8]. PPE addresses a distinct threat model where leakage occurs during inference from the external knowledge base retrieved in RAG settings. 
+
+B. Security in Retrieval-Augmented Generation 
+
+RAG shifts the privacy focus from training-time memoriza-tion to inference-time disclosure [9], [10]. Dynamic reposito-ries introduce real-time elution risks where the retriever serves as a conduit for sensitive information. Recent studies have demonstrated the feasibility of extracting retrieved documents through prompt injection and characterized the unique privacy issues inherent in RAG datastores [11]–[13]. Furthermore, membership inference attacks and tool-use vulnerabilities have been successfully adapted to target retrieved chunks, expand-ing the observational surface across heterogeneous reposito-ries [14]–[16]. Orthogonal cryptographic approaches verify training-data provenance through zero-knowledge proofs, en-suring models were fine-tuned on authorized datasets [17]. Whereas prior work has focused on securing the retrieval pipeline or attesting to its inputs, PPE targets the generated output as the final point of policy enforcement 
+
+C. The Limits of Classical De-identification 
+
+Privacy preservation in clinical data has traditionally relied on de-identification standards such as k-anonymity, which posits that an individual is protected if their attributes are indistinguishable from others in a cohort [2], [18]. Refine-ments such as l-diversity and t-closeness addressed vulner-abilities related to attribute skewness [19], [20]. However, these classical methods often fail for unstructured text, where aggregate narratives facilitate re-identification despite token-level redaction [21], [22]. Although PII benchmarks like the Text Anonymization Benchmark (TAB) have been developed to measure de-identification effectiveness, they often lack the scale or domain diversity required for multi-agent RAG systems [23], [24]. PPE fills this gap by utilizing a large-scale synthetic pipeline to generate domain-specific quasi-identifier clusters. 
+
+D. Reactive Guardrails and Safety Filters 
+
+To govern model behavior, developers have introduced di-verse alignment techniques and system-level guardrails. Meth-ods such as RLHF and Constitutional AI attempt to embed safety norms into model weights [25], [26]. External guardrails like Llama Guard and NeMo Guardrails provide a modular defense layer by classifying interactions against predefined safety taxonomies [27], [28]. Notably, these guardrails are trained on harm taxonomies that typically do not include contextual privacy violations, creating a structural gap in their enforcement logic [29], [30]. PPE positions contextual privacy as a first-class safety concern, closing the gap left by general-purpose moderation tools [31]. 
+
+E. Density Estimation and Statistical Typicality 
+
+Identifying subtle semantic anomalies is a core task in out-of-distribution (OOD) detection, a form of anomaly de-tection. Traditional methods range from parametric Gaussian Mixture Models (GMM) to non-parametric approaches like one-class SVM and Deep SVDD [32]–[34]. In generative AI, information-theoretic principles have introduced statistical typicality as a robust metric for uncertainty quantification in computer vision [35]–[38]. Typicality-based methods evaluate whether a sample resides within the concentrated typical set of the target distribution, and are used for MRI images [38], HPC log anomaly detection [39], quality control in automated agent workflows [40], and material science workflows [41]. Recent work on the T3 framework has operationalized this for language model guardrailing [1]. PPE extends this by applying typicality to contextual privacy and introducing a dual-density estimator to resolve stylistic confounds that T3-style prompts do not encounter (an extreme near-OOD task [42]). III. S YSTEM OVERVIEW 
+
+A. Setting 
+
+We consider a deployed RAG system that combines (i) a retrieval index over a domain-specific corpus containing sen-sitive data (e.g., medical case notes, financial records, le-gal matter files); (ii) a black-box generative LLM, with no assumption of access to fine-tuning, gradients, or internal activations; and (iii) a privacy-enforcement mechanism (the filter) that monitors the system’s output. We further assume that the retrieval index has undergone an initial curation pass to remove direct identifiers; consequently, our focus is restricted to leakages inherent to the retrieved content itself rather than the index architecture. The filter operates exclusively on the generated answer text at inference time. It is the final gatekeeper between the model and the user, and it is the only component in the pipeline whose decisions are observable, calibratable, and replaceable without retraining the generator. This positioning is deliberate: defenses earlier in the pipeline (corpus curation, retrieval-side filtering, prompt-level constraints) are complementary, but cannot catch what the generator produces de novo through synthesis or fabrication. 
+
+B. Threat Model 
+
+Our threat model includes two adversaries, neither of which has white-box access to the filter.  
+
+> •
+
+The end user submits questions that aim to elicit privacy-relevant answers. These questions can be harmless, such as a healthcare professional asking about treatment op-tions, or a lawyer researching procedural details, or adversarial, with the user probing for QI clusters about a specific individual. The filter is designed to be intent-agnostic, meaning it does not attempt to guess whether a query text is malicious. Instead, it evaluates every gen-erated answer on its own privacy merits. This approach is the optimal security practice for a Layer 2 defense, as user-intent inference belongs upstream.  
+
+> •
+
+The generative LLM is also treated as an unreli-able generator that may produce a re-identifying answer through three primary failure modes: (i) Retention : the model reproduces QI clusters that were present in the retrieved segments and bypassed the initial curation pass. (ii) Synthesis : the model aggregates multiple, individually innocuous QIs from disparate retrieved chunks into a single, identifying cluster. (iii) Fabrication : the model hallucinates quasi-identifiers that, despite being synthetic, appear identifying and violate the privacy policy. We do not consider an adversarial filter operator (the filter is assumed to be honestly-deployed) and we do not consider gradient-guided adversarial users with white-box access to the filter’s internals. We do not consider an adversarial filter operator (the filter is honestly deployed) and we do not consider gradient-guided adversarial users with white-box access to the filter’s internals or embedding pipeline. These restrictions are deliberate: they keep the threat model aligned with the deployment realities of regulated industries, where filters run inside operator infras-tructure and adversaries are external query-issuers rather than internal red-teamers. 
+
+C. Layered Defense 
+
+We frame contextual privacy enforcement as a two-layer architecture (see Figure 1):  
+
+> •
+
+Layer 1: Direct-Identifier Detection. Regex and NER pipelines reject answers containing literal identifiers such as Social Security Numbers (SSNs), Medical Record Numbers (MRNs), docket numbers, email addresses, or specific named individuals. As this represents well-studied prior art, it is not the primary focus of this work.  
+
+> •
+
+Layer 2: Contextual-Leakage Detection. A combi-nation of dual learned density-based detectors to flag answers containing quasi-identifier (QI) clusters. Cru-cially, this mechanism identifies leaks even when they are embedded within a referential professional voice (e.g., patient, client, or matter narratives) and contain no single token that would trigger a Layer 1 violation. The design, evaluation, and optimization of this layer constitute the core contribution of this paper. The two layers are fundamentally complementary: Layer 1 is high-precision, low-recall on direct identifiers, while Layer 2 flags indirect-QI paraphrases and aggregate-QI re-identification. 
+
+D. Problem Statement 
+
+Formally, let X be the set of generated Q&A pairs that have passed the Layer 1 filter, and let Y ∈ { safe , unsafe } be a latent binary label indicating whether the pair contains a re-identifying quasi-identifier cluster. We assume access to two exemplar training corpora: Ds = {x : Y (x) = safe }, drawn from public Q&A seeds and Du = {x : Y (x) = unsafe },synthesized via the pipeline detailed in Section IV). The objective for Layer 2 is to learn a mapping f :
+
+X → { flag , safe , abstain } from Ds and Du that minimizes the expected operational cost. This cost is determined by the domain-specific asymmetry between False Negatives (failing to flag a leak) and False Positives (unnecessarily flagging safe content). When the model’s predictive confidence is low, it may instead abstain, triggering a manual review at a lower fixed cost than a privacy breach would incur. 
+
+The Case for Density-Based Detection: while the latent label 
+
+Y is observable in construction sets Ds and Du, it remains unobservable in a live deployment. A discriminative classifier on {Ds, D u} would optimize the binary classification objec-tive directly, but we observe two empirical obstacles: (i) the synthetic Du contains stylistic correlates of Y = unsafe (ref-erential client voice; Section VI-D) that a discriminator latches onto as an easier signal than the underlying QI presence; (ii) density-based methods admit a principled abstention region (both-OOD) that discriminative methods do not have a natural analog for. We adopt the dual one-class density approach for these reasons; we revisit the discriminative alternative in Section IX-D. 
+
+E. Overview of Proposed Solution 
+
+We frame contextual privacy enforcement for retrieval-augmented generation (RAG) as a two-layer defense, focusing mainly on Layer 2: the detection of quasi-identifier (QI) clusters and indirect paraphrases that bypass token-level rules yet collectively facilitate re-identification. Figure 1 illustrates where Layer 2 sits in a deployed RAG pipeline. The detector processes the generated answer and emits one of three actions: 
+
+flag (sanitize or re-prompt), safe (pass through), or abstain (es-calate to human review). The abstain action is triggered when an input is identified as out-of-distribution (OOD) relative to both the safe and unsafe density estimates. 
+
+Pipeline: Our Layer 2 design utilizes a dual one-class density estimator over a fused text-embedding representation. Training requires only safe and unsafe exemplar corpora for training; it avoids the need for per-record privacy labels at deployment and requires no fine-tuning of the black-box generator. Infer-ence consists of a single forward pass through three frozen encoders followed by parallel density evaluations. The system comprises three core components: 1) Synthetic Data Pipeline (Section IV and Figure 2): An axis-stratified framework that transforms public seed corpora into unsafe Q&A pairs across multiple domains. Crucially, it also generates an explicit borderline-safe cor-pus (genuinely-safe content that mimics each suspected stylistic confounder of the unsafe class). We instantiate this pipeline across three domains: medical, finance, and law. 2) Dual One-Class Detector (Section V and Figure 3): A detection engine that fuses three distinct text encoders (Qwen3, BGE-M3, and E5) and feeds the fused em-bedding into two density estimators (T3+T3+GMM or T3+OCSVM), one trained on safe records, one on unsafe distribution producing a discriminator δ = σu − σs
+
+thresholded against an operator-chosen τ .3) Borderline-Safe Stress Test (Section VI-D): A method-ological framework to disentangle two competing hy-potheses, whether a detector has learned the intended signal (QI presence) or a stylistic confound (e.g., the referential professional voice). The test evaluates the detector using unsafe holdouts paired with a borderline-safe corpus that is stylistically identical to the unsafe class but entirely devoid of QI clusters. 
+
+Notations: Throughout the paper, σs and σu denote the (signed) T3+OCSVM scores against the safe and unsafe density estimates, respectively. δ = σu − σs is the discrim-inator score; τ is the operator threshold. v3 identifies the T3+GMM-with-cleaned-data baseline configuration; v4 identi-fies the T3+OCSVM-with-borderline-augmented-safe configu-ration (the recommended deployment configuration). IV. S YNTHETIC DATA GENERATION METHODOLOGY 
+
+Training a contextual-privacy detector requires paired safe and unsafe Q&A exemplars at a scale that real-world breaches cannot provide. We utilize public seed corpora to represent the safe class and synthesize the unsafe class through an axis-stratified, multi-LLM generation pipeline. This pipeline is instantiated across three domains i.e., medical, finance, and law, requiring only the substitution of the seed corpora, the QI taxonomy, and domain-specific validator constraints. The pipeline architecture is illustrated in Figure 2. 
+
+A. Seed Corpora 
+
+For each domain, we select public seed corpora across three stylistic registers to mirror the distribution of a deployed RAG system: authoritative (regulator/textbook), vignette (case study), and conversational (advisor Q&A). Table I summarizes these sources. Notably, all three domains are characterized by a single high-volume conversational source that dominates record counts (e.g., Stack Exchange variants). We empirically investigate how this dominance influences cross-domain resid-uals in Section VI-D. 
+
+B. Quasi-Identifier Taxonomy 
+
+We define an 8-class QI taxonomy that preserves cardinality across domains for direct cross-domain comparative analysis. Five classes share semantics across domains ( AGE , OCCUPA -
+
+> TION
+
+, LOCATION , FAMILY , AFFILIATION ), while three classes are specialized to domain-specific identifiers that distinguish individuals from generic content (Table II).  
+
+> •
+
+QI Distribution: Recognizing that single identifiers rarely facilitate re-identification, we sample k ∈ {2, 3, 4}
+
+QIs per unsafe record with a prior distribution of 
+
+> TABLE I SEED -CORPUS COMPOSITION ACROSS THE THREE DOMAINS .
+
+Domain Source Records License Medical 
+
+MedQuAD [43] 16,412 CC0 1.0 adrianf12 vignettes [44] 10,000 CC-BY 4.0 kabatubare conversational [45] 20,000 CC-BY 4.0 
+
+subtotal 46,412 
+
+Finance 
+
+FinanceBench [46] 90 CC-BY 4.0 FinQA [47] 8,280 MIT Money StackExchange [48] 34,035 CC-BY-SA 4.0 
+
+subtotal 42,405 
+
+Law 
+
+MMLU–Law [49] 1,709 MIT Australian Legal QA [50] 2,124 CC-BY 4.0 LegalQA-v1 [51] 3,724 Apache 2.0 Law Stack Exchange [52] 25,366 CC-BY-SA 4.0 EUR-Lex-Sum (EN) [53] 1,142 CC-BY 4.0 
+
+subtotal 34,065  
+
+> TABLE II EIGHT -CLASS QUASI -IDENTIFIER TAXONOMY . S HARED CLASSES ARE LISTED CENTRALLY ;DOMAIN -SPECIFIC MAPPINGS ARE GROUPED BY SECTOR .
+
+Class Medical Finance Law Shared Across All Domains  
+
+> AGE
+
+Age / Date of Birth  
+
+> OCCUPATION
+
+Occupation / Job Title  
+
+> LOCATION
+
+City / Region / Zip  
+
+> AFFILIATION
+
+Employer / Organization  
+
+> FAMILY
+
+Family members Dependents Heirs 
+
+Domain-Specific Classes 
+
+Specific 1 Condition Asset Class Matter Type Specific 2 Treatment Income Band Proc. Role Specific 3 Visit Pattern Transactions Case Disp. 
+
+(0 .45 , 0.35 , 0.20) , biasing toward the cluster sizes most dominant in re-identification literature.  
+
+> •
+
+Direct-Identifier Prohibitions: Our validator rejects records containing direct identifiers. Universal prohibi-tions include SSNs, contact information, and formatted dates of birth. Domain-specific constraints include Medi-cal Record Numbers (MRNs) for medicine; credit card and account numbers for finance; and docket or bar numbers for law. 
+
+C. Generation Axes 
+
+For each unsafe record, we sample independently from four axes so that coverage scales combinatorially rather than by template enumeration:  
+
+> •
+
+QI type (8 levels) Specifies which quasi-identifier dimen-sions are populated. (Table II).  
+
+> •
+
+Framing (6 levels) Defines the discourse register, such as  
+
+> CASE VOICE
+
+, IMPLICIT CASE , or REFERRAL . 
+
+> •
+
+Placement (4 levels) : Determines the position of the QI cluster (e.g., FRAME OPENING or DISTRIBUTED ). Fig. 1. Layered privacy enforcement for RAG. Layer-1 catches direct identifiers via regex/NER; Layer-2 (this work) detects contextual QI-cluster leakage and routes outputs to safe-pass, flag, or abstain via the discriminator δ and an explicit both-OOD abstain region (Section VIII-C). 
+
+Fig. 2. Axis-stratified multi-LLM data generation pipeline, instantiated per domain with the QI taxonomy of Table II and a domain-specific validator. Yi-1.5-9B is held out for cross-generator evaluation (Section VI-C); borderline-safe records are produced by a separate prompt template on the same generators (Section IV-E).  
+
+> •
+
+Adversarial mode (4 levels) : Dictates the leakage style, ranging from literal mentions (none) to paraphrased IN -
+
+DIRECT QI or STYLE TRANSFER .This combinatoric approach ensures that no single stylistic shortcut can dominate the unsafe class, forcing the detector to learn privacy semantics rather than simple patterns. 
+
+D. Cross-Generator Diversification and Validation 
+
+We utilize three open-weight generators (Qwen2.5-7B, Mistral-7B, and Phi-3-medium) to populate the training pool, while holding out a fourth lineage (Yi-1.5-9B) for cross-generator evaluation. (Section VI-C). Each generator runs on a vLLM-served OpenAI-compatible endpoint at temperature 
+
+0.9 with max tokens 600 and max model len 4096 .For each domain, each training generator produces three batches: a 15 ,000 -record baseline; 1,500 records of INDI -
+
+RECT QI ; and 3,000 records of mixed DISTRACTOR PADDED TABLE III GENERATION -CAMPAIGN TOTALS ACROSS THE THREE DOMAINS . E ACH DOMAIN USES THREE TRAINING -POOL GENERATORS (Q WEN 2.5-7B, MISTRAL -7B-V0.3, P HI -3-MEDIUM -4 K) PLUS ONE HELD -OUT GENERATOR (Y I-1.5-9B). P ER -GENERATOR BREAKDOWNS ARE DEFERRED TO APPENDIX B. 
+
+Set Medical Finance Law 
+
+Safe seed corpus 46,412 42,405 34,065 Unsafe (training pool) 47,916 58,500 58,500 Unsafe (Yi held out) 2,000 2,000 2,000 Borderline aug (Mistral) 4,000 4,000 4,000 Borderline eval (Phi-3) 1,000 1,000 1,000 
+
+Total generated 54,916 65,500 65,500 
+
++ STYLE TRANSFER . Yi-1.5-9B contributes a single 2,000 -record baseline batch held out from training. Aggregate per-domain totals are shown in Table III. Each generated record undergoes validation through adomain-specific validator that rejects records containing di-rect identifiers, named individuals, formatted DOBs, or, in adversarial-mode runs, vocabulary that the prompt explicitly forbade. Rejected records are retried (with a per-mode retry budget) against a fresh seed/spec/model triple; records that exhaust retries are dropped. 
+
+E. Borderline-Safe Construction 
+
+A dual density detector mechanism evaluated only on within-distribution holdouts cannot distinguish between learn-ing the QI-leakage signal and learning the referential-voice surface feature. The diagnostic finding of this paper (Sec-tion VI-D) requires a borderline-safe corpus: genuinely-safe content stylistically matched to the unsafe class but containing zero QI clusters. This corpus is the negative class in the central stress test and the training augmentation that defines the v4 detector configuration. The corpus spans five subtypes, sampled uniformly:  
+
+> •
+
+Population Demographics: Cohort-level statements (e.g., ”adults aged 50–70”) without individual framing.  
+
+> •
+
+Public Guideline Quotes: Lengthy passages from authori-tative sources or attributed quote from a publicly available clinical guideline (CDC, AHA, USPSTF, WHO, NICE). Mimics verbatim-source leakage but with public, non-patient source material.  
+
+> •
+
+Second-Person Education: Purely instructional second person voice.  
+
+> •
+
+Anonymized Case Reports: Case-study narratives stripped of all demographic or QI detail.  
+
+> •
+
+Empathetic Deflection: Standard consultative redirec-tions. To ensure evaluation integrity, we maintain two disjoint bor-derline sets generated by different models (Mistral for training, Phi-3 for testing). This separation ensures that improvements in False Positive Rates (FPR) reflect true semantic learning rather than the memorization of a specific generator’s style. V. D ETECTION FRAMEWORK 
+
+The Layer 2 detector is designed as a dual one-class density estimator operating over a fused text-embedding representation of the generated answer. This architecture (Figure 3) deliber-ately avoids learned classification heads, ensuring that training requires only the safe and unsafe exemplar corpora defined in Section IV. Detection consists of a single forward pass through frozen encoders followed by parallel density evaluations. We describe the embedding stack and density estimators below, then formalize the discriminator and the principled abstain gate. 
+
+A. Embedding Stack 
+
+Each Q&A pair is encoded by three frozen text encoders, with the resulting representations concatenated into a single feature vector:  
+
+> •
+
+Qwen3-Embedding-0.6B (Alibaba): Provides a dense semantic representation ( 1024 -dim).               
+
+> Fig. 3. Layer-2 detector architecture. Three frozen encoders produce a fused 3,072 -d representation; two one-class detectors fit in parallel ( σson safe + borderline-aug, σuon unsafe). The discriminator δ=σu−σsis thresholded by τ; the abstain gate routes both OOD inputs to human review (Section VIII-C).
+> •
+
+BGE-M3 (BAAI): multilingual dense retrieval embed-ding ( 1024 -dim).  
+
+> •
+
+E5-large-v2 (Microsoft): general-purpose retrieval em-bedding ( 1024 -dim). The combined 3,072 -dimensional representation serves as input for both one-class detectors. We employ multiple en-coders because the ”case-style” signal covers surface phrasing, semantic content, and register. A single encoder usually fails to capture all these aspects effectively. By concatenating features instead of ensembling at the end, the density estimators can directly learn cross-encoder relationships without needing an extra model to merge scores. 
+
+B. One-Class Density Estimators 
+
+We train two one-class detectors in parallel:  
+
+> •
+
+σs: Trained on the safe corpus. In configuration v3 , this uses the seed corpus alone; in v4 , it is augmented with the 4,000 -record borderline-safe set.  
+
+> •
+
+σu: a one-class detector trained on the unsafe corpus. This training set remains consistent across both v3 and 
+
+v4 configurations. We evaluate two density-estimator choices: a Gaussian Mixture Model (T3+GMM, used in v3) and a one-class SVM (T3+OCSVM, used in v4). Our ablation study (Sec-tion VI-F) indicates that T3+OCSVM is significantly more robust to borderline-safe inputs. T3+GMM components are fit with K=8 , full covariance PCA-reduced ( 512 -dim) features. T3+OCSVM utilizes an RBF kernel with γ set via the median heuristic and ν selected via a 5-fold validation sweep over 
+
+{0.005 , 0.01 , 0.02 , 0.05 } (e.g., ν = 0 .01 for the law domain). 
+
+C. Discriminator and Operational Thresholds 
+
+At inference time the detector emits the discriminator score 
+
+δ(x) = σu(x) − σs(x),
+
+where a positive δ(x) indicates the input lies closer to the un-safe distribution than the safe one. A flag is emitted iff δ(x) >τ for an operator-chosen threshold τ . The T3+OCSVM-v4 
+
+detector supports two primary operating points:  
+
+> •
+
+Conservative ( τ = 0 ). Flag iff σu(x) > σ s(x). Low FPR, lower TPR; suitable where false-positive cost dominates (clinician-facing tools, attorney-facing productivity tools).  
+
+> •
+
+Balanced ( τ at FPR@90%TPR). Threshold chosen so the within-distribution TPR is 0.90 . 
+
+> •
+
+Strict ( τ at FPR@95%TPR). Threshold chosen so the within-distribution TPR is 0.95 . Higher FPR, higher TPR; suitable for upstream sanitization filters where missed leaks are the dominant cost. 
+
+D. Two-Distribution OOD and the Abstain Gate 
+
+The discriminator δ is well-calibrated only when at least one of σs(x) or σu(x) claims the input as in-distribution. The discriminator δ is numerically unstable when an input is a ”tail value” for both distributions (i.e., it looks like neither safe nor unsafe data). In such cases, the difference between likelihoods is dominated by estimator noise rather than privacy signals. To address this, we implement a principled abstain region: a gate defined by σs(x) < θ s ∧ σu(x) < θ u. Inputs falling into this region are routed to human review or a secondary detec-tion layer. While the T3+OCSVM-v4 configuration naturally compresses this regime compared to the T3+GMM baseline (Section VIII-C), the inclusion of an abstain gate remains a critical methodological requirement for robust deployment. VI. E VALUATION 
+
+We evaluate our dual detector mechanism across three domains and three distinct evaluation pairings. Our head-line finding is that the case-style confound exposed by the borderline-safe stress test (Section VI-D) generalizes across all three domains, as does the effectiveness of the T3+OCSVM-v4. While the remediation is portable, we identify a unique residual structure in the finance domain, which we discuss in Section VIII-A. 
+
+A. Evaluation Framework and Metrics 
+
+To ensure clarity, we strictly distinguish between the detec-tor Configuration and the Test Pairing as follows:  
+
+> •
+
+Configurations (Training Property): 
+
+– v3 : A safe-side detector trained exclusively on the seed corpus. 
+
+– v4 : A safe-side detector trained on the seed corpus aug-mented with the 4,000 -record borderline-safe dataset. 
+
+– T3+GMM-v3 and T3+OCSVM-v4 represent the base-line and recommended deployment configurations, re-spectively.  
+
+> •
+
+Test pairing (Evaluation Property): 
+
+– Within-Distribution: Unsafe vs. safe holdouts from the training distributions. 
+
+– Cross-Generator: Evaluates generalization by testing against unsafe records produced by Yi-1.5-9B-Chat (a 9B-class generator from a distinct lineage, held out from unsafe-side training in all three domains). The goal is to test whether the detector learned the privacy-leakage signal or merely the stylometric fingerprint of the three training-pool generators (Qwen2.5-7B, Mistral-7B-v0.3, Phi-3-medium-4k) .
+
+– Borderline-Safe Stress Test: Pairs unsafe holdouts against a 1,000 -record corpus of genuinely safe content that matches the “client-voice” style of the unsafe class. The v3/v4 distinction is therefore about training data ;the within-dist / cross-gen/borderline distinction is about test data . A given configuration (say T3+OCSVM-v4) is evaluated against all three test pairings, producing one row in each of three evaluation tables (see Tables VI, VII and VIII). All reported binary metrics (FPR, TPR, AUROC, FPR 95 ,FPR 90 ) are computed on the kept population : records that the abstain gate (Section V-D) would have routed to hu-man review are excluded from both the numerator and the denominator. Abstain rate (Table IV) and binary metrics are therefore reported as independent measurements of two different deployment-time decisions: which records the sys-tem commits to (abstain rate) and how well it decides on the records it commits to (FPR/TPR). Threshold-calibrated quantities (FPR 95 , FPR 90 ) are read off the ROC of the kept population. The abstain thresholds (θs, θ u) are calibrated once per detector configuration on the within-distribution holdout, then applied identically to all three test pairings; this matches the operational deployment in which abstain thresholds are fixed at training time. 
+
+B. Within-Distribution Detection 
+
+Table V summarizes detection metrics for the within-distribution holdout pairings across the three domains. While both configurations achieve high AUROC, T3+OCSVM-v4 significantly optimizes the FPR 95 operating point, most no-tably in the law domain where error rates fall from 42 .2% to 
+
+18 .5% . We report FPR 90 alongside FPR 95 to provide a more lenient deployment perspective, as the 95% TPR target is a stringent operating point that often magnifies ROC-tail noise. Across all domains, a modest 5 pp TPR concession yields substantial FPR headroom, with the FPR 95 → FPR 90 ratio holding at approximately 2–3× (e.g., law T3+OCSVM-v4: 
+
+18 .5% → 7.2% ). The law domain’s within-distribution AUROC remains lower than medical and finance, a disparity we attribute to the law safe corpus spanning five sources across four jurisdic-tions. However, T3+OCSVM closes this gap more effectively than T3+GMM, corroborating the estimator-choice findings in Section VI-F. Crucially, while these within-distribution metrics might superficially justify the production deployment of T3+GMM-v3 (AUROC ≥ 0.93 ), the borderline-safe stress test (Section VI-D) reveals that such performance can be misleading. 
+
+C. Cross-Generator Generalization 
+
+A central concern in synthetic training is that detectors may overfit to generator-specific stylometry rather than capturing the underlying privacy-leakage signal. Table VIII addresses this by pairing unsafe records from the held-out Yi-1.5-9B-Chat model against the safe holdout under T3+OCSVM-v4. Across all domains, the held-out-generator AUROC remains 
+
+≥ 0.95 (kept population). In the medical and finance sectors, cross-generator performance effectively matches or exceeds within-distribution benchmarks; in the law domain, the slight decrease ( 0.9580 vs. 0.9711 ) is likely due to the law safe corpus’s inherent breadth and the Yi model’s stylistic distance from the training pool. Analysis of the FPR metrics in Table VIII further local-izes this law-domain gap. While medical and finance cross-generator FPRs match or beat their within-distribution coun-terparts, the law domain shows a specific divergence at the FPR 90 level: the cross-gen value ( 13 .4% ) is 1.9× higher than the within-distribution value ( 7.2% ), despite FPR 95 remaining nearly equal. This suggests the performance gap resides in the bulk of the score distribution rather than the extreme ROC tail. As confirmed by per-generator stratification (Appendix D), Yi-on-law TPR at τ =0 is 0.51 compared to the training-pool mean of 0.72 —a significantly wider disparity than the ≤ 3pp 
+
+gap seen in other domains. Ultimately, these results demonstrate that T3+OCSVM-v4 successfully avoids single-generator stylometric overfitting within the 7–14B instruction-tuned model class. However, the efficacy of this approach against closed-source frontier models or gradient-guided adversarial generation remains an area for future investigation (Section IX). 
+
+D. The Borderline-Safe Stress Test 
+
+The borderline-safe stress test serves as the central di-agnostic tool, distinguishing whether the detector captures the intended quasi-identifier (QI) signal or merely identifies ”referential client voice”—a stylistic confound prevalent in synthetic training distributions. By pairing the unsafe holdout with 1,000 -record Phi-3 records that are stylistically iden-tical to the unsafe class but contain zero QI clusters, we expose a significant ”case-style confound” across all domains. While T3+GMM-v3 achieves high within-distribution AU-ROC (0.95 –1.00 ), its borderline performance collapses to 
+
+[0 .72 , 0.79] . This non-overlapping range across three inde-pendent corpora and taxonomies suggests that the diagnostic captures an inherent property of the dual one-class density paradigm rather than a data-specific artifact. The T3+OCSVM-v4 “combined-fix” recipe successfully remediates this gap, recovering borderline AUROC to ≥ 0.93 
+
+in all domains and reducing FPR 95 by 44 –55 pp depending on domain. Comparable reductions at the more lenient FPR 90 
+
+operating point ( 43 –56 pp) confirm that the improvement is not a local artifact of a single TPR target but a shift of the entire ROC tail. Notably, per-subtype stratification (Table VII) shows that while medical and law converge to a ∼ 4% mean residual, finance retains a ∼ 35% residual. This is localized to quantitative subtypes such as SECOND PERSON EDUCATION 
+
+and POPULATION DEMOGRAPHICS where cohort-scoped data (e.g., income bands) is stylistically indistinguishable from single-client QI signals in the embedding space. Another rea-son for the finance FPR being high at τ = 0 compared to other domains is cross-domain operating-point non-comparability. Reading FPR at τ = 0 across domains is partly misleading because τ = 0 lands at different effective TPRs in each domain’s score distribution: 80.2% (medical), 97.8% (finance), 72.0% (law). Finance’s τ = 0 sits ∼ 18 pp deeper into the recall-greedy regime than medical’s, and its higher τ = 0 
+
+FPR therefore partly reflects this calibration difference rather than a domain-specific detection deficit. We retain τ = 0 
+
+reporting because the within-domain v3-vs-v4 contrast (the binding comparison for the case-style confound) shares a domain-specific score distribution and is well-posed; cross-domain comparisons in this paper use FPR95 and FPR90 wherever a fair comparison is the binding requirement. 
+
+E. Operational Feasibility: The Abstain Rate 
+
+The second critical benefit of T3+OCSVM-v4 is the stabi-lization of the abstain gate, which routes records to human review when neither density ( σs, σ u) can confidently claim the input. Under T3+GMM-v3, the medical and finance do-mains exhibit ”borderline abstain rates” of 31 .6% and 27 .5% ,respectively. Such figures represent an operationally infeasible human-review load at scale. T3+OCSVM-v4 reduces these rates by 3×–8×: medical drops to 10 .7% , while finance and law fall to ≤ 3.7% .T3+GMM-v3 saturates the review queue because its log-likelihoods bottom out on stylistically novel content; once both densities saturate, the discriminator becomes dominated by tail noise, triggering the abstain gate correctly but far too frequently. Law is the sole exception (T3+GMM-v3 abstain at 4.6% ), likely because its heterogeneous safe corpus (five sources across four jurisdictions) creates a wider safe distri-bution with fewer deep-tail records. Overall, T3+OCSVM-v4 proves to be the only configuration that simultaneously fixes binary error rates and maintainable review-queue volumes, making it the recommended choice for production deployment. 
+
+F. Ablation: Why T3+OCSVM Outperforms T3+GMM 
+
+Isolating the estimator choice reveals that T3+OCSVM consistently outperforms T3+GMM under stylistic overlap. In the medical ablation grid, T3+OCSVM matches T3+GMM on within-distribution metrics but provides a 0.18 AUROC boost on the borderline-safe stress test under matched v3 data. This disparity is structural: a T3+GMM partitions feature space into Gaussian basins where log-likelihoods are dominated by the distance to the nearest cluster mean. Genuinely safe content that falls between these clusters receives extreme negative log-likelihoods, saturating the safe density and causing the discriminator to misclassify the input as unsafe. In contrast, T3+OCSVM defines a singular boundary around the support of the training distribution and assigns graduated signed-distance scores. Because points outside the boundary receive linear distance scores rather than exponential tail val-ues, the discriminator remains numerically well-conditioned even for inputs that are technically out-of-distribution (OOD). This result validates T3+OCSVM as the superior estimator Medical Finance Law              
+
+> 0
+> 0.5
+> 10.99 0.98 0.94
+> 0.72 0.72 0.79
+> AUROC
+> (a) The diagnostic : T3+GMM-v3
+> within-dist
+> borderline
+> Medical Finance Law
+> 0
+> 50
+> 100 87 78 78
+> 2
+> 36
+> 3
+> Borderline FPR @  τ =0  (%)  (b) The fix : v3 vs. v4
+> T3+GMM-v3
+> T3+OCSVM-v4
+> Fig. 4. Case-style confound and its remediation. (a) AUROC performance per domain. (b) Comparison of False Positive Rates (FPR) at τ=0 . Finance’s elevated FPR in (b) reflects calibration differences discussed in Section VI-D.
+
+for high-stakes privacy detection where the boundary between ”safe style” and ”unsafe content” is inherently porous.                                       
+
+> TABLE IV ABSTAIN RATE PER (DOMAIN ,CONFIGURATION ,TEST SET )UNDER THE
+> 5TH -PERCENTILE RULE OF SECTION V-D. B ORDERLINE COLUMN IS THE DEPLOYABILITY SIGNAL ; T3+OCSVM-V4REDUCES IT 3–8×RELATIVE TO T3+GMM-V3.
+> Domain Cfg Safe holdout Unsafe corpus Borderline
+> Medical T3+GMM-v3 4.45% 4.61% 31 .60%
+> Medical T3+OCSVM-v4 4.44% 4.35% 10 .70 %
+> Finance T3+GMM-v3 3.70% 4.35% 27 .50%
+> Finance T3+OCSVM-v4 4.30% 3.54% 3.50 %
+> Law T3+GMM-v3 0.87% 4.40% 4.60%
+> Law T3+OCSVM-v4 2.42% 3.83% 3.70 %
+
+VII. C OMPARATIVE ANALYSIS : A RCHITECTURE 
+
+ALTERNATIVES 
+
+We benchmark the proposed one-class detector against two alternatives when forced to commit, those same records cross share the same evaluation substrate: (i) a supervised bi-nary classifier (MLP-v4) sharing the same encoder backbone, trained with cross-entropy on safe = 0 /unsafe = 1 labels; and (ii) an LLM-as-judge baseline Qwen2.5-14B-Instruct served via vLLM, prompted with a QI definition and 3 SAFE / 3 UNSAFE few-shot examples per domain). Both alternatives use the same train/test splits as OCSVM-v4 and write per-record scores in the schema of Table V. Table IX reports the comparison on the borderline-safe pairing. We discuss our main findings in the following. 
+
+a) The MLP binary classifier has no operationally viable operating point.: Table IX makes the trade-off explicit. With the abstain mechanism enabled, MLP-v4 achieves competitive per-record FPR ( 2.7–12 .5% on the records it commits to), but only because it commits to a decision on 15 –30% of borderline content ( nkept = 150 –303 out of 1,000 ); the rest are routed to human review at a 7–25 × higher volume than OCSVM-v4. Disabling the abstain mechanism (forcing the classifier to commit on every input) does not resolve the trade-off: at the natural decision threshold, MLP-v4’s borderline FPR jumps to 26 –47% , an order of magnitude above OCSVM-v4 in two of three domains. There is no operating point where MLP-v4 simultaneously commits to the majority of borderline traffic and maintains FPR comparable to OCSVM-v4. 
+
+b) The bimodal score distribution is the structural cause.: 
+
+The MLP head’s near bimodal output (probabilities clustered near 0 or 1 on confident records, with a thin uncertain band in between) is what drives both failure modes. The ambiguous middle band coincides with the borderline-safe content the detector is asked about: records in this band trigger the abstain rule (high abstain volume), and when forced to commit, those same records cross P (unsafe )>0.5 from below and manifest as the high full-population FPR. The trade-off is structural: any abstain rule based on classifier confidence produces an analogous coverage/FPR exchange. 
+
+c) Threshold-free accuracy is comparable, not the de-ciding axis.: On AUROC the three architectures sit within 
+
+∆ ≤ 0.07 (0.92 –1.00 , computed on the kept population). The MLP achieves the highest AUROC ( ∼ 0.99 ) but, as the previous paragraph established, only realizes that accuracy on the small subset it commits to. The LLM-judge matches OCSVM-v4 on AUROC ( 0.92 –0.94 vs. 0.93 –0.97 ), ruling out the interpretation that a 14 B prompted model cannot discriminate QI clusters; its limitation is calibratability and unit cost, not discrimination. 
+
+d) LLM-judge fails on calibration and unit cost.: The LLM-judge’s discrete output distribution prevents tuning to a target operating point: the achievable operating points are restricted to the handful of values the prompted model emits. Combined with ∼ 1 s latency and ∼ $10 −2 per-query cost (200 × slower, 10 4× more expensive than the trained detec-tors), this disqualifies the LLM-judge from inline Layer-2 deployment regardless of accuracy. 
+
+e) Why the one-class detector wins?: OCSVM-v4 is the only configuration in Table IX that simultaneously (a) commits to a decision on ≥ 89% of borderline content, (b) remains conservative at the natural threshold whether abstain is on or off ( ≤ 36% borderline FPR in the worst domain, both rows), (c) exposes a calibrated abstain region without a coverage cliff, and (d) runs at millisecond latency. The supervised classifier wins on AUROC but only by routing the majority of borderline traffic to review; the LLM-judge wins on no operational axis. For the review-queue-bounded, sub-second-latency Layer-2 regime characterized in Section III-E, the one-class detector is the deployment-correct architecture. VIII. D ISCUSSION 
+
+The three-domain evaluation (Section VI) and the three-architecture comparison (Section VII) together support three claims: the case-style confound is a property of the synthetic training regime rather than of any single domain or estimator; the data-plus-method fix that closes it is portable across domains; and the deployment choice between architectures is dominated by the abstain-rate/FPR trade-off, not by AUROC. We unpack each below and close with the operational conse-quences for production Layer-2 deployment. TABLE V WITHIN -DISTRIBUTION DETECTION METRICS : UNSAFE VS . SAFE HOLDOUT , PER DOMAIN . V3/ V4 REFER TO SAFE -SIDE TRAINING DATA 
+
+(S ECTION VI-A). FPR 95 / FPR 90 ARE FPR AT 95% / 90% TPR. 
+
+Medical Finance Law Config AUROC FPR 95 FPR 90 TPR τ 0 FPR τ 0 AUROC FPR 95 FPR 90 TPR τ 0 FPR τ 0 AUROC FPR 95 FPR 90 TPR τ 0 FPR τ 0
+
+T3+GMM-v3 0.995 2.7% 1.1% 98.0% 6.3% 0.984 10.6% 4.3% 96.1% 12.9% 0.946 42.2% 18.0% 93.3% 32.6% 
+
+T3+OCSVM-v4 0.995 2.5% 0.7% 80.2% 0.1% 0.992 3.6% 1.6% 97.8% 9.7% 0.971 18.5% 7.2% 72.0% 0.7% 
+
+TABLE VI BORDERLINE -SAFE STRESS TEST : UNSAFE HOLDOUT VS . THE 1,000 -RECORD PHI -3 BORDERLINE -SAFE CORPUS (S ECTION IV-E). TPR τ 0 IS OMITTED ; 
+
+> THE UNSAFE SET IS IDENTICAL TO
+
+TABLE V’ S.
+
+Medical Finance Law Config AUROC FPR 95 FPR 90 FPR τ 0 AUROC FPR 95 FPR 90 FPR τ 0 AUROC FPR 95 FPR 90 FPR τ 0
+
+T3+GMM-v3 0.725 77.6% 64.9% 86.7% 0.722 74.2% 64.3% 77.9% 0.792 85.3% 65.7% 78.3% 
+
+T3+OCSVM-v4 0.965 22.8% 9.0% 2.4% 0.963 21.8% 11.2% 36.0% 0.930 41.0% 22.4% 3.1% 
+
+∆AUROC (v3 →v4) +0 .241 +0 .241 +0 .139 ∆FPR 95 −54 .8 pp −52 .5 pp −44 .3 pp 
+
+∆FPR 90 −55 .9 pp −53 .1 pp −43 .3 pp TABLE VII PER -SUBTYPE BORDERLINE FPR AT τ =0 , BROKEN OUT ACROSS THE FIVE BORDERLINE -SAFE SUBTYPES (S ECTION IV-E). P ER -SUBTYPE ROWS AND 
+
+MEAN (SUBTYPE ) ARE FULL -POPULATION (KEPT -ONLY PER -SUBTYPE COUNTS ARE TOO SMALL FOR STABLE ESTIMATES ). GLOBAL FPR τ 0 USES THE KEPT -ONLY CONVENTION OF TABLE VI FOR DIRECT COMPARISON ; PER -DOMAIN ANALYSIS IS IN SECTION VIII-A. 
+
+Medical Finance Law Subtype v3 v4 v3 v4 v3 v4    
+
+> ANONYMIZED CASE REPORT
+
+97.5% 13.1% 93.5% 26.9% 80.8% 3.4%   
+
+> EMPATHETIC DEFLECTION
+
+66.7% 0.0% 70.8% 18.1% 68.0% 0.0%   
+
+> POPULATION DEMOGRAPHICS
+
+89.5% 5.0% 91.9% 47.7% 92.6% 18.0%    
+
+> PUBLIC GUIDELINE QUOTE
+
+87.0% 2.2% 58.3% 35.0% 72.8% 0.5%    
+
+> SECOND PERSON EDUCATION
+
+88.4% 2.0% 72.3% 49.3% 74.2% 0.5% 
+
+Mean (subtype) 85.8% 4.5% 77.4% 35.4% 77.7% 4.5% Global FPR τ 0 (kept) 86.7% 2.4% 77.9% 36.0% 78.3% 3.1% 
+
+TABLE VIII CROSS -GENERATOR GENERALIZATION : UNSAFE RECORDS FROM HELD -OUT YI-1.5-9B-C HAT (DISTINCT LINEAGE ) VS . THE SAME SAFE HOLDOUT AS TABLE V, T3+OCSVM-V4 ONLY . W ITHIN -DISTRIBUTION OPERATING POINTS REPEATED FOR DIRECT COMPARISON .
+
+Metric (T3+OCSVM-v4) Medical Finance Law 
+
+Within-distribution AUROC 0.9953 0.9920 0.9711 Cross-generator AUROC 0.9974 0.9965 0.9580 
+
+∆AUROC vs. within-dist +0 .002 +0 .005 −0.013 
+
+Cross-gen FPR 95 1.6% 1.8% 19.5% (within-dist FPR 95 ) 2.5% 3.6% 18.5% Cross-gen FPR 90 0.7% 0.9% 13.4% (within-dist FPR 90 ) 0.7% 1.6% 7.2% 
+
+A. What the Three-Domain Evaluation Establishes 
+
+Three findings transfer cleanly across medical, finance, and law: 
+
+a) The diagnostic transfers.: The within-distribution-vs-borderline AUROC gap exceeds 0.15 in every domain under T3+GMM-v3 (Table VI, Figure 4), with the borderline AU-ROC band [0 .72 , 0.79] entirely disjoint from each domain’s within-distribution AUROC ( ≥ 0.95 in medical and finance, 
+
+0.95 in law). Three independently instantiated corpora, three QI taxonomies, three borderline-safe constructions: one signa-ture. We treat this as strong evidence that the borderline-safe stress test should be a default evaluation ingredient for any one-class density detector trained on synthetic data. 
+
+b) The combined-fix recipe transfers.: T3+OCSVM-v4 lifts borderline AUROC to ≥ 0.93 in all three domains and shifts the entire ROC tail ( ∆FPR 95 = 44 –55 pp, ∆FPR 90 =43 -56 pp). That both operating points improve by similar margins rules out target-TPR-specific artifacts. The recipe (T3+OCSVM estimator + Mistral-generated borderline-aug) is portable. 
+
+c) Cross-generator robustness transfers within the open 
+
+7-14 B class.: A held-out 9B-class generator from a distinct lineage (Yi-1.5-9B-Chat) is detected at AUROC ≥ 0.95 in all three domains under T3+OCSVM-v4 (Table VIII). For medical and finance, cross-generator AUROC matches or ex-ceeds within-distribution; for law, the slight gap ( −0.013 ) sits at the natural threshold, not the threshold-free discriminator (Appendix D). We make no claim about closed-source frontier generators or gradient-guided adversarial generation. 
+
+d) What does not transfer: the per-subtype residual.: 
+
+Medical and law converge to a ∼ 4% mean borderline FPR TABLE IX THREE ARCHITECTURES ON THE BORDERLINE -SAFE STRESS TEST . T UPLES REPORT MEDICAL / FINANCE / LAW . B OLD MARKS THE PER -ROW OPTIMUM ;                                                  
+
+> RED MARKS ORDERS -OF -MAGNITUDE LOSSES THAT DISQUALIFY A BASELINE FROM OPERATIONAL DEPLOYMENT .
+> Metric OCSVM-v4 (ours) MLP-v4 (binary) Qwen-14B (LLM-judge)
+> Operational footprint — how much of the borderline traffic the system handles (borderline pairing) med / fin / law med / fin / law med / fin / law
+> Abstain rate (records routed to review) 10.7% / 3.5% / 3.7% 85.0% / 72.8% / 69.7% n/a †
+> With abstain on (kept-population at τ=0 ): metrics on records the system commits to (borderline pairing) med / fin / law med / fin / law med / fin / law
+> AUROC 0.97 / 0.96 / 0.93 1.00 / 1.00 / 0.99 0.92 / 0.94 / 0.93 FPR (false-flag on safe) 2.4% / 36.0% / 3.1% 2.7% / 5.5% / 12.5% 30.2% / 8.6% / 5.4%
+> nkept (out of 1,000 borderline) 893 / 965 / 963 150 / 272 / 303 1000 / 1000 / 1000
+> With abstain off (full-population at τ=0 , MLP forced to commit on every input) (borderline pairing) med / fin / law med / fin / law med / fin / law
+> FPR (false-flag on safe) 4.0% / 35.1% / 4.3% 28.3% / 47.1% / 26.2% 30.2% / 8.6% / 5.4%
+> Operations
+> Per-query latency / cost ∼5ms / ∼$10 −5∼5ms / ∼$10 −5∼1s / ∼$10 −2
+> Calibratable to operating point yes yes no (discrete output)
+> †LLM-judge has no calibrated abstain mechanism.
+
+after the fix; finance retains ∼ 35% (Table VII). Law shares finance’s structural register-dominance property (a single con-versational seed at ≥ 74% of the safe corpus), yet exhibits the medical-shape residual. Part of finance’s elevated τ = 0 
+
+residual is operating-point artifact (finance’s τ = 0 sits at 97.8% TPR vs medical’s 80.2%, Section VI-D); the gap that survives at matched TPR is the genuine cohort-quantitative-content overlap. The three-domain comparison therefore rules out register dominance as a sufficient cause and localizes the finance residual to legitimate cohort-scoped quantitative content (income bands, contribution limits) that is stylisti-cally indistinguishable from single-client QI signals in the embedding space. A two-domain study could not have made this distinction visible. Mitigating finance’s residual requires a domain-specific augmentation or a quantitative-content gating filter (Section IX-B). 
+
+B. Why the One-Class Architecture Wins? 
+
+The cross-architecture comparison (Section VII, Table IX) reframes what “best detector” means at deployment scale. The supervised binary classifier (MLP-v4) is more accurate on AUROC ( ∼ 1.00 vs. ∼ 0.953 -0.97 ), and the LLM-judge sits withing ∼ 0.05 AuROC of T3+OCSVM-v4, yet neither is deployable in the regime we target. The supervised classifier’s near-bimodal score distribution forces it into a binary trap: either it abstains on 69 -85% of borderline content, or it flags 
+
+26 -47% of safe content at the natural threshold. The LLM-judge produces only a handful of discrete output values, preventing operating-point calibration, and runs 200 × slower at 10 4× the per-query cost. T3+OCSVM-v4 is the only architecture that simultaneously (a) commits to a decision on ≥ 89% of borderline records, (b) remains conservative at the natural threshold ( ≤ 36% 
+
+borderline FPR even in the worst domain), (c) exposes a cali-brated abstain region, and (d) runs at single-digit-millisecond latency. The architectural property that earns the win is the T3+OCSVM’s graduated signed-distance score: unlike T3+GMM log-likelihoods that saturate on tail content, and unlike binary cross-entropy probabilities that compress most of the borderline mass into the 0.4-0.6 band, the T3+OCSVM produces a continuous score that remains numerically mean-ingful on inputs the training distribution did not anticipate. This is the same property that makes T3+OCSVM-v4 domi-nate T3+GMM-v3 on the borderline stress test within our own architecture (Section VI-F). 
+
+C. Operating-Point Selection and the Abstain Gate 
+
+The T3+OCSVM-v4 detector exposes two operating regimes without retraining (Section V-C): conservative ( τ =0 )and balanced (FPR@ 95% TPR). Their numerical profile is per-domain.  
+
+> •
+
+Medical / law: the conservative point is the right default. TPR is 72 -80% , within-distribution FPR is ≤ 0.7% ,borderline FPR is ≤ 3.1% . Suitable for clinician- and attorney-facing tooling where over-flagging causes alert fatigue.  
+
+> •
+
+Finance: the conservative point is not recommended where borderline content is common (borderline FPR 
+
+36 .0% ); use the balanced point with downstream review. The abstain region of Section V-D is the deployment-time response to inputs both densities consider out-of-distribution. Under T3+GMM-v3, medical and finance borderline abstain rates sit at ∼ 30% , which is operationally infeasible at scale (Table IV). T3+OCSVM-v4 reduces these rates 3-8× in medical and finance; law’s T3+GMM-v3 rate is already low (4.6% , see Section VI-E) and changes only marginally. Abstain volume is therefore not a footnote but a second deployment-time metric on which T3+OCSVM-v4 dominates T3+GMM-v3, complementing the binary FPR reduction. Operating-point selection is therefore a per-domain engineering deci-sion against measured borderline profile and downstream cost asymmetry; we recommend reporting both points in deploy-ment documentation and revisiting them periodically. 
+
+D. Practical Takeaways 
+
+For practitioners building Layer-2 detectors over RAG out-puts: 1) Evaluate against borderline-safe content. Within-distribution AUROC is misleading for synthetically-trained one-class detectors; the borderline-safe stress test should be a default evaluation ingredient. 2) Prefer T3+OCSVM over T3+GMM under stylistic overlap , and choose a one-class density architecture over a supervised binary classifier when the deployment budget for human review is bounded. 3) Augment the safe side with borderline-safe records. 
+
+A modest 4,000 -record borderline-aug corpus (generated by a different model than the one used at evaluation) lifts borderline AUROC by 0.14 -0.24 in our three domains. 4) Calibrate operating points per-domain , and add an explicit abstain gate for inputs that are out-of-distribution to both densities. IX. L IMITATIONS AND FUTURE WORK 
+
+We highlight four limitations of the current work and close with additional future-work directions. 
+
+A. Domain and Language Scope 
+
+The evaluation covers English-language medical, finance, and legal Q&A content. The detector’s behavior on other clinical-data modalities (radiology, discharge summaries, structured EHR), other regulatory regimes (GDPR’s broader notion of personal data, civil-law jurisdictions, non-US fi-nance regimes), and other languages is unmeasured. Each new domain requires its own QI taxonomy, validator extras, and seed corpus, and Section VIII-A shows that per-subtype residual structure can be domain-dependent (Section IX-B). The present three-domain evidence supports the claim that the methodology (axis-stratified synthetic generation, dual-detector OOD, borderline-safe stress test) transfers, but not that detector-tuning is universal. 
+
+B. Finance Borderline Residual 
+
+Finance T3+OCSVM-v4 borderline FPR at τ =0 is 36 .0% ,versus 2.4% medical and 3.1% law. The three-domain compar-ison (Section VIII-A) localizes the cause to legitimate quan-titative content overlap on three borderline subtypes: cohort-scoped financial statements (income bands, contribution limits, dollar amounts) are stylistically indistinguishable from single-client QI signals. Two corrective directions:  
+
+> •
+
+Quantitative-content gating. A pre-filter that strips nu-meric ranges and currency vocabulary before scoring would partially address the overlap, at the cost of careful design to avoid stripping legitimate QI content.  
+
+> •
+
+Discriminative classifier (Section IX-D). A fine-tuned encoder model trained directly on the safe/unsafe label would optimize for QI-presence discrimination rather than density estimation, which we expect would push finance borderline performance closer to medical/law levels. Two ancillary finance-specific notes: (i) the 80% Money StackExchange seed dominance contributes to the wider safe distribution, but does not by itself explain the residual; (ii) the 
+
+4,000 -record borderline-aug scale matches medical and law but may be insufficient for finance’s wider stylistic surface, thus needs an augmentation-size ablation study in the future. 
+
+C. Synthetic Training Data Biases 
+
+The unsafe class is constructed entirely through LLM generation against curated specifications. Three biases fol-low: (i) generator-style residuals (mitigated within the open 7–14B class by the cross-generator result of Sec-tion VI-C, but unmeasured against closed-source frontier models); (ii) plausibility ceiling (generators occasionally produce domain-implausible answers; we did not measure clinical/financial/legal validity of generated unsafe records); (iii) adversarial-mode imbalance (INDIRECT QI rejection rates of ∼80% mean its share in the training corpus is below the uniform-axis-sampling target). Each bias has a tractable mitigation (plausibility filter, adversarial oversampling, per-mode retry budget tuning) but is not closed in the current work. 
+
+D. One-Class Density Ceiling and Discriminative Alternative 
+
+The dual one-class density approach achieves AUROC 
+
+≥ 0.96 on within-distribution and held-out-generator data in all three domains but the borderline AUROC remains in 
+
+[0 .93 , 0.97] even with the combined fix, with a residual 36% 
+
+borderline FPR at the natural threshold in the finance domain. We hypothesize this reflects a fundamental ceiling of the paradigm: density estimators do not directly optimize for class separation, and the QI signal is intrinsically lower-dimensional than the stylistic signal that shapes the safe/unsafe densities. The frozen-encoder discriminative alternative is already characterized in this work as MLP-v4 (Section VII); its near-bimodal output forces an unacceptable coverage/FPR tradeoff at deployment scale. The remaining unexplored alternative is a fully fine-tuned encoder model (DistilBERT-class) trained end-to-end on the safe/unsafe label, where the representation itself is optimized for QI-presence discrimination. We expect this to narrow the gap at the borderline, particularly in finance, but it sacrifices the encoder-agnostic, label-free deployment property that motivated the one-class formulation. 
+
+E. Other Future-Work Directions 
+
+Three additional directions are worth highlighting: 
+
+verbatim-source leakage (a second sub-type of contextual privacy leakage where RAG outputs near-verbatim quotes retrieved from documents, not addressed by the current generator); multi-turn leakage (QI clusters revealed across turns rather than within a single answer; requires conversation-level scoping); and adversarial robustness (gradient-guided attacks against the embedding pipeline or density estimators are not characterized, and the INDIRECT QI adversarial mode probes only static paraphrasing). Per-replication caveats also remain: law’s within-distribution AUROC (0.9711 ,Table VIII) is mildly optimistic because no separate within-distribution unsafe holdout was reserved from the Yi slice, the 131 -name COMMON_NAMES list is empirically grown rather than exhaustive, and FinanceBench’s 90 -record size limits per-source stratified analysis. X. C ONCLUSION 
+
+We presented a Layer 2 contextual privacy detector for RAG systems based on a dual one-class density estimator over fused text embeddings, and evaluated it across three domains (medical, finance, law) that span four jurisdictions and three stylistic registers. Three findings are load-bearing. First, within-distribution AUROC on synthetic-vs-synthetic Q&A is misleading: across three independently constructed domains the T3+GMM-baseline detector achieves ≥ 0.95 AU-ROC within-distribution but collapses to [0 .72 , 0.79] AUROC on a borderline-safe stress test, exposing that it has learned referential client/patient/matter voice as a proxy for quasi-identifier presence. The borderline-safe stress test we introduce to expose this confound is a methodological contribution that extends beyond contextual privacy to any classifier trained on synthetically constructed positive and negative classes. Second, a T3+OCSVM estimator on the safe side with a 
+
+4,000 -record borderline-safe augmentation in training recovers borderline AUROC to ≥ 0.93 in all three domains and reduces borderline FPR 95 by 44 –55 pp across all three domains, with comparable FPR 90 reductions. The recipe is portable; per-subtype residual structure is domain-dependent. Third, the third domain (law) was decisive in localizing the cause of the elevated finance residual: law shares fi-nance’s structural register-dominance property but exhibits the medical-shape residual, ruling out register dominance as a suf-ficient explanation and identifying finance-specific quantitative content overlap as the attributable cause. The three-domain study makes this distinction visible; a two-domain study could not. The framework is not closed: a discriminative classifier should narrow the residual further, particularly in finance; multi-turn leakage and verbatim-source leakage are unmod-eled, and gradient-guided adversarial users with white-box access to the detector are uncharacterized. Each is a tractable direction for future work (Section IX). What the present three-domain evidence supports is the claim that the methodology and the diagnostic generalize, the recipe is portable, and the residual gaps are localizable to specific structural properties of the safe distribution in each new domain. REFERENCES [1] D. Ganguly et al. , “Trust the typical,” arXiv preprint arXiv:2602.04581 ,2026. [2] L. Sweeney, “k-anonymity: A model for protecting privacy,” Interna-tional Journal of Uncertainty, Fuzziness and Knowledge-Based Systems ,vol. 10, 2002. [3] N. Carlini et al. , “Extracting training data from large language models,” in 30th USENIX Security Symposium , 2021. [4] ——, “Quantifying memorization across neural language models,” in 
+
+International Conference on Learning Representations (ICLR) , 2023. [5] M. Nasr et al. , “Scalable extraction of training data from (production) language models,” arXiv preprint arXiv:2311.17035 , 2023. [6] R. Shokri et al. , “Membership inference attacks against machine learning models,” in IEEE Symposium on Security and Privacy (SP) , 2017. [7] J. Mattern et al. , “Membership inference attacks against language models via neighbourhood comparison,” in Findings of the ACL , 2023. [8] A. Nemecek, Z. Yun, Z. Rahmani, Y. Harel, V. Chaudhary, M. Sharif, and E. Ayday, “Exploring membership inference vulnerabilities in clinical large language models,” arXiv preprint arXiv:2510.18674 , 2025. [9] P. Lewis et al. , “Retrieval-augmented generation for knowledge-intensive nlp tasks,” in Advances in Neural Information Processing Systems (NeurIPS) , 2020. [10] K. Guu et al. , “Realm: Retrieval-augmented language model pre-training,” in Proceedings of the 37th International Conference on Machine Learning (ICML) , 2020. [11] Y. Zeng et al. , “The good and the bad: Exploring privacy issues in retrieval-augmented generation,” in Findings of the ACL 2024 , 2024. [12] S. Cohen et al. , “Compromptmized: Unleashing zero-click worms that target genai-powered applications,” arXiv preprint arXiv:2403.02817 ,2024. [13] Z. Qi et al. , “Circumventing steerability in retrieval-augmented genera-tion,” arXiv preprint arXiv:2403.04832 , 2024. [14] S. Yao et al. , “React: Synergizing reasoning and acting in language mod-els,” in International Conference on Learning Representations (ICLR) ,2023. [15] T. Schick et al. , “Toolformer: Language models can teach themselves to use tools,” in Advances in Neural Information Processing Systems (NeurIPS) , 2023. [16] N. Anderson et al. , “Membership inference attacks on retrieval-augmented generation,” arXiv preprint arXiv:2406.12031 , 2024. [17] M. Namazi, A. Nemecek, and E. Ayday, “Zkprov: A zero-knowledge approach to dataset provenance for large language models,” arXiv preprint arXiv:2506.20915 , 2025. [18] US Congress, “Health insurance portability and accountability act of 1996 (hipaa),” Pub. L. 104-191, 1996. [19] A. Machanavajjhala et al. , “l-diversity: Privacy beyond k-anonymity,” 
+
+ACM Transactions on Knowledge Discovery from Data (TKDD) , 2007. [20] N. Li et al. , “t-closeness: Privacy beyond k-anonymity and l-diversity,” in IEEE ICDE , 2007. [21] K. El Emam et al. , “A systematic review of re-identification attacks on health data,” PLoS ONE , 2011. [22] L. Rocher et al. , “Estimating the success of re-identifications in incom-plete datasets using generative models,” Nature Communications , 2019. [23] I. Pil´ an et al. , “The text anonymization benchmark (tab): A specialized corpus for measuring the effectiveness of de-identification,” Computa-tional Linguistics , 2022. [24] N. Lukas et al. , “Analyzing leakage of personally identifiable informa-tion in language models,” in IEEE Symposium on Security and Privacy (SP) , 2023. [25] L. Ouyang et al. , “Training language models to follow instructions with human feedback,” NeurIPS , 2022. [26] Y. Bai et al. , “Constitutional ai: Harmlessness from ai feedback,” arXiv preprint arXiv:2212.08073 , 2022. [27] H. Inan et al. , “Llama guard: Llm-based input-output safeguard for human-ai conversations,” arXiv preprint arXiv:2312.06674 , 2023. [28] T. Rebedea et al. , “Nemo guardrails: A toolkit for controllable and safe llm applications,” in EMNLP System Demonstrations , 2023. [29] S. Han et al. , “Wildguard: Open one-stop moderation tools for safety risks, jailbreaks, and refusals of llms,” Advances in Neural Information Processing Systems (NeurIPS) , 2024. [30] A. Zou et al. , “Universal and transferable adversarial attacks on aligned language models,” arXiv preprint arXiv:2307.15043 , 2023. [31] A. Wei et al. , “Jailbroken: How does llm safety training fail?” in 
+
+NeurIPS , 2023. [32] G. McLachlan and K. Basford, Mixture Models: Inference and Applica-tions to Clustering . Marcel Dekker, 1988. [33] B. Scholkopf et al. , “Support vector method for novelty detection,” in 
+
+NeurIPS , 1999. [34] L. Ruff et al. , “Deep one-class classification,” in Proceedings of the 35th ICML , 2018. [35] T. M. Cover and J. A. Thomas, Elements of Information Theory , 2nd ed. John Wiley and Sons, 2006. [36] E. Nalisnick et al. , “Detecting out-of-distribution inputs to deep gener-ative models using typicality,” arXiv preprint arXiv:1906.02994 , 2019. [37] W. Morningstar, C. Ham, A. Gallagher, B. Lakshminarayanan, A. Alemi, and J. Dillon, “Density of states estimation for out of distribution detection,” in International Conference on Artificial Intelligence and Statistics . PMLR, 2021, pp. 3232–3240. [38] D. Ganguly, W. R. Morningstar, A. S. Yu, and V. Chaudhary, “Forte : Finding outliers with representation typicality estimation,” in The Thirteenth International Conference on Learning Representations , 2025. [Online]. Available: https://openreview.net/forum?id=7XNgVPxCiA [39] W. Chen, V. Singh, Z. Rahmani, D. Ganguly, M. Hariri, and V. Chaud-hary, “K 4: Online log anomaly detection via unsupervised typicality learning,” arXiv preprint arXiv:2507.20051 , 2025. [40] D. Ganguly, S. Kumar, I. Balappanawar, W. Chen, S. Kambhatla, S. Iyengar, S. Kalyanaraman, P. Kumaraguru, and V. Chaudhary, “La-beling copilot: A deep research agent for automated data curation in computer vision,” arXiv preprint arXiv:2509.22631 , 2025. [41] M. Lu, P. K. Tripathi, M. Shteyn, D. Ganguly, R. H. French, V. Chaud-hary, and Y. Wu, “Context determines optimal architecture in materials segmentation,” arXiv preprint arXiv:2602.04154 , 2026. [42] J. Ren, P. J. Liu, E. Fertig, J. Snoek, R. Poplin, M. Depristo, J. Dillon, and B. Lakshminarayanan, “Likelihood ratios for out-of-distribution detection,” Advances in neural information processing systems , vol. 32, 2019. [43] A. Ben Abacha and D. Demner-Fushman, “A question-entailment ap-proach to question answering,” BMC Bioinformatics , vol. 20, no. 511, 2019, dataset: https://github.com/abachaa/MedQuAD. [44] adrianf12, “Medical Q&A vignettes (adrianf12),” HuggingFace Datasets, https://huggingface.co/datasets/adrianf12/healthcare conversational prompt completion 10k, 2024. [45] kabatubare, “Medical conversational Q&A (kabatubare),” HuggingFace Datasets, https://huggingface.co/datasets/Kabatubare/medical/viewer/ default/train, 2024. [46] P. Islam, A. Kannappan, D. Kiela, R. Qian, N. Scherrer, and B. Vidgen, “FinanceBench: A new benchmark for financial question answering,” 
+
+arXiv preprint arXiv:2311.11944 , 2023, dataset: https://huggingface.co/ datasets/PatronusAI/financebench. [47] Z. Chen, W. Chen, C. Smiley, S. Shah, I. Borova, D. Langdon, R. Moussa, M. Beane, T.-H. Huang, B. Routledge, and W. Y. Wang, “FinQA: A dataset of numerical reasoning over financial data,” in 
+
+Empirical Methods in Natural Language Processing (EMNLP) , 2021, dataset: https://github.com/czyssrs/FinQA. [48] Stack Exchange, Inc., “Money Stack Exchange data dump,” Inter-net Archive Stack Exchange Collection, https://archive.org/download/ stackexchange/money.stackexchange.com.7z, 2024, community Q&A under CC BY-SA 4.0; site: https://money.stackexchange.com. [49] D. Hendrycks, C. Burns, S. Basart, A. Zou, M. Mazeika, D. Song, and J. Steinhardt, “Measuring massive multitask language understanding,” in International Conference on Learning Representations (ICLR) , 2021, dataset (subset professional_law ): https://huggingface.co/datasets/ cais/mmlu/viewer/professional law. [50] U. Butler, “Open Australian legal Q&A,” HuggingFace Datasets, https: //huggingface.co/datasets/umarbutler/open-australian-legal-qa, 2023. [51] dzunggg, “LegalQA-v1: Legal question answering dataset,” Hug-gingFace Datasets, https://huggingface.co/datasets/dzunggg/legal-qa-v1, 2023. [52] Stack Exchange, Inc., “Law Stack Exchange data dump,” Inter-net Archive Stack Exchange Collection, https://archive.org/download/ stackexchange/law.stackexchange.com.7z, 2024, community Q&A under CC BY-SA 4.0; site: https://law.stackexchange.com. [53] D. Aumiller, A. Chouhan, and M. Gertz, “EUR-Lex-Sum: A multi- and cross-lingual dataset for long-form summarization in the legal domain,” in Empirical Methods in Natural Language Processing (EMNLP) , 2022, dataset: https://huggingface.co/datasets/dennlinger/eur-lex-sum. APPENDIX 
+
+This appendix collects per-domain texture that did not fit in the merged main sections: per-domain motivation and corpus rationale (Section A), full per-generator generation tables (Section B), full ablation grid for medical (Section C), per-generator stratified TPR for the T3+OCSVM-v4 configuration in each domain (Section D), and per-domain borderline-safe corpus construction notes (Section E). 
+
+A. Domain-Selection Rationale a) Why finance was selected as the second domain.: 
+
+Among candidate non-medical domains we considered fi-nance, law, education, and HR records. Finance was selected on five criteria: (i) quasi-identifier crispness (regex/checksum-validatable direct identifiers like SSN, ABA routing, EIN, Luhn-validatable card numbers); (ii) validator tractability (fi-nance Q&A typically uses “Client A” placeholders rather than fictional named individuals, unlike legal exam hypotheticals); (iii) public-corpus availability (Money StackExchange, Fi-nanceBench, FinQA all under open licenses); (iv) commercial threat model (retail banking chatbots, robo-advisors, fintech support agents are large RAG deployment surfaces under GLBA, FCRA, PCI DSS); (v) hypothesized confound (finance has stylistic analogs to medical’s case voice: “this client”, “the household we’re reviewing”, “in this scenario”). 
+
+b) Why law was selected as the third domain.: Law was deferred from the second-domain decision on validator-design grounds: legal exam hypotheticals routinely use fictional first-name parties (“Alice sues Bob”) that conflict with the shared name-based PII detector. With finance established as a repro-ducing second domain, we revisited law and addressed the validator obstacle directly: (i) the shared COMMON_NAMES list was expanded from 53 to 131 entries to cover crypto-tutorial conventions and gap-filler first names; (ii) surname-only case citations ( Brown v. Board ) were preserved as legitimate legal vocabulary by requiring either two title-cased tokens after a recognized first name or an explicit title prefix; (iii) three law-specific direct-identifier extras (federal/state docket numbers, keyword-anchored bar numbers, keyword-anchored attorney license numbers) were added. With these changes, the valida-tor passes Brown v. Board of Education but rejects “a recent widow, Jane” as a name leak. A two-domain study could have stopped at “finance is harder”. The third domain made one specific structural cause of the finance residual visible: register dominance is shared by law and finance, but only finance carries the elevated residual. 
+
+B. Per-Generator Generation Campaigns 
+
+Each domain’s training-pool generation is split across three generators in a uniform 15 ,000 + 1 ,500 + 3 ,000 = 19 ,500 
+
+records per generator pattern: a 15 ,000 -record baseline (no adversarial mode), 1,500 records of INDIRECT QI , and 3,000 
+
+records of mixed DISTRACTOR PADDED +STYLE TRANSFER .The held-out generator (Yi-1.5-9B) contributes 2,000 baseline records per domain. The borderline-aug generator (Mistral, used only on the safe side) contributes 4,000 records per do-main across the five borderline-safe subtypes; the borderline-eval generator (Phi-3, held out from training) contributes 1,000 
+
+records per domain. 
+
+a) Validator yields.: Baseline yield is ≥ 95% in all three domains. INDIRECT QI yield is 20 –40% depending on domain (lowest in medical, highest in law), reflecting domain-specific difficulty in producing QI-paraphrased answers that survive the forbidden-vocabulary check. DISTRACTOR PADDED and   
+
+> STYLE TRANSFER
+
+yields are 
+
+b) Per-axis distribution after validation.: Within each domain’s post-validator unsafe corpus, all six framings, all four placements, and all eight QI types are represented within 
+
+±5% of the configured uniform-sampling targets. The QI-count distribution (2 , 3, 4) = (0 .45 , 0.35 , 0.20) is realized as approximately (0 .53 , 0.34 , 0.13) , with the slight skew toward two-QI records reflecting higher rejection rates at higher QI counts in the INDIRECT QI mode. 
+
+C. Full Ablation Grid (Medical) 
+
+The merged Section VI reports the v3 vs. v4 endpoints of the 2×2 ablation grid (estimator ∈ { T3+GMM, T3+OCSVM },safe data ∈ { v3, v4 }). The full medical grid is reproduced here.                                                 
+
+> TABLE X
+> FULL MEDICAL ABLATION GRID .EACH ROW IS ONE DETECTOR CONFIGURATION (ESTIMATOR ×SAFE -SIDE TRAINING DATA ;V3 = SEED CORPUS ONLY ,V4 = SEED CORPUS + 4 K BORDERLINE -AUG ). E ACH COLUMN IS ONE TEST PAIRING :WITHIN -DISTRIBUTION ,
+> CROSS -GENERATOR (Y I HELD OUT ), BORDERLINE -SAFE STRESS TEST .BOLD ROWS ARE THE V 3BASELINE AND V 4COMBINED FIX REPORTED IN THE MAIN TEXT . T HE INTERMEDIATE CONFIGURATIONS (T3+GMM-V4, T3+OCSVM-V3) ARE REPORTED HERE FOR MEDICAL ONLY ;FINANCE AND LAW EVALUATE ONLY THE V 3AND V 4ENDPOINTS (S ECTION VI-A). REPORTED ON THE FULL POPULATION TO KEEP ALL FOUR CELLS COMPARABLE ;THE BOLD V 3/ V4ENDPOINTS SHIFT BY ≤0.01 AUROC
+> UNDER THE KEPT -ONLY CONVENTION USED BY TABLES V, VIII.
+> Estimator Safe Within-dist Cross-gen Borderline T3+GMM v3 0.9930 0.9940 0.7179
+> T3+GMM v4 0.9874 0.9879 0.9364 T3+OCSVM v3 0.9958 0.9943 0.8976
+> T3+OCSVM v4 0.9922 0.9943 0.9575
+
+The ablation isolates each fix’s contribution. On the border-line stress test (the binding metric), data alone (T3+GMM-v4) lifts AUROC from 0.7179 to 0.9364 (+0 .218 ); estimator alone (T3+OCSVM-v3) lifts it to 0.8976 (+0 .180 ); the combination (T3+OCSVM-v4) lifts it to 0.9575 (+0 .240 ). The two fixes are not strictly additive but are mutually reinforcing. We did not retrain the equivalent 4-cell grid for finance and law because the medical grid already characterizes each fix’s contribution and the cross-domain replication targets the v3-vs-v4 endpoints. A finance-specific ablation that would test whether finance shows a different ratio of method-level vs. data-level contribution is left to future work (Section IX-B). 
+
+D. Per-Generator Stratified TPR (T3+OCSVM-v4) 
+
+The narrow training-pool spread rules out single-generator stylometric overfitting in each domain. For medical and fi-TABLE XI PER -GENERATOR TPR AT τ =0 UNDER T3+OCSVM-V4 ACROSS THE THREE DOMAINS . Y I-1.5-9B IS HELD OUT FROM UNSAFE -SIDE TRAINING IN ALL THREE DOMAINS , SO ITS ROW REPORTS CLEAN CROSS -GENERATOR BEHAVIOR . T HE TRAINING -POOL SPREAD IS SMALL IN ALL THREE DOMAINS (≤ 5 PP ). F OR MEDICAL AND FINANCE , Y I IS DETECTED AT WITHIN -POOL -COMPARABLE TPR; FOR LAW , Y I SITS NOTICEABLY BELOW THE TRAINING -POOL MEAN , EVEN THOUGH ITS THRESHOLD -FREE    
+
+> AUROC IS STILL HIGH (T ABLE VIII).
+
+Generator Medical Finance Law 
+
+Qwen2.5-7B-Instruct 0.796 0.971 0.720 Mistral-7B-Instruct-v0.3 0.773 0.974 0.696 Phi-3-medium-4k-instruct 0.798 0.968 0.742 Yi-1.5-9B-Chat (held out) 0.801 0.992 0.511 
+
+Spread (training pool) 2.5 pp 0.6 pp 4.6 pp 
+
+Yi vs. training mean +0 .012 +0 .021 −0.208 
+
+nance, the held-out generator is detected at higher TPR than the training mean, consistent with Yi-1.5-9B producing more stereotypical referential-voice phrasing on the same prompts than the training pool. For law the pattern inverts: Yi sits 
+
+∼21 pp below the training-pool mean at τ =0 . Because the threshold-free discriminator is still strong (cross-gen AUROC 
+
+0.9580 , Table VIII), this represents a shift in the operating point at which Yi crosses the safe/unsafe boundary, not a failure of the detector to separate Yi outputs from safe content. We attribute the shift to law’s wider safe distribution and Yi’s stylistically distinct legal register relative to the training pool, and to the fact that medical and finance training pools may have overfit slightly to any stereotypical 7–14B output style (making Yi unusually easy), where law’s generators produce more diverse legal phrasing in the training pool, leaving less room for Yi to look more stereotypical. 
+
+E. Borderline-Safe Construction Notes 
+
+The five borderline-safe subtypes are instantiated per do-main with explicit prompt templates that specify (i) the QI-free constraint, (ii) the stylistic register to imitate, and (iii) five canonical example openings. Each borderline-aug record is sampled by a training-pool model (Mistral) at temperature 
+
+0.9 and validated against the same direct-identifier prohibi-tions as the unsafe corpus plus the additional “no QI cluster of size ≥ 2” rule. Borderline-eval records are sampled by a held-out model (Phi-3) under the same constraints. The 
+
+4,000 /1,000 split in scale reflects the v4 augmentation re-quirement (training-aug needs to be large enough to shift the T3+OCSVM safe boundary) versus the borderline-eval requirement (eval needs to be large enough to estimate FPR with reasonable variance). 
+
+a) Per-domain borderline subtype counts.: Across all three domains the 1,000 -record borderline-eval is approxi-mately balanced across the five subtypes ( ∼ 200 records each, varying ±12 records due to generator-side rejection patterns). Per-domain n’s are reported in Table VII via the n column of the underlying per-subtype tables.

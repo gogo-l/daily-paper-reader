@@ -1,0 +1,578 @@
+Title: ICED: Concept-level Machine Unlearning via Interpretable Concept Decomposition
+
+URL Source: https://arxiv.org/pdf/2605.14309v2
+
+Published Time: Mon, 18 May 2026 00:35:52 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# ICED: Concept-level Machine Unlearning via Interpretable Concept Decomposition 
+
+Shen Lin 1, Jing Lin 1, Junhao Dong 2∗ , Piotr Koniusz 3,4, and Li Xu 11Fujian Normal University, 2Nanyang Technological University, 
+
+> 3
+
+University of New South Wales, 4Data61 CSIRO 
+
+Abstract 
+
+Machine unlearning in Vision-Language Models (VLMs) is typically performed at the image or instance level, making it difficult to precisely remove target knowledge without affecting unrelated semantics. This issue is especially pronounced since a single image often contains multiple entangled concepts, including both target con-cepts to be forgotten and contextual information that should be preserved. In this paper, we propose an interpretable concept-level unlearning framework for VLMs, which constructs a compact task-specific concept vocabulary from the forgetting set using a multimodal large language model. In addition to modality alignment, visual representations are decomposed into sparse, nonnegative combinations of semantic concepts, providing an explicit interface for fine-grained knowledge manipulation. Based on this decomposition, our method formulates unlearning as concept-level optimization, where target concepts are selectively suppressed while intra-instance non-target semantics and global cross-modal knowledge are preserved. Exten-sive experiments across both in-domain and out-of-domain forgetting settings demonstrate that our method enables more comprehensive target forgetting, better preserves non-target knowledge within the same image, and maintains competitive model utility compared with existing VLM unlearning methods. 
+
+1 Introduction 
+
+Recent advances in large-scale Vision–Language Models (VLMs), exemplified by CLIP [ 1], have established a powerful framework for learning aligned representations. Despite these successes, the practical deployment of such models has raised growing concerns about data governance, privacy, robustness, and regulatory compliance [ 2, 3 , 4, 5], as they may implicitly retain and expose sensitive, copyrighted, or harmful information present in their training set. This challenge is further amplified by recent regulatory trends that emphasize the right to data removal and accountability in AI systems. Machine unlearning [ 6, 7 , 8, 9, 10 ] has thus emerged for selectively erasing the influence of specific training data from a trained model without requiring costly retraining from scratch. Existing VLM unlearning methods [ 11 , 12 , 13 , 14 , 15 , 16 ] often perform forgetting at the image or sample level, treating each training instance as an atomic unit for removal. Most methods operate at the parameter or embedding level, treating unlearning as an optimization problem over model weights without explicitly modeling the semantic structure of vision–language alignment. This lack of semantic grounding makes it difficult to localize the exact knowledge being forgotten, often leading to the entangled or incomplete removal of target concepts. Moreover, this limitation becomes more evident when accounting for the internal structure of visual inputs. A single image often contains multiple semantic concepts, including both target concepts 
+
+> ∗Corresponding author. Preprint.
+> arXiv:2605.14309v2 [cs.CV] 15 May 2026
+
+Figure 1: Motivation. The left part shows target concepts to be forgotten, while the right part shows remaining contextual concepts that should be preserved. ICED more effectively suppresses forgetting concepts and shifts the model’s focus toward non-target contextual concepts, indicating more selective and utility-preserving unlearning. intended for forgetting and irrelevant contextual information that should be preserved. However, existing methods typically treat each instance as an atomic unit for removal. As illustrated in Fig. 1, conventional unlearning methods can reduce the weights associated with target concepts to some extent, but they may also suppress or distort non-target concepts. Once the target concepts are effectively removed, the model should instead redirect its attention to the remaining non-target concepts, rather than uniformly weakening the entire representation. In contrast, our method more selectively suppresses the forgetting concepts while preserving stronger activations on the surrounding contextual concepts, indicating a more fine-grained concept-level forgetting behavior. Consequently, removing an entire instance may inadvertently eliminate unrelated yet useful knowledge, resulting in unnecessary degradation of general vision–language capabilities. These observations suggest that image-level unlearning is too coarse to disentangle target concepts from co-occurring non-target semantics, making it difficult to achieve precise forgetting without compromising model utility. This motivates the need for fine-grained, concept-level unlearning in VLMs, where semantic compo-nents within each instance can be explicitly identified and manipulated. In this work, we propose a novel machine unlearning method based on Interpretable Conc Ept Decomposition, dubbed ICED. Specifically, ICED decomposes CLIP representations into sparse, non-negative, and overcomplete concept bases, enabling fine-grained localization of semantic concepts within individual instances. This structured decomposition supports the selective removal of target concepts while preserving irrelevant but useful visual-language knowledge. We summarize our contributions as follows: I) We identify a key limitation of existing vision-language model unlearning methods: instance-level forgetting induces entangled representations and non-selective knowledge removal. To address this limitation, we propose ICED, an interpretable concept-level unlearning framework that integrates concept decomposition with concept-level optimization. II) We develop ICED with two key components: an interpretable concept decomposition module that constructs a task-specific concept vocabulary and represents each image as a combination of semantic concepts, and a concept-level optimization objective that removes target concepts while preserving non-target semantics and global cross-modal knowledge. III) We conduct extensive experiments on CIFAR-10 and ImageNet-1K with two CLIP back-bones, comparing ICED against state-of-the-art baselines. The results show that ICED achieves a superior trade-off between effective unlearning and model preservation. 
+
+2 Related Work 
+
+CLIP Interpretability. Recent works leverage the semantic structure of CLIP and its text encoder to interpret visual representations through concept-based analysis. A common line of research represents image embeddings via their similarities to textual concepts, enabling downstream concept bottleneck models or probing methods [ 17 , 18 , 19 ]. Another direction focuses on structured concept decompositions, expressing image representations as combinations of human-interpretable concepts 2through sparse coding, latent dictionaries, or attribution mechanisms [ 20 , 21 , 22 , 23 , 24 ]. Despite these advances, existing CLIP interpretability methods are not well-suited for machine unlearning. They primarily provide post-hoc explanations rather than controllable representations. Moreover, they lack mechanisms for selectively suppressing identified concepts while preserving model knowledge. 
+
+Machine unlearning for CLIP. Existing works [ 11 , 12 , 13 , 14 , 15 , 16 ] have explored machine unlearning in CLIP models by targeting the removal of specific concepts or classes. For example, Cheng et al. [ 12 ] proposed a multi-modal unlearning method, namely MultiDelete, which is designed to separate embeddings for the forget set while preserving uni-modal embeddings for the retain set. Cai et al. [ 13 ] computed unlearning gradients on the forgetting data and restricted the update to a single selected layer. Yang et al. [ 14 ] proposed CLIPErase, which disentangles and selectively removes both visual and textual associations in CLIP. Kravets et al. [ 25 ] employed Lipschitz regularization with synthetic samples for zero-shot class unlearning. Different from existing works, we introduce an interpretable concept decomposition of CLIP rep-resentations, enabling direct intervention on semantically meaningful components and supporting precise, interpretable concept-level machine unlearning. 
+
+3 Proposed Method 
+
+3.1 Overview 
+
+As shown in Fig. 2, we present an interpretable framework for concept-level machine unlearning in vision-language models. Instead of removing entire instances, our method decomposes visual representations into sparse combinations of semantic concepts and selectively suppresses the target ones. The framework consists of two stages. First, we construct a task-specific concept vocabulary from the forgetting set using an MLLM, and align it with the visual embedding space. Each image is then represented as a sparse, nonnegative combination of concept embeddings, yielding an interpretable decomposition. Second, we perform concept-level unlearning by directly manipulating these representations. We design three objectives: a forgetting loss to remove target concepts from remaining semantics, an intra-instance preservation loss to maintain non-target information within each sample, and a global preservation loss to retain general knowledge on the remaining data. This formulation enables precise and controllable unlearning while preserving overall model performance. 
+
+Figure 2: An overview of our proposed ICED method. 
+
+3.2 Interpretable Concept Decomposition Vocabulary Construction. Unlike prior work that relies on a predefined universal concept set, we construct a task-specific concept vocabulary directly from the forgetting set. A unified large-scale vocabulary typically introduces two issues in our setting: it increases storage overhead due to the 3need to maintain a large concept dictionary, and it may degrade representation precision because many irrelevant or redundant concepts can interfere with the decomposition process. Given a forgetting set Df , we leverage a multimodal large language model (MLLM) to extract a set of semantic concepts Cf = {ck}Kk=1 that capture the dominant objects, attributes, and contextual patterns present in Df . Specifically, for each sample x ∈ D f , we prompt the MLLM with both visual and textual inputs to generate descriptive phrases grounded in the image content, and aggregate the resulting concepts across the dataset to form an initial candidate pool: 
+
+Cf = [
+
+> x∈D f
+
+MLLM (x). (1) To improve robustness and reduce noise, we further perform deduplication and frequency-based filtering, retaining only the most representative and semantically consistent concepts. We also supplement the vocabulary with a small set of common background concepts and their synonyms to improve the coverage of non-target contextual semantics. Compared to generic concept vocabularies, this data-driven construction yields a compact and task-relevant concept set that is more tightly aligned with the forgetting objective. 
+
+Modality Alignment. To decompose visual features into nonnegative combinations of semantic concepts, the image embeddings and concept embeddings should lie in a shared and compatible space. However, due to the modality gap [ 26 ] in CLIP, the two modalities may occupy different regions on the unit sphere, which hinders reliable nonnegative decomposition. To address this issue, we perform mean-centering separately for image embeddings and concept embeddings. Let zimg = fv (x)
+
+denote the CLIP image embedding and g(ck) = ft(tk) denote the text embedding of concept ck. We estimate the image-space mean μimg and the concept-space mean μcon , and center the embeddings as 
+
+˜z = σ(zimg − μimg ), ˜ck = σ(g(ck) − μcon ), (2) where σ(·) denotes ℓ2 normalization. This alignment alleviates the modality gap and enables reliable nonnegative decomposition in the shared space. After obtaining the reconstructed embedding ˆz, we map it back to the original CLIP image space as 
+
+ˆzimg = σ(ˆ z + μimg ). (3) This ensures that the reconstructed representation lies on the same cone as the original CLIP im-age embeddings, which is important for preserving downstream performance after concept-level manipulation. 
+
+Concept Decomposition. Given the aligned concept vocabulary C = {ck}Kk=1 constructed from the forgetting set and the centered CLIP image embedding z = σ(zimg − μimg ), we aim to represent z as a sparse nonnegative combination of concept embeddings. Let C = [ σ(g(c1) − μcon ), · · · , σ (g(cK ) −
+
+μcon )] denote the centered and normalized concept dictionary, where g(·) is the CLIP text encoder and σ(·) denotes ℓ2 normalization. We formulate concept decomposition as an optimization problem: 
+
+min 
+
+> w∈RK
+> +
+
+∥w∥0 s.t. ⟨z, σ (Cw)⟩ ≥ 1 − ϵ, (4) where ϵ controls the reconstruction tolerance. Following standard practice, we relax the ℓ0 constraint by introducing an ℓ1 sparsity regularization, yielding the following convex surrogate: 
+
+w∗ = arg min 
+
+> w∈RK
+> +
+
+∥Cw − z∥22 + λdec ∥w∥1, (5) where λdec controls the strength of the sparsity regularization. 
+
+3.3 Concept-level Machine Unlearning 
+
+Based on the proposed interpretable concept decomposition, we formulate machine unlearning as a concept-level optimization problem. Instead of removing entire instances, our goal is to selectively suppress target concepts while preserving both unrelated contextual information within the same instance and general knowledge learned from the remaining data. 
+
+Forgetting Loss. To remove target concepts while avoiding interference with other unrelated semantics within the same image, we enforce a separation between the target concept embedding 4and the remaining concept representations. Specifically, we minimize the similarity between the reconstructed embedding of the forgetting concept and the residual visual representation that captures non-target concepts: 
+
+Lforget = Ex∼D f
+
+sim  ˆz, f v (x) − ˆz , (6) where sim( ·, ·) denotes the cosine similarity, fv (x) is the visual embedding, and ˆz = σ(Cw∗ + μimg )
+
+represents the reconstructed embedding. This objective encourages the model to decorrelate the target concept from the remaining non-target semantic components within the same instance, thereby achieving more precise and localized forgetting. 
+
+Intra-instance Preservation Loss. To preserve non-target semantic information within the same instance, we reconstruct the visual representation after removing the influence of the forgetting concept and its semantic neighbors. Specifically, we first construct a binary mask m over the concept weights w, where entries corresponding to the target concept and its synonyms are set to zero. The remaining concept weights are then used to reconstruct the embedding as follows: 
+
+˜z = σ C (1 − m) ⊙ w + μimg 
+
+, (7) where w denotes the concept weight vector, C is the concept basis, μimg is the image bias term, ⊙
+
+denotes element-wise multiplication, and σ(·) is the activation function. We then enforce consistency between the original visual representation and the reconstructed embedding via a mean squared error objective: 
+
+Lintra = Ex∼D f
+
+h
+
+∥fv (x) − ˜z∥22
+
+i
+
+. (8) This objective encourages the model to preserve the remaining semantic structure within each instance while explicitly excluding the influence of the forgetting concept and its related semantic components, thereby preventing unintended distortion of non-target knowledge during unlearning. 
+
+Global Preservation Loss. To preserve general semantic knowledge during unlearning, we impose a global alignment constraint on the retained dataset Dr . Specifically, we adopt a contrastive objective consistent with CLIP, while only optimizing the image encoder to maintain stable visual representations. Formally, the global preservation loss is defined as: 
+
+Lglobal = −E(x,y )∼D r [log softmax( fv (x) · ft(y)/τ )] , (9) where Dr denotes the retained dataset and τ is a temperature parameter. This objective preserves the global cross-modal alignment learned from the retained data, ensuring that general semantic knowledge remains intact while selectively removing the target concepts. 
+
+Overall Loss. The final objective integrates the three complementary components as follows: 
+
+Ltotal = λforget Lforget + λintra Lintra + λglobal Lglobal , (10) where λforget , λintra , and λglobal are hyperparameters that balance the trade-off between effective forgetting and knowledge preservation. 
+
+4 Theoretical Analysis 
+
+Theorem 1 (Selectivity of concept-level unlearning) . Let C = [ CT , C R] ∈ Rd×K denote the aligned concept dictionary, where CT contains the target concepts to be forgotten, and CR contains the remaining non-target concepts. Assume that all concept atoms are ℓ2-normalized. For an image x,suppose its centered visual representation admits the decomposition 
+
+h(x) = CT wT + CRwR + r, wT , wR ≥ 0, ∥r∥2 ≤ ϵdec , (11) 
+
+where wT and wR are the target and non-target concept coefficients, and r is the decomposition residual. Let the concept-erased representation be 
+
+˜h(x) = CRwR + r. (12) 
+
+Consider a unit-norm target text query pT and a unit-norm non-target query pR. Suppose there exist constants α, β, η ≥ 0 such that 
+
+⟨pT , ci⟩ ≥ α ∀ci ∈ CT , |⟨ pT , cj ⟩| ≤ β ∀cj ∈ CR, (13) 5and 
+
+|⟨ pR, ci⟩| ≤ η ∀ci ∈ CT . (14) 
+
+Then the erased representation satisfies 
+
+⟨pT , h (x)⟩ − ⟨ pT , ˜h(x)⟩ ≥ α∥wT ∥1, (15) 
+
+|⟨ pR, h (x)⟩ − ⟨ pR, ˜h(x)⟩| ≤ η∥wT ∥1, (16) 
+
+|⟨ pT , ˜h(x)⟩| ≤ β∥wR∥1 + ϵdec . (17) 
+
+Consequently, when target concepts are well aligned with pT and weakly aligned with non-target queries, i.e., α ≫ η, suppressing CT wT produces a large decrease in the target score while causing only a small change to non-target semantic scores. Proof. Proof can be found in Appendix B. 
+
+Remark 1. The theorem gives a simple explanation for why concept-level unlearning can be selective. Removing the target concept coefficients reduces the target score, while the effect on unrelated concepts depends only on how much those concepts overlap with the removed target concepts. Thus, when the concept dictionary is well separated, ICED can forget the specified concepts without substantially changing other visual semantics. This also suggests that using a clean and compact concept vocabulary is important: highly overlapping concepts make selective unlearning harder. 
+
+5 Experiments 
+
+5.1 Experimental Setup Datasets and Models. Following previous works [ 15 ], we evaluate ICED under two settings: in-domain forgetting and out-of-domain forgetting, using two CLIP backbones, RN50 and RN101. For in-domain forgetting, we use Breeds [ 27 ], a subset of ImageNet-1K [ 28 ] that is closer to CLIP’s pre-training distribution. For each of its 17 super-classes, we select one subgroup as the forgetting set and use the remaining three subgroups as the retaining set. For out-of-domain forgetting, we use CIFAR-10 [29], whose distribution differs substantially from CLIP’s training data. 
+
+Implementation Details. During unlearning, we fine-tune the CLIP model for 5 epochs using AdamW with a batch size of 192, a weight decay of 0.1, and gradient clipping with a maximum norm of 1.0. The learning rate is set to the order of 1 × 10 −6 for CIFAR-10 and 1 × 10 −7 for ImageNet. All images are resized to 224 × 224 and normalized following the standard CLIP preprocessing protocol. For vocabulary construction, we use ChatGPT to extract candidate semantic concepts from the forgetting set. Unless otherwise specified, we set the sparsity regularization weight to λdec = 0 .35 
+
+and the balancing coefficients to λforget = 0 .5, λintra = 95 , and λglobal = 0 .075 .
+
+Baseline Methods. We compare ICED with the following baselines: FT [ 30 ], GA [ 31 ], Fisher [ 32 ], LIP [ 33 ], EMMN [ 34 ], CLIP-LIP [ 25 ], and TIFS [ 15 ]. For fair comparison, all baselines are evaluated under the same forgetting and retaining splits with the same CLIP backbones. We provide detailed experimental settings for all baselines in the supplementary material. 
+
+Metrics. Following prior work [ 15 ], we report zero-shot classification accuracy on the target set (Target ), retained set ( Retain ), and full dataset ( All ). To evaluate model fidelity, we further test on several unseen benchmarks, including Food [ 35 ], STL [ 36 ], and ObjectNet [ 37 ]. We use a normalized score min( Acc unlearn /Acc original , 1) , capped at 1 to indicate no performance degradation relative to the original model. The Avg. Score is computed by averaging normalized scores across all evaluated datasets, serving as an overall measure of the forgetting–preservation trade-off. All results are averaged over three independent runs and the best results are highlighted in bold .
+
+5.2 Main Results Comparison Experiments in In-domain Forgetting. We first evaluate ICED under the in-domain forgetting setting on ImageNet-1K. As shown in Table 1, existing methods generally exhibit a clear trade-off between forgetting effectiveness and model preservation. FT, GA, Fisher, and LIP can reduce the target accuracy, but they substantially degrade retained-class accuracy, overall accuracy, and transfer performance on unseen datasets, indicating that their forgetting behavior is not sufficiently 6selective. EMMN and CLIP-LIP better preserve the original model utility in some cases, but they often leave high target accuracy, suggesting incomplete removal of the target concepts. TIFS achieves stronger forgetting than most baselines, yet still incurs noticeable utility loss. In contrast, ICED consistently achieves effective target forgetting while maintaining strong retained, overall, and out-of-domain generalization performance across different CLIP backbones. Table 1: Performance comparison with several baselines in box-turtle forgetting on ImageNet-1K. Results are reported as ab, where a is the zero-shot accuracy (%) and b is the normalized score. Additional results are provided in the supplementary material. Backbone Method ImageNet Food ↑ STL ↑ ObjectNet ↑ CIFAR-10 ↑ Avg. Score ↑
+
+Target ↓ Retain ↑ All ↑
+
+RN50 Original 68 .00 48 .67 51 .94 76 .49 93 .75 25 .83 68 .84 −
+
+FT [30] 4.00 5.88 0.26 0.53 24 .80 47 .75 30 .34 39 .67 67 .05 71 .52 9.58 37 .09 12 .26 17 .81 44 .07 
+
+GA [31] 14 .50 21 .32 35 .40 72 .73 35 .39 68 .14 51 .39 67 .18 77 .76 82 .94 14 .18 54 .90 14 .08 20 .45 63 .58 
+
+Fisher [32] 0.20 0.29 0.34 0.70 1.09 2.10 0.23 0.30 10 .69 11 .40 1.14 4.41 10 .12 14 .70 19 .04 
+
+LIP [33] 0.95 1.40 1.75 3.60 1.14 2.19 0.23 0.30 10 .50 11 .20 0.59 2.28 10 .46 15 .19 19 .06 
+
+EMMN [34] 10 .00 14 .71 36 .67 75 .34 32 .25 62 .09 47 .48 62 .07 65 .21 69 .56 9.65 37 .36 11 .75 17 .07 58 .40 
+
+CLIP-LIP [25] 37 .00 54 .41 52 .77 100 .00 53 .78 100 .00 76 .47 99 .97 93 .80 100 .00 25 .80 99 .88 67 .77 98 .45 91 .98 
+
+TIFS [15] 0.00 0.00 44 .67 91 .78 47 .34 91 .14 79 .00 100 .00 83 .05 88 .59 16 .95 65 .62 83 .80 100 .00 91 .01 
+
+ICED (ours) 1.20 1.76 50 .68 100 .00 50 .43 97 .09 71 .66 93 .69 91 .35 97 .44 20 .91 80 .95 65 .06 94 .51 94.56 
+
+RN101 Original 80 .00 54 .67 54 .33 81 .16 96 .46 29 .16 73 .82 −
+
+FT [30] 0.00 0.00 0.51 0.93 27 .62 50 .84 38 .54 47 .49 74 .75 77 .49 13 .26 45 .47 15 .78 21 .38 49 .09 
+
+GA [31] 32 .00 40 .00 38 .76 70 .90 38 .75 71 .32 58 .44 72 .01 84 .45 87 .55 18 .62 63 .85 18 .73 25 .37 64 .43 
+
+Fisher [32] 1.12 1.40 0.38 0.70 0.27 0.50 0.24 0.30 9.94 10 .30 0.41 1.41 13 .44 18 .21 18 .57 
+
+LIP [33] 0.24 0.30 0.27 0.49 1.74 3.20 0.16 0.20 11 .19 11 .60 0.79 2.71 11 .89 16 .11 19 .14 
+
+EMMN [34] 68 .00 85 .00 29 .33 53 .65 26 .43 48 .65 42 .44 52 .29 72 .46 75 .12 11 .97 41 .05 17 .31 23 .45 44 .17 
+
+CLIP-LIP [25] 2.00 2.50 50 .84 92 .99 51 .49 94 .77 78 .50 96 .72 96 .42 99 .96 27 .66 94 .86 70 .08 94 .93 95 .96 
+
+TIFS [15] 0.00 0.00 50 .17 91 .77 49 .51 91 .13 70 .50 86 .87 85 .45 88 .59 19 .13 65 .60 89 .86 100 .00 89 .14 
+
+ICED (ours) 2.00 2.50 53 .67 98 .17 53 .42 98 .33 78 .57 96 .81 95 .92 99 .44 26 .86 92 .11 70 .02 94 .85 96.74 
+
+Comparison Experiments in Out-of-domain Forgetting. We further evaluate ICED on CIFAR-10, which represents the out-of-domain forgetting setting. As reported in Table 2, the same trade-off can be observed for existing methods. FT and GA reduce the accuracy of the target class but also impair the retained classes and overall performance. Fisher and LIP drive the target accuracy close to zero in several cases, but this comes with severe degradation of model utility. Although EMMN and CLIP-LIP preserve part of the original model behavior, their forgetting performance is unstable or insufficient. Compared with these baselines, ICED achieves a better balance between target removal and knowledge preservation, maintaining stronger retained accuracy, overall accuracy, and transfer performance. These results demonstrate that concept-level unlearning enables more precise removal of target knowledge with less collateral damage to non-target semantics and general knowledge. Table 2: Performance comparison with several baselines in Airplane forgetting on CIFAR-10. Addi-tional results are provided in the supplementary material. Backbone Method CIFAR-10 Food ↑ STL ↑ ObjectNet ↑ ImageNet ↑ Avg. Score ↑
+
+Target ↓ Retain ↑ All ↑
+
+RN50 Original 54 .10 66 .61 65 .37 76 .49 93 .75 25 .83 53 .81 −
+
+FT [30] 22 .40 41 .40 63 .29 95 .02 58 .20 89 .03 1.70 2.22 45 .20 48 .21 0.29 1.12 0.00 0.00 42 .03 
+
+GA [31] 5.90 10 .91 27 .01 40 .55 24 .90 38 .09 1.82 2.38 34 .16 36 .44 0.88 3.41 0.40 0.74 30 .10 
+
+Fisher [32] 0.00 0.00 12 .39 18 .60 12 .16 18 .60 1.22 1.59 15 .47 16 .50 0.10 0.39 0.11 0.20 22 .27 
+
+LIP [33] 0.00 0.00 14 .85 22 .29 14 .58 22 .30 1.61 2.10 15 .19 16 .20 0.08 0.31 0.10 0.30 23 .34 
+
+EMMN [34] 0.30 0.55 11 .34 17 .02 10 .24 15 .66 49 .70 64 .98 46 .86 49 .98 10 .21 39 .53 36 .32 67 .49 50 .59 
+
+CLIP-LIP [25] 67 .80 100 .00 68 .44 100 .00 68 .34 100 .00 76 .78 100 .00 93 .66 99 .90 25 .91 100 .00 53 .85 100 .00 82 .08 
+
+TIFS [15] 5.03 9.30 61 .61 92 .49 60 .47 92 .50 65 .17 85 .20 87 .38 93 .21 21 .70 84 .01 45 .09 83 .79 88 .84 
+
+ICED (ours) 1.20 2.22 74 .61 100 .00 67 .27 100 .00 74 .67 97 .62 89 .70 95 .68 24 .34 94 .23 52 .04 96 .71 97.43 
+
+RN101 Original 70.60 75.39 74.91 81.16 96.46 29.16 55.25 –FT [30] 14 .90 21 .10 63 .84 84 .68 57 .89 77 .28 1.70 2.09 66 .90 69 .35 1.87 6.41 1.29 2.33 45 .86 
+
+GA [31] 4.50 6.37 25 .86 34 .30 23 .72 31 .66 3.47 4.28 56 .35 58 .39 1.97 6.76 1.64 2.97 33 .14 
+
+Fisher [32] 0.00 0.00 15 .08 20 .00 14 .98 20 .00 1.38 1.70 17 .65 18 .30 0.12 0.41 0.17 0.31 22 .96 
+
+LIP [33] 0.00 0.00 16 .13 21 .40 16 .03 21 .40 2.27 2.80 16 .40 17 .00 0.09 0.31 0.28 0.51 23 .34 
+
+EMMN [34] 78 .30 100 .00 6.47 8.58 13 .65 18 .22 45 .29 55 .80 42 .85 44 .42 10 .71 36 .73 36 .54 66 .14 31 .28 
+
+CLIP-LIP [25] 3.60 5.10 75 .67 100 .00 68 .50 91 .44 79 .11 97 .47 90 .88 91 .22 26 .83 92 .01 55 .25 100 .00 95 .72 
+
+TIFS [15] 8.97 12 .71 73 .96 98 .10 73 .49 98 .10 69 .15 85 .20 91 .54 94 .90 21 .49 83 .98 36 .52 66 .10 86 .20 
+
+ICED (ours) 0.00 0.00 82 .76 100 .00 74 .48 99 .43 78 .04 96 .16 92 .85 96 .26 26 .05 89 .33 53 .11 96 .13 96.76 
+
+Retrieval Visualization. We further provide retrieval results before and after unlearning to quali-tatively evaluate whether ICED removes the target knowledge while preserving related non-target 7semantics. Fig. 3 shows the in-domain case on ImageNet-1K, where the target subgroup marmoset is removed from the superclass monkey . Before unlearning, the retrieved results contain multiple target subgroup samples. After unlearning, these target samples are largely removed, while other monkey subgroups and unrelated superclasses such as panda remain retrievable. This indicates that ICED can suppress the target subgroup without collapsing the broader superclass semantics. Additional retrieval results on CIFAR-10 are provided in the supplementary material. 
+
+Figure 3: Retrieval visualization for in-domain forgetting on ImageNet-1K. The target subgroup 
+
+marmoset is highlighted in red, while other monkey subgroups are highlighted in green. 
+
+Effectiveness of Concept Decomposition. Fig. 4 visualizes the top activated concepts produced by our sparse decomposition. The selected concepts are well aligned with the image content, covering both object-level semantics and contextual semantics. The decomposition is also sparse, with only a few concepts receiving dominant weights. These results suggest that our decomposition provides an interpretable and reliable concept-level interface for subsequent unlearning. peacock cock park partridge crane bird 0.033 0.015 0.013 0.013 0.012            
+
+> 00.01 0.02 0.03 0.04
+> cliff dune canyon rock beauty volcano 0.041 0.031 0.028 0.014 0.012
+> 00.02 0.04
+> Pomeranian Eskimo dog grass park teddy 0.089 0.028 0.017 0.013 0.012
+> 00.05 0.1
+> toucan bird palm tree spider web flamingo 0.064 0.055 0.050 0.011 0.011
+> 00.02 0.04 0.06
+
+Figure 4: Visualization of the top-5 concepts obtained by ICED. 
+
+5.3 Ablation Study Impact of Each Loss Component. Table 3 shows that the three loss terms play complementary roles. 
+
+Lforget is the main source of forgetting, as using it alone already drives the target accuracy close to zero. However, this comes at the cost of reduced retained and overall performance. Incorporating 
+
+Lintra improves the preservation of non-target semantics within each instance, while Lglobal further stabilizes global knowledge and substantially boosts Avg. Score. The full objective achieves the best trade-off, yielding the highest retained accuracy, overall accuracy, and Avg. Score, which validates the necessity of all three components. 
+
+Impact of Vocabulary Size. As shown in Fig. 5(a), ICED achieves strong performance even with a relatively small concept vocabulary. When the vocabulary size is set to 500, the target accuracy is already reduced to a very low level, while the retained and overall accuracy remain stable, indicating 8Table 3: Ablation study of each loss component on CIFAR-10. Config Components Metrics                                                                  
+
+> Lforget Lintra Lglobal Target ↓Retain ↑All ↑Food ↑STL ↑ObjectNet ↑ImageNet ↑Avg. Score ↑
+> Original ---54 .10 66 .61 65 .37 76 .49 93 .75 25 .83 53 .81 −
+> 1✓××0.00 0.00 40 .53 60 .85 36 .48 58 .49 71 .61 93 .62 80 .40 85 .76 19 .78 76 .58 41 .80 77 .68 79 .00
+> 2✓✓×0.00 0.00 55 .92 83 .95 50 .33 80 .70 75 .70 98 .97 85 .71 91 .42 23 .48 90 .90 49 .60 92 .18 91 .16
+> 3✓×✓0.00 0.00 70 .92 100 .00 63 .83 100 .00 65 .97 86 .25 81 .11 86 .52 15 .78 61 .09 41 .81 77 .70 87 .36
+> Ours ✓✓✓1.20 2.22 74 .61 100 .00 67 .27 100 .00 74 .67 97 .62 89 .70 95 .68 24 .34 94 .23 52 .04 96 .71 97.43
+
+that a compact task-specific vocabulary is sufficient to capture the key semantics required for concept-level unlearning. This also suggests that ICED does not rely on a large universal concept set, thereby reducing storage and decomposition overhead while avoiding interference from redundant concepts. 
+
+Impact of and Sparsity Weight. Fig. 5(b) shows the influence of the sparsity regularization weight 
+
+λdec . When λdec is relatively small, the model achieves strong target forgetting while maintaining stable retained and overall performance. However, as λdec becomes too large, the target accuracy increases noticeably, suggesting that excessive sparsity may weaken the representation of useful concepts and reduce the effectiveness of target concept suppression. 500 1000 1500 2000 2500 3000 3500 4000 020 40 60 80 100 
+
+> Accuracy (%)
+> Target Retain All
+
+(a) Vocabulary size 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.55 0.6 020 40 60 80 100  
+
+> Accuracy (%)  Target Retain All
+
+(b) Sparsity regularization weight 
+
+Figure 5: Ablation study of the vocabulary size and sparsity regularization weight on CIFAR-10. 
+
+Impact of Balancing Hyperparameters. We further analyze the influence of the balancing hyper-parameters in Fig. 6. For λforget , increasing its value generally strengthens target suppression, as reflected by the low forget accuracy. However, an overly large forgetting weight slightly increases the target accuracy and provides limited additional benefit to retained and overall performance. For λintra ,the retained accuracy and overall accuracy remain stable across different values, suggesting that the intra-instance preservation term is not sensitive to the exact weighting and consistently helps maintain non-target semantics. For λglobal , increasing the weight improves retained and overall accuracy, but it also gradually increases the forget accuracy, indicating that a strong global preservation constraint may weaken target removal. Therefore, an appropriate balance among the three terms is necessary to achieve effective forgetting while preserving model utility. 0.5 1 1.5 2 2.5 020 40 60 80 100 
+
+> Accuracy (%)  Target Retain All
+
+(a) λforget 40 60 80 100 120 140 160 020 40 60 80 100  
+
+> Accuracy (%)  Target Retain All
+
+(b) λintra 0 0.02 0.04 0.06 0.08 0.1 0.12 0.14 020 40 60 80 100  
+
+> Accuracy (%)  Target Retain All
+
+(c) λglobal 
+
+Figure 6: Ablation study of the balancing hyperparameters on CIFAR-10. 
+
+6 Conclusion 
+
+In this paper, we propose ICED, an interpretable concept-level machine unlearning framework for vision-language models. Instead of removing knowledge at the coarse instance level, ICED decomposes visual representations into sparse combinations of task-specific semantic concepts and performs selective suppression on the target concepts. To preserve model utility, we further introduce intra-instance and global preservation objectives that maintain non-target semantics within each sample and retain general cross-modal knowledge on the remaining data. Extensive experiments 9under both in-domain and out-of-domain forgetting settings demonstrate that ICED achieves an effective balance between target forgetting and model preservation. 
+
+References 
+
+[1] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark et al. , “Learning transferable visual models from natural language supervi-sion,” in International Conference on Machine Learning , 2021, pp. 8748–8763. [2] B. Li, P. Qi, B. Liu, S. Di, J. Liu, J. Pei, J. Yi, and B. Zhou, “Trustworthy ai: From principles to practices,” ACM Computing Surveys , vol. 55, no. 9, pp. 1–46, 2023. [3] J. Dong, R. Z. Moayedi, Y.-S. Ong, and S.-M. Moosavi-Dezfooli, “Allies teach better than enemies: Inverse adversaries for robust knowledge distillation,” IEEE Transactions on Pattern Analysis and Machine Intelligence , 2026. [4] J. Dong, X. Qu, C. Zhang, S. Q. Rong, N. D. Thai, W. Pan, X. Li, T. Liu, P. Koniusz, and Y.-S. Ong, “Tug-of-war no more: Harmonizing accuracy and robustness in vision-language models via stability-aware task vector merging,” in The Fourteenth International Conference on Learning Representations , 2026. [5] S. Lin, X. Zhang, X. Ma, X. Chen, and W. Susilo, “Deepaw: A customized dnn watermarking scheme against unreliable participants,” IEEE Transactions on Network Science and Engineer-ing , 2025. [6] V. S. Chundawat, A. K. Tarun, M. Mandal, and M. Kankanhalli, “Can bad teaching induce forgetting? unlearning in deep networks using an incompetent teacher,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 37, 2023, pp. 7210–7217. [7] S. Lin, X. Zhang, C. Chen, X. Chen, and W. Susilo, “Erm-ktp: Knowledge-level machine unlearning via knowledge transfer,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 20 147–20 155. [8] M. Chen, W. Gao, G. Liu, K. Peng, and C. Wang, “Boundary unlearning: Rapid forgetting of deep networks via shifting the decision boundary,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 7766–7775. [9] S. Lin, X. Zhang, W. Susilo, X. Chen, and J. Liu, “Gdr-gma: Machine unlearning via direction-rectified and magnitude-adjusted gradients,” in Proceedings of the 32nd ACM International Conference on Multimedia , 2024, pp. 9087–9095. [10] G. Patel and Q. Qiu, “Learning to unlearn while retaining: Combating gradient conflicts in machine unlearning,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2025, pp. 4211–4221. [11] S. Poppi, T. Poppi, F. Cocchi, M. Cornia, L. Baraldi, and R. Cucchiara, “Safe-clip: Removing nsfw concepts from vision-and-language models,” in European Conference on Computer Vision ,2024, pp. 340–356. [12] J. Cheng and H. Amiri, “Multidelete for multimodal machine unlearning,” in European Confer-ence on Computer Vision , 2024, pp. 165–184. [13] Z. Cai, Y. Tan, and M. S. Asif, “Targeted unlearning with single layer unlearning gradient,” in 
+
+International Conference on Machine Learning , 2025, pp. 6257–6290. [14] T. Yang, L. Dai, X. Wang, M. Cheng, Y. Tian, and X. Zhang, “Cliperase: Efficient unlearning of visual-textual associations in clip,” in Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics , 2025, pp. 30 438–30 452. [15] Z. Zhang, G. Liu, C. Fleming, R. R. Kompella, and C. Xu, “Targeted forgetting of image subgroups in clip models,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 9870–9880. [16] J. Dong, H. Zhu, Y. Zhang, X. Qu, Y.-S. Ong, and P. Koniusz, “Machine unlearning via task simplex arithmetic,” in The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. [17] M. Moayeri, K. Rezaei, M. Sanjabi, and S. Feizi, “Text-to-concept (and back) via cross-model alignment,” in Proceedings of the 40th International Conference on Machine Learning , 2023, pp. 25 037–25 060. 10 [18] M. Yuksekgonul, M. Wang, and J. Zou, “Post-hoc concept bottleneck models,” in The Eleventh International Conference on Learning Representations , 2023. [Online]. Available: https://openreview.net/forum?id=nA5AZ8CEyow [19] T. Yun, U. Bhalla, E. Pavlick, and C. Sun, “Do vision-language pretrained models learn composable primitive concepts?” Transactions on Machine Learning Research , 2023. [Online]. Available: https://openreview.net/forum?id=YwNrPLjHSL [20] C. Chen, B. Zhang, L. Cao, J. Shen, T. Gunter, A. Jose, A. Toshev, Y. Zheng, J. Shlens, R. Pang 
+
+et al. , “Stair: Learning sparse text and image representation in grounded tokens,” in Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing , 2023, pp. 15 079–15 094. [21] Y. Gandelsman, A. A. Efros, and J. Steinhardt, “Interpreting CLIP’s image representation via text-based decomposition,” in The Twelfth International Conference on Learning Representations , 2024. [Online]. Available: https://openreview.net/forum?id=5Ca9sSzuDp [22] A. Chattopadhyay, R. Pilgrim, and R. Vidal, “Information maximization perspective of or-thogonal matching pursuit with applications to explainable ai,” in Proceedings of the 37th International Conference on Neural Information Processing Systems , 2023, pp. 2956–2990. [23] U. Bhalla, A. Oesterling, S. Srinivas, F. P. Calmon, and H. Lakkaraju, “Interpreting clip with sparse linear concept embeddings (splice),” in Proceedings of the 38th International Conference on Neural Information Processing Systems , 2024, pp. 84 298–84 328. [24] J. Dong, C. Zhang, X. Qu, Z. Ma, P. Koniusz, and Y. S. Ong, “Robust superalignment: Weak-to-strong robustness generalization for vision-language models,” Advances in Neural Information Processing Systems , vol. 38, pp. 18 345–18 377, 2025. [25] A. Kravets and V. P. Namboodiri, “Zero-shot class unlearning in clip with synthetic samples,” in 
+
+2025 IEEE/CVF Winter Conference on Applications of Computer Vision , 2025, pp. 6456–6464. [26] J. Dong, P. Koniusz, X. Qu, and Y.-S. Ong, “Stabilizing modality gap & lowering gradient norms improve zero-shot adversarial robustness of vlms,” in Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 1 , 2025, pp. 236–247. [27] S. Santurkar, D. Tsipras, and A. Madry, “BREEDS: benchmarks for subpopulation shift,” in 9th International Conference on Learning Representations , 2021. [Online]. Available: https://openreview.net/forum?id=mQPBmvyAuk [28] J. Deng, W. Dong, R. Socher, L.-J. Li, K. Li, and L. Fei-Fei, “Imagenet: A large-scale hierarchical image database,” in 2009 IEEE Conference on Computer Vision and Pattern Recognition , 2009, pp. 248–255. [29] A. Krizhevsky, “Learning multiple layers of features from tiny images,” Master’s thesis, Univer-sity of Tront , 2009. [30] A. Warnecke, L. Pirch, C. Wressnegger, and K. Rieck, “Machine unlearning of features and labels,” in Proceedings 2023 Network and Distributed System Security Symposium , 2023. [31] A. Thudi, G. Deza, V. Chandrasekaran, and N. Papernot, “Unrolling sgd: Understanding factors influencing machine unlearning,” in 2022 IEEE 7th European Symposium on Security and Privacy , 2022, pp. 303–319. [32] A. Golatkar, A. Achille, and S. Soatto, “Eternal sunshine of the spotless net: Selective forgetting in deep networks,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2020, pp. 9304–9312. [33] J. Foster, K. Fogarty, S. Schoepf, Z. Dugue, C. Öztireli, and A. Brintrup, “An information theoretic approach to machine unlearning,” 2024. [Online]. Available: https://arxiv.org/abs/2402.01401 [34] V. S. Chundawat, A. K. Tarun, M. Mandal, and M. Kankanhalli, “Zero-shot machine unlearning,” 
+
+IEEE Transactions on Information Forensics and Security , vol. 18, pp. 2345–2354, 2023. [35] L. Bossard, M. Guillaumin, and L. Van Gool, “Food-101–mining discriminative components with random forests,” in European Conference on Computer Vision , 2014, pp. 446–461. [36] A. Coates, A. Ng, and H. Lee, “An analysis of single-layer networks in unsupervised feature learning,” in Proceedings of the Fourteenth International Conference on Artificial Intelligence and Statistics , 2011, pp. 215–223. 11 [37] A. Barbu, D. Mayo, J. Alverio, W. Luo, C. Wang, D. Gutfreund, J. Tenenbaum, and B. Katz, “Objectnet: A large-scale bias-controlled dataset for pushing the limits of object recognition models,” in Proceedings of the 33rd International Conference on Neural Information Processing Systems , 2019, pp. 9453–9463. 
+
+A Additional Descriptions of ICED 
+
+Algorithm 1 summarizes the overall procedure of ICED. The method consists of two stages. In the first stage, ICED constructs a task-specific concept vocabulary from the forgetting set and performs sparse nonnegative decomposition to obtain interpretable concept weights for each forgetting sample. In the second stage, these concept weights are used to separate target and non-target semantic components, enabling concept-level unlearning with three complementary objectives: target concept suppression, intra-instance semantic preservation, and global cross-modal preservation. The first stage provides an interpretable concept-level representation of the forgetting data, while the second stage uses this representation to selectively remove target concepts and preserve non-target knowledge. 
+
+Algorithm 1: Concept-level Machine Unlearning via ICED  
+
+> 1
+
+Stage 1: Interpretable Concept Decomposition.  
+
+> 2
+
+Construct a task-specific concept vocabulary Cf from Df using Φ; 
+
+> 3
+
+Deduplicate and filter Cf , and supplement common background concepts;  
+
+> 4
+
+Estimate modality means μimg and μcon ; 
+
+> 5
+
+Build the aligned concept dictionary C using the CLIP text encoder ft; 
+
+> 6
+
+for each x ∈ D f do  
+
+> 7
+
+Compute the aligned image embedding z; 
+
+> 8
+
+Solve sparse nonnegative decomposition: 
+
+w∗ 
+
+> x
+
+= arg min 
+
+> w∈RK
+> +
+
+∥Cw − z∥22 + λdec ∥w∥1. 
+
+> 9
+
+end  
+
+> 10
+
+Stage 2: Concept-level Machine Unlearning.  
+
+> 11
+
+Freeze the text encoder ft; 
+
+> 12
+
+for each training epoch do  
+
+> 13
+
+for mini-batches Bf ⊂ D f and Br ⊂ D r do  
+
+> 14
+
+Reconstruct target concept representations from {w∗
+
+> x
+
+}x∈B f ; 
+
+> 15
+
+Mask target concepts and reconstruct non-target representations;  
+
+> 16
+
+Compute Lforget , Lintra , and Lglobal ; 
+
+> 17
+
+Minimize 
+
+Ltotal = λforget Lforget + λintra Lintra + λglobal Lglobal .
+
+Update only the image encoder fv ; 
+
+> 18
+
+end  
+
+> 19
+
+end 
+
+B Proof 
+
+Proof. By construction, the erased representation removes only the target component CT wT while keeping the non-target component CRwR and the residual r:
+
+h(x) − ˜h(x) = CT wT . (18) Therefore, for the target query pT ,
+
+⟨pT , h (x)⟩ − ⟨ pT , ˜h(x)⟩ = ⟨pT , C T wT ⟩ (19) 
+
+= X
+
+> ci∈CT
+
+wT,i ⟨pT , ci⟩. (20) 12 Since wT,i ≥ 0 and ⟨pT , c i⟩ ≥ α for all target concepts, we obtain 
+
+⟨pT , h (x)⟩ − ⟨ pT , ˜h(x)⟩ ≥ α X
+
+> ci∈CT
+
+wT,i = α∥wT ∥1, (21) which proves Eq. (15). Similarly, for any non-target query pR,
+
+|⟨ pR, h (x)⟩ − ⟨ pR, ˜h(x)⟩| = |⟨ pR, C T wT ⟩| (22) 
+
+≤ X
+
+> ci∈CT
+
+wT,i |⟨ pR, ci⟩| (23) 
+
+≤ η∥wT ∥1, (24) which proves Eq. (16). Finally, the remaining target leakage after erasure is bounded by 
+
+|⟨ pT , ˜h(x)⟩| = |⟨ pT , C RwR + r⟩| (25) 
+
+≤ |⟨ pT , C RwR⟩| + |⟨ pT , r⟩| (26) 
+
+≤ X 
+
+> cj∈CR
+
+wR,j |⟨ pT , cj ⟩| + ∥pT ∥2∥r∥2 (27) 
+
+≤ β∥wR∥1 + ϵdec . (28) This proves Eq. (17) and completes the proof. 
+
+C Additional Implementation Details 
+
+All experiments are conducted on a single NVIDIA RTX 4090 GPU with 48GB memory, using Python 3.10.19 and PyTorch 2.5.1. All CLIP backbones are initialized from the official OpenAI released pretrained weights 2. For the implementation details of baselines, we follow the official implementations or commonly adopted settings from prior work as below. • FT [30 ] updates the image encoder using only the retain set Dr , while keeping the text encoder frozen, and optimizes the standard CLIP contrastive loss. For ImageNet, we subsample approximately 50k retain samples to reduce computation, and train for 2 epochs using Adam with a learning rate of 1 × 10 −6 and a batch size of 128. • GA [31 ] performs gradient ascent on the current forget set D(t) 
+
+> u
+
+to maximize the CLIP loss and disrupt image–text alignment for target classes. Only the image encoder is updated, with gradient norm clipping applied for stability. We use Adam with a learning rate of 1 × 10 −6,a batch size of 128, and train for 2 epochs with gradient clipping set to 1.0. • Fisher [32 ] estimates the Fisher Information Matrix on the forgetting dataset and perturbs the model parameters by adding Gaussian noise whose variance is inversely proportional to the Fisher information, thereby reducing the model’s sensitivity to the target data. • LIP [33 ] freezes the image encoder and updates the text projection matrix via a LoRA adapter, optimizing a combination of forget loss, retain loss, and a regularization term. To reduce computation on ImageNet, up to 512 retain classes are sampled. After optimization, the LoRA weights are merged back into the model. We use Adam with a learning rate of 0.01, LoRA rank 5, and run 2,000 iterations with λ1 = 0 .3, λ2 dynamically adjusted, and 
+
+λ3 = 1 .0.• EMMN [34] adopts a teacher–student framework with a learnable pseudo-image generator. The teacher model is fixed, while the student is updated using pseudo-images filtered by confidence, and training alternates between generator and student updates in a 1:5 ratio. We use Adam for both components, with a student learning rate of 1 × 10 −6, generator learning rate of 1 × 10 −5, batch size 128, temperature T = 1 .0, and confidence threshold δ = 0 .5.• CLIP-LIP [25 ] extends LIP to the CLIP framework by applying low-rank adaptation to the text projection while preserving the pretrained image encoder. Similar to LIP, it updates 
+
+> 2https://github.com/openai/CLIP
+
+13 the text projection using a low-rank LoRA module to suppress representations of the forgetting classes while maintaining alignment for retained classes. We follow the original implementation and use Adam with a learning rate of 0.01, LoRA rank 5, and 2,000 iterations. • TIFS [13 ] performs targeted forgetting by explicitly suppressing the model’s responses on the forgetting dataset while preserving performance on retained data. Specifically, it optimizes the model to minimize prediction confidence on target classes while maintaining alignment on non-target samples. We follow the original implementation and update only the image encoder using Adam with a learning rate of 1 × 10 −6, batch size 128, and train for 2 epochs. 
+
+D Additional Experimental Results 
+
+We provide additional comparison results under both in-domain and out-of-domain forgetting settings. These results complement the main paper by evaluating another forgetting target for each setting, using the same evaluation protocol and CLIP backbones. 
+
+Additional comparison experiments in In-domain Forgetting. Table 4 reports the results of Red Fox forgetting on ImageNet-1K. Compared with existing baselines, ICED achieves near-zero target accuracy while preserving stronger retained and overall ImageNet performance. In addition, ICED maintains competitive transfer performance on Food, STL, ObjectNet, and CIFAR-10, leading to the best Avg. Score on both RN50 and RN101. These results further verify that ICED can perform precise in-domain target removal with less degradation to non-target knowledge. Table 4: Performance comparison with several baselines in Red Fox forgetting on ImageNet-1K. Backbone Method ImageNet Food ↑ STL ↑ ObjectNet ↑ CIFAR-10 ↑ Avg. Score ↑
+
+Target ↓ Retain ↑ All ↑
+
+RN50 Original 48 .00 38 .67 51 .94 76 .49 93 .75 25 .83 68 .84 −
+
+FT [30] 6.00 12 .50 0.97 2.51 20 .96 40 .35 27 .60 36 .08 54 .33 57 .95 9.00 34 .84 14 .14 20 .54 39 .97 
+
+GA [31] 18 .00 37 .50 36 .18 93 .56 36 .16 69 .62 55 .04 71 .96 69 .10 73 .71 15 .86 61 .40 17 .27 25 .09 65 .40 
+
+Fisher [32] 0.91 1.90 1.08 2.79 3.06 5.89 0.54 0.71 10 .69 11 .40 0.59 2.28 9.50 13 .80 19 .29 
+
+LIP [33] 0.29 0.60 1.86 4.81 13 .19 25 .39 7.65 10 .00 24 .19 25 .80 4.24 16 .41 10 .39 15 .09 28 .13 
+
+EMMN [34] 22 .00 45 .83 48 .67 100 .00 31 .04 59 .76 43 .41 56 .75 59 .42 63 .38 9.64 37 .32 10 .70 15 .54 55 .28 
+
+CLIP-LIP [25] 33 .50 69 .79 52 .57 100 .00 53 .72 100 .00 76 .57 100 .00 93 .83 100 .00 25 .83 100 .00 68 .55 99 .58 89 .97 
+
+TIFS [15] 0.00 0.00 38 .17 98 .71 43 .95 84 .62 63 .43 82 .93 89 .27 95 .22 16 .16 62 .56 53 .29 77 .41 85 .92 
+
+ICED (ours) 0.00 0.00 49 .99 100 .00 49 .79 95 .86 74 .72 97 .69 87 .53 93 .37 23 .37 90 .48 65 .05 94 .49 95.98 
+
+RN101 Original 52 .00 46 .67 54 .33 81 .16 96 .46 29 .16 73 .82 −
+
+FT [30] 18 .00 34 .62 2.26 4.84 23 .05 42 .43 35 .83 44 .15 54 .30 56 .29 18 .75 64 .30 16 .41 22 .23 42 .80 
+
+GA [31] 16 .00 30 .77 38 .97 83 .50 39 .03 71 .84 62 .59 77 .12 71 .78 74 .41 18 .75 64 .30 24 .89 33 .72 67 .73 
+
+Fisher [32] 1.51 2.90 1.45 3.11 0.76 1.40 0.41 0.51 9.94 10 .30 0.26 0.89 12 .62 17 .10 18 .63 
+
+LIP [33] 0.62 1.19 1.96 4.20 11 .25 20 .71 11 .93 14 .70 17 .65 18 .30 6.18 21 .19 11 .81 16 .00 27 .70 
+
+EMMN [34] 52 .00 100 .00 49 .33 100 .00 24 .90 45 .83 38 .61 47 .57 66 .79 69 .24 10 .56 36 .21 14 .17 19 .20 45 .44 
+
+CLIP-LIP [25] 0.50 0.96 52 .25 100 .00 49 .88 91 .81 78 .10 96 .23 92 .95 96 .36 25 .21 86 .45 67 .40 91 .30 94 .46 
+
+TIFS [15] 0.00 0.00 48 .49 100 .00 51 .71 95 .18 79 .04 97 .39 95 .52 99 .03 19 .47 66 .77 81 .27 100 .00 94 .05 
+
+ICED (ours) 1.00 1.92 54 .98 100 .00 54 .77 100 .00 78 .68 96 .94 94 .79 98 .27 26 .93 92 .35 73 .13 99 .07 97.82 
+
+Additional comparison experiments in Out-of-domain Forgetting. Table 5 shows the results of 
+
+Truck forgetting on CIFAR-10. Existing methods often either fail to sufficiently remove the target class or suffer from severe utility degradation on retained and transfer datasets. In contrast, ICED achieves effective target forgetting while preserving strong retained accuracy and overall model utility. The consistently higher Avg. Score across both backbones demonstrates the robustness of ICED under out-of-domain forgetting. 
+
+Additional Retrieval Visualization. Fig. 7 shows the out-of-domain case on CIFAR-10 with 
+
+airplane as the forgetting class and ship as the retaining class. After unlearning, retrieval results for 
+
+airplane are significantly reduced or replaced, whereas the retrieved samples for ship remain visually consistent before and after unlearning. These results suggest that ICED performs targeted removal while preserving non-target visual-language alignment across datasets. 14 Table 5: Performance comparison with several baselines in Truck forgetting on CIFAR-10. Backbone Method CIFAR-10 Food ↑ STL ↑ ObjectNet ↑ ImageNet ↑ Avg. Score ↑
+
+Target ↓ Retain ↑ All ↑
+
+RN50 Original 84 .80 63 .20 65 .36 76 .49 93 .75 25 .83 53 .81 −
+
+FT [30] 42 .50 50 .12 62 .17 98 .37 58 .84 90 .02 1.50 1.96 43 .81 46 .73 0.82 3.17 0.27 0.50 41 .52 
+
+GA [31] 8.70 10 .26 31 .83 50 .36 29 .52 45 .17 1.24 1.62 30 .90 32 .96 0.67 2.59 0.25 0.46 31 .84 
+
+Fisher [32] 0.00 0.00 10 .68 16 .90 11 .05 16 .91 1.53 2.00 19 .69 21 .00 0.10 0.39 0.11 0.20 22 .49 
+
+LIP [33] 0.00 0.00 11 .94 18 .89 12 .35 18 .90 1.15 1.50 12 .56 13 .40 0.15 0.58 0.16 0.30 21 .94 
+
+EMMN [34] 0.00 0.00 11 .12 17 .59 10 .01 15 .31 51 .01 66 .69 54 .02 57 .62 10 .49 40 .61 37 .26 69 .24 52 .44 
+
+CLIP-LIP [25] 77 .70 91 .63 68 .56 100 .00 68 .68 100 .00 76 .83 100 .00 93 .92 100 .00 25 .95 100 .00 53 .85 100 .00 86 .91 
+
+TIFS [15] 1.44 1.70 38 .99 61 .69 40 .33 61 .70 63 .41 82 .90 75 .66 80 .70 21 .15 81 .88 46 .87 87 .10 79 .18 
+
+ICED (ours) 1.60 1.89 70 .63 100 .00 63 .73 97 .51 75 .15 98 .25 87 .20 93 .01 23 .14 89 .59 49 .13 91 .30 95.40 
+
+RN101 Original 81 .60 74 .17 74 .91 81 .16 96 .46 29 .16 55 .25 −
+
+FT [30] 33 .10 40 .56 62 .60 84 .40 58 .32 77 .85 3.31 4.08 65 .70 68 .11 1.91 6.55 1.40 2.53 43 .28 
+
+GA [31] 7.30 8.95 33 .30 44 .90 30 .70 40 .98 3.33 4.10 60 .44 62 .66 1.67 5.73 1.21 2.19 35 .94 
+
+Fisher [32] 0.00 0.00 12 .24 16 .50 12 .36 16 .50 1.38 1.70 14 .85 15 .40 0.12 0.41 0.11 0.20 21 .53 
+
+LIP [33] 0.00 0.00 14 .61 19 .70 14 .76 19 .70 2.27 2.80 16 .40 17 .00 0.12 0.41 0.17 0.31 22 .85 
+
+EMMN [34] 54 .00 66 .06 13 .93 18 .78 12 .54 16 .74 44 .10 54 .34 41 .95 43 .49 10 .93 37 .48 35 .55 64 .34 38 .44 
+
+CLIP-LIP [25] 35 .30 43 .26 72 .22 97 .37 72 .53 96 .82 79 .05 97 .40 95 .75 99 .26 26 .90 92 .25 52 .25 94 .57 90 .63 
+
+TIFS [15] 2.86 3.50 65 .57 88 .41 66 .22 88 .40 65 .41 80 .59 90 .38 93 .70 24 .55 84 .19 41 .33 74 .81 86 .66 
+
+ICED (ours) 0.00 0.00 80 .30 100 .00 72 .28 96 .49 78 .58 96 .82 89 .46 92 .74 24 .52 84 .09 48 .41 87 .62 93.97 
+
+Figure 7: Retrieval visualization for out-of-domain forgetting on CIFAR-10. After forgetting the 
+
+airplane class, retrieval results for the retained ship class remain stable, indicating preservation of non-target semantics. 
+
+E Broader Impact and Limitations 
+
+E.1 Broader Impact 
+
+This work studies concept-level machine unlearning for vision-language models, aiming to remove target knowledge more precisely while preserving non-target semantics and general model utility. Compared with coarse image-level unlearning, the proposed framework provides a more interpretable interface for identifying and suppressing specific concepts, which may benefit applications involving privacy protection, data removal requests, harmful content mitigation, and controllable model editing. By reducing unnecessary degradation on unrelated knowledge, ICED also contributes to more reliable and transparent deployment of VLMs after unlearning. At the same time, unlearning techniques may be misused to intentionally remove useful or socially important knowledge from models. Therefore, such methods should be applied with careful auditing, clear documentation of unlearning targets, and evaluation protocols that measure both forgetting effectiveness and unintended side effects. 
+
+E.2 Limitations 
+
+Although ICED enables more fine-grained unlearning, several limitations remain. First, the quality of concept decomposition depends on the constructed vocabulary. If the MLLM fails to extract important concepts or introduces noisy descriptions, the decomposition may be incomplete or less precise. Second, the proposed method relies on modality alignment and sparse decomposition, which 15 approximate the visual representation with concept embeddings; this approximation may be imperfect when the target knowledge is highly abstract, relational, or not well captured by text concepts. Third, our current experiments focus on CLIP-based models and classification-oriented evaluation settings. Extending the framework to larger generative VLMs, open-ended visual question answering, and more complex multimodal reasoning tasks remains an important direction. Finally, while ICED improves the trade-off between forgetting and preservation, it does not provide a formal guarantee that all traces of the target concept are removed. Future work may combine concept-level unlearning with stronger verification mechanisms and certified forgetting criteria. 16

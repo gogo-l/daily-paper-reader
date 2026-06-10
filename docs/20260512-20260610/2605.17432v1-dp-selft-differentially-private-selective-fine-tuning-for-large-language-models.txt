@@ -1,0 +1,1034 @@
+Title: DP-SelFT: Differentially Private Selective Fine-Tuning for Large Language Models
+
+URL Source: https://arxiv.org/pdf/2605.17432v1
+
+Published Time: Tue, 19 May 2026 01:36:16 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# DP-SelFT: Differentially Private Selective Fine-Tuning for Large Language Models 
+
+# Haichao Sha ∗
+
+Renmin University of China Beijing, China sha@ruc.edu.cn 
+
+# Zihao Wang ∗† 
+
+Nanyang Technological University Singapore zihao.wang@ntu.edu.sg 
+
+# Yuncheng Wu 
+
+Renmin University of China Beijing, China wuyuncheng@ruc.edu.cn 
+
+# Hong Chen 
+
+Renmin University of China Beijing, China chong@ruc.edu.cn 
+
+# Wei Dong †
+
+Nanyang Technological University Singapore wei_dong@ntu.edu.sg 
+
+## Abstract 
+
+Large language models (LLMs) are increasingly adapted to down-stream tasks through fine-tuning rather than training task-specific models from scratch. However, fine-tuning data is often privacy-sensitive, and the resulting model may leak training information through attacks such as membership inference or data extraction. Differential privacy (DP) provides a principled way to mitigate such risks, but differentially private LLM fine-tuning often suffers from substantial utility degradation. This challenge is especially severe for large models, where gradient clipping and noise injection sig-nificantly distort optimization. To improve utility, prior work has combined DP with parameter-efficient fine-tuning (PEFT) methods such as LoRA, which reduce the trainable model size by constrain-ing the form of updates. However, the utility gap between DP and non-DP fine-tuning remains substantial. In this work, we study a complementary direction: selection-based PEFT, which restricts where updates are applied. Existing non-DP methods often use gradient- or loss-based criteria to iden-tify parameters worth training, but extending this idea to DP faces three obstacles: selection itself consumes privacy budget, the re-quired data-dependent estimates become noisy and unstable under DP perturbations, and non-DP selectors do not account for the damage that noisy updates may cause to the pre-trained model. To address these challenges, we propose DP-SelFT, a framework for differentially private selective fine-tuning of LLMs. DP-SelFT first performs lightweight differentially private synthetic data gen-eration and then carries out selection on the resulting synthetic data, eliminating repeated privacy cost during selection. To im-prove stability, DP-SelFT performs layer-level selection and ranks candidate layer subsets by validation performance on a synthetic validation split after temporary training on a synthetic training split. Most importantly, this temporary training is conducted un-der a perturbation regime matched to downstream DP fine-tuning, so that selection captures not only learning signal but also noise-induced damage, which is crucial in the DP setting. To further improve robustness to unseen perturbations, DP-SelFT replaces random perturbations with worst-case perturbations of the same scale during selection. Intuitively, if a layer subset remains effective even under worst-case perturbation, it is more likely to remain 
+
+> ∗The first two authors contributed equally to this work.
+> †Correspondence to zihao.wang@ntu.edu.sg and wei_dong@ntu.edu.sg.
+
+robust under the stochastic perturbations encountered during ac-tual DP fine-tuning. Extensive experiments on benchmark tasks show that DP-SelFT consistently achieves a stronger privacy–utility trade-off than existing DP fine-tuning baselines under the same privacy guarantees. 
+
+## 1 Introduction 
+
+Large language models (LLMs) have become a standard foundation for modern AI systems. After large-scale pre-training, they are commonly adapted to downstream tasks through prompting or fine-tuning. While prompting is lightweight, fine-tuning remains essential for applications that require stronger specialization, better controllability, or domain-specific expertise. However, the data used for fine-tuning is often sensitive, such as personal records, proprietary documents, or healthcare data. In such settings, sending data to remote APIs may be prohibited by regulatory, contractual, or organizational constraints [ 2]. As a result, practitioners often need to fine-tune open-source foundation models locally, even when these models are less capable than commercial alternatives. This makes privacy-preserving local fine-tuning an important problem. Differential privacy (DP) [ 8] provides a rigorous way to pro-tect individual training examples. For deep learning, the standard approach is differentially private stochastic gradient descent (DP-SGD) [ 1], which clips per-example gradients and adds calibrated Gaussian noise before each update. Adaptive private optimizers such as DP-AdamW [ 17 ] have further improved optimization sta-bility and empirical performance in LLM fine-tuning settings. 
+
+Challenges. Nevertheless, despite these advances, DP fine-tuning still often suffers from substantial utility degradation compared to non-private training. A key reason is scale. LLMs contain a massive number of parameters, and useful task-specific updates are often distributed across a high-dimensional parameter space. Under DP, the optimization signal is distorted by gradient clipping and noise injection, making it harder to recover the fine-grained update di-rections needed for adaptation. At the same time, large pre-trained models can be surprisingly sensitive to parameter perturbations: even small noisy deviations may damage useful pre-trained struc-ture and noticeably degrade downstream behavior. These difficulties naturally motivate parameter-efficient fine-tuning (PEFT) [ 13 – 15 ], which restricts training to a smaller set of parameters and thus reduces the effective dimension of the noisy optimization problem. 
+
+> arXiv:2605.17432v1 [cs.LG] 17 May 2026 Haichao Sha, Zihao Wang, Yuncheng Wu, Hong Chen, and Wei Dong
+
+Existing work has explored integrating DP with non-selection-based PEFT methods such as LoRA [ 30 , 40 ]. These methods con-strain the form of the update, for example by learning low-rank adaptations instead of updating the full parameter space. This struc-tured parameterization indeed improves the privacy–utility trade-off relative to full-parameter DP fine-tuning. However, the gap between DP and non-DP fine-tuning remains substantial even with such designs, motivating the need for more effective PEFT schemes. A complementary line of work in non-private settings studies 
+
+selection-based efficient fine-tuning, which automatically identifies and updates only the most important parameters for a given task [ 11 ,48 ]. This direction is orthogonal to non-selection-based methods such as LoRA: the latter constrains how updates are parameterized, while the former constrains where updates are applied. Despite its strong promise, this direction remains largely unexplored in differentially private LLM fine-tuning. A natural idea is to directly adapt existing selection methods to the DP setting. However, we find that this is far from straightfor-ward. First, selection itself consumes privacy budget . Most existing methods rely on data-dependent statistics such as gradients or losses to estimate parameter importance [ 11 , 48 ]. Under DP, these statistics must be privatized, which either incurs additional privacy cost or produces highly noisy estimates. Second, importance esti-mation becomes unstable under noise . Selection is fundamentally a ranking problem, and DP noise can easily distort the relative order among candidates, especially in the high-dimensional regime of LLMs. Third, and most fundamentally, there is an objective mismatch 
+
+between standard selection criteria and DP fine-tuning. Classical se-lectors aim to find parameters that are most useful for reducing loss under clean optimization. Under DP, however, the actual updates are clipped and noisy. A parameter subset that looks beneficial in a clean setting may be a poor choice if noisy updates on that subset cause disproportionate damage to the pre-trained model. 
+
+Our solution. In this work, we propose DP-SelFT, a framework for differentially private selective fine-tuning of LLMs. Our design is built around observations corresponding to the above challenges. 
+
+First , to avoid repeated privacy expenditure during selection, we decouple selection from the private dataset through a light-weight differentially private synthetic-data construction stage. The resulting synthetic data is then treated as public for downstream selection, so the selection process itself incurs no additional privacy cost. We further split this synthetic dataset into a training split and a validation split. For each candidate layer subset, we first per-form temporary training on the synthetic training split, and then evaluate the resulting model on the validation split. The validation performance is used as the criterion for layer selection. 
+
+Second , instead of selecting individual parameters, we perform selection at the layer level. This coarser granularity yields sub-stantially more stable estimates and improves transferability from synthetic data to the real private task. 
+
+Third , and most importantly, we argue that selection in the DP setting should be carried out under the same perturbation regime as the eventual private fine-tuning stage, rather than under clean optimization. In particular, candidate subsets should be evaluated in the presence of both gradient clipping and noise injection, since these operations fundamentally alter the update dynamics and de-termine which parts of the model can be trained reliably under privacy constraints. Building on this principle, we introduce worst-case perturbation into the selection stage. For each candidate layer subset, DP-SelFT performs temporary training on the synthetic training split under a perturbation-aware update rule, and then uses validation performance on the synthetic validation split as the selection criterion. Instead of evaluating a subset under one sampled random perturbation, DP-SelFT evaluates it under an ad-versarial perturbation with the same scale as the target DP noise. This design reflects our central insight: under DP, a good train-able subset should be not only learnable , but also robust to noisy updates. Worst-case perturbation provides a conservative stress test, favoring layer subsets that remain effective under unfavorable perturbations and are therefore more likely to generalize to the stochastic noise encountered during actual DP fine-tuning. 
+
+Empirical results. We conduct extensive experiments on four foundation models across four GLUE benchmark datasets [ 31 ], cov-ering sentiment analysis, natural language inference, and para-phrase detection, under three privacy budgets. The results show that DP-SelFT improves downstream utility over five baselines, including full-parameter fine-tuning, existing DP fine-tuning meth-ods [ 13 – 15 ], and manually designed heuristic layer selection [ 19 ], while preserving the same privacy guarantees. For example, at 𝜀 = 5,DP-SelFT improves the average accuracy of OPT-350M from 64 .99% 
+
+to 67 .34% , yielding a gain of 2.35% . Moreover, ablation studies show that naive adaptations of non-private selective fine-tuning meth-ods are suboptimal, confirming the need for a DP-specific design. Further ablations and sensitivity analyses validate each component of DP-SelFT and show stable performance across different numbers of selected layers, privacy budget allocations, and model sizes. Finally, we provide theoretical analysis (see Section 4.4) showing that DP-SelFT improves the privacy–utility trade-off by balancing two DP-specific forces: preserving useful learning signal and reduc-ing noise-induced model damage. Our analysis further justifies the use of worst-case perturbation as a robust selection criterion that better generalizes to unseen DP noise. 
+
+Contributions. Our key contributions are summarized as follows: 
+
+• Parameter selection for DP fine-tuning. We identify selection-based PEFT as a promising but underexplored direction for differentially private LLM fine-tuning. Unlike LoRA-style methods that constrain the form of updates, parameter selection constrains where updates are applied. Building on this observation, we propose DP-SelFT, a DP-specific selective fine-tuning framework that selects trainable layers under privacy and noise constraints. 
+
+• Theoretical understandings. We provide theoretical analysis ex-plaining why selective fine-tuning can improve the DP privacy– utility trade-off. Our results show that layer selection induces a trade-off between retained learning signal and reduced DP noise damage, and that worst-case perturbation yields a more robust selection criterion for unseen DP noise. 
+
+• Extensive empirical studies. We conduct comprehensive exper-iments across multiple models, tasks, and privacy budgets. The results show that DP-SelFT consistently improves utility over exist-ing DP fine-tuning and heuristic layer-selection baselines under the same privacy guarantees. Ablation and sensitivity studies further validate the contribution of each design component. DP-SelFT: Differentially Private Selective Fine-Tuning for Large Language Models 
+
+## 2 Background and Related Work 2.1 LLM Fine-tuning 
+
+Large language models (LLMs) have become a core building block for a wide range of applications. In practice, these applications are often built on top of a foundation model and then adapted to down-stream tasks. Two common adaptation strategies are in-context learning through prompting and parameter updating through fine-tuning. Prompting is lightweight and easy to deploy, while fine-tuning is often preferred when developers need stronger task spe-cialization, better controllability, or domain-specific expertise. However, the current LLM ecosystem presents an important prac-tical constraint. The most capable models are typically proprietary and only accessible through remote APIs. By contrast, open-source models that can be deployed locally are often weaker in capability. Moreover, even when model providers expose fine-tuning APIs, such support is usually limited to only a subset of their models. In many cases, newer or more capable models are available for inference only and cannot be directly fine-tuned by users. This limitation is further compounded by privacy and trust con-cerns. In many real-world scenarios, the training data contains sensitive or proprietary information (e.g., user data, enterprise doc-uments, or medical records). Sending such data to external APIs (either through prompting or fine-tuning) introduces significant privacy risks and may violate regulatory or organizational con-straints. As a result, practitioners often resort to locally fine-tuning open-source models, even at the cost of reduced model quality, in order to maintain full control over data and training processes. This trade-off between model capability and data privacy has made local fine-tuning an important practical paradigm. It also motivates the study of fine-tuning methods under realistic privacy and security constraints. 
+
+## 2.2 Parameter-Efficient Fine-tuning 
+
+Building on the practical constraints discussed above, parameter-efficient fine-tuning (PEFT) has emerged as a key paradigm for adapting large models under limited computational and data bud-gets. Instead of updating all model parameters, PEFT methods re-strict training to a small subset of parameters or introduce light-weight trainable components, thereby significantly reducing mem-ory, computation, and storage overhead. Existing PEFT approaches can be broadly categorized into two orthogonal directions: non-selection-based methods and selection-based methods. The former introduces structured parameterizations to reduce the number of trainable parameters, while the latter explicitly selects a subset of existing parameters to update. These two directions are largely complementary and can often be combined in practice. 
+
+Non-selection-based methods. A prominent line of work focuses on modifying the parameterization of fine-tuning without explicitly selecting parameters. Low-Rank Adaptation (LoRA) [ 14 ] models parameter updates as low-rank decompositions added to existing weight matrices, effectively reducing the number of trainable pa-rameters while preserving expressiveness. Adapter-based methods, introduced by Houlsby et al. [ 13 ], insert small bottleneck layers with residual connections after attention and feed-forward mod-ules, enabling task-specific adaptation without modifying the back-bone parameters. Subsequent work further improves parameter efficiency; for example, Compacter [ 15 ] replaces dense adapter ma-trices with tensorized parameter sharing, significantly reducing the number of trainable parameters while maintaining performance. 
+
+Selection-based methods. Another line of work aims to identify and update only the most important parameters for a given task. Gradient-based selection methods [ 48 ] prioritize parameters with large gradients, under the intuition that these parameters contribute most to the loss landscape and thus benefit more from adaptation. Similarly, loss-based selection approaches [ 11 ] evaluate the impact of tuning individual parameters or modules by measuring the re-sulting loss reduction, selecting those that yield the largest loss reduction. These two paradigms capture complementary aspects of effi-cient adaptation: non-selection-based methods constrain the form 
+
+of updates, while selection-based methods constrain the location 
+
+of updates. As a result, hybrid approaches (e.g., applying LoRA only to selected layers or parameters) have been explored to fur-ther improve efficiency. This design space highlights an important trade-off between parameter efficiency, optimization flexibility, and downstream performance, which remains an active area of research. 
+
+## 2.3 Differentially Private Machine Learning 
+
+Differential privacy [ 8] (DP) provides a rigorous framework for limiting the leakage of individual-level information in data analysis and machine learning. At a high level, DP ensures that the output of a randomized mechanism does not depend significantly on any single data record. This guarantees that an adversary observing the output cannot reliably infer whether a particular individual’s data was included in the training set. Formally, DP is defined as follows: 
+
+Definition 2.1 (( 𝜀 ,𝛿 )-Differential Privacy). Given two neighboring datasets 𝐷 and 𝐷 ′ differing by one record, a randomized mechanism 
+
+M is said to satisfy ( 𝜀 ,𝛿 )-differential privacy if for all measurable sets 𝑆 ,
+
+𝑃𝑟 [M ( 𝐷 ) ∈ 𝑆 ] ≤ 𝑒 𝜀 · 𝑃𝑟 [M ( 𝐷 ′) ∈ 𝑆 ] + 𝛿, 
+
+where 𝜀 is the privacy budget and 𝛿 is a small failure probability. A smaller 𝜀 implies stronger privacy, as it bounds how much the output distribution can change with respect to any individual record. 
+
+Key properties. Two properties make DP particularly suitable for machine learning. First, sequential composition states that privacy loss accumulates across multiple accesses to the same dataset: if 
+
+M1, . . . , M𝑘 are applied sequentially with budgets 𝜀 1, . . . , 𝜀 𝑘 , the overall mechanism satisfies 𝜀 = Í𝑖 𝜀 𝑖 . Second, post-processing in-variance ensures that any transformation applied to the output of a DP mechanism does not incur additional privacy cost. These prop-erties allow DP guarantees to be tracked modularly throughout complex training pipelines. 
+
+DP-SGD. The standard approach for training deep models under differential privacy [ 37 ] is differentially private stochastic gradient descent (DP-SGD) [ 1]. At each iteration, given a mini-batch B, per-example gradients 𝑔 𝑖 = ∇𝜃 L( 𝜃 ; 𝑥 𝑖 ) are first clipped to bound their sensitivity: 
+
+˜𝑔 𝑖 = 𝑔 𝑖 
+
+max 
+
+
+
+1, |𝑔 𝑖 |∗ 2
+
+> 𝐶
+
+ , (1) Haichao Sha, Zihao Wang, Yuncheng Wu, Hong Chen, and Wei Dong 
+
+where 𝐶 is the clipping norm. The clipped gradients are then ag-gregated with Gaussian noise: 
+
+¯𝑔 = 1
+
+|B| 
+
+∑︁ 
+
+∗𝑖 ∈ B ˜𝑔 𝑖 + N ( 0, 𝜎 2𝐶 2I)
+
+
+
+, (2) followed by a standard parameter update 𝜃 ← 𝜃 − 𝜂 ¯𝑔 . The clipping step limits the influence of any individual sample, while the injected noise ensures indistinguishability between neighboring datasets. To track the cumulative privacy loss over multiple iterations, modern implementations adopt R’enyi Differential Privacy (RDP) [ 23 ]. A mechanism M satisfies (𝛼, 𝜀 )-RDP if for any neighboring datasets 
+
+𝐷, 𝐷 ′,
+
+𝐷 𝛼 (M ( 𝐷 ), |, M ( 𝐷 ′)) ≤ 𝜀, (3) where 𝐷 𝛼 (·|·) is the R’enyi divergence of order 𝛼 > 1. RDP com-poses additively across iterations, enabling tight accounting of the total privacy cost, which can be converted back to an (𝜀, 𝛿 ) guar-antee. This tighter analysis is particularly important for iterative training procedures such as DP-SGD. 
+
+DP-AdamW. Recent work extends adaptive optimizers such as AdamW to the private setting, often referred to as DP-AdamW [ 17 ]. DP-AdamW retains gradient clipping and noise injection while incorporating momentum and adaptive learning rates, which im-proves convergence and stability for large-scale DP fine-tuning. 
+
+DP and parameter-efficient fine-tuning. Applying DP to LLM fine-tuning remains challenging due to the large number of train-able parameters and the sensitivity of gradients. PEFT offers a natural direction to mitigate these issues by reducing the effective parameter space. Existing work has primarily explored integrating DP with non-selection-based methods such as LoRA [ 30 , 40 ], lever-aging their reduced parameterization to improve utility under noise. In contrast, the combination of DP with selection-based methods remains largely under-explored. In particular, systematically iden-tifying which parameters should be updated under DP constraints (where both gradient noise and privacy budget interact) poses a non-trivial design challenge. 
+
+## 2.4 Threat Model 
+
+We consider a setting where a defender aims to fine-tune a language model on sensitive data while providing formal privacy guarantees. 
+
+Defender capabilities. The defender has access to (i) a locally deployable open-source foundation model (e.g., from HuggingFace), and (ii) general-purpose commercial LLM APIs (e.g., GPT-4o ) for auxiliary usage. The defender can perform full training and fine-tuning locally on the open-source model, and may use external APIs for non-sensitive processing or general-purpose tasks. 
+
+Privacy constraints. The training data contains sensitive informa-tion (e.g., user data or proprietary documents) that must not leave the local environment. As a result, the defender cannot directly use API-based fine-tuning services, nor can they expose raw data through prompting. All operations involving private data must be performed locally with formal privacy guarantees. This assumption is realistic in many practical scenarios where data is subject to strict regulatory or organizational constraints (e.g., healthcare, finance, or enterprise settings), which prohibit transmitting raw data to third-party services. 
+
+Learning objective. The defender aims to fine-tune the open-source model under differential privacy, ensuring that the resulting model satisfies a target (𝜀, 𝛿 )-DP guarantee. At the same time, the defender seeks to maximize downstream utility despite the perfor-mance degradation introduced by DP mechanisms such as gradient clipping and noise injection. 
+
+## 3 Differentially Private LLM Fine-tuning 3.1 Motivation 
+
+Differentially private fine-tuning of LLMs often exhibits a clear utility gap compared to non-private fine-tuning. While this chal-lenge exists more broadly in deep learning, it becomes particularly pronounced in LLMs due to their scale and sensitivity. One reason is that DP training fundamentally perturbs the opti-mization process. In DP-SGD, each update is computed from clipped per-example gradients with additional Gaussian noise. For small models, such perturbations may still allow the optimizer to fol-low a relatively stable descent direction. For LLMs, however, the parameter space is extremely high-dimensional, and useful task-specific updates are often distributed across many parameters. As a result, the signal carried by each update is already weak and diffuse, making it more vulnerable to distortion after clipping and noise injection. The larger the model, the harder it becomes for a noisy optimizer to consistently recover the fine-grained update directions needed for adaptation. Another reason is that modern pre-trained language models are not uniformly robust to parameter perturbations. Although they contain substantial redundancy, their downstream behavior can still be highly sensitive to changes in certain layers or subspaces. Prior observations in model robustness and parameter perturbation suggest that even relatively small weight changes can noticeably alter model behavior [ 12 , 34 ]. Under DP, this issue becomes more severe because the perturbation is not adversarially optimized or task-aware; instead, it is injected indiscriminately as part of the pri-vacy mechanism. Consequently, DP fine-tuning must operate under a stricter constraint: it must adapt the model to a new task while simultaneously avoiding excessive damage to the useful structure already encoded in the pre-trained weights. These observations suggest that the difficulty of DP LLM fine-tuning is not merely that “noise is added”. Rather, the key issue is that privacy noise interacts poorly with the scale and fragility of large pre-trained models. This naturally motivates restricting the trainable space so that optimization is concentrated on a smaller and more controllable subset of parameters. Parameter-efficient fine-tuning (PEFT) provides such a mecha-nism. By reducing the number of trainable parameters, PEFT nar-rows the space in which noisy optimization takes place. This can help in at least two ways. First, it reduces the effective complexity of adaptation, making it easier for the optimizer to extract a useful signal from noisy gradients. Second, it limits the portion of the model directly exposed to noisy updates, which can preserve more of the original pre-trained knowledge. Existing work has therefore explored combining DP with non-selection-based PEFT methods such as LoRA [ 30 , 40 ], where updates are constrained to low-rank adapters rather than the full parameter space. This design is intuitively appealing because LoRA imposes struc-ture on the update itself. Instead of learning an unrestricted pertur-bation to each weight matrix, it learns a low-rank update, which DP-SelFT: Differentially Private Selective Fine-Tuning for Large Language Models 
+
+acts as an implicit regularizer. Under DP noise, this structured parameterization can be more stable than full fine-tuning, since the optimizer only needs to recover a smaller number of trainable directions. Empirically, this indeed improves the privacy–utility trade-off relative to full-parameter DP fine-tuning [40]. However, existing PEFT solutions are still insufficient. Even un-der LoRA-based DP fine-tuning, prior work reports non-trivial utility drops, including several-point degradations on benchmarks such as GLUE [ 31 ]. On such benchmarks, a drop of a few percentage points is already substantial, especially when the remaining perfor-mance gap between methods is often narrow. This suggests that merely constraining the form of the update is not enough. There remains room to better control where the noisy updates are applied. This motivates us to explore more effective PEFT strategies for DP fine-tuning, to further improving the privacy–utility trade-off. 
+
+## 3.2 Challenges 
+
+A natural next step is to consider parameter selection. In non-private settings, a rich line of work has shown that not all pa-rameters are equally worth updating: some contribute more to downstream adaptation, while others can remain frozen with little performance loss. This suggests an appealing possibility for DP fine-tuning: if one could identify a particularly suitable subset of pa-rameters, then noisy updates could be concentrated on that subset, potentially yielding better utility with the same privacy budget. At first glance, existing selection-based methods seem directly applicable here. For example, gradient-based methods [ 48 ] prioritize parameters with large gradients, based on the intuition that these parameters are currently most relevant to reducing the objective. Loss-based methods [ 11 ] instead evaluate how much improvement is obtained when certain parameters are updated, and select those that appear most beneficial. In standard fine-tuning, such criteria are often reasonable proxies for learnability. However, directly transplanting these methods into the DP set-ting introduces several complications. 
+
+Privacy cost of selection. The first challenge is that selection itself is a data-dependent procedure. To decide which parameters are important, the algorithm must query the private training data to estimate gradients, losses, or sensitivities. Under DP, such queries are not free: they consume privacy budget just like training updates do. This creates an immediate tension. If substantial privacy budget is spent on accurately identifying good parameters, less budget remains for the actual fine-tuning stage. Conversely, if only a very small budget is allocated to selection, the resulting estimates may be too noisy to be useful. Therefore, unlike in non-private settings, selection cannot be treated as a cheap preprocessing step. This issue is especially severe in LLMs, where the candidate parameter space is enormous. Estimating importance over such a large space is already statistically difficult, and DP noise makes it harder still. In practice, this means that selection may only be performed once, or at most a few times, under a limited privacy budget. As a result, the estimate must be both cheap and reliable, which existing methods are not designed for. 
+
+Noisy and unstable importance estimation. A second challenge is that the signals used by classical selection methods become much less reliable under DP noise. Gradient magnitudes, loss reductions, and sensitivity scores are all fine-grained quantities. In non-private optimization, they can already be noisy due to mini-batch variation. Under DP, they must additionally be clipped and perturbed. This can substantially distort the ranking of parameters, especially when many candidate parameters have similar importance. In such cases, the noise may dominate the true differences, causing the selected subset to be unstable or even systematically misleading. This problem is not merely one of reduced precision. Selection is fundamentally a ranking problem: what matters is not only es-timating each parameter well in isolation, but also preserving the relative order among many parameters. DP noise can easily disrupt this ordering, particularly in the high-dimensional regime of LLMs. Therefore, a naive DP version of an existing selector may fail even if its non-private counterpart works well. 
+
+Objective mismatch in the DP setting. More fundamentally, existing selection methods optimize the wrong objective for DP fine-tuning. In non-private settings, it is natural to select parameters that appear most helpful for reducing loss, since updates can be applied relatively faithfully. Under DP, however, the actual update is a noisy approximation of the desired direction. Therefore, a parameter that looks highly useful in principle may still be a poor choice if its update is especially fragile to clipping and noise. This introduces a DP-specific objective mismatch. Under privacy constraints, a good parameter subset should not only be learnable ,in the sense that updating it can improve task performance, but also robust , in the sense that the model can tolerate noisy updates on that subset without incurring disproportionate damage. These two properties are related but not identical. A parameter may have a large gradient because it is highly task-relevant, but that same sensitivity may also mean that noisy perturbations on it are par-ticularly destructive. Conversely, some parameters may support smaller but more stable improvements under noise. This distinction is largely absent in prior selection-based fine-tuning, because standard training does not need to account for systematic privacy noise. In the DP setting, by contrast, preserving the useful structure of the pre-trained model becomes part of the optimization problem itself. The goal is no longer just to identify pa-rameters worth learning, but to identify parameters worth learning 
+
+under noisy and privacy-constrained updates .
+
+## 3.3 Key Insights 
+
+The challenges above suggest that an effective selection strategy for DP LLM fine-tuning should satisfy three requirements simultane-ously: it should incur little additional privacy cost, produce stable importance estimates, and align the selection criterion with the noisy optimization dynamics of DP training. Our design is guided by the following insights. 
+
+Insight 1: Decoupling selection from private data via DP synthetic data. The main obstacle in applying selection-based methods under DP is that selection itself is data-dependent and therefore consumes privacy budget. A natural way to break this dependency is to first construct a privacy-preserving surrogate dataset, and then perform selection entirely on that surrogate. Concretely, we allocate a small portion of the overall privacy budget to differentially private synthetic data generation [ 16 , 22 ,39 , 43 ], a well-studied problem with existing practical solutions. Haichao Sha, Zihao Wang, Yuncheng Wu, Hong Chen, and Wei Dong 
+
+Once generated, the synthetic data can be treated as public for all subsequent stages, meaning that any computation performed on it incurs no additional privacy cost. We can therefore use part of the synthetic data for training-time analysis and reserve another part as validation data for parameter selection. The key intuition is that this synthetic data does not need to be of sufficiently high quality to support full downstream training. Instead, it only needs to preserve enough coarse task structure to distinguish relatively better parameter subsets from worse ones. Em-pirically, selection decisions are often more robust than final model accuracy to moderate data imperfections: even if the synthetic data does not faithfully reproduce the full private distribution, it may still preserve the broad layer-wise adaptation patterns needed for selection. This suggests that a relatively small privacy budget may already suffice for generating useful synthetic data for this purpose. 
+
+Insight 2: Coarsening the selection granularity improves stability. Even with a surrogate dataset, directly estimating im-portance at the parameter level remains unstable. Fine-grained im-portance scores are highly sensitive to both data and optimization noise, and small estimation errors can easily change the resulting ranking among millions or billions of candidate parameters. This motivates reducing the granularity of selection, from pa-rameter selection to layer selection . Compared with individual param-eters, layers are much larger and more semantically coherent units. Their importance is easier to estimate reliably, and their ranking is less sensitive to small fluctuations in the data. Moreover, layer-level preferences are more likely to transfer from synthetic data to the real private data distribution, since higher-level adaptation patterns are typically more stable than fine-grained parameter-wise signals. In other words, coarser selection sacrifices some flexibility, but gains substantial robustness. This trade-off is favorable: a slightly less expressive but much more reliable selector can be more useful than a highly flexible selector whose estimates are unstable. 
+
+Insight 3: Selection should account for noisy updates ex-plicitly. Existing selection methods typically evaluate importance under clean optimization, implicitly assuming that the chosen pa-rameters will later receive accurate updates. This assumption no longer holds under DP, where every update is clipped and perturbed by noise. As discussed earlier, this creates an objective mismatch: parameters that appear most beneficial in a clean setting may not be the best ones once the actual training dynamics become noisy. To address this mismatch, selection should be performed under the same perturbation regime as the eventual DP fine-tuning stage. That is, instead of evaluating candidate layers using clean updates, we inject noise and apply clipping during the selection-time train-ing process and choose the layers that yield the best validation performance under noisy optimization. In this way, the selector explicitly captures not only how much a layer can help learning, but also how robust that layer is to noisy updates. To further improve transferability, we replace random noise with 
+
+worst-case noise of the same scale during selection. The intuition is that random noise provides only one realization of the perturbation that may be encountered during DP training, whereas worst-case perturbations approximate a more conservative stress test of ro-bustness. If a layer continues to perform well under such adverse perturbations, it is more likely to remain stable across different realizations of DP noise in the actual private fine-tuning stage. This yields a selector that is less tied to a particular random draw and better aligned with the robustness requirements of DP learning. 
+
+## 4 Design of DP-SelFT 4.1 Overview 
+
+In this section, we present the design of DP-SelFT. Figure 1 illus-trates the overall pipeline, which consists of three stages. For ease of exposition, we describe the method under a classification task, although the design is more general. 
+
+(1) Synthetic data generation. As discussed in Section 2.1, re-mote commercial APIs typically provide stronger generation ca-pability than locally deployable open-source models. Inspired by [ 39 ], we first leverage such remote APIs to generate a large pool of 
+
+candidate data samples using only simple, task-relevant prompts abstracted from the private task, such as “write a movie review”. Al-though these prompts are derived from a high-level understanding of the private task, they remain sufficiently abstract and contain no dataset-specific or individual-level information. As a result, this stage does not reveal private data and incurs no privacy cost. Given this unlabeled candidate dataset, we then allocate a small portion of the privacy budget to adapt it to the private task locally. Specifically, we use the private dataset to identify candidate sam-ples that are closer to the target data distribution and to assign them labels in a differentially private manner. This yields a labeled synthetic dataset that better matches the private task, while only consuming a limited privacy budget. Intuitively, the required bud-get can remain small because this synthetic dataset is used only for selection rather than real model fine-tuning. 
+
+(2) Parameter selection. We further split the selected labeled synthetic dataset into a training set and a validation set. We then evaluate different layer selections using this synthetic data. For each candidate layer subset, we train a temporary model on the synthetic training split and evaluate its performance on the synthetic val-idation split. Importantly, this temporary training is performed under the same perturbation regime as the eventual DP fine-tuning stage, so that the selection criterion reflects the actual optimization conditions under privacy constraints. Moreover, instead of injecting random noise during this stage, we use worst-case noise with the same scale. This provides a more conservative estimate of robustness and reduces the risk that the selected layers are overly tuned to a particular random noise real-ization. The validation performance under such perturbation-aware training is then used as the criterion for layer selection. 
+
+(3) DP fine-tuning. After identifying the selected layers, we per-form the final training on the private dataset using DP-AdamW, updating only the chosen layers to obtain the final model. Since DP-SelFT determines where to apply the updates rather than changing the update parameterization itself, it is naturally compatible with non-selection-based PEFT methods such as LoRA. In this sense, DP-SelFT can be used either as a standalone layer selection strat-egy or as a complementary component to further improve existing PEFT-based DP fine-tuning pipelines. 
+
+## 4.2 Synthetic Data Generation 
+
+In this section, we provide the design details of the synthetic data generation stage in DP-SelFT. DP-SelFT: Differentially Private Selective Fine-Tuning for Large Language Models 
+
+Figure 1: Overview of DP-SelFT. 
+
+We construct the synthetic dataset in two stages. Let Dpri =
+
+{( 𝑥 𝑖 , 𝑦 𝑖 )} 𝑛 𝑖 =1 denote the private dataset. We first generate an unla-beled candidate pool 
+
+C = { ˜𝑥 𝑗 }𝑚 𝑗 =1 (4) using a remote commercial API queried with a task-level prompt template 𝜋 . Here, 𝜋 captures only the high-level task semantics (e.g., review writing or question answering) and contains no private examples or dataset-specific content. Since 𝜋 is a task abstraction rather than a data-dependent query, this stage is independent of 
+
+Dpri and incurs no privacy cost. In the second stage, we use the private dataset only to select 
+
+and label a subset of candidates in a differentially private manner. To do so, we map both private and candidate samples into a local embedding space using a public encoder 𝜙 (·) executed entirely on the defender side. For each private example 𝑥 𝑖 , we identify its nearest candidate 
+
+𝑗 ∗ (𝑖 ) = arg min   
+
+> 𝑗 ∈ [ 𝑚 ]
+
+𝑑  𝜙 (𝑥 𝑖 ), 𝜙 ( ˜𝑥 𝑗 ) , (5) where 𝑑 (· , ·) is a distance metric such as Euclidean distance or cosine distance. Each private sample then casts one vote to its nearest candidate. Aggregating these votes gives a histogram over candidates, 
+
+ℎ𝑗 =
+
+> 𝑛
+
+∑︁ 
+
+> 𝑖 =1
+
+1{ 𝑗 ∗ (𝑖 ) = 𝑗 }, 𝑗 = 1, . . . , 𝑚. (6) Since each private example contributes to exactly one bin, the his-togram has sensitivity 1 at the sample level. We therefore privatize it by adding independent Gaussian noise to each bin: 
+
+˜ℎ𝑗 = ℎ𝑗 + 𝑧 𝑗 , 𝑧 𝑗 ∼ N ( 0, 𝜎 2). (7) The noisy histogram ˜ℎ is then used to rank candidates, and we retain the top-𝑘 samples as the synthetic subset. Intuitively, candidates receiving more votes are closer to the private data distribution, while the added noise ensures that the influence of any single private example is bounded. After selection, we assign labels to the retained candidates using the private labels in a similarly aggregated manner. Concretely, for each selected candidate ˜𝑥 𝑗 and each class 𝑐 ∈ Y , we count how many private samples of class 𝑐 vote for ˜𝑥 𝑗 :
+
+ℎ𝑗,𝑐 =
+
+> 𝑛
+
+∑︁ 
+
+> 𝑖 =1
+
+1{ 𝑗 ∗ (𝑖 ) = 𝑗, 𝑦 𝑖 = 𝑐 }. (8) We then add Gaussian noise to these class-wise counts, 
+
+˜ℎ𝑗,𝑐 = ℎ𝑗,𝑐 + 𝑧 𝑗,𝑐 , 𝑧 𝑗,𝑐 ∼ N ( 0, 𝜎 2lab ), (9) and assign the synthetic label by noisy majority vote, 
+
+˜𝑦 𝑗 = arg max  
+
+> 𝑐 ∈ Y
+
+˜ℎ𝑗,𝑐 . (10) This produces a labeled synthetic dataset 
+
+eDsyn = {( ˜𝑥 𝑗 , ˜𝑦 𝑗 )} 𝑗 ∈ S , (11) where S is the index set of selected candidates. Our key design choice is to spend privacy budget only on this lightweight selection-and-labeling step, rather than on synthetic data generation itself or repeated parameter selection on the private dataset. This keeps the additional privacy cost small while still adapting the candidate pool toward the private task distribution. Importantly, the resulting synthetic data is not required to support high-quality standalone training. Instead, it only needs to preserve enough task-relevant structure for reliable layer selection, which is empirically much more tolerant to moderate data imperfections. 
+
+## 4.3 Parameter Selection 
+
+In this section, we present the design details of the parameter se-lection stage in DP-SelFT. Given the labeled synthetic dataset 
+
+eDsyn = {( ˜𝑥 𝑗 , ˜𝑦 𝑗 )} 𝑗 ∈ S , (12) we split it into a synthetic training set and a synthetic validation set, 
+
+eDtr syn ∪ eDval syn = eDsyn , eDtr syn ∩ eDval syn = ∅. (13) Let the pre-trained model be parameterized by 
+
+𝜃 (0) = {𝜃 (0) 
+
+> 1
+
+, . . . , 𝜃 (0) 
+
+> 𝐿
+
+}, (14) where 𝜃 (0) 
+
+> ℓ
+
+denotes the parameters of the ℓ-th layer and 𝐿 is the total number of layers. Our goal is to select a subset of layers 
+
+Λ ⊆ [ 𝐿 ] (15) for subsequent DP fine-tuning on the private dataset. For each candidate layer subset Λ, we construct a temporary model by allowing only the layers in Λ to be updated while freezing all remaining layers. Formally, the trainable parameter set is 
+
+𝜃 Λ = {𝜃 ℓ : ℓ ∈ Λ}, (16) while 𝜃 ℓ = 𝜃 (0) 
+
+> ℓ
+
+remains fixed for all ℓ ∉ Λ.Haichao Sha, Zihao Wang, Yuncheng Wu, Hong Chen, and Wei Dong 
+
+To evaluate a candidate subset Λ, we perform temporary training on eDtr syn under a perturbation regime matched to the downstream DP fine-tuning stage. Let 
+
+Lsyn (𝜃 ; eDtr syn ) = 1
+
+| eDtr syn |∑︁ ( ˜𝑥, ˜𝑦 ) ∈ eDtr syn 
+
+ℓ (𝜃 ; ˜ 𝑥, ˜𝑦 ) (17) denote the synthetic training loss. For a given Λ, we first compute the gradient with respect to the selected layers, 
+
+𝑔 Λ = ∇𝜃 Λ Lsyn (𝜃 ; eDtr syn ). (18) Instead of applying the clean update direction 𝑔 Λ, we inject perturbation during this temporary training process to mimic the noisy optimization conditions in DP fine-tuning. Specifically, we use 
+
+b𝑔 Λ = 𝑔 Λ + 𝜉 Λ, (19) where 𝜉 Λ is a perturbation vector whose norm scale matches that of the downstream DP noise. Rather than sampling 𝜉 Λ as random Gaussian noise, we use a worst-case perturbation under the same norm budget. Concretely, we define 
+
+𝜉 ★ 
+
+> Λ
+
+∈ arg max   
+
+> ∥𝜉 ∥2≤𝜌 Λ
+
+Lsyn 
+
+ 𝜃 − 𝜂 (𝑔 Λ + 𝜉 ); eDtr syn 
+
+, (20) where 𝜂 is the learning rate and 𝜌 Λ is chosen to match the effective perturbation scale induced by the downstream DP mechanism. The temporary update is then given by 
+
+𝜃 ′ 
+
+> Λ
+
+= 𝜃 Λ − 𝜂  𝑔 Λ + 𝜉 ★
+
+> Λ
+
+. (21) This worst-case perturbation yields a conservative estimate of the robustness of layer subset Λ: if a candidate subset continues to perform well even under the most adverse perturbation of the prescribed scale, it is more likely to remain effective under the stochastic noise encountered in the actual DP fine-tuning stage. After temporary training, we evaluate the resulting model on the synthetic validation set. Let 
+
+Perf (Λ) = Acc  𝜃 ′ (Λ); eDval syn 
+
+ (22) denote the validation performance of the temporarily updated model associated with Λ, where Acc (·) can be replaced by any task-appropriate evaluation metric. We then select the final layer subset as 
+
+Λ★ = arg max  
+
+> Λ∈ Q
+
+Perf (Λ), (23) where Q is the candidate family of layer subsets considered by the selector. The selected subset Λ★ is subsequently used in the final DP fine-tuning stage on the private dataset. By performing selection on synthetic data and evaluating candidate subsets under perturbation-aware training, this stage avoids additional privacy cost while producing a selector that is better aligned with the noisy optimization dynamics of DP learning. 
+
+Overall algorithm. We summarize the whole pipeline in Algo-rithm 1 in Appendix A. 
+
+## 4.4 Theoretical Analyses 
+
+In this section, we provide a theoretical analysis of DP-SelFT. Our goal is to formalize why selective fine-tuning is beneficial under DP noise, and why the proposed worst-case perturbation criterion improves the robustness of layer selection. We state the main re-sults informally here and defer the formal theorems and proofs to Appendix F. 
+
+Notation. Let Λ ⊆ [ 𝐿 ] denote a selected layer subset and let 𝑑 Λ
+
+be the number of trainable parameters in Λ. We write 𝜃 Λ for the trainable parameters and 𝜃 ¯Λ for the frozen parameters. Let 𝐹 pri (𝜃 )
+
+be the empirical risk on the private dataset and 𝐹 syn (𝜃 ) be the empirical risk on the synthetic training split. For a perturbation 𝜉 
+
+applied to the trainable parameters, we denote by 
+
+Rsyn (Λ, 𝜉 ) (24) the validation risk on the synthetic validation split after training only the layers in Λ under perturbation 𝜉 . Similarly, Rpri (Λ, 𝜉 ) de-notes the corresponding risk on the private task distribution. We make the following standard assumptions for the analysis. 
+
+Assumption 1 (Smoothness). For any layer subset Λ, the loss is 
+
+𝛽 -smooth with respect to 𝜃 Λ:
+
+𝐹 (𝜃 Λ + Δ) ≤ 𝐹 (𝜃 Λ) + ∇𝜃 Λ 𝐹 (𝜃 Λ), Δ + 𝛽 
+
+2 ∥Δ∥22. (25) 
+
+Assumption 2 (Bounded clipped gradients). After per-example clipping, the gradient used in DP fine-tuning satisfies 
+
+∥𝑔 Λ ∥2 ≤ 𝐶. (26) The injected DP noise on the selected trainable subspace follows 
+
+𝑧 Λ ∼ N ( 0, 𝜎 2𝐶 2𝐼 𝑑 Λ ). (27) 
+
+Assumption 3 (Synthetic-to-private transfer). For all candidate layer subsets Λ ∈ Q and all perturbations ∥𝜉 ∥2 ≤ 𝜌 , the synthetic validation risk uniformly approximates the private-task risk up to error 𝜏 :
+
+Rsyn (Λ, 𝜉 ) − R pri (Λ, 𝜉 ) ≤ 𝜏 . (28) 
+
+Assumption 4 (Bounded validation loss). The validation loss is bounded by 𝐵 :
+
+0 ≤ R pri (Λ, 𝜉 ) ≤ 𝐵. (29) 
+
+Privacy guarantee. The end-to-end privacy guarantee follows from composition and post-processing. The API-based candidate generation stage does not access Dpri and therefore incurs no privacy cost. The DP synthetic-data construction stage satisfies 
+
+(𝜀 syn , 𝛿 syn )-DP, and the final DP fine-tuning stage satisfies (𝜀 ft , 𝛿 ft )-DP. Since layer selection is performed only on the synthetic dataset, it is post-processing of a DP output and incurs no additional privacy cost. Thus, the full pipeline satisfies 
+
+(𝜀, 𝛿 ) = (𝜀 syn + 𝜀 ft , 𝛿 syn + 𝛿 ft ). (30) 
+
+Theorem 1 (Informal: selective fine-tuning trades learning signal for reduced DP noise damage). Similar to smoothness-based analyses of private ERM [ 44 ], we decompose the effect of a noisy private update into a descent term and a perturbation-induced error term. In our setting, this decomposition reveals a DP-specific trade-off: restricting updates to a selected layer subset Λ reduces the DP noise damage through the trainable dimension 𝑑 Λ, but it also reduces the available learning signal to the gradient projected onto Λ.DP-SelFT: Differentially Private Selective Fine-Tuning for Large Language Models 
+
+Under Assumptions 1 and 2, consider one DP update restricted to a layer subset Λ:
+
+𝜃 + 
+
+> Λ
+
+= 𝜃 Λ − 𝜂 (𝑔 Λ + 𝑧 Λ), 𝑧 Λ ∼ N ( 0, 𝜎 2𝐶 2𝐼 𝑑 Λ ). (31) Then the expected one-step risk satisfies 
+
+E 𝐹 pri (𝜃 +) ≤ 𝐹 pri (𝜃 )− 𝜂 ∇𝜃 Λ 𝐹 pri (𝜃 ), 𝑔 Λ + 𝛽𝜂 2
+
+2 ∥𝑔 Λ ∥22+ 𝛽𝜂 2
+
+2 𝑑 Λ𝜎 2𝐶 2.
+
+(32) Here, the first-order term 
+
+∇𝜃 Λ 𝐹 pri (𝜃 ), 𝑔 Λ (33) captures the learning signal retained by the selected layers. If Λ is too small or poorly chosen, this term may become weak because the update only follows the gradient projected onto the selected subspace. In contrast, the last term 
+
+𝑑 Λ𝜎 2𝐶 2 (34) captures the DP noise damage, which decreases with the number of trainable parameters. Therefore, selective fine-tuning is beneficial only when the selected subset preserves sufficient learning signal while substantially reducing noise-induced damage. 
+
+Theorem 2 (Informal: worst-case selection generalizes to un-seen DP noise). Let the worst-case selection objective be 
+
+𝑊 syn (Λ) = sup   
+
+> ∥𝜉 ∥2≤𝜌
+
+Rsyn (Λ, 𝜉 ), (35) and let DP-SelFT select 
+
+Λ★ = arg min  
+
+> Λ∈ Q
+
+𝑊 syn (Λ). (36) Assume the downstream DP perturbation 𝑍 satisfies 
+
+Pr (∥ 𝑍 ∥2 ≤ 𝜌 ) ≥ 1 − 𝛼 . (37) Then, under Assumptions 3 and 4, the private-task risk of the se-lected subset under unseen DP noise is bounded by 
+
+E𝑍 
+
+Rpri (Λ★, 𝑍 ) ≤ min  
+
+> Λ∈ Q
+
+sup   
+
+> ∥𝜉 ∥2≤𝜌
+
+Rpri (Λ, 𝜉 ) + 2𝜏 + 𝛼𝐵. (38) This theorem explains why worst-case perturbation is useful for DP layer selection. Random perturbation evaluates a candidate layer subset under one sampled noise realization, which may be benign and may not represent the perturbations encountered during final DP fine-tuning. In contrast, worst-case perturbation minimizes an upper bound over all perturbations within the target noise scale. Thus, if a layer subset performs well under the worst admissible perturbation, it is guaranteed to perform well under any random DP perturbation within the same radius, up to the synthetic-to-private transfer error and the tail probability of the DP noise. 
+
+Implications. Together, the two theorems justify the design of DP-SelFT. Theorem 1 shows that selective fine-tuning has an in-trinsic advantage under DP because the noise damage grows with the trainable dimension. Theorem 2 shows that worst-case pertur-bation provides a robust selection criterion that better generalizes to unseen DP noise than a criterion based on one random perturba-tion. Therefore, DP-SelFT improves the privacy–utility trade-off by jointly controlling where noisy updates are applied and whether the selected layers remain stable under DP perturbations. 
+
+## 5 Evaluation 5.1 Experimental Setup 
+
+Models and APIs. We evaluate DP-SelFT on four widely used open-source foundation models from the OPT [ 45 ] and RoBERTa [ 20 ]families. These models are representative backbones for local NLP fine-tuning and are commonly used in both private and non-private adaptation studies. For synthetic-data generation, we use commer-cial LLM APIs only with high-level, non-sensitive prompts; the private data never leaves the local environment. More details are provided in Appendix B. 
+
+Datasets. We evaluate on four benchmark datasets from GLUE [ 31 ]and related standard NLP benchmarks, covering sentiment analy-sis, natural language inference, and paraphrase detection. Specifi-cally, we use SST-2 and SST-5 [ 29 ], MNLI [ 38 ], and QQP [ 4]. These datasets cover diverse language understanding tasks and are stan-dard benchmarks for evaluating fine-tuning quality. 
+
+Privacy settings. We consider three end-to-end privacy budgets, 
+
+𝜀 ∈ { 1, 5, 10 }, representing strict, moderate, and relatively relaxed privacy regimes. Following common practice, we set the failure probability to 𝛿 = 10 −5 for all experiments. Unless otherwise speci-fied, we adopt a unified setting across all experiments, where the clipping threshold is set to 𝐶 = 1, the batch size is 64 , the number of training steps is 1000 , and the training set size is fixed to 1024 
+
+records. In addition, we set the number of non-DP pre-fine-tuning steps to 300 by default. 
+
+Baselines. We compare DP-SelFT against three representative baselines: full DP fine-tuning, which updates all parameters; DP-LoRA [ 14 ], a representative non-selection-based PEFT method; and heuristic layer selection [ 19 ], a manually designed strategy that updates only attention layers. These baselines allow us to compare against full-parameter training, structured PEFT, and hand-crafted selective tuning rules. 
+
+Configuration of DP-SelFT. We evaluate two variants: DP-SelFT, which directly updates the selected layers, and DP-SelFT+LoRA, which applies LoRA only to the selected layers. By default, we allo-cate 𝜀 syn = 0.3 to synthetic-data construction and use the remaining privacy budget for final DP fine-tuning. We select the top-𝑘 layers according to the perturbation-aware validation performance on synthetic data, with 𝑘 = 15 by default. Additional implementation details, including prompt templates, API choices, synthetic-data splits, and layer-search details, are deferred to Appendix B. 
+
+## 5.2 Main Results 
+
+Table 1 reports the downstream accuracy under different models, tasks, and privacy budgets. Overall, DP-SelFT achieves the best average accuracy in all six model-budget settings, demonstrating consistent improvement over full DP fine-tuning, DP-LoRA, and heuristic layer selection. When 𝜀 = 1, DP-SelFT improves the aver-age accuracy over the strongest baseline from 73 .52% to 74 .51% on RoBERTa-Large, yielding a gain of 0.99 percentage points. Under larger privacy budgets, the gains become clearer: at 𝜀 = 5, DP-SelFT improves the OPT-350M average accuracy from 64 .99% to 67 .34% , a gain of 2.35 percentage points; at 𝜀 = 10 , it improves the accuracy from 67 .25% to 69 .15% , a gain of 1.90 percentage points. The only outlier is the 𝜀 = 1 setting with OPT-350M, where Full Parameter fine-tuning slightly outperforms DP-SelFT on MNLI Haichao Sha, Zihao Wang, Yuncheng Wu, Hong Chen, and Wei Dong 
+
+Table 1: Comparison of the performance of full DP fine-tuning, DP-LoRA, heuristic layer selection, and DP-SelFT across various downstream tasks under different privacy budgets. 
+
+Privacy Budget Method RoBERTa-Large OPT-350M MNLI QQP SST-2 SST-5 Average MNLI QQP SST-2 SST-5 Average 
+
+𝜀 = 1
+
+Full Parameter 76.30 76.30 93.01 46.30 72.98 40.80 63.80 87.73 47.30 59.91 LoRA [40] 74.60 76.30 92.78 41.30 71.25 34.50 61.60 84.86 43.80 56.19 Heuristic-based [19] 76.10 78.20 93.46 46.30 73.52 36.80 61.20 88.18 47.30 58.37 
+
+DP-SelFT 77.00 78.60 94.15 48.30 74.51 40.20 64.50 88.76 47.80 60.32 DP-SelFT+LoRA 74.50 76.80 93.00 41.40 71.43 35.60 61.70 85.32 43.10 56.43 
+
+𝜀 = 5
+
+Full Parameter 77.70 77.20 94.04 50.40 74.84 47.50 74.40 89.45 48.60 64.99 LoRA [40] 79.80 77.70 93.00 49.00 74.88 36.10 63.10 88.07 46.20 58.37 Heuristic-based [19] 77.60 78.50 93.92 49.30 74.83 42.70 71.60 89.79 49.00 63.27 
+
+DP-SelFT 79.70 79.10 94.15 51.40 76.09 54.40 74.60 90.37 50.00 67.34 DP-SelFT+LoRA 80.50 79.50 93.46 51.20 76.17 38.80 64.30 88.53 46.40 59.51 
+
+𝜀 = 10 
+
+Full Parameter 78.20 77.30 94.15 50.60 75.06 55.50 74.80 89.91 48.80 67.25 LoRA [40] 81.20 78.70 93.12 50.90 75.98 38.70 64.80 88.88 47.40 59.95 Heuristic-based [19] 77.90 78.80 93.69 47.90 74.57 46.50 74.50 90.37 48.60 64.99 
+
+DP-SelFT 80.30 79.40 94.38 51.60 76.42 59.00 76.30 90.48 50.80 69.15 DP-SelFT+LoRA 82.20 79.60 93.81 51.20 76.70 41.40 66.80 89.11 48.20 61.38 (40 .80% vs. 40 .20% ). This may be because MNLI requires broad cross-sentence reasoning, and under a very small model and strict privacy budget, restricting updates to a subset of layers can slightly limit the model’s adaptation capacity. Nevertheless, DP-SelFT still achieves the best average accuracy in this setting, indicating that the selected layers provide a better overall privacy–utility trade-off. The results also show that DP-SelFT is complementary to LoRA in some settings, but the benefit is model-dependent. On RoBERTa-Large, DP-SelFT+LoRA achieves the best average accuracy under 
+
+𝜀 = 5 and 𝜀 = 10 , suggesting that selecting where LoRA modules are applied can further improve non-selection-based PEFT. On OPT-350M, however, DP-SelFT without LoRA consistently performs better than DP-SelFT+LoRA. This indicates that, for some back-bones, directly updating carefully selected layers is more effective than introducing low-rank adapters under DP noise. We further observe that the improvement of DP-SelFT is es-pecially pronounced on challenging tasks. Compared with SST-2, SST-5 requires fine-grained sentiment classification and is more sensitive to noisy updates. This difference is reflected in the gains. Under 𝜀 = 1 on RoBERTa-Large, DP-SelFT improves SST-2 accu-racy from 93 .46% to 94 .15% , a gain of 0.69 percentage points, while improving SST-5 accuracy from 46 .30% to 48 .30% , a gain of 2.00 
+
+percentage points. Similarly, under 𝜀 = 10 on OPT-350M, DP-SelFT improves SST-2 accuracy from 90 .37% to 90 .48% , a gain of 0.11 per-centage points, while improving SST-5 accuracy from 48 .80% to 
+
+50 .80% , a gain of 2.00 percentage points. This is consistent with our motivation: fine-grained tasks are more vulnerable to DP-induced perturbations, and selecting layers that are both learnable and ro-bust becomes particularly beneficial. 
+
+## 5.3 Ablation Study 
+
+In this section, we conduct ablation studies to evaluate the necessity of each design component in DP-SelFT and to understand whether existing non-DP selection criteria can be directly adapted to DP 
+
+Table 2: Ablation Study on MNLI [38] Dataset.                                     
+
+> Method 𝜀 =1𝜀 =5𝜀 =10
+> Full Parameter 76.30 77.70 78.20 LoRA [40] 74.60 79.80 81.20 Heuristic-based [19] 76.10 77.60 77.90 Gradient-based [48] 74.00 77.60 78.10 Loss-based [11] 74.00 78.40 79.20 Performance-based (without noise) 67.00 73.70 75.20 Performance-based (with noise) 67.10 74.50 77.50
+> DP-SelFT 77.00 79.70 80.30
+> DP-SelFT+LoRA 74.50 80.50 82.20
+
+fine-tuning. We fix the foundation model to RoBERTa-Large and report results on MNLI in Table 2. We consider four additional selection baselines. (1) Gradient-based [48 ], which ranks layers using gradient-based importance scores computed on the synthetic data. (2) Loss-based [ 11 ], which ranks layers according to validation loss on the synthetic data. (3) 
+
+Performance-based (without noise) , which selects layers by validation accuracy after clean temporary training. (4) Performance-based (with noise) , which adds clipping and random noise during temporary training and then selects layers by validation accuracy. Table 2 shows the results. First, directly adapting gradient- or loss-based selection [ 11 , 48 ] does not consistently outperform stan-dard baselines. For example, under 𝜀 = 1, both Gradient-based and Loss-based selection achieve 74 .00% , below Full Parameter fine-tuning ( 76 .30% ) and Heuristic-based selection ( 76 .10% ). Under larger budgets, Loss-based selection improves, reaching 79 .20% at 
+
+𝜀 = 10 , but it still underperforms DP-SelFT+LoRA ( 82 .20% ). This suggests that gradient and loss signals alone are insufficient for reliable DP layer selection, since they do not directly capture how selected layers behave under noisy private optimization. In partic-ular, loss-based selection is less effective than performance-based DP-SelFT: Differentially Private Selective Fine-Tuning for Large Language Models 
+
+Figure 2: Impact of Top-𝑘 on MNLI under 𝜀 = 5 and RoBERTa-Large. Left: comparison between DP-SFT and DP Full Parame-ter. Right: comparison between DP-SFT+LoRA and DP-LoRA. 
+
+selection because validation loss and validation accuracy respond differently to DP-induced perturbations. Loss is sensitive to con-fidence calibration and probability margins over all classes, even when the predicted label does not change. As a result, it may fa-vor layer subsets that improve probability estimates but are not necessarily stable under clipped and noisy updates. In contrast, accuracy directly measures whether the selected layers preserve correct task decisions after perturbation. Since the downstream objective is classification accuracy, performance-based selection provides a more task-aligned criterion for identifying layers that remain useful and robust under DP fine-tuning. Second, performance-based selection without noise performs poorly, achieving only 67 .00% , 73 .70% , and 75 .20% under 𝜀 = 1, 5, 10 ,respectively. Adding clipping and random noise improves the re-sults to 67 .10% , 74 .50% , and 77 .50% . This supports our claim that selection should reflect the perturbation regime of downstream DP fine-tuning rather than clean optimization. However, random-noise selection is still much worse than DP-SelFT, indicating that a ran-dom perturbation can provide an unreliable estimate of robustness. Finally, DP-SelFT achieves the best result under the strictest privacy budget, improving over the strongest baseline from 76 .30% 
+
+to 77 .00% at 𝜀 = 1. When combined with LoRA, DP-SelFT+LoRA achieves the best performance under larger budgets, reaching 80 .50% 
+
+at 𝜀 = 5 and 82 .20% at 𝜀 = 10 . These results validate the central design of DP-SelFT: layer selection should be based not only on learnability, but also on robustness to adverse perturbations induced by DP training. 
+
+## 5.4 Impact of Top-k 
+
+In this section, we study the sensitivity of DP-SelFT to the number of selected top-𝑘 layers. We vary 𝑘 from a small subset to Full , where 
+
+Full means that all layers are updated. We consider two settings: DP-SelFT without LoRA and DP-SelFT+LoRA. We fix the foundation model to RoBERTa and the task to MNLI. Figure 2 shows the downstream accuracy under different choices of 𝑘 . For readability, we start the curves from 𝑘 = 9 without LoRA and 𝑘 = 11 with LoRA, since smaller values lead to extremely low accuracy. In both settings, DP-SelFT achieves the best performance at an intermediate value, with the peak at 𝑘 = 15 . Without LoRA, performance increases sharply from 𝑘 = 9 to 𝑘 = 11 , reaches the best result at 𝑘 = 15 , and then gradually declines as more layers are selected. With LoRA, the same pattern is observed: very small 
+
+𝑘 underperforms, while 𝑘 = 13 to 𝑘 = 21 remains competitive, with the best result again around 𝑘 = 15 .
+
+Table 3: Model utility under different privacy allocation.                        
+
+> Method Dataset 𝜀 syn
+> 0.1 0.3 0.5 1.0
+> DP-SelFT MNLI 79.00 79.70 79.90 78.80 QQP 78.30 79.10 78.40 78.60
+> DP-SelFT+LoRA MNLI 79.50 80.50 79.80 80.10 QQP 79.00 79.50 79.50 79.40
+
+This trend reflects a natural trade-off in selective DP fine-tuning. When 𝑘 is too small, the trainable subspace is overly restricted, lim-iting the model’s adaptation capacity and reducing the task-specific learning signal. When 𝑘 is too large, more layers are exposed to clipped and noisy DP updates, increasing the risk of damaging useful pre-trained representations and weakening the benefit of selection. The best performance is therefore achieved at an inter-mediate 𝑘 , where the model retains sufficient adaptation flexibility while still reducing noise-induced damage. Overall, these results show that DP-SelFT is stable across a rea-sonable range of 𝑘 values and support our motivation that effective DP fine-tuning requires balancing learnability and robustness. 
+
+## 5.5 Impact of Privacy Budget Allocation 
+
+In this section, we study the sensitivity of DP-SelFT to the privacy budget allocated to the synthetic-data construction stage under two settings: DP-SelFT without LoRA and DP-SelFT+LoRA. We fix the total privacy budget to 𝜀 = 5, the foundation model to RoBERTa, and evaluate on MNLI and QQP. We vary the synthetic-data budget as 𝜀 syn ∈ { 0.1, 0.3, 0.5, 1.0}, with the remaining budget allocated to the final DP fine-tuning stage. Table 3 reports the results. Overall, DP-SelFT is reasonably stable across different allocations, with the best performance typically achieved at an intermediate 𝜀 syn . For DP-SelFT, the best result on MNLI is obtained at 𝜀 syn = 0.5 (79 .90% ), while the best result on QQP is obtained at 𝜀 syn = 0.3 (79 .10% ). For DP-SelFT+LoRA, 𝜀 syn = 0.3
+
+gives the best MNLI result ( 80 .50% ), and 𝜀 syn ∈ { 0.3, 0.5} gives the best QQP result ( 79 .50% ). These results reflect a natural trade-off. When 𝜀 syn is too small, the synthetic data may be less informative, weakening the quality of layer selection. For example, increasing 
+
+𝜀 syn from 0.1 to 0.3 improves DP-SelFT+LoRA from 79 .50% to 80 .50% 
+
+on MNLI. On the other hand, allocating too much privacy budget to synthetic-data construction leaves less budget for final DP fine-tuning, which can hurt downstream utility. For example, DP-SelFT on MNLI drops from 79 .90% at 𝜀 syn = 0.5 to 78 .80% at 𝜀 syn = 1.0.Overall, DP-SelFT is not overly sensitive to the exact allocation, but an intermediate 𝜀 syn generally provides the best balance be-tween reliable selection and effective final DP fine-tuning. We use 
+
+𝜀 syn = 0.3 by default, as it performs strongly across settings and leaves sufficient privacy budget for strict regimes such as total 𝜀 = 1.
+
+## 5.6 Impact of Model Size 
+
+In this section, we investigate the impact of model size on DP-SelFT. Specifically, we consider three RoBERTa-family models with differ-ent scales: DistilRoBERTa [ 26 ], RoBERTa-Base [ 20 ], and RoBERTa-Large [20]. We fix 𝜀 = 5 and evaluate on MNLI. Table 4 reports the results. Overall, DP-SelFT achieves the best performance on the smaller and medium-sized models, improving Haichao Sha, Zihao Wang, Yuncheng Wu, Hong Chen, and Wei Dong 
+
+Table 4: Impact of model size on MNLI dataset under 𝜀 = 5.                  
+
+> Method DistilRoberta Roberta-Base Roberta-Large Full Parameter 57.50 71.00 77.70 LoRA [40] 53.70 71.20 79.80 Heuristic-based [19] 59.20 70.70 77.60
+> DP-SelFT 59.80 72.00 79.70
+> DP-SelFT+LoRA 55.90 71.20 80.50
+
+Table 5: Impact of remote API under 𝜀 = 5.                                               
+
+> Fine-tuning Pre-fine-tuning Claude Haiku GPT-4o-mini GPT-4o Full Parameter None 77.70 77.70 77.70 Full Parameter 79.90 77.80 78.70 LoRA [40] None 79.80 79.80 79.80 Full Parameter 81.80 80.50 81.90 LoRA 81.30 80.10 80.40 Heuristic-based [19] None 77.60 77.60 77.60 Full Parameter 80.80 76.30 80.10 Heuristic-based 79.70 75.80 79.10
+> DP-SelFT
+> None 78.10 79.00 79.70 Full Parameter 79.80 79.90 81.00 DP-SelFT 78.50 78.40 80.60
+> DP-SelFT+LoRA
+> None 79.50 80.30 80.50 Full Parameter 82.00 80.40 82.40
+> DP-SelFT+LoRA 80.60 81.00 80.90
+
+over the strongest baseline from 59 .20% to 59 .80% on DistilRoBERTa, a gain of 0.60 percentage points, and from 71 .20% to 72 .00% on RoBERTa-Base, a gain of 0.80 percentage points. On RoBERTa-Large, DP-SelFT+LoRA achieves the best accuracy, improving over the strongest baseline from 79 .80% to 80 .50% , a gain of 0.70 percent-age points. These results suggest that selective fine-tuning remains effective across model scales, but the best way to apply selection can depend on the backbone size. For smaller models, directly updating the selected layers performs best. This is likely because smaller models have limited adaptation capacity, and adding LoRA may further constrain the update space. In contrast, for RoBERTa-Large, combining DP-SelFT with LoRA performs best, suggesting that larger models can benefit from both selecting where updates are ap-plied and constraining the form of those updates. This is consistent with our motivation: as the model becomes larger, controlling noisy DP updates becomes more important, and combining layer selec-tion with structured PEFT can better preserve useful pre-trained representations while still enabling task adaptation. Overall, these results show that DP-SelFT is robust across differ-ent model sizes and can be used either as a standalone strategy or together with LoRA, depending on the model scale. 
+
+## 5.7 Impact of Remote API 
+
+Since DP-SelFT leverages knowledge from a remote API during the synthetic-data construction stage, one may question whether the comparison with baselines is entirely fair. To address this concern, we strengthen the baselines by allowing them to also use remote API access. Specifically, for each baseline, we construct API-enhanced variants that first use the remote API to generate a differentially pri-vate synthetic dataset, then perform an additional pre-fine-tuning stage on this synthetic data, and finally perform the original DP fine-tuning stage on the private dataset. We consider two pre-fine-tuning strategies: full-parameter pre-fine-tuning, which updates all model parameters on the synthetic data, and method-aligned pre-fine-tuning, which uses the same adaptation strategy as the final DP fine-tuning method, such as LoRA for DP-LoRA and heuristic layer selection for heuristic-based DP fine-tuning. We tune the hy-perparameters of each variant independently for a fair comparison. We also study the impact of different remote APIs, including Claude Haiku, GPT-4o-mini, and GPT-4o, with additional API and implementation details provided in Appendix B. In this section, we fix the privacy budget to 𝜀 = 5, the foundation model to RoBERTa, and the task to MNLI. Table 5 reports the results. Overall, API-enhanced baselines do not consistently outperform their original counterparts. In some cases, pre-fine-tuning on API-generated synthetic data improves performance, while in others the gain is limited or even disappears. This suggests that directly using synthetic data for pre-fine-tuning imposes a much stronger requirement on data quality than using it for selection. The synthetic data must be accurate, task-aligned, and sufficiently informative to provide a useful optimization signal for model adaptation. This also creates a difficult privacy-budget trade-off. Allocating more privacy budget to synthetic-data construction can improve the quality of the synthetic data, but leaves less budget for the final DP fine-tuning stage. Conversely, allocating less budget preserves more privacy resources for final fine-tuning, but the synthetic data may become too noisy or mismatched to provide meaningful benefit during pre-fine-tuning. Across the tested APIs, we observe broadly similar trends: changing the remote API does not fundamentally change whether API-enhanced pre-fine-tuning is helpful. This indicates that the main bottleneck is not the specific remote API used, but the difficulty of converting privacy-limited synthetic data into an effective pre-fine-tuning signal. In contrast, DP-SelFT benefits more reliably from remote API knowledge because it uses synthetic data only for layer selection rather than direct model adaptation. This imposes a weaker require-ment on synthetic data quality: the data only needs to preserve enough task structure to distinguish better layer subsets from worse ones. Importantly, even after strengthening all baselines with re-mote API access and independently tuned pre-fine-tuning variants, DP-SelFT still achieves the best performance across all tested APIs. This further supports that the gain of DP-SelFT does not simply come from access to stronger generators, but from using synthetic data in a DP-specific and selection-oriented way. 
+
+## 6 Conclusion 
+
+We studied selective fine-tuning for differentially private LLM adap-tation, showing that DP fine-tuning should consider not only the 
+
+form of updates, as in existing PEFT methods, but also where noisy updates are applied. We identified key challenges in directly adapt-ing non-private selection methods, including privacy cost, unstable noisy estimates, and mismatch with DP optimization. To address them, we proposed DP-SelFT, a DP-specific framework combin-ing lightweight DP synthetic data construction, layer-level selec-tion, and worst-case perturbation. Experiments show that DP-SelFT consistently improves the privacy–utility trade-off over existing baselines under the same privacy guarantees. DP-SelFT: Differentially Private Selective Fine-Tuning for Large Language Models 
+
+## References 
+
+[1] Martin Abadi, Andy Chu, Ian Goodfellow, H Brendan McMahan, Ilya Mironov, Kunal Talwar, and Li Zhang. 2016. Deep learning with differential privacy. In 
+
+Proceedings of the 2016 ACM SIGSAC conference on computer and communications security . 308–318. [2] Accountability Act. 1996. Health insurance portability and accountability act of 1996. Public law 104 (1996), 191. [3] Rohan Anil, Badih Ghazi, Vineet Gupta, Ravi Kumar, and Pasin Manurangsi. 2022. Large-scale differentially private BERT. In Findings of the Association for Computational Linguistics: EMNLP 2022 . 6481–6491. [4] Daniel Cer, Mona Diab, Eneko Agirre, Inigo Lopez-Gazpio, and Lucia Specia. 2017. SemEval-2017 task 1: Semantic textual similarity multilingual and crosslingual focused evaluation. In Proceedings of the 11th international workshop on semantic evaluation (SemEval-2017) . 1–14. [5] Linkang Du, Zhikun Zhang, Shaojie Bai, Changchang Liu, Shouling Ji, Peng Cheng, and Jiming Chen. 2021. AHEAD: adaptive hierarchical decomposition for range query under local differential privacy. In Proceedings of the 2021 ACM SIGSAC Conference on Computer and Communications Security . 1266–1288. [6] Yuntao Du, Yujia Hu, Zhikun Zhang, Ziquan Fang, Lu Chen, Baihua Zheng, and Yunjun Gao. 2023. Ldptrace: Locally differentially private trajectory synthesis. 
+
+arXiv preprint arXiv:2302.06180 (2023). [7] Cynthia Dwork. 2008. Differential privacy: A survey of results. In International conference on theory and applications of models of computation . Springer, 1–19. [8] Cynthia Dwork, Frank McSherry, Kobbi Nissim, and Adam Smith. 2006. Cali-brating noise to sensitivity in private data analysis. In Theory of cryptography conference . Springer, 265–284. [9] Cynthia Dwork and Aaron Roth. 2014. The algorithmic foundations of differential privacy. Foundations and trends ® in theoretical computer science 9, 3-4 (2014), 211–487. [10] Badih Ghazi, Noah Golowich, Ravi Kumar, Pasin Manurangsi, and Chiyuan Zhang. 2021. Deep learning with label differential privacy. Advances in neural information processing systems 34 (2021), 27131–27145. [11] Haoyu He, Jianfei Cai, Jing Zhang, Dacheng Tao, and Bohan Zhuang. 2023. Sensitivity-aware visual parameter-efficient fine-tuning. In Proceedings of the IEEE/CVF international conference on computer vision . 11825–11835. [12] Sanghyun Hong, Pietro Frigo, Yiğitcan Kaya, Cristiano Giuffrida, and Tudor Dumitra s, . 2019. Terminal brain damage: Exposing the graceless degradation in deep neural networks under hardware fault attacks. In 28th USENIX Security Symposium (USENIX Security 19) . 497–514. [13] Neil Houlsby, Andrei Giurgiu, Stanislaw Jastrzebski, Bruna Morrone, Quentin De Laroussilhe, Andrea Gesmundo, Mona Attariyan, and Sylvain Gelly. 2019. Parameter-efficient transfer learning for NLP. In International conference on machine learning . PMLR, 2790–2799. [14] Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Liang Wang, Weizhu Chen, et al . 2022. Lora: Low-rank adaptation of large language models. Iclr 1, 2 (2022), 3. [15] Rabeeh Karimi Mahabadi, James Henderson, and Sebastian Ruder. 2021. Com-pacter: Efficient low-rank hypercomplex adapter layers. Advances in neural information processing systems 34 (2021), 1022–1035. [16] Alexey Kurakin, Natalia Ponomareva, Umar Syed, Liam MacDermed, and An-dreas Terzis. 2023. Harnessing large-language models to generate private syn-thetic text. arXiv preprint arXiv:2306.01684 (2023). [17] Xuechen Li, Florian Tramer, Percy Liang, and Tatsunori Hashimoto. 2021. Large language models can be strong differentially private learners. arXiv preprint arXiv:2110.05679 (2021). [18] Zinan Lin, Sivakanth Gopi, Janardhan Kulkarni, Harsha Nori, and Sergey Yekhanin. 2023. Differentially private synthetic data via foundation model apis 1: Images. arXiv preprint arXiv:2305.15560 (2023). [19] Michael F Liu, Saiyue Lyu, Margarita Vinaroz, and Mijung Park. 2023. Differen-tially private latent diffusion models. arXiv preprint arXiv:2305.15759 (2023). [20] Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, and Veselin Stoyanov. 2019. Roberta: A robustly optimized bert pretraining approach. arXiv preprint arXiv:1907.11692 
+
+(2019). [21] Ashwin Machanavajjhala, Daniel Kifer, John Abowd, Johannes Gehrke, and Lars Vilhuber. 2008. Privacy: Theory meets practice on the map. In 2008 IEEE 24th international conference on data engineering . IEEE, 277–286. [22] Justus Mattern, Zhijing Jin, Benjamin Weggenmann, Bernhard Schoelkopf, and Mrinmaya Sachan. 2022. Differentially private language models for secure data sharing. In Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing . 4860–4873. [23] Ilya Mironov, Kunal Talwar, and Li Zhang. 2019. R \’enyi differential privacy of the sampled gaussian mechanism. arXiv preprint arXiv:1908.10530 (2019). [24] Nicolas Papernot, Martín Abadi, Ulfar Erlingsson, Ian Goodfellow, and Kunal Talwar. 2016. Semi-supervised knowledge transfer for deep learning from private training data. arXiv preprint arXiv:1610.05755 (2016). [25] Jinseong Park, Hoki Kim, Yujin Choi, and Jaewook Lee. 2023. Differentially pri-vate sharpness-aware training. In International Conference on Machine Learning .PMLR, 27204–27224. [26] Victor Sanh, Lysandre Debut, Julien Chaumond, and Thomas Wolf. 2019. Dis-tilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter. arXiv preprint arXiv:1910.01108 (2019). [27] Baifeng Shi, Siyu Gai, Trevor Darrell, and Xin Wang. 2023. Toast: Transfer learning via attention steering. arXiv preprint arXiv:2305.15542 (2023). [28] Yifan Shi, Yingqi Liu, Kang Wei, Li Shen, Xueqian Wang, and Dacheng Tao. 2023. Make landscape flatter in differentially private federated learning. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition .24552–24562. [29] Richard Socher, Alex Perelygin, Jean Wu, Jason Chuang, Christopher D Manning, Andrew Y Ng, and Christopher Potts. 2013. Recursive deep models for semantic compositionality over a sentiment treebank. In Proceedings of the 2013 conference on empirical methods in natural language processing . 1631–1642. [30] Yu-Lin Tsai, Yizhe Li, Chia-Mu Yu, Xuebin Ren, Po-Yu Chen, Zekai Chen, and Francois Buet-Golfouse. 2025. Differentially private fine-tuning of diffusion models. In Proceedings of the IEEE/CVF International Conference on Computer Vision . 4561–4571. [31] Alex Wang, Amanpreet Singh, Julian Michael, Felix Hill, Omer Levy, and Samuel R. Bowman. 2019. GLUE: A Multi-Task Benchmark and Analysis Platform for Natural Language Understanding. In 7th International Conference on Learning Representations, ICLR 2019, New Orleans, LA, USA, May 6-9, 2019 .https://openreview.net/forum?id=rJ4km2R5t7 [32] Haiming Wang, Zhikun Zhang, Tianhao Wang, Shibo He, Michael Backes, Jiming Chen, and Yang Zhang. 2023. {PrivTrace }: Differentially private trajectory synthesis by adaptive markov models. In 32nd USENIX Security Symposium (USENIX Security 23) . 1649–1666. [33] Tianhao Wang, Joann Qiongna Chen, Zhikun Zhang, Dong Su, Yueqiang Cheng, Zhou Li, Ninghui Li, and Somesh Jha. 2021. Continuous release of data streams under both centralized and local differential privacy. In Proceedings of the 2021 ACM SIGSAC Conference on Computer and Communications Security . 1237–1253. [34] Zihao Wang, Di Tang, XiaoFeng Wang, Wei He, Zhaoyang Geng, and Wenhao Wang. 2024. Tossing in the dark: Practical {Bit-Flipping } on gray-box deep neural networks for runtime trojan injection. In 33rd USENIX Security Symposium (USENIX Security 24) . 1331–1348. [35] Zihao Wang, Rui Zhu, Dongruo Zhou, Zhikun Zhang, John Mitchell, Haixu Tang, and XiaoFeng Wang. 2024. {DPAdapter }: Improving Differentially Private Deep Learning through Noise Tolerance Pre-training. In 33rd USENIX Security Symposium (USENIX Security 24) . 991–1008. [36] Zihao Wang, Rui Zhu, Dongruo Zhou, Zhikun Zhang, XiaoFeng Wang, and Haixu Tang. 2025. Sharpness-Aware Initialization: Improving Differentially Private Machine Learning from First Principles. In 34th USENIX Security Symposium (USENIX Security 25) . 3103–3122. [37] Chengkun Wei, Minghu Zhao, Zhikun Zhang, Min Chen, Wenlong Meng, Bo Liu, Yuan Fan, and Wenzhi Chen. 2023. Dpmlbench: Holistic evaluation of differentially private machine learning. In Proceedings of the 2023 ACM SIGSAC Conference on Computer and Communications Security . 2621–2635. [38] Adina Williams, Nikita Nangia, and Samuel Bowman. 2018. A broad-coverage challenge corpus for sentence understanding through inference. In Proceedings of the 2018 Conference of the North American Chapter of the Association for Com-putational Linguistics: Human Language Technologies, Volume 1 (Long Papers) .1112–1122. [39] Chulin Xie, Zinan Lin, Arturs Backurs, Sivakanth Gopi, Da Yu, Huseyin A Inan, Harsha Nori, Haotian Jiang, Huishuai Zhang, Yin Tat Lee, et al . 2024. Differen-tially private synthetic data via foundation model apis 2: Text. arXiv preprint arXiv:2403.01749 (2024). [40] Da Yu, Saurabh Naik, Arturs Backurs, Sivakanth Gopi, Huseyin A Inan, Gautam Kamath, Janardhan Kulkarni, Yin Tat Lee, Andre Manoel, Lukas Wutschitz, et al .2021. Differentially private fine-tuning of language models. arXiv preprint arXiv:2110.06500 (2021). [41] Da Yu, Huishuai Zhang, Wei Chen, and Tie-Yan Liu. 2021. Do not let privacy overbill utility: Gradient embedding perturbation for private learning. arXiv preprint arXiv:2102.12677 (2021). [42] Quan Yuan, Zhikun Zhang, Linkang Du, Min Chen, Peng Cheng, and Mingyang Sun. 2023. {PrivGraph }: Differentially private graph data publication by ex-ploiting community information. In 32nd USENIX Security Symposium (USENIX Security 23) . 3241–3258. [43] Xiang Yue, Huseyin Inan, Xuechen Li, Girish Kumar, Julia McAnallen, Hoda Shajari, Huan Sun, David Levitan, and Robert Sim. 2023. Synthetic text generation with differential privacy: A simple and practical recipe. In Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) . 1321–1342. [44] Jiaqi Zhang, Kai Zheng, Wenlong Mou, and Liwei Wang. 2017. Efficient private ERM for smooth objectives. arXiv preprint arXiv:1703.09947 (2017). [45] Susan Zhang, Stephen Roller, Naman Goyal, Mikel Artetxe, Moya Chen, Shuohui Chen, Christopher Dewan, Mona Diab, Xian Li, Xi Victoria Lin, et al . 2022. Opt: Haichao Sha, Zihao Wang, Yuncheng Wu, Hong Chen, and Wei Dong          
+
+> Open pre-trained transformer language models. arXiv preprint arXiv:2205.01068
+> (2022). [46] Zhikun Zhang, Tianhao Wang, Ninghui Li, Shibo He, and Jiming Chen. 2018. CALM: Consistent adaptive local marginal for marginal release under local dif-ferential privacy. In Proceedings of the 2018 ACM SIGSAC Conference on Computer and Communications Security . 212–229. [47] Zhikun Zhang, Tianhao Wang, Ninghui Li, Jean Honorio, Michael Backes, Shibo He, Jiming Chen, and Yang Zhang. 2021. {PrivSyn }: Differentially private data synthesis. In 30th USENIX Security Symposium (USENIX Security 21) . 929–946. [48] Zhi Zhang, Qizhe Zhang, Zijun Gao, Renrui Zhang, Ekaterina Shutova, Shiji Zhou, and Shanghang Zhang. 2024. Gradient-based parameter selection for efficient fine-tuning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 28566–28577.
+
+## Ethical Considerations 
+
+We conducted this research in accordance with established ethical guidelines and best practices. All experiments were performed in a controlled local environment using publicly available datasets and open-source models. The study relies exclusively on public bench-mark data and does not involve human participants, user studies, or the collection of private or personally identifiable information. The proposed method is designed to improve privacy-preserving model adaptation under formal differential privacy guarantees. 
+
+## Open Science 
+
+The implementation of our evaluation and the proposed DP-SelFT is available at: https://anonymous.4open.science/r/DPSelectiveFT/ README.md. The code is released for research and evaluation purposes only, with the goal of facilitating reproducibility and further study of differentially private LLM fine-tuning. 
+
+## Generative AI Usage 
+
+ChatGPT was used for minor grammar correction, language pol-ishing, and writing assistance. All technical ideas, experimental designs, analyses, and conclusions were developed and verified by the authors. 
+
+## A Algorithms 
+
+Algorithm 1 summarizes DP-SelFT. The algorithm first constructs a labeled DP synthetic dataset from API-generated candidates, and splits it into training and validation subsets. It then evaluates each candidate layer subset under worst-case perturbation on the syn-thetic data and selects the subset with the best validation perfor-mance. Finally, it performs DP-AdamW fine-tuning on the private dataset while updating only the selected layers. 
+
+Algorithm 1 Differentially Private Selective Fine-tuning 
+
+Require: Private dataset Dpri ; foundation model 𝑓 𝜃 (0) ; remote API 
+
+A; task-level prompt template 𝜋 ; public encoder 𝜙 (·) ; candidate layer family Q; privacy budgets (𝜀 syn , 𝛿 syn ) and (𝜀 ft , 𝛿 ft )
+
+Ensure: Final DP fine-tuned model 𝜃 ★ 
+
+> 1:
+
+Stage 1: Synthetic data generation  
+
+> 2:
+
+Generate unlabeled candidate pool C from A using 𝜋  
+
+> 3:
+
+Construct labeled synthetic dataset 
+
+eDsyn ← DP -Select -Label  Dpri , C, 𝜙, 𝜀 syn , 𝛿 syn 
+
+ 
+
+> 4:
+
+Split 
+
+eDsyn = eDtr syn ∪ eDval syn  
+
+> 5:
+
+Stage 2: Parameter selection  
+
+> 6:
+
+Decompose 𝜃 (0) layer-wise as 𝜃 (0) = {𝜃 (0) 
+
+> 1
+
+, . . . , 𝜃 (0) 
+
+> 𝐿
+
+} 
+
+> 7:
+
+for each Λ ∈ Q do  
+
+> 8:
+
+Initialize temporary model 𝜃 ← 𝜃 (0) with only 𝜃 Λ trainable  
+
+> 9:
+
+Compute synthetic training loss 
+
+Lsyn (𝜃 ; eDtr syn ) = 1
+
+| eDtr syn |∑︁ ( ˜𝑥, ˜𝑦 ) ∈ eDtr syn 
+
+ℓ (𝜃 ; ˜ 𝑥, ˜𝑦 ) 
+
+> 10:
+
+Compute gradient on selected layers 
+
+𝑔 Λ = ∇𝜃 Λ Lsyn (𝜃 ; eDtr syn ) 
+
+> 11:
+
+Compute worst-case perturbation 
+
+𝜉 ★ 
+
+> Λ
+
+∈ arg max   
+
+> ∥𝜉 ∥2≤𝜌 Λ
+
+Lsyn 
+
+ 𝜃 − 𝜂 (𝑔 Λ + 𝜉 ); eDtr syn 
+
+ 
+
+> 12:
+
+Score candidate subset on validation split 
+
+Perf (Λ) = Acc  𝜃 ′ (Λ); eDval syn 
+
+ 
+
+> 13:
+
+end for  
+
+> 14:
+
+Select layers 
+
+Λ★ = arg max  
+
+> Λ∈ Q
+
+Perf (Λ) 
+
+> 15:
+
+Stage 3: DP fine-tuning  
+
+> 16:
+
+Initialize 𝜃 ← 𝜃 (0) with only 𝜃 Λ★ trainable  
+
+> 17:
+
+for each iteration 𝑡 = 1, . . . ,𝑇 do  
+
+> 18:
+
+Sample mini-batch B𝑡 ⊆ D pri  
+
+> 19:
+
+Perform DP-AdamW update on 𝜃 Λ★ using B𝑡  
+
+> 20:
+
+end for  
+
+> 21:
+
+return 𝜃 ★DP-SelFT: Differentially Private Selective Fine-Tuning for Large Language Models 
+
+## B Additional Experimental Setup 
+
+Models and remote APIs. We evaluate DP-SelFT on four widely used foundation models from the OPT [ 45 ] and RoBERTa [ 20 ] fam-ilies. These models are representative open-source backbones for local fine-tuning and are commonly used in prior work on pri-vate and non-private NLP adaptation. For remote API access in the synthetic-data generation stage, we use OpenAI GPT-4o-mini, OpenAI GPT-4o 1, and Claude Haiku 4.5 2. These APIs are widely de-ployed, provide strong general-purpose text generation capability, and are inexpensive enough for lightweight candidate data genera-tion at the scale considered in our experiments. This setup matches our threat model: the defender can use popular commercial APIs for non-sensitive, high-level prompt-based generation, while all operations involving private data are performed locally. 
+
+Dataset details. We evaluate on four benchmark datasets from GLUE [ 31 ] and related standard NLP benchmarks. SST-2 and SST-5 [ 29 ] are used for sentiment analysis: SST-2 is binary sentiment classification, while SST-5 requires fine-grained sentiment classifi-cation. MNLI [ 38 ] is used for natural language inference, where the goal is to determine whether a hypothesis is entailed by, neutral with respect to, or contradicted by a premise. QQP [ 4] is used for paraphrase detection, where the task is to determine whether two questions are semantically equivalent. 
+
+Baseline details. Full DP fine-tuning updates all model parame-ters under DP training. DP-LoRA [ 14 ] constrains the form of up-dates by introducing low-rank adaptation modules and serves as a representative non-selection-based PEFT baseline. Heuristic layer selection [ 19 ] is a manually designed, non-adaptive strategy that updates only attention layers. This heuristic is motivated by prior observations that modifying attention modules can substantially affect LLM behavior [ 14 , 27 ]. It allows us to assess the benefit of automatic, perturbation-aware layer selection over hand-crafted selective tuning rules. 
+
+Configuration of DP-SelFT. We consider two variants of DP-SelFT. The first directly updates the selected layers and evaluates the benefit of selective fine-tuning alone. The second, denoted as DP-SelFT+LoRA, combines layer selection with LoRA and tests whether DP-SelFT can complement non-selection-based PEFT methods by determining where LoRA modules should be applied. The prompt templates 𝜋 used for different datasets are summa-rized in Appendix C. These prompts are intentionally high-level and task-oriented, and contain no private examples, identifiers, or dataset-specific records. By default, we allocate 𝜀 syn = 0.3 to the synthetic-data construc-tion stage. This empirical choice keeps the privacy overhead of selection small while leaving most of the privacy budget for final DP fine-tuning. After constructing the synthetic dataset, we ran-domly split it into synthetic training and validation subsets with a ratio of 7:3 .For the candidate layer family Q, we adopt an efficiency-oriented approximation. Instead of evaluating arbitrary layer subsets, we evaluate each layer independently during selection. Specifically, for each layer ℓ, we temporarily unfreeze only that layer while keeping all other layers frozen, and then compute its validation 
+
+> 1https://openai.com/index/hello-gpt-4o/
+> 2https://www.anthropic.com/news/claude-haiku-4-5
+
+performance under our perturbation-aware selection procedure. We rank all layers by validation performance and select the top-𝑘 
+
+layers for final DP fine-tuning. Unless otherwise specified, we set 
+
+𝑘 = 15 .Unless otherwise specified, we use the same failure probability for synthetic-data construction and final fine-tuning, i.e., 𝛿 syn =
+
+𝛿 ft . The privacy budget consumed by synthetic-data construction is included in the end-to-end privacy budget, and the remaining budget is used for final DP fine-tuning. 
+
+Configuration of generation. We construct synthetic datasets via a variation-based expansion process initialized from a small set of seed samples. For each seed, we generate 𝜇 = 3 variations, resulting in 𝐿 = 𝜇 + 1 = 4 candidates per instance. The number of seed samples 𝑁 seed is set to 800 for MNLI and 600 for QQP, SST-2, and SST-5, yielding a total of 𝐿 × 𝑁 seed synthetic samples. To ensure a consistent data scale and a fair comparison, we subsample the synthetic data to match the size of the downstream training set for both layer selection and model pre-fine-tuning. We encode all candidate samples using sentence-t5-xl to ob-tain semantic representations for subsequent data generation and selection. The text generation is performed using a primary gen-erator deployed on the Azure platform 3, with temperature of 1.2
+
+to encourage diversity. The maximum generation length is set to 
+
+30 for MNLI, 25 for QQP, and 10 for SST-2 and SST-5. Variations are constructed using task-specific templates (please refer to Ap-pendix C), with a perturbation probability 𝑝 controlling the degree of modification. We set 𝑝 = 0.5 for MNLI and SST-5, and 𝑝 = 0.6
+
+for QQP and SST-2. To further regulate the diversity of generated samples, we apply a word-level variation scale of 30 for MNLI and 
+
+20 for the other datasets, together with a maximum token-level scaling factor of 2.To ensure differential privacy, we calibrate the noise multiplier following [ 39 ] and inject noise during the data generation process. Since high-fidelity synthetic data is not strictly required in our setting, we limit the number of iterative refinement epochs to 3 to reduce the overall magnitude of injected noise. Moreover, due to the rewriting process, repeated iterations may introduce misalign-ment between generated sentences and their labels. Restricting the number of epochs helps mitigate such accumulation of semantic drift and label inconsistency. All candidate samples are generated independently and filtered in subsequent stages. 
+
+## C Prompts 
+
+This section summarizes the prompt templates used for synthetic data generation and paraphrasing. All prompts are intentionally high-level and task-oriented. They describe only the dataset format and task semantics, without including private examples, identifiers, or dataset-specific records. 
+
+## D Discussion 
+
+Why does the synthetic-data-based selection work? A natural question is why DP-SelFT can make reliable selection decisions using synthetic data, even though the synthetic data is only a rough approximation of the private task distribution. We believe the key 
+
+> 3https://portal.azure.com/ Haichao Sha, Zihao Wang, Yuncheng Wu, Hong Chen, and Wei Dong
+
+Prompt Template for SST-2 Synthetic Data Generation 
+
+Generate a short movie review snippet in the style of the SST-2 dataset. Snippets are concise opinionated fragments (5-25 words) taken from real movie reviews. The sentiment should be either positive or negative , and clearly expressed through natural language. 
+
+Figure 3: Prompt template for SST-2 synthetic data genera-tion. 
+
+Prompt Template for SST-2 Paraphrasing 
+
+Paraphrase the movie review snippet while strictly preserving the original sentiment. Output ONLY the paraphrased snippet -- no quotes, no labels, no explanations. 
+
+Figure 4: Prompt template for SST-2 paraphrasing. 
+
+Prompt Template for SST-5 Synthetic Data Generation 
+
+Generate a short movie review snippet in the style of the SST-5 dataset. Snippets are concise opinionated fragments (5-25 words) taken from real movie reviews. The sentiment must be one of five categories: very negative, negative, neutral, positive, or very positive. 
+
+Figure 5: Prompt template for SST-5 synthetic data genera-tion. 
+
+reason is that parameter selection imposes a much lower require-ment on data quality than final model training. The goal of the synthetic dataset in DP-SelFT is not to fully substitute for the pri-vate dataset or to support high-quality standalone model adaptation. Instead, it only needs to preserve enough coarse task structure to distinguish relatively better layer subsets from worse ones. In other words, selection mainly depends on comparative signals, rather than on perfectly accurate modeling of the target distribution. This makes the process substantially more tolerant to moderate distribu-tion mismatch or label noise in the synthetic data. Moreover, our selection is performed at the layer level rather than the parameter 
+
+Prompt Template for SST-5 Paraphrasing 
+
+Paraphrase the movie review snippet while strictly preserving both the original sentiment and its intensity. Output ONLY the paraphrased snippet -- no quotes, no labels, no explanations. 
+
+Figure 6: Prompt template for SST-5 paraphrasing. 
+
+Prompt Template for MNLI Synthetic Data Generation 
+
+Generate a premise-hypothesis sentence pair for the MultiNLI task. entailment: the hypothesis is definitely true given the premise. neutral: the hypothesis may or may not be true given the premise. contradiction: the hypothesis is definitely false given the premise. Output ONLY the premise and hypothesis separated by a SINGLE TAB CHARACTER. 
+
+Figure 7: Prompt template for MNLI synthetic data genera-tion. 
+
+Prompt Template for MNLI Paraphrasing 
+
+Paraphrase the tab-separated premise-hypothesis pair while preserving the logical relationship .Output ONLY: premise hypothesis (one tab separator, no other text or newlines). 
+
+Figure 8: Prompt template for MNLI paraphrasing. 
+
+level, which further reduces the granularity of the decision and im-proves robustness to synthetic-data imperfections. Taken together, these properties make it possible for a lightweight DP synthetic dataset to serve as an effective surrogate for privacy-free selection. 
+
+Limitations and future work. Our work has several limitations that suggest directions for future research. First, DP-SelFT requires choosing the number of selected top-𝑘 layers, which introduces an additional hyperparameter. Although our experiments show that DP-SelFT: Differentially Private Selective Fine-Tuning for Large Language Models 
+
+Prompt Template for QQP Synthetic Data Gen-eration 
+
+> Generate a question pair for the Quora Question Pairs (QQP) task. duplicate: both questions ask the same thing in different words. not_duplicate: the questions ask clearly different things. Output ONLY the two questions separated by a SINGLE TAB CHARACTER. No labels, no newlines, no extra text.
+
+Figure 9: Prompt template for QQP synthetic data generation. 
+
+Prompt Template for QQP Paraphrasing  
+
+> Paraphrase the tab-separated question pair while preserving whether they are duplicate or not. Output ONLY: question1 question2 (one tab separator, no other text or newlines).
+
+Figure 10: Prompt template for QQP paraphrasing. 
+
+the method is reasonably stable across a range of 𝑘 values, auto-matically determining an appropriate selection budget would make the framework more practical and easier to deploy. Future work may explore adaptive or data-dependent strategies for selecting 
+
+𝑘 under privacy constraints. Second, our approach assumes that the remote API can generate task-relevant candidate samples from high-level prompts. When the private task is highly specialized, domain-specific, or contains substantial jargon, this assumption may become weaker, and the quality of the candidate pool may degrade accordingly. In such cases, the effectiveness of the synthetic-data-based selection stage may also decrease. One possible direction is to replace the generic API-based candidate generator with a dif-ferentially private task-specific generator trained locally on the private data. Such a generator could better capture the structure of specialized domains while preserving privacy. We leave this extension to future work. 
+
+## E Related Work 
+
+Differential privacy (DP) [7, 9 ] provides a rigorous mathematical framework for quantifying privacy guarantees, typically parameter-ized by a privacy budget that captures the trade-off between protec-tion and utility. It has been widely applied to diverse data analysis tasks, including synthetic dataset generation [ 6, 32 , 42 , 47 ], marginal release [ 46 ], range queries [ 5], and streaming data processing [ 33 ]. For machine learning, a seminal advancement is DP-SGD [ 1], which clips per-example gradients and injects calibrated noise to provide formal privacy guarantees. Subsequent works have sought to miti-gate DP’s utility overhead through new training algorithms [ 24 , 41 ]or context-specific relaxations of the DP definition [10, 21]. Orthogonal to our work, recent studies improve robustness to DP noise without explicitly reducing the trainable model size. In particular, several works [ 25 , 28 , 35 , 36 ] incorporate sharpness-aware minimization (SAM) or adversarial training techniques into DP learning, either during pre-training or private fine-tuning, aim-ing to make model parameters less sensitive to the perturbations introduced by DP optimization. In contrast, DP-SelFT improves ro-bustness to DP noise by restricting where noisy updates are applied during private fine-tuning. These two directions are complemen-tary: robustness-oriented training reduces parameter sensitivity to noise, while DP-SelFT reduces the parameter subspace exposed to noisy updates. However, existing robustness-oriented DP meth-ods have mainly been evaluated on image classification tasks. It remains unclear whether they directly generalize to large language models, where the model scale, optimization dynamics, and fine-tuning objectives differ substantially from vision models. We leave a systematic study of the compatibility between DP-SelFT and robustness-oriented pre-training methods for future work. 
+
+DP synthetic text generation aims to produce text data that preserves useful distributional properties of the original data while limiting individual-level leakage [ 22 ]. Existing studies have ex-plored training or fine-tuning language models under DP to gener-ate synthetic text, and have shown that downstream models trained on such synthetic data can sometimes approach the performance of models trained with DP directly on real data [ 16 , 22 , 43 ]. How-ever, achieving a favorable fidelity–privacy trade-off through direct DP training can require large batch sizes and long training sched-ules [3], which makes it costly for large language models. More recent work therefore considers API-based generation, where strong pre-trained models are queried with non-sensitive prompts and DP is applied only to the data-dependent selection or adaptation stage [ 18 , 39 ]. This line of work is particularly relevant to our setting because it separates high-capability text generation from privacy-sensitive operations, allowing the private data to remain local while still benefiting from strong generative models. In our implementation, we instantiate the synthetic data con-struction stage using a recent API-based DP synthetic text gen-eration method [ 39 ]. We emphasize that this component is not tied to a specific generator. DP-SelFT only requires a DP synthetic dataset that preserves enough task-relevant structure for layer se-lection. Therefore, stronger future DP synthetic data generators can be naturally plugged into DP-SelFT and may further improve its performance. Haichao Sha, Zihao Wang, Yuncheng Wu, Hong Chen, and Wei Dong 
+
+## F Theoretical Results 
+
+In this appendix, we provide the formal statements and proofs of the theoretical results discussed in Section 4.4. 
+
+## F.1 Proof of Theorem 1 
+
+We first formalize the one-step effect of DP noise under selective fine-tuning. 
+
+Theorem F.1 (Selective fine-tuning trades learning signal for reduced DP noise damage). Let Λ ⊆ [ 𝐿 ] be a selected layer subset with 𝑑 Λ trainable parameters. Assume that 𝐹 pri (𝜃 ) is 𝛽 -smooth with respect to 𝜃 Λ. Consider one DP update restricted to Λ:
+
+𝜃 + 
+
+> Λ
+
+= 𝜃 Λ − 𝜂 (𝑔 Λ + 𝑧 Λ), ∥𝑔 Λ ∥2 ≤ 𝐶, 𝑧 Λ ∼ N ( 0, 𝜎 2𝐶 2𝐼 𝑑 Λ ). (39) 
+
+Then, 
+
+E 𝐹 pri (𝜃 +) ≤ 𝐹 pri (𝜃 ) − 𝜂 ∇𝜃 Λ 𝐹 pri (𝜃 ), 𝑔 Λ + 𝛽𝜂 2
+
+2 ∥𝑔 Λ ∥22 + 𝛽𝜂 2
+
+2 𝑑 Λ𝜎 2𝐶 2. (40) 
+
+In particular, if 𝑔 Λ is aligned with the projected gradient and satisfies 
+
+∇𝜃 Λ 𝐹 pri (𝜃 ), 𝑔 Λ ≥ 𝑎 Λ ∇𝜃 Λ 𝐹 pri (𝜃 ) 22 (41) 
+
+for some alignment coefficient 𝑎 Λ > 0, then 
+
+E 𝐹 pri (𝜃 +) ≤ 𝐹 pri (𝜃 ) − 𝜂𝑎 Λ ∇𝜃 Λ 𝐹 pri (𝜃 ) 22 + 𝛽𝜂 2
+
+2 𝐶 2 + 𝛽𝜂 2
+
+2 𝑑 Λ𝜎 2𝐶 2. (42) 
+
+Moreover, defining the signal retention ratio as 
+
+𝑠 (Λ) = ∇𝜃 Λ 𝐹 pri (𝜃 ) 22
+
+∇𝜃 𝐹 pri (𝜃 ) 22
+
+, (43) 
+
+the bound can be written as 
+
+E 𝐹 pri (𝜃 +) ≤ 𝐹 pri (𝜃 ) − 𝜂𝑎 Λ𝑠 (Λ) ∇𝜃 𝐹 pri (𝜃 ) 22 + 𝛽𝜂 2
+
+2 𝐶 2 + 𝛽𝜂 2
+
+2 𝑑 Λ𝜎 2𝐶 2. (44) 
+
+Thus, the expected one-step progress is governed by a trade-off between the retained learning signal 𝑠 (Λ) and the DP-noise damage term 𝑑 Λ𝜎 2𝐶 2.
+
+Proof. Let 
+
+ΔΛ = −𝜂 (𝑔 Λ + 𝑧 Λ). (45) By 𝛽 -smoothness of 𝐹 pri with respect to 𝜃 Λ, we have 
+
+𝐹 pri (𝜃 +) ≤ 𝐹 pri (𝜃 ) + ∇𝜃 Λ 𝐹 pri (𝜃 ), ΔΛ + 𝛽 
+
+2 ∥ΔΛ ∥22
+
+= 𝐹 pri (𝜃 ) − 𝜂 ∇𝜃 Λ 𝐹 pri (𝜃 ), 𝑔 Λ + 𝑧 Λ + 𝛽𝜂 2
+
+2 ∥𝑔 Λ + 𝑧 Λ ∥22.
+
+(46) Taking expectation over 𝑧 Λ and using E[𝑧 Λ] = 0, we obtain 
+
+E 𝐹 pri (𝜃 +) ≤ 𝐹 pri (𝜃 ) − 𝜂 ∇𝜃 Λ 𝐹 pri (𝜃 ), 𝑔 Λ + 𝛽𝜂 2
+
+2 E∥𝑔 Λ + 𝑧 Λ ∥22
+
+= 𝐹 pri (𝜃 ) − 𝜂 ∇𝜃 Λ 𝐹 pri (𝜃 ), 𝑔 Λ + 𝛽𝜂 2
+
+2
+
+ ∥𝑔 Λ ∥22 + E∥𝑧 Λ ∥22
+
+
+
+= 𝐹 pri (𝜃 ) − 𝜂 ∇𝜃 Λ 𝐹 pri (𝜃 ), 𝑔 Λ + 𝛽𝜂 2
+
+2 ∥𝑔 Λ ∥22 + 𝛽𝜂 2
+
+2 𝑑 Λ𝜎 2𝐶 2.
+
+(47) This proves the first claim. If the alignment condition holds, then 
+
+−𝜂 ∇𝜃 Λ 𝐹 pri (𝜃 ), 𝑔 Λ ≤ − 𝜂𝑎 Λ ∇𝜃 Λ 𝐹 pri (𝜃 ) 22 . (48) Using ∥𝑔 Λ ∥2 ≤ 𝐶 , we obtain 
+
+E 𝐹 pri (𝜃 +) ≤ 𝐹 pri (𝜃 ) − 𝜂𝑎 Λ ∇𝜃 Λ 𝐹 pri (𝜃 ) 22 + 𝛽𝜂 2
+
+2 𝐶 2 + 𝛽𝜂 2
+
+2 𝑑 Λ𝜎 2𝐶 2. (49) Finally, by the definition of 𝑠 (Λ),
+
+∇𝜃 Λ 𝐹 pri (𝜃 ) 22 = 𝑠 (Λ) ∇𝜃 𝐹 pri (𝜃 ) 22 . (50) Substituting this identity into the previous inequality gives 
+
+E 𝐹 pri (𝜃 +) ≤ 𝐹 pri (𝜃 ) − 𝜂𝑎 Λ𝑠 (Λ) ∇𝜃 𝐹 pri (𝜃 ) 22 + 𝛽𝜂 2
+
+2 𝐶 2 + 𝛽𝜂 2
+
+2 𝑑 Λ𝜎 2𝐶 2. (51) This completes the proof. □DP-SelFT: Differentially Private Selective Fine-Tuning for Large Language Models 
+
+## F.2 Proof of Theorem 2 
+
+We next formalize why worst-case perturbation provides a robust selection criterion for unseen DP noise. 
+
+Theorem F.2 (Worst-case selection generalizes to unseen DP noise). Let Q be the family of candidate layer subsets. For each Λ ∈ Q ,define 
+
+𝑊 syn (Λ) = sup   
+
+> ∥𝜉 ∥2≤𝜌
+
+Rsyn (Λ, 𝜉 ), Λ★ = arg min  
+
+> Λ∈ Q
+
+𝑊 syn (Λ). (52) 
+
+Assume that, for all Λ ∈ Q and all ∥𝜉 ∥2 ≤ 𝜌 ,
+
+Rsyn (Λ, 𝜉 ) − R pri (Λ, 𝜉 ) ≤ 𝜏, 0 ≤ R pri (Λ, 𝜉 ) ≤ 𝐵. (53) 
+
+If the downstream DP perturbation 𝑍 satisfies 
+
+Pr (∥ 𝑍 ∥2 ≤ 𝜌 ) ≥ 1 − 𝛼, (54) 
+
+then 
+
+E𝑍 
+
+Rpri (Λ★, 𝑍 ) ≤ min  
+
+> Λ∈ Q
+
+sup   
+
+> ∥𝜉 ∥2≤𝜌
+
+Rpri (Λ, 𝜉 ) + 2𝜏 + 𝛼𝐵. (55) 
+
+Proof. Define 
+
+𝑊 pri (Λ) = sup   
+
+> ∥𝜉 ∥2≤𝜌
+
+Rpri (Λ, 𝜉 ). (56) By the uniform approximation assumption, for every Λ ∈ Q ,
+
+𝑊 pri (Λ) ≤ 𝑊 syn (Λ) + 𝜏, 𝑊 syn (Λ) ≤ 𝑊 pri (Λ) + 𝜏 . (57) Since Λ★ minimizes 𝑊 syn , for any Λ ∈ Q ,
+
+𝑊 pri (Λ★) ≤ 𝑊 syn (Λ★) + 𝜏 
+
+≤ 𝑊 syn (Λ) + 𝜏 
+
+≤ 𝑊 pri (Λ) + 2𝜏 . 
+
+(58) Taking the minimum over Λ ∈ Q gives 
+
+sup   
+
+> ∥𝜉 ∥2≤𝜌
+
+Rpri (Λ★, 𝜉 ) ≤ min  
+
+> Λ∈ Q
+
+sup   
+
+> ∥𝜉 ∥2≤𝜌
+
+Rpri (Λ, 𝜉 ) + 2𝜏 . (59) Now decompose the expectation over the event {∥ 𝑍 ∥2 ≤ 𝜌 }:
+
+E𝑍 
+
+Rpri (Λ★, 𝑍 ) = E𝑍 
+
+Rpri (Λ★, 𝑍 )1{∥ 𝑍 ∥2 ≤ 𝜌 } + E𝑍 
+
+Rpri (Λ★, 𝑍 )1{∥ 𝑍 ∥2 > 𝜌 }
+
+≤ sup   
+
+> ∥𝜉 ∥2≤𝜌
+
+Rpri (Λ★, 𝜉 ) + 𝐵 Pr (∥ 𝑍 ∥2 > 𝜌 )≤ sup   
+
+> ∥𝜉 ∥2≤𝜌
+
+Rpri (Λ★, 𝜉 ) + 𝛼𝐵. 
+
+(60) Combining the two bounds yields 
+
+E𝑍 
+
+Rpri (Λ★, 𝑍 ) ≤ min  
+
+> Λ∈ Q
+
+sup   
+
+> ∥𝜉 ∥2≤𝜌
+
+Rpri (Λ, 𝜉 ) + 2𝜏 + 𝛼𝐵. (61) This completes the proof. □

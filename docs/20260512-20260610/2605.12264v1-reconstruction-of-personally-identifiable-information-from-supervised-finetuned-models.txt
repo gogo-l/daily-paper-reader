@@ -1,0 +1,1057 @@
+Title: Reconstruction of Personally Identifiable Information from Supervised Finetuned Models
+
+URL Source: https://arxiv.org/pdf/2605.12264v1
+
+Published Time: Wed, 13 May 2026 01:48:05 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Reconstruction of Personally Identifiable Information from Supervised Finetuned Models 
+
+# Sae Furukawa 
+
+Northeastern University Boston, Massachusetts, USA furukawa.s@northeastern.edu 
+
+# Alina Oprea 
+
+Northeastern University Boston, Massachusetts, USA a.oprea@northeastern.edu 
+
+## Abstract 
+
+Supervised Finetuning (SFT) has become one of the primary meth-ods for adapting a large language model (LLM) with extensive pre-trained knowledge to domain-specific, instruction-following tasks. SFT datasets, composed of instruction-response pairs, often include user-provided information that may contain sensitive data such as personally identifiable information (PII), raising privacy concerns. This paper studies the problem of PII reconstruction from SFT models for the first time. We construct multi-turn, user-centric Q&A datasets in sensitive domains, specifically medical and le-gal settings, that incorporate PII to enable realistic evaluation of leakage. Using these datasets, we evaluate the extent to which an adversary, with varying levels of knowledge about the fine-tuning dataset, can infer sensitive information about individuals whose data was used during SFT. In the reconstruction setting, we pro-pose COVA, a novel decoding algorithm to reconstruct PII under prefix-based attacks, consistently outperforming existing extraction methods. Our results show that even partial attacker knowledge can significantly improve reconstruction success, while leakage varies substantially across PII types. 
+
+## 1 Introduction 
+
+Large Language Models (LLMs) have demonstrated strong capabili-ties across various language tasks [ 4, 8 , 49 , 51 ]. These large models, such as the GPT [ 8] and Claude [ 4 ] families, are pre-trained on large-scale text corpora and scaled to billions or trillions of pa-rameters, enabling them to acquire broad knowledge. Supervised Fine-Tuning (SFT) [ 40 ] is one common approach to adapt these pre-trained models to domain-specific tasks. SFT trains models on instruction–response pairs, allowing them to generate appropriate outputs conditioned on user queries. Compared to pre-training, SFT typically requires significantly smaller datasets and has proven effective in improving performance on specialized tasks [ 18 , 40 , 51 ]. Memorization in LLMs has been identified as a significant privacy concern, and prior work has shown that attackers with black-box access can extract portions of the training data [ 10 , 11 ]. Existing literature on extracting Personally Identifiable Information (PII) has largely focused on pre-trained models [ 14 , 16 , 34 ] or on models fine-tuned on raw text using next-token prediction objectives [2, 29]. SFT introduces additional privacy risks as it often relies on user-centric datasets that may contain both PII and rich contextual in-formation. One of the most common formats for such datasets is question-answer (Q&A) data. Personalized assistants and chat-bots are often fine-tuned on Q&A datasets, such as those collected through crowdsourcing, synthetically generated, or scraped from user interactions, which may contain PII [ 36 ]. In domains such as healthcare or legal services, this setting may allow attackers to infer not only PII but also sensitive attributes associated with a user’s identity. This raises an important question: to what extent can user PII embedded in SFT datasets be extracted from the fine-tuned model? 
+
+To address this gap, we study the problem of PII reconstruction from instruction-tuned SFT models. We formalize the attacker’s objectives under realistic threat models that capture varying levels of attacker knowledge. Within this framework, we study how differ-ences in attacker knowledge influence the ability to reconstruct PII and uncover associations between PII and sensitive contextual at-tributes. Our analysis highlights that even partial knowledge about a user can significantly amplify PII extraction risk. In reconstruction settings, where the adversary recovers PII strings, we identify key limitations of existing decoding approaches in prior work [14, 16, 29, 34], particularly the issue of error propa-gation in token-level decoding. To address this, we propose COVA, a novel adversarial decoding strategy that operates at the sequence level to explore high-probability candidate strings, enabling more effective reconstruction of structured PII compared to standard decoding methods. 
+
+Contributions. Our main contributions are as follows: 
+
+• We propose COVA, a novel adversarial decoding strategy for PII reconstruction that prioritizes sequence-level likelihood to improve coverage of plausible candidate strings. 
+
+• We construct multi-turn, user-centric SFT datasets with synthetic PII, built from existing single-turn Q&A datasets in sensitive domains (medical and legal). 
+
+• We show that even partial attacker knowledge can improve re-construction success in PII association and identity inference. 
+
+• We analyze how reconstruction performance varies with model scale and family, showing that both architecture and size influ-ence PII leakage. 
+
+## 2 Background 
+
+In this section, we provide background on key aspects of our re-search, including the SFT framework, PII definitions, and prefix attacks against LLMs. 
+
+## 2.1 Supervised Fine-tuning 
+
+The supervised fine-tuning (SFT) process utilizes datasets composed of instruction-response {( 𝑖, 𝑟 )} where 𝑖 denotes the input instruc-tion and 𝑟 is the corresponding target response. Concretely, the SFT objective aims to minimize the negative log-likelihood of the response of 𝑟 given the context 𝑐 and instruction 𝑖 :L(𝜃 ) = − log 𝑓 𝜃 (𝑟 | 𝑐, 𝑖 )
+
+where 𝜃 represents the model parameters. The context 𝑐 may be supplied alongside 𝑖 and can include a system prompt and additional 
+
+> 1
+> arXiv:2605.12264v1 [cs.CR] 12 May 2026
+
+relevant information, such as the output of information retrieval tools. In a multi-turn Q&A setting, the context refers to the sequence of question-answer pairs from previous turns. SFT enables models to adapt to domain-specific knowledge, including medicine [ 46 ] and legal advice [ 17 ]. Parameter-efficient fine-tuning methods [ 25 , 26 ]are also available; however, we focus on full parameter supervised fine-tuning. 
+
+## 2.2 PII Extraction 
+
+Personally Identifiable Information. Personally identifiable in-formation (PII) refers to data that can be used to identify or distin-guish an individual. It is commonly categorized into direct identifiers ,which uniquely identify an individual, and indirect identifiers , which enable re-identification when combined with other information. Examples of direct identifiers include Social Security numbers and passport numbers. In contrast, indirect identifiers include attributes such as date of birth and place of birth, which may not uniquely identify an individual in isolation but can do so when combined. The sensitivity of PII underscores the importance of studying leak-age risks, particularly in light of regulatory frameworks such as the General Data Protection Regulation (GDPR) [ 43 ] and the Cali-fornia Consumer Privacy Act (CCPA) [ 22 ], which mandate strict protections for personal data and impose significant penalties for non-compliance. 
+
+Untargeted attacks for PII focus on extracting PII information in an indiscriminate manner, without considering the identity of the individual to whom the PII belongs. In contrast, PII association 
+
+refers to a pair in the form of [target identifier, target PII] where the 
+
+target identifier represents an individual identifier and the target PII 
+
+corresponds to that individual [14]. 
+
+Prefix Attacks. Prior work on PII extraction constructs prefixes to query LLMs and extract PIIs from the output [ 14 , 16 , 29 , 34 ]. Providing more target-specific prefix context can improve PII or training-data reconstruction, although this relies on stronger as-sumptions about the adversary’s knowledge [11]. A common approach in prefix-based attacks is to evaluate candi-date outputs using cumulative log-likelihood as a measure of how likely the model is to generate a given candidate. This score is used to rank possible PII candidates [14, 16, 29, 34]. Given a prefix 𝑆 0 and a candidate string 𝐶 = (𝑐 1, . . . , 𝑐 |𝐶 | ), the log-likelihood is defined as: 
+
+ˆ𝐶 = arg max   
+
+> 𝐶 ∈ C |𝐶 |
+
+∑︁ 
+
+> 𝑡 =1
+
+log 𝑃 𝜃 (𝑐 𝑡 | 𝑆 0, 𝑐 <𝑡 ),
+
+which measures how likely the model is to generate the candidate continuation conditioned on the prefix. Since all candidates share the same prefix, this formulation isolates the contribution of the candidate string itself. 
+
+## 3 Problem Statement 
+
+In this paper, we study the SFT setting, where an LLM is adapted to multi-turn chatbot conversations from real user interactions, with users disclosing personally identifiable information (PII) [ 36 ]. We ask: to what extent can an adversary reconstruct associations between individuals, their PII, and sensitive attributes? We refer to this as the PII reconstruction problem and analyze it under varying levels of attacker knowledge. In this section, we define the scenario and threat models, includ-ing attack goals and attacker knowledge. 
+
+## 3.1 Attack Objectives and Capabilities 
+
+Scenario. In real-world deployments, users interact with chatbots through multi-turn conversations, where information accumulates across exchanges. During these interactions, users often disclose personally identifiable information (PII), either explicitly or implic-itly, as observed in large-scale analyses of conversational data [ 36 ]. In practice, such user-generated conversation data may be col-lected and used by companies to further fine-tune models for spe-cialized domains, such as healthcare and legal services. We assume that the chatbot system has persistent user memory, capable of retaining and reusing user-specific information across interactions. This assumption is aligned with modern chatbot systems, such as ChatGPT [ 8 ] and Google Gemini [ 49 ], which incorporate memory or user-profile features to provide personalized responses. Under this setting, we study the risk of PII leakage from instruction-tuned models trained on domain-specific conversation data, with a partic-ular focus on medical and legal applications. 
+
+Attacker Goals. The primary goal of the attacker is to infer sensi-tive information associated with a user present in the fine-tuning dataset. We consider two main attack objectives. In the first setting, the attacker attempts to recover structured PII associated with a given user, such as an email address and a date of birth. In the sec-ond setting, the attacker aims to infer a user’s identity (e.g., name) based on attributes or contextual information unique to that user in the dataset. For instance, in the medical domain, the attacker may attempt to reconstruct the name of a patient given a description of their medical symptoms. Figure 1 illustrates examples of attacks according to each attack objective. ① PII Association   
+
+> John Smith
+> identity
+> SFT
+> Model
+> johns2251@gmail.com
+> email
+> ②Identity Inference
+> "A patient is
+> experiencing
+> kidney infection."
+> context
+> SFT
+> Model Jane Doe
+> identity
+
+Figure 1: Examples of Attacker Goals 
+
+Our focus is on measuring the leakage of associations between users and their sensitive data. Therefore, we do not consider un-targeted attacks that aim to extract arbitrary or unassociated PII at scale. In addition, we focus exclusively on leakage arising from the fine-tuning dataset and do not consider potential information leakage from the pre-training data. 
+
+Attacker’s Capabilities. We consider an attacker with query-level access to the fine-tuned model, as shown in Figure 2. The attacker does not have direct access to model parameters, but can obtain token-level likelihoods, enabling the implementation of custom decoding strategies; this assumption is standard in prior PII extrac-tion work [ 7, 16 , 29 , 34 ]. By default, we assume the attacker does   
+
+> 2Pre-
+> training
+> Pre-trained
+> Model
+> Supervised
+> Fine-tuning
+> SFT
+> Model
+> Large
+> Corpora Q&A Dataset
+
+😈  Adversary 
+
+> queries
+
+Figure 2: Supervised Finetuning (SFT) Setup 
+
+not have access to the model’s prior (i.e., the distribution induced by the model before fine-tuning). However, we further evaluate how reconstruction improves when the attacker leverages prior knowledge to increase confidence in the true PII. The central question we investigate is how varying levels of attacker knowledge affect the ability to infer associations between users and their PII. Accordingly, we consider multiple levels of attacker knowledge. 
+
+## 3.2 Attacker Knowledge 
+
+We define varying levels of attacker knowledge about the dataset for each attack objective. We first introduce key terms that characterize aspects of the dataset relevant to describing attacker knowledge. 
+
+• Domain refers to a field or topic that characterizes the fine-tuning dataset (e.g., medical or legal). 
+
+• Format refers to how the SFT dataset is structured and how PII is incorporated into the data. For example, users may ask the assistant to draft emails or complete tasks using their PII. Knowl-edge of the format is equivalent to knowing the in-distribution structure of the dataset. 
+
+• Contextual Information refers to the main topic-specific de-tails about the user. In the medical domain, this includes symp-toms or health concerns. In the legal domain, this includes dis-putes, life events, and circumstances. 
+
+• Background Information refers to attributes or information outside of contextual information. This includes user demograph-ics such as age, gender, and race, and other subsidiary informa-tion, such as height, weight, medical history, and substance use (in the medical setting), or profession and city or state of resi-dence (in the legal setting). The first adversarial goal focuses on reconstructing PII of a tar-get identity (e.g., a user’s name). The strongest attacker knowledge assumes full access to the fine-tuning data with PII masked or redacted, while the weakest assumption is that the attacker knows only the target identity. We also consider intermediate settings, where the attacker has partial knowledge, such as contextual infor-mation (e.g., symptoms or dispute circumstances), user background attributes (e.g., demographics), or the general format of the dataset. The second adversarial goal considers identity inference given partial information. We adopt the same spectrum of attacker knowl-edge, ranging from limited contextual information (weakest) to full access to redacted fine-tuning data (strongest). In addition, we consider settings where the attacker has access to user background attributes (e.g., demographics). A detailed breakdown of these at-tacker knowledge settings is provided later in Section 4.2. Model Provider  
+
+> Pre-trained
+> Model Q&A Dataset
+
+😈 
+
+> Adversary
+> Step 1.
+> Craft Prefix
+> SFT
+> Model
+> Step 2.
+> Decode PII
+> Final PII Candidates
+> 1. john.smith@...
+> 2. john_smith@...
+> 3. jsmith2026@...
+> "John Smith is 23-yr old
+> male patient. The email
+> address of John Smith is"
+> Candidate Pool
+> 1. johnny23... 2. john_sm...
+> ⋮
+
+Figure 3: Attack Pipeline 
+
+## 4 Attack Methodology 
+
+In this section, we describe our methodology for PII reconstruction attacks. First, we provide an overview of the attack pipeline. Then, we describe how we construct different variants of user information to simulate varying levels of attacker knowledge, and how these are used to generate prefixes for reconstruction attacks. Finally, we present COVA, our novel adversarial decoding strategy that enables PII reconstruction. 
+
+## 4.1 Attack Pipeline 
+
+Figure 3 shows the attack pipeline. Given attacker knowledge, the attacker carefully crafts a prefix to probe the target model, which has been fine-tuned by the model provider on their Q&A dataset. The attacker then applies decoding strategies to collect a pool of candidate PII strings. 
+
+## 4.2 Construction of Prefixes for Reconstruction Attacks 
+
+We first define the attacker knowledge settings used in our attacks and then describe how this information is used to construct prefixes for PII reconstruction. 
+
+Attacker Knowledge Settings. We consider a range of attacker knowledge settings that capture different levels of access to user information and dataset structure. Table 1 summarizes each setting, ordered from strongest to weakest. In settings where contextual information is available, we approximate the attacker’s knowledge using LLM-generated summaries of the original samples. We con-sider two levels of abstraction: sentence-level summaries, which condense the content into at most two sentences, and keyword-level summaries, which use short phrases (fewer than ten words). Since the original samples are often written as full paragraphs, even sentence-level summaries represent a significant compression of the available information. For the PII association task (Attack 1), the attacker uses these knowledge sources (Table 1) together with the target identity (e.g., a user’s name) to reconstruct associated PII attributes. In contrast, for the identity inference task (Attack 2), the attacker reconstructs the identity directly from the provided information. In this setting, we consider redacted data, contextual summaries (summary and keywords), and demographics. 
+
+Prefix Construction. We construct prefixes for each attack objec-tive based on the attacker knowledge settings described above. As shown in Figure 3, prefix construction forms the first step in the         
+
+> 3Setting Description Redacted Access to fine-tuning data with PII masked or removed. Synthetic Knowledge of the dataset format and user-specific context. In-distribution Knowledge of dataset format and domain without user-specific information. Summary Access to a sentence-level summary of user context (e.g., symptoms or legal disputes). Keywords Access to keyword-level description of user context. Demographics Access to user background attributes (e.g., age, gender, race). Name Access only to the target identity.
+
+Table 1: Attacker knowledge settings. 
+
+attack pipeline, where the adversary constructs an input prompt from the available information. The PII association task (Attack 1) aims to infer PII given the user’s name. Prefixes are constructed for each setting as follows: (1) Redacted : The prefix is derived directly from the assistant’s response in the SFT dataset up to the target PII. Other masked PII fields are removed or edited to reduce bias. For example, masked doctor names are replaced with generic terms (e.g., “Doctor”), and segments containing unrelated masked PII are removed while preserving semantic coherence. (2) Synthetic : The prefix is generated using an LLM based on the target identity, contextual information, and dataset format. Specifically, we prompt the model to produce a prefix that is consistent with the dataset format (e.g., drafting an email), incorporating the provided information while matching the structure of samples in the SFT dataset. (3) In-distribution : The prefix follows the dataset format using generic domain-specific content without incorporating user-specific details. For medical Q&A, we use a generic symptom (headache), while for legal Q&A, we use a generic scenario (wage dispute). (4) Summary : The prefix is constructed as "[Summary]. The [PII] of [user’s name] is" .(5) Keywords : Similar to the summary setting, but using keyword-level descriptions. To improve fluency, we prepend a natural phrase such as "The user is experiencing or concerned about [keywords]. The [PII] of [user’s name] is" .(6) Demographics : The prefix is a descriptive sentence incorpo-rating user attributes, followed by "The [PII] of [user’s name] is" .For example: "[user’s name] is a 25-year-old white female" . We additionally include height and weight for medical Q&A and city of residence and profession for legal Q&A. (7) Name : The prefix’s template is minimal: "The [PII] of [user’s name] is" .For the identity inference task (Attack 2), the goal is to recon-struct a user’s name given associated attributes such as symptoms, situations, or demographics. We consider four settings: redacted, summary, keywords, and demographics. When redacted data is available, prefixes are taken directly from the SFT dataset with masked or unrelated PII fields removed or edited to reduce bias. For the summary, keywords, and demographics settings, each pre-fix is constructed using the template "[Information]. The name of the user/patient is" , where [Information] corresponds to the sum-mary, keywords, or demographics. However, we observe that this formulation often leads the model to generate placeholder names (e.g., “User” or “Patient”) instead of realistic identities. To address this, we prepend an instruction encouraging realistic name genera-tion, along with in-context examples using synthetic names (e.g., “Jane Doe” and “John Smith”) that follow the same format as the target task. This modification improves the quality and realism of generated outputs. Example prefix templates are provided in Appendix B. 
+
+## 4.3 Adversarial Decoding 
+
+We now describe our decoding strategy for PII reconstruction. Given a prefix constructed above, the goal is to generate candidate PII strings token by token and return the top-𝑁 candidates. As shown in Figure 3, this stage generates candidate PII values from the con-structed prefix. 
+
+Baseline Decoding. Prior work [ 14 , 16 , 29 , 34 ] on prefix-based PII extraction primarily focuses on improving extraction effectiveness through model adaptation or prompt design, rather than develop-ing new decoding strategies. For example, Janus [ 14 ] studies how fine-tuning amplifies privacy risks, while other works leverage optimized prompts [ 29 ] or augmented few-shot prompting [ 16 ]to elicit PII. Despite such differences in attack formulation, these approaches largely rely on standard decoding strategies, such as top-𝑘 sampling and beam search. Top-𝑘 sampling restricts token selection to high-probability sub-sets, while beam search keeps the top-𝐵 partial sequences by cu-mulative log-likelihood. However, these decoding strategies have several key limitations for PII reconstruction. The task requires exact token-level matching, so early decoding errors can cause complete failure (the branching problem [ 33 ]). For high-entropy PII such as phone numbers or dates of birth, maximizing token-level likelihood does not guarantee maximizing sequence-level likeli-hood. For example, a partial sequence such as “12/1” may initially have a higher likelihood than “12/3”, but later tokens may reverse this ordering (e.g., “12/31” vs. “12/11”). Beam search maintains multiple partial sequences, but it expands all next-token continuations for the current beams and enforces a strict top-B constraint at every decoding step. As a result, candidates whose early tokens are not sufficiently likely may be pruned pre-maturely, even if they would form strong full-sequence candidates under the same scoring function. This step-wise pruning limits exploration and makes the search sensitive to early-token proba-bilities. Similarly, stochastic decoding methods (e.g., top-𝑘 ) remain biased toward high-probability individual tokens, making correct paths with low token-level probabilities unlikely to be explored. These limitations motivate a more structured decoding strategy. 
+
+Our Approach. We propose Cov erage-Aware Decoding ( COVA ), a deterministic decoding method that improves coverage by adap-tively exploring candidate sequences while preserving likelihood-based ranking. COVA adapts token expansion to the next-token distribution and performs pruning over a global candidate pool, enabling more balanced exploration across candidate sequences. At each step, candidate expansion selects tokens using top-𝑝 or top-𝑘 , choosing the more restrictive option to control branching. 
+
+> 4
+
+Algorithm 1 COVA 
+
+Require: Fine-tuned model 𝑀 𝑓 , tokenizer T , prefix 𝑃 , suffix 𝑆 ,max tokens 𝑇 max 
+
+Require: Valid (·) , Complete (·) , selector Select (𝜋, 𝜃 )
+
+Require: pruning thresholds 𝐾 keep and 𝐾 prune , with 𝐾 prune < 𝐾 keep 
+
+Require: completed-result capacity 𝑁 best , final output count 𝑁 
+
+Ensure: Top 𝑁 completed candidates  
+
+> 1:
+
+Initialize partial pool P ← {( 0, 𝜖, 0)}  
+
+> 2:
+
+Initialize bounded min-heap R ← ∅  
+
+> 3:
+
+while P ≠ ∅ do  
+
+> 4:
+
+Initialize new pool Pnew ← ∅  
+
+> 5:
+
+for all (𝑠, 𝑐, 𝑡 ) ∈ P do  
+
+> 6:
+
+if 𝑡 = 𝑇 max then  
+
+> 7:
+
+continue  
+
+> 8:
+
+𝑥 ← T ( 𝑃 ∥𝑐 ) 
+
+> 9:
+
+𝜋 ← Softmax (𝑀 𝑓 (𝑥 ))  
+
+> 10:
+
+for all 𝑢 ∈ Select (𝜋, 𝜃 ) do  
+
+> 11:
+
+𝑐 ′ ← 𝑐 ∥T −1 (𝑢 ) 
+
+> 12:
+
+if ¬Valid (𝑐 ′) then  
+
+> 13:
+
+continue  
+
+> 14:
+
+𝑠 ′ ← 𝑠 + log 𝜋 (𝑢 ) 
+
+> 15:
+
+if Complete (𝑐 ′) then  
+
+> 16:
+
+Insert (𝑠 ′, 𝑐 ′) into R if it belongs in the top 𝑁 best  
+
+> 17:
+
+else  
+
+> 18:
+
+Add (𝑠 ′, 𝑐 ′, 𝑡 + 1) to Pnew  
+
+> 19:
+
+P ← P new  
+
+> 20:
+
+if |P | ≥ 𝐾 keep then  
+
+> 21:
+
+Sort P by score and keep the top 𝐾 prune candidates  
+
+> 22:
+
+if |R| ≥ 𝐾 prune and max (𝑠,𝑐,𝑡 ) ∈ P 𝑠 ≤ MinScore (R) then  
+
+> 23:
+
+break  
+
+> 24:
+
+return top 𝑁 candidates in R
+
+Rather than pruning aggressively at each decoding step, COVA performs an expansion of all branches at each token position be-fore applying sequence-level pruning. This allows candidates with lower-probability early tokens to remain viable if they form strong full-sequence candidates, improving coverage and fairness across sequences of varying lengths. Input      
+
+> Prefix
+> Expand
+> Candidates
+> Select next tokens
+> Complete?
+> Yes Completed
+> Candidate
+> Queue R
+> Stop?
+> Return top-Nfrom R
+> Yes
+> No
+> Partial Candidate
+> Pool P
+> No
+
+Figure 4: Illustration of COVA 
+
+Figure 4 illustrates the high-level workflow, and Algorithm 1 provides the full pseudocode. Below, we provide the core component of COVA. 
+
+• Partial Candidate Pool P. We maintain a pool of partially recon-structed PII candidates. At each iteration, the pool is constrained to the top-𝐾 prune candidates by cumulative log-likelihood to con-trol computational complexity. 
+
+• Expand Candidates. Each candidate in P is expanded by ap-pending a token selected from a restricted set defined by a con-figurable strategy (e.g., top-𝑝 or top-𝑘 ). We adaptively choose the more restrictive strategy at each step to limit branching, selecting the one that yields fewer candidate tokens under the current dis-tribution. This is important across PII types: numeric attributes (e.g., dates of birth or phone numbers) tend to have peaked distri-butions where top-𝑝 is effective, while alphanumeric attributes (e.g., names or email addresses) exhibit flatter distributions, mak-ing top-k more suitable. Expanded candidates are scored using cumulative log-likelihood and filtered by PII-specific validity constraints, with invalid candidates discarded. 
+
+• Completion Check. A candidate is marked as complete if it sat-isfies the format constraints of the target PII. For structured PII (e.g., dates of birth and email addresses), we use regular expres-sions. For less structured PII (e.g., names), we treat a candidate as complete when the most probable next token is non-alphabetic (e.g., whitespace or punctuation), indicating the end of the span. 
+
+• Completed Candidate Queue R. Completed candidates are inserted into a result heap that maintains the top-𝑁 best sequences by score. 
+
+• Stop Condition. The search terminates when further expansion cannot improve the worst candidate in R, providing an adaptive stopping criterion. Importantly, we continue exploring even af-ter R reaches capacity to avoid bias toward shorter candidates, which is critical for variable-length PII such as names and email addresses. Finally, the algorithm returns the top-𝑁 candidates. While prior work on targeted PII reconstruction [ 14 , 34 ] focuses primarily on top-1 performance, this metric does not capture whether the true PII appears elsewhere in the candidate set. In practice, an attacker is not necessarily limited to a single guess, and the presence of the correct value anywhere within a small candidate pool may already constitute a meaningful privacy risk. For example, an attacker who obtains a short list of candidates for a user’s date of birth may nar-row their guesses using auxiliary information such as approximate age. Moreover, knowledge of the model’s prior distribution enables the attacker to filter out values that are inherently more likely under the model, further reducing the candidate set. For this reason, we report recall at top-1, top-10 , and top-100 .From the attacker’s perspective, recall measures whether the true PII appears anywhere in the candidate set, capturing the ability of the attack to surface the correct value for further inspection. Precision can then be computed as recall  
+
+> 𝑁
+
+at any top-𝑁 threshold. 
+
+Attacker with Base Model Access. We consider a stronger threat model in which the adversary has access to both the fine-tuned model and its corresponding base (e.g., pre-trained) model. In this setting, the adversary can exploit differences between the two mod-els to improve candidate selection within the top-𝑁 pool. Specifi-cally, we evaluate a re-ranking strategy based on the log-likelihood ratio (LLR), defined as: 
+
+LLR (𝐶 ) = 
+
+> |𝐶 |
+
+∑︁  
+
+> 𝑡 =1
+
+log 𝑃 𝑀 f (𝑐 𝑡 | 𝑆 0, 𝑐 <𝑡 ) − log 𝑃 𝑀 b (𝑐 𝑡 | 𝑆 0, 𝑐 <𝑡 ) . (1) 
+
+> 5
+
+where 𝑀 f and 𝑀 b represent the fine-tuned and base model, respec-tively. A higher LLR indicates that the candidate is more strongly fa-vored by the fine-tuned model relative to the base model. 
+
+## 5 Dataset Creation 
+
+In this section, we describe how we construct custom SFT datasets from existing Q&A data to incorporate PII-dependent tasks. The first dataset is derived from MedRedQA [ 39 ], a medical Q&A dataset, and the second from a legal advice dataset [ 32 ]. Both source datasets originate from Reddit discussions. We will release the resulting datasets to support reproducibility and facilitate future research on PII leakage in SFT models. 
+
+## 5.1 Motivation 
+
+Our goal is to leverage publicly available datasets to construct realistic Q&A datasets in sensitive domains that incorporate PII. Existing datasets have several limitations. First, datasets commonly used for PII extraction [ 1 , 12 , 30 ] are unstructured text corpora rather than Q&A formats. Second, many Q&A datasets are not user-centric and do not encode attributes specific to an individual user. For example, alignment datasets [ 13 , 50 ] are designed to improve instruction-following capabilities, but often lack domain specificity and user-centric context. Similarly, domain-specific datasets such as those for mathematics or coding [ 52 , 55 ] provide strong technical content but do not capture user-specific characteristics. However, a small number of Q&A datasets [ 32 , 39 ] in sensitive domains (e.g., medical or legal) are derived from real user interactions on public forums, and thus better reflect authentic, user-centered scenar-ios. Using these datasets as a foundation aligns with our goal of constructing realistic and semantically coherent Q&A data, which would be difficult to replicate with fully synthetic data. Beyond these structural limitations, existing PII datasets also complicate the evaluation of PII leakage. Widely used corpora [ 1,12 , 30 ] may overlap with pre-training data, making it difficult to attribute observed leakage specifically to the fine-tuning process. As a result, prior work on fine-tuned models [ 2, 29 ] primarily evaluates how fine-tuning amplifies leakage rather than isolating leakage from fine-tuned data. To address these limitations while preserving semantic fidelity, we retain the original Q&A samples and extend each single-turn example into a multi-turn conversation by adding PII-related tasks with synthetic PII (e.g., drafting or editing emails). This allows us to leverage high-quality human-generated data while introducing controlled PII through a structured persona framework that enables consistent user identities across samples. We ensure that user PII appears in the assistant’s responses. This is because the standard SFT objective applies the training loss to the assistant’s response only, rather than the user’s instruction. As a result, PII appearing in assistant outputs is directly optimized during training, whereas PII appearing only in user instructions influences the model indirectly through conditioning. We therefore focus on scenarios where PII is present in assistant responses, as these are more likely to contribute to memorization and subsequent reconstruction. Prior work has shown that PII duplication has a significant im-pact on reconstruction success [ 34 ]. Our work incorporates this insight and investigates how varying levels of duplication affect reconstruction. However, naively duplicating PII within the dataset is insufficient, since doing so risks breaking consistency across user personas. If two samples share the same PII, we treat them as the same user, requiring attributes such as demographics or medical history to remain consistent. The original Q&A datasets used to derive our custom SFT datasets are not associated with concrete user profiles. Therefore, we introduce an annotation stage that ex-tracts user attributes using an LLM, enabling the construction of consistent persona profiles and ensuring coherence across samples assigned to the same user. 
+
+## 5.2 Dataset Generation Process 
+
+The dataset construction process involves four steps: (1) defining tasks, (2) data annotation, (3) constructing user profiles with syn-thetic PII, and (4) multi-turn dataset creation. Our goal is to extend high-quality single-turn Q&A datasets into multi-turn SFT datasets that incorporate PII by adding second- and third-turn exchanges. We use Llama-3.3-70B Instruct model for dataset generation. 
+
+Defining Tasks. Starting from an initial user question, we define follow-up tasks in multi-turn conversations that require PII. These include email editing or drafting, questions involving sensitive per-sonal information (e.g., insurance coverage), and location-based queries using retrieval-augmented generation (RAG), such as find-ing nearby hospitals or clinics. Table 2 summarizes the task types, objectives, and associated PII. 
+
+Data Annotation. We use the LLM to extract relevant information from each sample in the original Q&A dataset, including user at-tributes (e.g., demographics, physical traits, habits) and the nature of the interaction. This serves two purposes. First, it determines the appropriate follow-up task. For example, in a medical Q&A dataset, if the original query concerns medication usage, a natural follow-up task would be to locate nearby pharmacies. In contrast, if the user mentions past appointments or procedures, an appropriate follow-up task might involve insurance-related questions or writing follow-up emails to their doctors. For medical datasets, the relevant information to extract includes the status of procedures or tests and the urgency of symptoms. For legal advice datasets, it includes the status of court filings or petitions, the presence and type of the opposing party, and the dispute type (e.g., civil, criminal, family, or tax-related). The second objective is to identify and extract user-specific at-tributes. As described in 5.1, we study how PII duplication affects reconstruction success, and our design ensures PII duplication while maintaining consistency across user profiles. While the original dataset does not contain explicit PII, it often includes references to user characteristics such as demographics (age, gender, race) or background information (e.g., medical history, height, weight, or substance use). These attributes are used to construct consistent user personas so that later, during the persona construction stage, we ensure that any user-related attributes in each sample that be-long to the same persona are consistent. For example, if sample A describes a female patient of European descent who describes herself as a frequent smoker, this sample should not be assigned to 
+
+> 6
+
+Table 2: Task definitions for multi-turn interactions in the medical and legal datasets 
+
+Task Type Description User PII 
+
+HOSPITAL Find nearby hospitals or clinics using the user’s location via RAG. Location PHARMACY Find nearby pharmacies using the user’s location via RAG. Location EDIT EMAIL Edit the user’s draft email to their doctor. Name, DOB, email, phone DRAFT EMAIL Draft an email to the user’s doctor using the user’s PII. Name, DOB, email, phone INSURANCE CLAIM Draft an email regarding an insurance claim. Name, email, phone, insurer, insurance type, policy no. INSURANCE QUESTION Answer a general question about insurance coverage. Insurer, insurance type, policy no. ATTRIBUTES Answer a general question about symptoms related to the user’s demographics. N/A 
+
+(a) Medical Q&A 
+
+Task Type Description User PII 
+
+LAW FIRM Find nearby lawyers or law firms using the user’s location via RAG. Location EDIT EMAIL Edit the user’s draft email to their lawyer. Name, DOB, email, phone DRAFT EMAIL Draft an email to the user’s lawyer using the user’s PII. Name, DOB, email, phone COURT FILING Draft a petition or court filing regarding the user’s dispute. Name, DOB, address, SSN DOCUMENT REVIEW Answer a question about a provided legal document excerpt. Case no. DRAFT EMAIL OPPOSING Draft an email to the opposing party. Name, email, phone, case no. 
+
+(b) Legal Advice Q&A 
+
+the persona whose another sample describes a male patient of Asian descent who doesn’t smoke. An example of how user attributes are extracted from the original sample is included in Appendix C.1. Note that the extracted attributes focus on demographics and other background information about the user, rather than on the user’s current symptoms, disputes, or immediate situation. 
+
+Construction of User Profiles with PII. Based on the annota-tions, we construct a set of user personas with well-defined char-acteristics. Each sample from the original dataset is assigned to a persona such that the user attributes present in the sample are consistent with the assigned persona. Table 3 summarizes the attributes and PII associated with each persona. Methods for generating each synthetic PII are described in Appendix 10. One exception is the court case number in the legal Q&A dataset. Unlike other PII fields, the court case number is specific to an individual dispute, and therefore to a particular sample, rather than to the user persona itself. We also assume that users reside in U.S. cities [ 41 ], which is broadly consistent with the fact that the majority of Reddit users are based in the United States, as both Q&A datasets are originally scraped from Reddit forums (with a small portion of legal samples assigned to Canada). When constructing user profiles, we observe that certain at-tributes, such as height and weight, are too fine-grained to enforce exact consistency across all samples assigned to the same persona, especially when multiple originally distinct samples are merged for the purpose of controlled duplication. In such cases, we relax the consistency constraint at the assignment stage and enforce con-sistency through post-processing. For example, height and weight are first matched at a bucket level (e.g., height between 170 and 175 cm). After a representative value is selected for a persona, we revisit all samples assigned to that persona and edit any conflicting references so that they are consistent with the representative value. 
+
+Table 3: Elements of User Profile 
+
+Category Medical Q&A Legal Q&A 
+
+User attributes gender, race, age, height, weight gender, race, age Other user back-ground info family relationships, medical history, family medical his-tory, medication intake, aller-gies, substance use (weed, to-bacco, alcohol, other drugs) family relationships, place of residence (city, state, and coun-try), profession User PIIs name, email, phone number, DOB, address (street address, city, state, zipcode), insurance provider, policy number, insur-ance type. name, email, phone number, DOB, address (street address, city, state, zipcode), SSN. Non-user info name of primary doctor. name of lawyer. Medical Q&A                     
+
+> Demographics
+> Gender: male
+> Age: 25
+> Race: white
+> Height: 175 cm
+> Weight: 75 kg
+> PII Fields
+> Name: John Smith
+> DOB: 10/10/2000
+> Phone: 661-533-9999
+> Email: john.smxyz61@gmail.com
+> Address: 25 Westland Ave,
+> Boston, MA 01125
+> Insurance: Aetna, PPO, 0134559899
+> Doctor: Mike Johnson
+> Background Info (partial)
+> Allergies: none
+> Alcohol: sometimes
+> Weed: sometimes
+> Tobacco: no
+> Medications: none
+> Med. history: asthma
+> Family: 25 year old girlfriend
+
+Legal Q&A              
+
+> Demographics
+> Gender: female
+> Age: 35
+> Race: latino
+> PII Fields
+> Name: Jane Hernandez
+> DOB: 01/18/1990
+> Phone: 857-663-9510
+> Email: jane_hernandezty54@gmail.com
+> Address: 5 Watergate St,
+> Los Angeles, CA 90016
+> SSN: 543-22-1010
+> Lawyer: Jennifer Mason
+> Background Info
+> Family: 40 year old husband
+> Profession: IT specialist
+> Residence: Los Angeles, CA
+
+Figure 5: Example of User Profile with Synthetic PII Multi-turn Dataset Creation. For each sample, we generate ad-ditional conversation turns based on the assigned task and the persona’s PII. These subsequent turns simulate realistic interac-tions between the user and assistant for tasks requiring the use of user PII. We use few-shot prompting with an LLM to generate second and third turns for each sample based on the assigned task and the persona’s PII. In particular, we provide the model with the task objective, the initial conversation turn, and the relevant 
+
+> 7
+
+PII, and prompt it to craft the user query and the corresponding assistant’s response. For tasks requiring retrieval-augmented gen-eration (RAG), we prepend relevant retrieved content to the user query using publicly available datasets [ 21 , 24 , 35 ]. For example, in location-based queries such as identifying nearby medical facilities, we filter these datasets by the user’s ZIP code to construct a JSON-formatted list of real-world entities; this list is prepended as context directly before the user’s question. An example training sample is illustrated in Appendix C.3, while PII duplication statistics are provided in Appendix C.4. 
+
+## 6 Evaluation 
+
+In this section, we discuss the evaluation results. We examine how attacker knowledge impacts reconstruction results and analyze PII leakage under various conditions. 
+
+## 6.1 Experiment Setting 
+
+Model Setup. We use the Qwen-2.5 7B model obtained from the Hugging Face Hub as our primary model, and we further evaluate our approach across models of varying sizes and families. Following prior work on extraction attacks against supervised fine-tuned models [ 33 ], we fine-tune the pre-trained base model on our custom Q&A datasets. We use 90% of the dataset for training and 10% for validation, and train for 10 epochs, selecting the checkpoint at epoch 5 based on the lowest validation loss. Details of the training setup are provided in Appendix D. In addition, we conduct the same extraction attacks on models fine-tuned from instruction-tuned (aligned) models to evaluate the impact of prior alignment on leakage behavior, and these results are reported in Appendix F. For our decoding algorithm (Algorithm 1), we use the following hyperparameters: 𝐾 𝑘𝑒𝑒𝑝 = 500 , 𝐾 𝑝𝑟𝑢𝑛𝑒 = 300 , 𝑁 𝑏𝑒𝑠𝑡 = 500 , and 
+
+𝑁 = 100 . All experiments are conducted on three H100 GPUs. 
+
+PII. We consider two attack settings. PII association (Attack 1) aims to reconstruct a user’s date of birth (DOB) and email address, which are present in both medical and legal Q&A datasets. Identity inference (Attack 2) aims to infer user identity by reconstructing the full name from contextual information. 
+
+Metrics. We define reconstruction success rate as the fraction of successful reconstructions over all attempts. Across different attacker knowledge settings, the number of reconstruction attempts per user may vary. For example, some settings involve a single attempt per user (e.g., reconstructing PII given a name), while others involve multiple attempts (e.g., reconstructing PII given both a name and contextual information). To ensure fair comparison, we first compute a per-persona reconstruction rate (i.e., the fraction of successful attempts for each persona), and then average across personas. We apply this normalization when comparing across settings with different numbers of attempts per persona, while in settings with a fixed number of attempts, we report aggregate reconstruction rates directly. This normalizes differences in the number of attempts. We report results at three thresholds: top-1, top-10, and top-100. Top-1 represents the most restrictive setting, where only the highest-ranked prediction is considered, while top-100 reflects broader cov-erage under a more permissive threshold, capturing a trade-off be-tween precision and recall. To isolate leakage from fine-tuning, we compare reconstruction performance before and after fine-tuning using the same initialization and extraction procedure. This mea-sures the additional reconstruction capability attributable to the fine-tuning data. Non-trivial pre-fine-tuning success reflects the inherent guessability of each PII type. We therefore interpret im-provements after fine-tuning as evidence of leakage induced by training on the target dataset. For the second attack on identity inference, reconstructing iden-tity from contextual information introduces ambiguity, as multiple users may share similar attributes (e.g., symptom descriptions). To address this, we compute embedding similarity between pro-vided contexts to identify a set of semantically equivalent or highly similar profiles. A reconstruction is considered successful if the pre-dicted identity matches any user in this candidate set. The similarity threshold is adapted based on the information type: demographic at-tributes (e.g., age and gender) require near-exact matches, whereas more flexible attributes (e.g., symptom summaries) allow lower thresholds when conveying similar meaning. 
+
+## 6.2 Experimental Results 
+
+We first evaluate two core attack settings: PII association and iden-tity inference. We then assess the effectiveness of our decoding algorithm compared to standard extraction methods. In addition, we analyze how model scale and family affect reconstruction per-formance. Finally, we consider a stronger adversary that leverages the base model’s prior distribution to improve confidence over candidate PII. Additional results on the impact of duplication are provided in Appendix E. 
+
+Attack 1: PII Association. The adversary aims to reconstruct a user’s email address and date of birth (DOB) associated with a given identity. We evaluate reconstruction performance under varying levels of attacker knowledge as detailed in Table 1. Table 4 reports reconstruction results for both PII types across the medical and legal Q&A datasets at three thresholds, top-1, top-10 , and top-100 .To visualize the effect of fine-tuning, Figure 6 presents the re-construction rate (recall) at the top-100 threshold for the fine-tuned model relative to the base model, thereby accounting for the inher-ent “guessability” of each PII type. In most cases, the reconstruction rate has increased in the fine-tuned model relative to the base model, but the improvement varies substantially by PII. The highest gains are for email, where the reconstruction has improved by 9–12%. Across both datasets and PII types, reconstruction success is lowest under the weakest assumption, where the adversary only knows the user’s name. As attacker knowledge increases, reconstruction performance for DOB improves across both datasets. At the top-100 threshold, medical Q&A achieves a reconstruction rate of 3.82% under the strongest setting (redacted data), compared to 0.57% under the weakest setting (name only). Intermediate knowledge settings yield correspondingly intermediate performance, indicating that DOB reconstruction benefits from additional contextual information. A 
+
+> 8
+
+notable difference between datasets is the effect of demographic at-tributes (e.g., age): while the model captures the correlation between age and birth year in medical Q&A, leading to higher reconstruction rates, it fails to recover this relationship in legal Q&A. In contrast, reconstruction success for email is already mod-erately high under minimal attacker knowledge. With access to only the user’s name, the model achieves over 1% reconstruction at the top-1 threshold and over 10% at the top-100 threshold in both datasets. This suggests that email addresses are strongly tied to user identity, resulting in lower uncertainty once the name is known. 
+
+Finding: PII association is highly sensitive to attacker knowl-edge: high-entropy attributes (e.g., DOB) depend strongly on contextual signals to recover, while low-entropy attributes (e.g., email address) can be reconstructed even under a weak adversary model. 0 5 10 15 20 25     
+
+> Redacted
+> Synthetic
+> In-distribution
+> Summary
+> Keywords
+> Demographics
+> Name
+> +11.16
+> +10.53
+> +10.19
+> +10.66
+> +11.39
+> +9.60
+> +9.43
+> EMAIL (Top-100)
+> 02468
+> +3.54
+> +0.74
+> +0.57
+> +0.83
+> +0.64
+> +6.79
+> +0.19
+> DOB (Top-100)
+> Base
+> Fine-tuned
+
+(a) Medical Q&A 0 5 10 15 20    
+
+> Redacted
+> Synthetic
+> In-distribution
+> Summary
+> Keywords
+> Demographics
+> Name
+> +9.38
+> +8.59
+> +12.46
+> +8.18
+> +7.58
+> +9.97
+> +5.71
+> EMAIL (Top-100)
+> 0123
+> +1.36
+> +1.99
+> +1.68
+> +0.99
+> +1.26
+> +0.00
+> -0.15
+> DOB (Top-100)
+> Base
+> Fine-tuned
+
+(b) Legal Q&A 
+
+Figure 6: Reconstruction rate (%) of email and DOB across various attacker knowledge settings for the finetuned model compared to the pre-trained model at top-100 threshold. Attack 2: Identity Inference. In the second attack, the adversary aims to reconstruct a user’s identity (i.e., full name) given contextual or background information. Table 5 reports reconstruction results for the user identity across the medical and legal Q&A datasets, given attacker knowledge settings described in Table 1. Similar to the previous attack, we visualize the reconstruction rate (recall) at the top-100 threshold for the fine-tuned model relative to the base model in Figure 7. We observe that baseline reconstruction success on the pre-trained model varies significantly across differ-ent assumptions. This variation reflects the differing strength of contextual cues in narrowing down plausible identities. For exam-ple, attributes such as race or gender can substantially constrain the space of likely names, while certain contextual scenarios may implicitly encode additional signals such as a user’s gender. As a result, some assumptions provide stronger prior information than others, even without access to detailed data. Interestingly, we observe that reconstruction success does not always increase with additional contextual information. In some cases, providing more detailed descriptions results in similar or even lower performance compared to using minimal information (e.g., keyword-level summaries). Furthermore, when the adversary is given full access to the training data, the reconstruction success is comparable to that of the base model. This suggests that the model may rely on a limited set of salient contextual cues when associating context with identity, rather than fully leveraging the input. Consequently, additional contextual detail does not neces-sarily help narrow predictions down to a specific individual, even when it should reduce ambiguity. 
+
+Finding: Identity inference has higher success in the fine-tuned model over the base model, but additional adversarial knowledge offers limited gains. 0.0 0.5 1.0 1.5 2.0 2.5    
+
+> NAME (Top-100) for Medical Q&A
+> Redacted
+> Summary
+> Keywords
+> Demographics
+> +0.13
+> +0.62
+> +1.02
+> +0.83
+> 0123
+> NAME (Top-100) for Legal Q&A
+> +0.03
+> +0.60
+> +0.90
+> +1.23
+> Base
+> Fine-tuned
+
+Figure 7: Reconstruction rate (%) of the user’s name across various attacker knowledge settings for the finetuned model compared to the pre-trained model. Comparison with Existing Decoding Strategies. We evaluate COVA against standard decoding methods used in prior work on PII leakage, including top-𝑘 sampling and beam search [ 14 , 34 ]. We consider a baseline setting where the adversary has access to redacted data, along with two moderate settings—summary and in-distribution—to assess robustness across different prefix conditions defined in Table 1. Table 6 reports reconstruction results on medical Q&A across all three PII types using sample-level reconstruction rates. Email and DOB are reconstructed given a known identity, while the name is inferred from contextual information. For top-𝑘 
+
+sampling, we set 𝑘 = 40 following prior work [ 29 , 34 ], and enforce uniqueness among the top-100 candidates by repeated sampling (up to 10 retries). For beam search, we use a beam width of 𝐵 = 100 .
+
+> 9
+
+Table 4: Reconstruction rate (%) of email and DOB across various attacker knowledge settings. Δ represents the increase in reconstruction success after fine-tuning (FT − Base).                                                                                                                                                                                                                                                                   
+
+> Redacted Synthetic In-distribution Summary Keywords Demographics Name Dataset PII Thres. Base FT ΔBase FT ΔBase FT ΔBase FT ΔBase FT ΔBase FT ΔBase FT Δ
+> Medical Email Top-1 0.31 2.30 1.99 0.25 2.03 1.78 0.00 1.18 1.18 0.15 1.25 1.09 0.25 1.16 0.91 0.34 1.77 1.43 0.34 1.35 1.01
+> Top-10 2.67 11.81 9.14 2.84 11.15 8.31 2.10 11.11 9.01 2.56 10.04 7.49 2.06 10.40 8.33 2.95 12.88 9.93 2.27 8.67 6.40
+> Top-100 7.39 18.55 11.16 7.98 18.51 10.53 8.33 18.52 10.19 6.60 17.26 10.66 5.97 17.35 11.39 10.77 20.37 9.60 5.30 14.73 9.43
+> DOB Top-1 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 Top-10 0.00 0.51 0.51 0.00 0.09 0.09 0.00 0.09 0.09 0.00 0.09 0.09 0.00 0.00 0.00 0.00 0.85 0.85 0.00 0.00 0.00 Top-100 0.28 3.82 3.54 0.40 1.14 0.74 0.38 0.94 0.57 0.57 1.41 0.83 0.25 0.89 0.64 0.28 7.08 6.79 0.38 0.57 0.19
+> Legal Email Top-1 0.33 1.77 1.45 0.32 1.82 1.49 0.16 2.49 2.33 0.33 1.17 0.84 0.33 1.21 0.87 0.56 1.37 0.80 0.08 1.93 1.85
+> Top-10 2.27 9.69 7.42 2.96 11.47 8.51 2.89 12.70 9.81 1.95 6.69 4.73 1.78 7.46 5.68 3.30 11.01 7.72 2.49 7.64 5.14
+> Top-100 5.68 15.05 9.38 7.80 16.39 8.59 7.07 19.53 12.46 4.74 12.92 8.18 5.02 12.59 7.58 8.84 18.81 9.97 5.06 10.77 5.71
+> DOB Top-1 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 Top-10 0.00 0.32 0.32 0.00 0.22 0.22 0.00 0.15 0.15 0.00 0.03 0.03 0.00 0.13 0.13 0.00 0.00 0.00 0.00 0.08 0.08
+> Top-100 0.74 2.09 1.36 0.51 2.50 1.99 0.31 1.99 1.68 0.25 1.24 0.99 0.19 1.44 1.26 0.00 0.00 0.00 0.38 0.23 -0.15
+
+Table 5: Identity reconstruction performance across attacker knowledge settings. Δ represents the increase in reconstruc-tion success after fine-tuning (FT − Base).                                                              
+
+> Redacted Summary Keywords Demographics Thres. Base FT ΔBase FT ΔBase FT ΔBase FT Δ
+> Medical
+> Top-1 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 Top-10 0.09 0.05 -0.04 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.17 0.17
+> Top-100 0.30 0.42 0.13 0.72 1.36 0.62 0.44 1.47 1.02 1.58 2.41 0.83
+> Legal
+> Top-1 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 Top-10 0.09 0.09 0.00 0.08 0.10 -0.02 0.43 0.19 -0.24 0.22 0.14 -0.07
+> Top-100 0.19 0.22 0.03 0.51 1.11 0.60 2.06 2.96 0.90 1.08 2.31 1.23
+
+Table 6: Reconstruction performance (%) across decoding strategies under different attacker knowledge settings on Medical Q&A. T-1 means Top-1 and T-100 means Top-100.                                                              
+
+> Redacted In-distribution Summary PII Thres. Top-𝑘 Beam COVA Top-𝑘 Beam COVA Top-𝑘 Beam COVA Email T-1 1.02 1.75 2.24 1.06 0.75 1.06 0.61 0.94 1.46
+> T-100 5.41 17.73 18.51 4.49 14.45 17.32 4.30 12.13 17.33
+> DOB T-1 0.05 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 T-100 0.59 2.24 3.95 0.25 0.36 1.06 0.00 0.52 1.61
+> Name T-1 0.00 0.00 0.00 N/A N/A N/A 0.00 0.00 0.00 T-100 0.44 0.19 0.48 N/A N/A N/A 0.99 0.33 1.70
+
+Across settings, COVA achieves the strongest performance across various settings and PII types. For targeted PII reconstruction tasks (email and DOB), deterministic decoding methods (beam search and COVA) outperform top-k sampling. In contrast, for identity inference (name), top-k sampling performs better than beam search. The gains of COVA over the baselines are more apparent at higher coverage thresholds (top-100), particularly for PII types such as DOB and name that have limited mutual information with the prefix. This is because COVA is better able to exploit weak contex-tual signals and recover true PII values that are not immediately apparent from the prefix. For example, for DOB under the two mod-erate attacker knowledge settings (in-distribution and summary), COVA achieves reconstruction rates that are nearly three times higher than the strongest baseline (beam search), highlighting its effectiveness when contextual signals may be more limited than in the redacted setting. In these scenarios, improved coverage plays a larger role, whereas for email, the performance gap between COVA and beam search remains relatively modest. When comparing the two deterministic decoding methods, COVA and beam search, COVA generally achieves stronger performance. This may be attributed to its ability to adaptively select tokens based on the underlying distribution and to maintain a more diverse set of candidate paths, allowing promising sequences to recover even when early token likelihoods are low, while enabling more effective sequence-level ranking of candidates. 
+
+Finding: COVA outperforms baseline decoding methods (e.g., top-k and beam search) across different attacker knowledge settings, with the largest gains for DOB and name. 
+
+Impact of Model Scale. Following prior work on PII leakage [ 14 ,34 ], we examine how model size affects PII reconstruction perfor-mance. We restrict this analysis to the Qwen-2.5 family and evaluate the PII association task across three model sizes: 3B, 7B, and 14B. Figure 8 shows the reconstruction rate of email and DOB at the top-100 threshold under the moderate attacker knowledge of the user’s symptoms (e.g., summary). Overall, our results are consistent with prior work suggesting that larger models tend to exhibit higher reconstruction success, in-dicating greater PII memorization risk. In particular, the 14B model achieves nearly double the DOB reconstruction rate of the 7B model. 
+
+> 10
+
+Interestingly, the 3B model performs similarly to the 7B model for DOB reconstruction, but for email, the fine-tuned 3B model slightly underperforms its pre-trained counterpart, suggesting limited addi-tional memorization at this scale. 0 5 10 15 20 25     
+
+> 3B
+> 7B
+> 14B
+> -1.37
+> +10.39
+> +11.33
+> EMAIL (Top-100)
+> 01234
+> +0.99
+> +1.09
+> +2.79
+> DOB (Top-100)
+> Base
+> Fine-tuned
+
+Figure 8: Comparison of reconstruction performance (%) across different model sizes within Qwen family Impact of Model Family. We next evaluate whether our attack generalizes across model families. To this end, we fine-tune two ad-ditional models, Llama-3.1 8B and DeepSeek-LLM 7B, for the same five epochs as Qwen-2.5 to ensure a consistent comparison. These models are chosen to be broadly comparable in scale while differing in strengths and characteristics. Llama-3.1 is often regarded as par-ticularly strong in natural and stylistic English generation, whereas Qwen-2.5 is often preferred for more structured reasoning tasks such as math and coding. In contrast, DeepSeek-LLM is generally weaker than both on a broad range of tasks. 
+
+Table 7: Perplexity score on test set 
+
+Qwen-2.5 DeepSeek-LLM Llama-3.1 Perplexity 2.60 2.74 2.64 0 5 10 15 20     
+
+> Qwen2.5-7b
+> Llama-3.1-8b
+> Deepseek-llm-7b
+> +10.39
+> +6.00
+> +2.41
+> EMAIL (Top-100)
+> 0.0 0.5 1.0 1.5 2.0
+> +1.09
+> +1.51
+> +0.00
+> DOB (Top-100)
+> Base
+> Fine-tuned
+
+Figure 9: Comparison of reconstruction performance across different model families 
+
+To provide a basic measure of model fit on our dataset, Table 7 reports validation-set perplexity for each model, where lower per-plexity indicates better fit. Among the three, DeepSeek-LLM has the highest perplexity, while Qwen-2.5 achieves the lowest. Figure 9 reports the reconstruction rate of email and DOB for the PII associa-tion task on medical Q&A under the attacker knowledge of a user’s symptoms (e.g., summary). Llama-3.1 exhibits slightly higher recon-struction success than Qwen-2.5, while DeepSeek-LLM performs substantially worse. For DOB in particular, all three models appear to share a similar prior, but fine-tuning has little effect on memo-rization for DeepSeek-LLM compared to Qwen-2.5 and Llama-3.1. Taken together, these results suggest that model family matters in addition to parameter count. In our setting, the stronger model families, Qwen-2.5 and Llama-3.1, exhibit greater reconstruction success than DeepSeek-LLM despite having a similar scale. 
+
+Attacker with Base Model Access. Our primary threat model assumes that the adversary has access only to the fine-tuned model. However, reconstruction performance is also influenced by the model’s prior distribution. For example, predictions of PII such as dates of birth and names are largely governed by the model’s prior (e.g., 01/01/1970 or John Smith). We therefore consider a stronger adversary that leverages this prior. The adversary first generates a top-100 candidate set using COVA, and then re-ranks these candidates using the log-likelihood ratio (LLR) score (Equation 1), which captures the difference be-tween fine-tuned and pre-trained likelihoods. We evaluate this approach on the medical Q&A dataset under the summary set-ting, where the attacker knows a user’s medical symptoms. Table 8 reports reconstruction rate at Top-1, Top-10, and Top-50 after re-ranking 𝑁 = 100 candidates using LLR. 
+
+Table 8: Comparison of reconstruction performance (%) be-tween log-likelihood (log) and likelihood ratio (LLR) at top-1 and top-10 thresholds. 
+
+DOB Email Name Threshold Log LLR Log LLR Log LLR Top-1 0.00 0.05 1.46 0.99 0.00 0.09 
+
+Top-10 0.09 0.33 10.62 6.47 0.00 0.38 
+
+Top-50 0.76 1.04 16.24 12.94 0.52 0.94 
+
+The results show that LLR-based re-ranking improves recon-struction for DOB and name, increasing the fraction of correct candidates ranked at all thresholds, while performance degrades for email. This suggests that LLR is most effective when fine-tuning induces a meaningful shift from the base distribution, as it can high-light candidates whose likelihood increases due to exposure to fine-tuning data. In contrast, for PII such as email—where predictions are already strongly constrained by the prefix (e.g., name-email correlations)—the relative difference between fine-tuned and base model likelihoods is smaller, limiting the benefit of LLR. Prior work suggests that LLMs trained on web-scale corpora ex-hibit similar inductive biases and prior distributions across different models [ 28 , 57 , 58 ]. This suggests that an adversary may benefit from partial knowledge of the prior, even without explicit access to the exact base model. In practice, this can be approximated through simple heuristics that exploit common patterns in model outputs. For example, in our experiments across different model families, all models consistently favor values such as 01/01 or 12/12 for date of birth, indicating shared prior tendencies. 
+
+> 11
+
+These results highlight the importance of achieving strong can-didate coverage in the initial decoding stage. As methods like COVA already achieve meaningful reconstruction performance, prior-aware strategies can then be applied to further refine the candidate set, enabling the adversary to more effectively identify the true PII in SFT settings. 
+
+Finding: Knowledge of the base model’s prior helps attackers improve candidate ranking for certain PII types. The broad cov-erage of COVA is essential for generating a larger candidate list, which can be further refined using auxiliary information such as the model’s prior. 
+
+## 7 Discussion 
+
+Defense Strategies. Defenses against PII leakage can be applied either during training or at inference time. Among training-time defenses, data scrubbing is often considered the first line of defense for preventing leakage. However, prior work [ 34 ] has shown that scrubbing can come at the cost of degraded model utility, and that even after scrubbing, models may still leak PII at a non-trivial rate. In addition, the effectiveness of scrubbing methods such as named entity recognition (NER) depends strongly on the type of PII. For example, prior work [ 45 ] shows that certain structured PII types, such as email addresses, are easier to detect reliably, whereas other types with more variable formats are more difficult to identify. This suggests that data scrubbing may be insufficient for specialized datasets containing domain-specific PII beyond common identi-fiers such as names and email addresses, while more aggressive scrubbing may further degrade downstream performance. Another training-time defense is differentially private stochastic gradient descent (DP-SGD). However, prior work [ 34 ] also reports a substantial privacy-utility trade-off, making it difficult to apply in settings where strong task performance must be preserved. In contrast, inference-time defenses aim to reduce leakage with-out retraining the model. These include methods that encourage safer responses through self-reminders [ 53 ], as well as methods that detect and filter unsafe outputs using auxiliary classifiers [ 42 ]. Compared to training-time defenses, these approaches are easier to deploy post hoc, but they protect the model interface at generation time rather than limiting what the model has already memorized. Since our threat model assumes that a subsidiary fine-tunes an existing LLM on private downstream data, training-time defenses are the more natural and direct mitigation strategy in our setting. 
+
+## 8 Related Works 
+
+PII Leakage and Defenses. Beyond PII extraction attacks [ 14 , 16 ,29 , 34 ], a broader line of work studies how to measure and mit-igate PII leakage in LLMs [ 2, 7, 15 , 47 ]. Borkar et al. [ 7 ] analyze how adding or removing PII during training affects leakage across different training phases. Beyond memorization, Mireshghallah et al. examine how users disclose their PII in human-chatbot interac-tions [ 36 ]. On the defense side, while data scrubbing and differential privacy remain the dominant approaches, recent work has explored additional directions. Hughes et al. [ 27 ] propose editing PII-related circuits, while Shi et al. [ 44 ] introduce selective differential privacy (DP), applying DP to sensitive subsets of data. 
+
+Training Data Extraction. A large body of work studies training data extraction and memorization in LLMs [ 11 , 33 , 38 , 56 ]. Carlini et al. [ 11 ] demonstrate that LLMs can exhibit eidetic memorization of training samples, while Nasr et al. [ 38 ] show that alignment can be partially reversed to recover training data from production models. More recent work focuses on post-training settings: Barbero et al. [ 6 ] extract alignment data using chat template artifacts, and Li et al. [ 33 ] reconstruct instruction–response pairs from SFT models by exploiting differences between base and fine-tuned distributions. 
+
+Membership Inference. Membership inference attacks (MIAs) aim to determine whether a sample was used during training [ 5,9 , 23 , 48 , 54 ]. While classical approaches rely on shadow models, this assumption is often impractical for LLMs. Recent work instead performs inference directly on the target model. Fu et al. [19] pro-pose self-calibrated MIAs using the model to generate reference distributions, while Galli et al. [ 20 ] introduce a perturbation-based approach that compares model behavior on noisy neighbors with-out retraining. 
+
+Emerging Privacy Risks. Recent studies highlight privacy risks that arise beyond training data extraction. In particular, LLMs can enable indirect attribute inference, large-scale de-anonymization, and context-dependent leakage in deployed systems [ 37 ]. Lermen et al. [ 31 ] show that LLMs can extract identity signals from large cor-pora for deanonymization, while Annamalai et al. [ 3] demonstrate that even privacy-preserving systems can be attacked by injecting crafted inputs to recover sensitive user profiles. These works point to a broader class of privacy risks driven by inference, aggregation, and system-level interactions, rather than memorization alone. 
+
+## 9 Conclusion 
+
+In this paper, we study PII reconstruction from supervised fine-tuned (SFT) language models for the first time. We systematically evaluate how varying levels of attacker knowledge about a user and the fine-tuning dataset affect the ability to reconstruct PII associa-tions and infer identity. Our results show that even partial attacker knowledge can significantly improve reconstruction success, while the extent of leakage varies substantially across PII types. We fur-ther propose COVA, a novel deterministic decoding algorithm for prefix-based attacks, which outperforms baseline decoding strate-gies across a wide range of settings. Finally, evaluation across model scales and families shows that both model size and architecture influence the extent of PII leakage. 
+
+## Acknowledgments 
+
+This research was supported by NSF award CNS-2247484. The au-thors are grateful to Harsh Chaudhari, Anshuman Suri, and Geor-gios Syros for their insightful comments and constructive feedback, all of which were instrumental in improving both the technical rigor and the overall quality of this work. 
+
+## References   
+
+> [1] Ai4Privacy. 2024. Ai4Privacy Hugging Face Repository. https://huggingface.co/ ai4privacy. Accessed: 2026-04-28. [2] Atilla Akkus, Masoud Poorghaffar Aghdam, Mingjie Li, Junjie Chu, Michael Backes, Yuyang Zhang, and Sinem Sav. 2025. Generated data with fake privacy:
+> 12
+
+Hidden dangers of fine-tuning large language models on generated data. In 34th USENIX Security Symposium (USENIX Security 25) . 8075–8093. [3] Meenatchi Sundaram Muthu Selva Annamalai, Emiliano De Cristofaro, and Peter Kairouz. 2026. CLIOPATRA: Extracting Private Information from LLM Insights. 
+
+arXiv preprint arXiv:2603.09781 (2026). [4] Anthropic. 2024. The Claude 3 Model Family: Opus, Sonnet, Haiku. 
+
+Anthropic Model Card (2024). https://www-cdn.anthropic.com/ de8ba9b01c9ab7cbabf5c33b80b7bbc618857627/Model_Card_Claude_3.pdf [5] Teodora Baluta, Shiqi Shen, S Hitarth, Shruti Tople, and Prateek Saxena. 2022. Membership inference attacks and generalization: A causal perspective. In Pro-ceedings of the 2022 ACM SIGSAC Conference on Computer and Communications Security . 249–262. [6] Federico Barbero, Xiangming Gu, Christopher A. Choquette-Choo, Chawin Sitawarin, Matthew Jagielski, Itay Yona, Petar Veličković, Ilia Shumailov, and Jamie Hayes. 2025. Extracting alignment data in open models. arXiv:2510.18554 [cs.AI] https://arxiv.org/abs/2510.18554 [7] Jaydeep Borkar, Matthew Jagielski, Katherine Lee, Niloofar Mireshghallah, David A. Smith, and Christopher A. Choquette-Choo. 2025. Privacy Ripple Effects from Adding or Removing Personal Information in Language Model Training. In Findings of the Association for Computational Linguistics: ACL 2025 , Wanxi-ang Che, Joyce Nabende, Ekaterina Shutova, and Mohammad Taher Pilehvar (Eds.). Association for Computational Linguistics, Vienna, Austria, 18703–18726. doi:10.18653/v1/2025.findings-acl.959 [8] Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al . 2020. Language models are few-shot learners. Advances in neural information processing systems 33 (2020), 1877–1901. [9] Nicholas Carlini, Steve Chien, Milad Nasr, Shuang Song, Andreas Terzis, and Florian Tramèr. 2022. Membership Inference Attacks From First Principles. In 
+
+2022 IEEE Symposium on Security and Privacy (SP) . 1897–1914. doi:10.1109/ SP46214.2022.9833649 [10] Nicholas Carlini, Daphne Ippolito, Matthew Jagielski, Katherine Lee, Florian Tramer, and Chiyuan Zhang. 2022. Quantifying memorization across neural language models. In The Eleventh International Conference on Learning Represen-tations .[11] Nicholas Carlini, Florian Tramer, Eric Wallace, Matthew Jagielski, Ariel Herbert-Voss, Katherine Lee, Adam Roberts, Tom Brown, Dawn Song, Ulfar Erlingsson, et al . 2021. Extracting training data from large language models. In 30th USENIX security symposium (USENIX Security 21) . 2633–2650. [12] Ilias Chalkidis, Ion Androutsopoulos, and Nikolaos Aletras. 2019. Neural Legal Judgment Prediction in English. In Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics , Anna Korhonen, David Traum, and Lluís Màrquez (Eds.). Association for Computational Linguistics, Florence, Italy, 4317–4323. doi:10.18653/v1/P19-1424 [13] Lichang Chen, Shiyang Li, Jun Yan, Hai Wang, Kalpa Gunaratna, Vikas Yadav, Zheng Tang, Vijay Srinivasan, Tianyi Zhou, Heng Huang, et al . 2023. Alpagasus: Training a better alpaca with fewer data. arXiv preprint arXiv:2307.08701 (2023). [14] Xiaoyi Chen, Siyuan Tang, Rui Zhu, Shijun Yan, Lei Jin, Zihao Wang, Liya Su, Zhikun Zhang, XiaoFeng Wang, and Haixu Tang. 2024. The janus interface: How fine-tuning in large language models amplifies the privacy risks. In Proceedings of the 2024 on ACM SIGSAC Conference on Computer and Communications Security .1285–1299. [15] Shuai Cheng, Zhao Li, Shu Meng, Mengxia Ren, Haitao Xu, Shuai Hao, Chuan Yue, and Fan Zhang. 2025. Understanding PII Leakage in Large Language Models: A Systematic Survey. In Proceedings of the Thirty-Fourth International Joint Conference on Artificial Intelligence, IJCAI-25 , James Kwok (Ed.). Interna-tional Joint Conferences on Artificial Intelligence Organization, 10409–10417. doi:10.24963/ijcai.2025/1156 Survey Track. [16] Shuai Cheng, Shu Meng, Haitao Xu, Haoran Zhang, Shuai Hao, Chuan Yue, Wen-rui Ma, Meng Han, Fan Zhang, and Zhao Li. 2025. Effective {PII } Extraction from 
+
+{LLMs } through Augmented {Few-Shot } Learning. In 34th USENIX Security Symposium (USENIX Security 25) . 8155–8173. [17] Jiaxi Cui, Zongjian Li, Yang Yan, Bohua Chen, and Li Yuan. 2023. Chatlaw: Open-source legal large language model with integrated external knowledge bases. arXiv preprint arXiv:2306.16092 2 (2023). [18] Guanting Dong, Hongyi Yuan, Keming Lu, Chengpeng Li, Mingfeng Xue, Dayi-heng Liu, Wei Wang, Zheng Yuan, Chang Zhou, and Jingren Zhou. 2024. How Abilities in Large Language Models are Affected by Supervised Fine-tuning Data Composition. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , Lun-Wei Ku, Andre Martins, and Vivek Srikumar (Eds.). Association for Computational Linguistics, Bangkok, Thailand, 177–198. doi:10.18653/v1/2024.acl-long.12 [19] Wenjie Fu, Huandong Wang, Chen Gao, Guanghua Liu, Yong Li, and Tao Jiang. 2024. Membership Inference Attacks against Fine-tuned Large Language Models via Self-prompt Calibration. In The Thirty-eighth Annual Conference on Neural Information Processing Systems . https://openreview.net/forum?id=PAWQvrForJ [20] Filippo Galli, Luca Melis, and Tommaso Cucinotta. 2024. Noisy Neighbors: Efficient membership inference attacks against LLMs. In Proceedings of the Fifth Workshop on Privacy in Natural Language Processing , Ivan Habernal, Sepideh Ghanavati, Abhilasha Ravichander, Vijayanta Jain, Patricia Thaine, Timour Igamberdiev, Niloofar Mireshghallah, and Oluwaseyi Feyisetan (Eds.). Association for Computational Linguistics, Bangkok, Thailand, 1–6. https: //aclanthology.org/2024.privatenlp-1.1/ [21] Gigasheet. 2026. Free List of Law Practice Businesses (CSV). https://www. gigasheet.com/sample-data/free-list-of-law-practice-businessescsv. Accessed: 2026-04-29. [22] Eric Goldman. 2020. An introduction to the california consumer privacy act (ccpa). Santa Clara Univ. Legal Studies Research Paper (2020). [23] Jamie Hayes, Ilia Shumailov, Christopher A. Choquette-Choo, Matthew Jagielski, Georgios Kaissis, Milad Nasr, Meenatchi Sundaram Muthu Selva Annamalai, Niloofar Mireshghallah, Igor Shilov, Matthieu Meeus, Yves-Alexandre de Mon-tjoye, Katherine Lee, Franziska Boenisch, Adam Dziedzic, and A. Feder Cooper. 2026. Exploring the limits of strong membership inference attacks on large language models. In The Thirty-ninth Annual Conference on Neural Information Processing Systems . https://openreview.net/forum?id=x0i7wvRLHK [24] Health Resources and Services Administration. 2026. HRSA Data Warehouse: Health Center Service Delivery Site Data. https://data.hrsa.gov/data/download. Accessed: 2026-04-29. [25] Edward J Hu, yelong shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. 2022. LoRA: Low-Rank Adaptation of Large Language Models. In International Conference on Learning Representations .https://openreview.net/forum?id=nZeVKeeFYf9 [26] Zhiqiang Hu, Lei Wang, Yihuai Lan, Wanyu Xu, Ee-Peng Lim, Lidong Bing, Xing Xu, Soujanya Poria, and Roy Lee. 2023. Llm-adapters: An adapter family for parameter-efficient fine-tuning of large language models. In Proceedings of the 2023 conference on empirical methods in natural language processing . 5254–5276. [27] Anthony Hughes, Vasisht Duddu, N Asokan, Nikolaos Aletras, and Ning Ma. 2026. PATCH: Mitigating PII Leakage in Language Models with Privacy-Aware Targeted Circuit PatcHing. In Findings of the Association for Computational Linguistics: EACL 2026 . 5139–5153. [28] Hyejun Jeong, Shiqing Ma, and Amir Houmansadr. 2026. Bias Similarity Mea-surement: A Black-Box Audit of Fairness Across LLMs. In The Fourteenth Inter-national Conference on Learning Representations . https://openreview.net/forum? id=EveruzAsGI [29] Seongho Keum, Dongwon Shin, Leo Marchyok, Sanghyun Hong, and Sooel Son. 2025. Private Investigator: Extracting Personally Identifiable Information from Large Language Models Using Optimized Prompts. In 34th USENIX Security Symposium (USENIX Security 25) . 8175–8194. [30] Bryan Klimt and Yiming Yang. 2004. The enron corpus: A new dataset for email classification research. In European conference on machine learning . Springer, 217–226. [31] Simon Lermen, Daniel Paleka, Joshua Swanson, Michael Aerni, Nicholas Carlini, and Florian Tramèr. 2026. Large-scale online deanonymization with LLMs. arXiv preprint arXiv:2602.16800 (2026). [32] Jonathan Li, Rohan Bhambhoria, and Xiaodan Zhu. 2022. Parameter-efficient legal domain adaptation. In Proceedings of the Natural Legal Language Processing Workshop 2022 . 119–129. [33] Zongjie Li, Daoyuan Wu, Shuai Wang, and Zhendong Su. 2025. Differentiation-based extraction of proprietary data from fine-tuned llms. In Proceedings of the 2025 ACM SIGSAC Conference on Computer and Communications Security .3071–3085. [34] Nils Lukas, Ahmed Salem, Robert Sim, Shruti Tople, Lukas Wutschitz, and San-tiago Zanella-Béguelin. 2023. Analyzing leakage of personally identifiable in-formation in language models. In 2023 IEEE Symposium on Security and Privacy (SP) . IEEE, 346–363. [35] Mexwell. 2024. US Hospitals Dataset. https://www.kaggle.com/datasets/mexwell/ us-hospitals-dataset. Accessed: 2026-04-29. [36] Niloofar Mireshghallah, Maria Antoniak, Yash More, Yejin Choi, and Golnoosh Farnadi. 2024. Trust No Bot: Discovering Personal Disclosures in Human-LLM Conversations in the Wild. In First Conference on Language Modeling . https: //openreview.net/forum?id=tIpWtMYkzU [37] Niloofar Mireshghallah and Tianshi Li. 2025. Position: Privacy Is Not Just Mem-orization! arXiv preprint arXiv:2510.01645 (2025). [38] Milad Nasr, Javier Rando, Nicholas Carlini, Jonathan Hayase, Matthew Jagielski, A. Feder Cooper, Daphne Ippolito, Christopher A. Choquette-Choo, Florian Tramèr, and Katherine Lee. 2025. Scalable Extraction of Training Data from Aligned, Production Language Models. In The Thirteenth International Conference on Learning Representations . https://openreview.net/forum?id=vjel3nWP2a [39] Vincent Nguyen, Sarvnaz Karimi, Maciej Rybinski, and Zhenchang Xing. 2023. MedRedQA for medical consumer question answering: Dataset, tasks, and neural baselines. In Proceedings of the 13th International Joint Conference on Natural Language Processing and the 3rd Conference of the Asia-Pacific Chapter of the Association for Computational Linguistics (Volume 1: Long Papers) . 629–648. [40] Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al .2022. Training language models to follow instructions with human feedback. In 
+
+> 13
+
+Advances in Neural Information Processing Systems , Vol. 35. 27730–27744. [41] Parelo Software. 2026. United States Cities Database. https://simplemaps.com/ data/us-cities. Accessed: 2026-04-29. [42] Renjie Pi, Tianyang Han, Jianshu Zhang, Yueqi Xie, Rui Pan, Qing Lian, Hanze Dong, Jipeng Zhang, and Tong Zhang. 2024. MLLM-Protector: Ensuring MLLM’s Safety without Hurting Performance. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing , Yaser Al-Onaizan, Mohit Bansal, and Yun-Nung Chen (Eds.). Association for Computational Linguistics, Miami, Florida, USA, 16012–16027. doi:10.18653/v1/2024.emnlp-main.895 [43] Protection Regulation. 2016. Regulation (EU) 2016/679 of the European Parlia-ment and of the Council. Regulation (eu) 679, 2016 (2016), 10–3. [44] Weiyan Shi, Aiqi Cui, Evan Li, Ruoxi Jia, and Zhou Yu. 2022. Selective differential privacy for language modeling. In Proceedings of the 2022 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies . 2848–2859. [45] Devansh Singh and Sundaraparipurnan Narayanan. 2025. Unmasking the reality of pii masking models: Performance gaps and the call for accountability. arXiv preprint arXiv:2504.12308 (2025). [46] Karan Singhal, Shekoofeh Azizi, Tao Tu, S Sara Mahdavi, Jason Wei, Hyung Won Chung, Nathan Scales, Ajay Tanwani, Heather Cole-Lewis, Stephen Pfohl, et al .2023. Large language models encode clinical knowledge. Nature 620, 7972 (2023), 172–180. [47] Marton Szep, Jorge Marin Ruiz, Georgios Kaissis, Paulina Seidl, Rüdiger von Eisenhart-Rothe, Florian Hinterwimmer, and Daniel Rueckert. 2026. Unintended Memorization of Sensitive Information in Fine-Tuned Language Models. In 
+
+Proceedings of the 19th Conference of the European Chapter of the Association for Computational Linguistics (Volume 1: Long Papers) , Vera Demberg, Kentaro Inui, and Lluís Marquez (Eds.). Association for Computational Linguistics, Rabat, Morocco, 6461–6480. doi:10.18653/v1/2026.eacl-long.304 [48] Xinyu Tang, Saeed Mahloujifar, Liwei Song, Virat Shejwalkar, Milad Nasr, Amir Houmansadr, and Prateek Mittal. 2022. Mitigating membership inference attacks by {Self-Distillation } through a novel ensemble architecture. In 31st USENIX security symposium (USENIX security 22) . 1433–1450. [49] Gemini Team, Rohan Anil, Sebastian Borgeaud, Jean-Baptiste Alayrac, Jiahui Yu, Radu Soricut, Johan Schalkwyk, Andrew M Dai, Anja Hauth, Katie Millican, et al . 2023. Gemini: a family of highly capable multimodal models. arXiv preprint arXiv:2312.11805 (2023). [50] Yizhong Wang, Yeganeh Kordi, Swaroop Mishra, Alisa Liu, Noah A Smith, Daniel Khashabi, and Hannaneh Hajishirzi. 2023. Self-instruct: Aligning language models with self-generated instructions. In Proceedings of the 61st annual meeting of the association for computational linguistics (volume 1: long papers) . 13484– 13508. [51] Jason Wei, Maarten Bosma, Vincent Zhao, Kelvin Guu, Adams Wei Yu, Brian Lester, Nan Du, Andrew M. Dai, and Quoc V Le. 2022. Finetuned Language Models are Zero-Shot Learners. In International Conference on Learning Representations .https://openreview.net/forum?id=gEZrGCozdqR [52] Yuxiang Wei, Zhe Wang, Jiawei Liu, Yifeng Ding, and Lingming Zhang. 2023. Magicoder: Empowering code generation with oss-instruct. arXiv preprint arXiv:2312.02120 (2023). [53] Yueqi Xie, Jingwei Yi, Jiawei Shao, Justin Curl, Lingjuan Lyu, Qifeng Chen, Xing Xie, and Fangzhao Wu. 2023. Defending chatgpt against jailbreak attack via self-reminders. Nature Machine Intelligence 5, 12 (2023), 1486–1496. [54] Xiaoyong Yuan and Lan Zhang. 2022. Membership inference attacks and defenses in neural network pruning. In 31st USENIX Security Symposium (USENIX Security 22) . 4561–4578. [55] Xiang Yue, Xingwei Qu, Ge Zhang, Yao Fu, Wenhao Huang, Huan Sun, Yu Su, and Wenhu Chen. 2024. MAmmoTH: Building Math Generalist Models through Hybrid Instruction Tuning. In The Twelfth International Conference on Learning Representations . https://openreview.net/forum?id=yLClGs770I [56] Shenglai Zeng, Yaxin Li, Jie Ren, Yiding Liu, Han Xu, Pengfei He, Yue Xing, Shuaiqiang Wang, Jiliang Tang, and Dawei Yin. 2023. Exploring memorization in fine-tuned language models. arXiv preprint arXiv:2310.06714 (2023). [57] Liyi Zhang, Veniamin Veselovsky, R Thomas McCoy, and Thomas L Griffiths. 2025. Identifying and Mitigating the Influence of the Prior Distribution in Large Language Models. arXiv preprint arXiv:2504.12585 (2025). [58] Jian-Qiao Zhu and Thomas L Griffiths. 2024. Eliciting the priors of large language models using iterated in-context learning. arXiv preprint arXiv:2406.01860 (2024). 
+
+## A Ethical Considerations 
+
+Our research ensures compliance with ethical principles, including beneficence, respect for persons, justice, and adherence to legal and public interest. This study highlights potential privacy risks arising from fine-tuned LLMs. By identifying these vulnerabilities, we aim to contribute to the safe development and deployment 
+
+Table 9: Example prefixes used for PII reconstruction attacks. 
+
+Target Example Prefix DOB Randy Tate is experiencing gastrointestinal symptoms including constipation, diarrhea, bloating, blood in stool, and perceived inflammation in the colon. The date of birth of Randy Tate is Name You are fine-tuned with the medical Q&A dataset. Provide the real name of the patient corresponding to the medical symptom. Examples: The patient is experiencing stomachache and mild fever. Symp-toms have worsened since last night. The name of the patient is Jane Doe The patient is concerned about the take of antibiotics medication. They are wondering if he should continue taking them after his symptoms are relieved. The name of the patient is John Smith Now, do this: Randy Tate is experiencing gastrointestinal symptoms including constipation, diarrhea, bloating, blood in stool, and perceived inflammation in the colon. The name of the patient is 
+
+of LLM systems. The custom datasets constructed and used for experiments will be available via artifacts to support continued research in LLM privacy. To ensure no real person is impacted by this study, we utilized exclusively synthetic personas and synthetic PII. Our analysis of PII leakage can be leveraged for auditing and improving the security of LLM systems. 
+
+## B Prefix Examples 
+
+We provide example prefixes used in our attacks. Table 9 illustrates a scenario in which the attacker has access to a patient’s symptoms (e.g., summary) and attempts to (1) reconstruct the date of birth (DOB) given the patient’s name, and (2) infer the identity directly from the context. For the identity inference task, we additionally include two in-context examples along with an instruction preced-ing the context to guide the model toward generating a realistic patient name. 
+
+## C Dataset C.1 Example of Dataset Annotation 
+
+Figure 10 shows an example of how an original Q&A sample is an-notated. The LLM identifies and extracts user-specific information, including demographics, habits, medical history, and mentions of family and relatives. 
+
+## C.2 Synthetic PII Generation Methods 
+
+Table 10 details methods to generate synthetic PII using the Faker library. For email generation, we avoid relying too heavily on overly simplistic templates. Prior work [ 14 ] shows that memorization rates can be disproportionately affected when email addresses are constructed in highly predictable forms using only the first and last name, such as "john.smith@example.com". At the same time, such formats are realistic and do occur in practice. Therefore, rather than excluding them entirely, we design a custom email generation function that takes a user’s full name and probabilistically produces a range of plausible variations, assigning low probability to the 
+
+> 14 User Question
+
+Hello i am a male 23 years old, 175 cm 
+
+height and 49 kilograms, I quit smoking 
+
+a year ago, but I still drink occasionally. 
+
+No other prior medical issues or 
+
+conditions to talk about. So im getting a 
+
+colonoscopy in 5 days but I still need 
+
+some opinions. Since last night I have 
+
+cramps that feel like I'm passing a 
+
+kidney stone, a lot of mucus in my stool. 
+
+My GI doctor told me it might be IBS, 
+
+crohn's or an infection, my symptoms 
+
+get worse if I'm stressed. Thank you in 
+
+advance! 
+
+> Extracted Data
+
+Age: 23 years old 
+
+Height: 175 cm 
+
+Weight: 49 kg 
+
+Gender: Male 
+
+Race: N/A 
+
+Weed: N/A 
+
+Tobacco: No 
+
+Alcohol: Sometimes 
+
+Drug use: N/A 
+
+Allergies: N/A 
+
+Current Medications: N/A 
+
+Medical History: N/A 
+
+Family Medical History: N/A 
+
+Family Relations: N/A Figure 10: Example of Data Annotation 
+
+simplest first-name–last-name concatenations. Generated variants are augmented by multiple digits and characters. 
+
+Table 10: Mapping of PII Types to Generation Rules 
+
+PII Type Generation Rules 
+
+Common to Medical and Legal Q&A 
+
+Name Gender- and race-appropriate names. DOB Consistent with the user’s age. Phone number Format xxx-xxx-xxxx (U.S. number). Email Custom function generating plausible email addresses from a full name. City & State U.S. cities with population ≥ 20,000; consistent with any mentioned place of residence in the dataset. Zipcode Valid zipcodes for the given city. Street address Faker-generated. Doctor/Lawyer name Faker name distinct from the user. 
+
+Medical-specific 
+
+Ins. provider Selected from Aetna, Blue Cross Blue Shield, Cigna, United-Healthcare, and Kaiser Permanente. Ins. type Selected from HMO, POS, PPO, and EPO. Policy number 10-digit number. 
+
+Legal-specific 
+
+SSN Format xxx-xx-xxxx. Court case number Format yy-cc-xxxx, where yy is a year from 23–26 and cc denotes the case type (CV, CR, FA, TL). 
+
+## C.3 Example of Multi-Turn Training Sample 
+
+Listing 1 shows an example of a multi-turn training sample from our custom dataset. In this example, the first-turn exchange be-tween a user and assistant is directly extracted from the MedRedQA dataset [ 39 ], with changes applied to ensure consistency for user attributes and background information. In the subsequent turns, the user interacts with the assistant to draft an email to their doc-tor regarding their symptoms and searches hospitals near their location. 
+
+Listing 1: Example Training Sample 
+
+<|im_start|>user I am a 25-year-old female. I had a baby 2 years ago via emergency c section. The whole pregnancy, I only ever felt my baby on my left side. My bump grew out to the left. He was 5 weeks premature and breach. I’m 5’4", 110lbs, smoker, non drinker, I have irregular and very heavy periods. Every time I have had an exam with a speculum, the doctors have said something like "this doesnt look right" (which is obviously horrible). How common is this? Can you give me any general information about this? <|im_end|> <|im_start|>assistant 
+
+It’s not common at all, you have a rare congenital malformation. During the fetal period, the uterus begins its growing process as two separated tubes which later on unite to form the normal uterus. In the case that these two separated tubes do not connect (your case), each tube forms separated structures, that’s why you have 2 cervixes. Women with this condition are able to have babies but they do have an increased risk of having premature babies and miscarriages. Treatment is rarely needed though, but I suggest you discuss this with your gynecologist. <|im_end|> <|im_start|>user Can you help me draft an email to Doctor Heather Good about the irregular periods and uterine malformation we talked about, and please include my date of birth, phone number, and email address, introducing me as their patient. <|im_end|> <|im_start|>assistant Dear Dr. Good, This is Laura Mendoza, one of your patients. I am writing to discuss my concerns about my irregular and very heavy periods, as well as the uterine malformation we previously discussed. As you may recall, I have a rare congenital condition where my uterus developed as two separated tubes that did not connect properly during fetal development. This has resulted in me having two cervixes and an increased risk of premature births and miscarriages. I would appreciate your advice on how to manage my symptoms and whether any further testing or treatment is needed. I am 25 years old and had a baby via emergency c-section 2 years ago. My pregnancy was complicated by the fact that my baby was positioned on my left side and my bump grew out to the left. He was born 5 weeks premature and breach. Date of Birth: 08/06/2000 Phone Number: 625-731-9768 Email Address: laura_fblr@hotmail.com Please let me know if you think I should be seen sooner or if any tests are needed. I would appreciate your guidance on this matter. Sincerely, Laura Mendoza<|im_end|> <|im_start|>user Context (JSON): [list of RAG content] Question: I need help finding hospitals or clinics near Minneapolis, MN that can assist me with my medical situation.<|im_end|> <|im_start|>assistant To find hospitals or clinics near Minneapolis, MN that can assist with your medical situation, here are a few options: 1. **Children’s Hospitals & Clinics OF MN**: Located at 2525 Chicago Avenue South, Minneapolis, MN 55404, with emergency services available. 2. **Abbott Northwestern Hospital**: At 800 East 28TH Street, Minneapolis, MN 55407, this hospital has emergency services and is rated 4.0. 3. **Hennepin County Medical Center 1**: Found at 701 Park Avenue, Minneapolis, MN 55415, this medical center has emergency services and is rated 2.0. For more information about services, hours, or to confirm availability, it’s best to call them directly or visit their websites.<|im_end|> 
+
+## C.4 Dataset Statistics 
+
+After dataset processing, persona has an average of 2.69 samples in the medical Q&A and 2.52 samples in the legal Q&A datasets. Figure 11 shows the distribution of duplicate counts at both the persona level (number of occurrences per user) and the sample level (number of occurrences per PII value across all samples) for each PII type. 
+
+## D Training Setup 
+
+Table 11 shows the hyperparameters used for finetuning Qwen-2.5-7b model. With this setup, the model achieves lowest validation loss at epoch 5. 
+
+Table 11: Training hyperparameters for SFT. Hyperparameter Value 
+
+Optimizer AdamW Learning rate 5 × 10 −6
+
+LR scheduler Cosine Train batch size (per device) 2Gradient accumulation steps 4Sequence length 2048 Precision BF16 
+
+15 0 1 2 3 4 5 6 7 8 9                
+
+> Duplicate Count
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> 700
+> 800
+> Count
+> EMAIL
+> 01234568
+> Duplicate Count
+> DOB
+> 0123456789
+> Duplicate Count
+> NAME
+> Persona Level
+> Sample Level
+
+(a) Medical Q&A 0 1 2 3 4 5 6 7 8                
+
+> Duplicate Count
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> 700
+> 800
+> Count
+> EMAIL
+> 012345678
+> Duplicate Count
+> DOB
+> 012345678
+> Duplicate Count
+> NAME
+> Persona Level
+> Sample Level
+
+(b) Legal Q&A 
+
+Figure 11: Duplicate Count Per PII 
+
+## E Impact of Duplication 
+
+Prior work has shown that duplication of PII or training data is correlated with memorization in LLMs [ 10 , 34 ]. Following this line of work, we examine how reconstruction success varies with dupli-cation count. Specifically, we group instances by their duplication frequency in the training dataset and measure reconstruction suc-cess in both PII association and identity inference attacks. Figure 12 reports results under a moderate attacker setting in medical Q&A, where the adversary has access to user symptoms. 1 2 3 4 5 6 7+             
+
+> Duplicate Count
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> DOB
+> 1234567+
+> Duplicate Count
+> EMAIL
+> 1234567+
+> Duplicate Count
+> NAME
+> Observed rate
+> Best-fit curve
+> Top-100 Reconstruction Rate (%)
+
+(a) Medical Q&A 1 2 3 4 5 6 7+             
+
+> Duplicate Count
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> DOB
+> 1234567+
+> Duplicate Count
+> EMAIL
+> 1234567+
+> Duplicate Count
+> NAME
+> Observed rate
+> Best-fit curve
+> Top-100 Reconstruction Rate (%)
+
+(b) Legal Q&A 
+
+Figure 12: Reconstruction rate (%) per duplication 
+
+Our findings indicate that the relationship between duplication and reconstruction is not uniformly strong. We do not observe a consistent positive correlation across PII types. While DOB exhibits a modest increasing trend with duplication count, email and name 0 5 10 15 20      
+
+> Redacted
+> Synthetic
+> In-distribution
+> Summary
+> Keywords
+> Demographics
+> Name
+> +11.81
+> +10.80
+> +11.20
+> +10.61
+> +10.95
+> +10.69
+> +7.24
+> EMAIL (Top-100)
+> 012345
+> +4.36
+> +1.28
+> +0.66
+> +0.98
+> +1.17
+> +4.25
+> +0.47
+> DOB (Top-100)
+> Base
+> Fine-tuned
+
+(a) Medical Q&A 0 5 10 15 20     
+
+> Redacted
+> Synthetic
+> In-distribution
+> Summary
+> Keywords
+> Demographics
+> Name
+> +7.50
+> +9.02
+> +11.01
+> +7.19
+> +7.69
+> +11.01
+> +7.56
+> EMAIL (Top-100)
+> 0.0 0.5 1.0 1.5 2.0
+> +1.62
+> +0.73
+> +1.15
+> +1.44
+> +1.45
+> +0.00
+> +0.23
+> DOB (Top-100)
+> Base
+> Fine-tuned
+
+(b) Legal Q&A 
+
+Figure 13: Reconstruction rate (%) of email and DOB across various attacker knowledge settings for the finetuned model compared to the (base) instruct model at top-100 threshold. 
+
+show little to no clear correlation. This suggests that duplication alone is not a reliable predictor of reconstruction success. There are several important differences between our setup and prior work that help explain this discrepancy. First, prior studies that report a strong linear relationship typically consider duplica-tion counts up to 100 , whereas in our dataset duplication counts remain below 10 . Second, prior work aggregates all PII types when analyzing duplication effects, whereas we examine each PII type separately. Third, prior evaluations are conducted in untargeted settings, where recovering any memorized string suffices, whereas our experiments focus on targeted reconstruction, where a correct association between context and PII is required. Taken together, our results suggest that the impact of duplica-tion on memorization is more nuanced than previously indicated. In realistic SFT regimes with limited duplication, reconstruction depends not only on frequency but also on the structure of the PII and its relationship to the conditioning context. 
+
+## F Attacks on Instruction-Following Models 
+
+We perform the same attacks on instruction-following models to examine the effect of prior alignment on reconstruction success. 
+
+Attack 1: PII Association. We evaluate the PII association task, where the adversary reconstructs a user’s email address and date of birth (DOB) given their identity. Table 12 reports reconstruction results for both PII types across the medical and legal Q&A at three thresholds, top-1, top-10, and top-100, under the attacker knowledge settings in Table 1. Figure 13 visualizes the top-100 results. 
+
+16 Table 12: Reconstruction rate (%) of email and DOB across various attacker knowledge settings. Δ represents the increase in reconstruction success after fine-tuning (FT − Base). 
+
+Redacted Synthetic In-distribution Summary Keywords Demographics Name Dataset PII Thres. Base FT Δ Base FT Δ Base FT Δ Base FT Δ Base FT Δ Base FT Δ Base FT Δ
+
+Medical Email Top-1 0.00 2.33 2.33 0.09 1.87 1.78 0.00 1.26 1.26 0.00 0.93 0.93 0.00 1.41 1.41 0.00 1.77 1.77 0.08 0.84 0.76 
+
+Top-10 1.06 10.19 9.13 0.76 9.14 8.38 0.51 8.92 8.42 0.31 7.54 7.23 0.36 7.87 7.50 2.10 10.52 8.42 2.19 7.42 5.22 
+
+Top-100 5.67 17.48 11.81 5.00 15.80 10.80 5.64 16.84 11.20 3.95 14.55 10.61 3.45 14.40 10.95 7.74 18.43 10.69 3.79 11.03 7.24 
+
+DOB Top-1 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 Top-10 0.00 0.69 0.69 0.00 0.28 0.28 0.00 0.09 0.09 0.00 0.21 0.21 0.00 0.09 0.09 0.00 0.57 0.57 0.00 0.09 0.09 
+
+Top-100 0.13 4.48 4.36 0.19 1.47 1.28 0.09 0.75 0.66 0.28 1.26 0.98 0.00 1.17 1.17 0.09 4.34 4.25 0.09 0.57 0.47 
+
+Legal Email Top-1 0.05 1.54 1.49 0.00 1.68 1.68 0.00 2.09 2.09 0.03 1.04 1.01 0.00 0.97 0.97 0.00 1.69 1.69 0.08 1.53 1.45 
+
+Top-10 2.35 7.04 4.69 2.24 8.64 6.40 1.53 9.00 7.48 0.66 5.22 4.56 0.54 5.77 5.23 1.29 8.68 7.40 0.88 6.83 5.95 
+
+Top-100 5.44 12.94 7.50 5.67 14.69 9.02 5.79 16.80 11.01 3.12 10.31 7.19 2.51 10.20 7.69 4.26 15.27 11.01 2.97 10.53 7.56 
+
+DOB Top-1 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 Top-10 0.09 0.09 0.09 0.09 0.15 0.06 0.00 0.15 0.15 0.00 0.14 0.14 0.00 0.09 0.09 0.00 0.00 0.00 0.00 0.08 0.08 
+
+Top-100 0.29 1.91 1.62 0.45 1.18 0.73 0.46 1.61 1.15 0.17 1.61 1.44 0.04 1.49 1.45 0.00 0.00 0.00 0.23 0.46 0.23 
+
+Table 13: Identity reconstruction performance across at-tacker knowledge settings. Δ represents the increase in re-construction success after fine-tuning (FT − Base). 
+
+Redacted Summary Keywords Demographics Thres. Base FT Δ Base FT Δ Base FT Δ Base FT Δ
+
+Medical 
+
+Top-1 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 Top-10 0.09 0.09 0.00 0.02 0.00 -0.02 0.00 0.02 0.02 0.17 0.08 -0.08 
+
+Top-100 0.25 0.32 0.07 0.42 1.24 0.82 0.24 1.26 1.02 0.83 1.33 0.50 
+
+Legal 
+
+Top-1 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.14 0.14 
+
+Top-10 0.00 0.09 0.09 0.02 0.11 0.10 0.08 0.27 -0.19 0.36 0.36 0.00 
+
+Top-100 0.43 0.40 -0.03 0.19 0.84 0.65 0.70 1.77 1.07 0.65 1.59 0.94 0.0 0.5 1.0 1.5     
+
+> NAME (Top-100) for Medical Q&A
+> Redacted
+> Summary
+> Keywords
+> Demographics
+> +0.07
+> +0.82
+> +1.02
+> +0.50
+> 0.0 0.5 1.0 1.5 2.0
+> NAME (Top-100) for Legal Q&A
+> -0.03
+> +0.65
+> +1.07
+> +0.94
+> Base
+> Fine-tuned
+
+Figure 14: Reconstruction rate (%) of the user’s name across various attacker knowledge settings for the finetuned model compared to the pre-trained model. 
+
+The results follow a similar pattern to those for models fine-tuned from pre-trained models. Partial attacker knowledge substantially improves DOB reconstruction, while email reconstruction is already moderately high under minimal knowledge. Consistent with earlier findings (Section 6.2), the model captures the correlation between age and birth year in medical Q&A but not in legal Q&A. 
+
+Attack 2: Identity Inference. We further evaluate the identity inference task, where the adversary reconstructs a user’s identity from partial information. Table 13 reports reconstruction results for names across both datasets. Figure 14 visualizes the top-100 results. The results again follow similar trends. Additional context does not consistently improve reconstruction. Even with access to redacted training data, the fine-tuned model remains comparable to the base (instruction-following) model. In contrast, larger gains occur when reconstructing identity from keyword-level descriptions. We also observe differences in baseline reconstruction rates be-tween instruction-following and pre-trained models, suggesting alignment effects. Overall, these results show that our findings from Section 6.2 extend to instruction-following models.

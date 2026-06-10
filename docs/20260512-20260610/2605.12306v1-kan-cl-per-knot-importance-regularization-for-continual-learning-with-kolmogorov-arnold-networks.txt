@@ -1,0 +1,624 @@
+Title: KAN-CL: Per-Knot Importance Regularization for Continual Learning with Kolmogorov-Arnold Networks
+
+URL Source: https://arxiv.org/pdf/2605.12306v1
+
+Published Time: Wed, 13 May 2026 01:48:57 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# KAN-CL: Per-Knot Importance Regularization for Continual Learning with Kolmogorov–Arnold Networks 
+
+Minjong Cheon Sejong University Department of Computer Science and Engineering Assistant Professor 
+
+jmj2316@sejong.ac.kr 
+
+Abstract 
+
+Catastrophic forgetting remains the central obstacle in continual learning (CL): parameters shared across tasks interfere with one another, and existing regularization methods such as EWC and SI apply uniform penalties without awareness of which input region a parameter serves. We propose KAN-CL , a continual learning frame-work that exploits the compact-support spline parameterization of Kolmogorov–Arnold Networks (KANs) to perform importance-weighted anchoring at per-knot granularity. Deployed as a classification head on a convolu-tional backbone—with standard EWC regularization on the backbone ( bbEWC )— KAN-CL achieves forgetting reductions of 88% and 93% over a head-only KAN baseline on Split-CIFAR-10/5T and Split-CIFAR-100/10T respectively, while matching or exceeding the accuracy of all baselines on both benchmarks. We further provide a Neural Tangent Kernel (NTK) analysis showing that KAN’s spline locality induces a structural rank deficit in the cross-task NTK, yielding a forgetting bound that holds even in the feature-learning regime. These results establish that combining an architecture with natural parameter locality ( KAN head) with a complementary backbone regularizer ( bbEWC ) yields a compositional and principled approach to catastrophic forgetting. 
+
+Keywords: Catastrophic Forgetting; Continual Learning; Kolmogorov–Arnold Networks; Neural Tangent Kernel; Spline Regularization 
+
+# 1 Introduction 
+
+A long-standing problem in deep learning is the identification of neural network architectures that offer a more favorable balance of expressive power, efficiency, and inductive bias. This question becomes especially important in continual learning (CL), where the goal is not merely to fit a single task but to learn a sequence of tasks while retaining previously acquired knowledge. Catastrophic forgetting [2, 3] remains the principal obstacle: after training on task t2, a model often loses much of what it learned on task t1. The two dominant strategies in the CL literature are (i) regularization —penalizing the movement of important parameters through methods such as Elastic Weight Consolidation (EWC) [4] and Synaptic Intelligence (SI) [6]— and (ii) rehearsal —revisiting stored examples from previous tasks [8, 9]. Although highly influential, both families treat all parameters symmetrically: they do not model which part of the input space a parameter is responsible for. Recently, Kolmogorov–Arnold Networks (KANs) [17] have emerged as a compelling alternative architecture. Instead of placing fixed activation functions on nodes, KANs place learnable univariate B-spline functions on edges. Each spline coefficient cijk is tied to a compact input sub-range via the support of the corresponding basis function 
+
+Bk. This gives KAN a structurally local parameterization: a coefficient is only activated when its input dimension falls in the corresponding interval, and remains structurally dormant otherwise. We argue that this inductive bias is exactly what is needed for continual learning—task-specific parameters are spatially separated by construction, rather than entangled across the input range. 
+
+KAN head + CNN backbone. Modern CL benchmarks require feature representations that KANs alone cannot match when used as full backbones. We therefore adopt a hybrid design: a convolutional backbone extracts rich visual features, and a KAN classification head maps them to task outputs. Combining KAN layers with CNN feature extractors has been shown to be effective for visual recognition tasks [30, 28]; here we bring this hybrid design into the continual learning setting and show that it also confers structural benefits for catastrophic forgetting. This 1
+
+> arXiv:2605.12306v1 [cs.LG] 12 May 2026
+
+design localizes the locality argument to the head, where task-specific class discrimination resides, while delegating feature learning to the backbone. The backbone is regularized using standard EWC (which we call bbEWC , for 
+
+backbone EWC ). Our per-knot method, KAN-CL , operates on the KAN head. Together, KAN-CL +bbEWC forms a compositional and modular CL system that achieves a strong Pareto improvement over all baselines. 
+
+Contributions. 
+
+1. Per-knot CL theory. We derive a per-knot Fisher decomposition (Lemma 1) and show that under disjoint per-dimension input supports, the cross-task Fisher (and NTK) is structurally zero on task-local knots (Theorems 2, 3). 2. NTK forgetting bound, feature-regime safe. We give a forgetting bound (Theorem 4) that survives feature learning because B-splines are θ-independent (Theorem 6). 3. Algorithm: KAN-CL + bbEWC . A modular continual learner pairing per-knot importance-weighted L2 anchoring on the KAN head with standard EWC on the convolutional backbone, plus an anchor annealing 
+
+extension for class-IL with replay. 4. State-of-the-art forgetting reduction. On CIFAR-10/5T and CIFAR-100/10T, KAN-CL +bbEWC re-duces forgetting by 88% and 93% over a head-only KAN baseline, and matches or exceeds the accuracy of all baselines—achieving a Pareto improvement on the accuracy–forgetting frontier. 
+
+# 2 Related Work 
+
+Regularization-based CL. EWC [4] penalizes deviation in important parameters using the empirical Fisher; online EWC [5] is a streaming variant. SI [6] replaces Fisher with a path integral of gradient contributions. Memory-Aware Synapses [7] use output sensitivity, while Learning without Forgetting (LwF) distills predictions from previous tasks using only current-task data [12]. Orthogonal Gradient Descent (OGD) constrains updates by projecting gradients away from subspaces that would alter previously learned functions [13]. More recent Fisher-based variants include R-EWC [33], which rotates the parameter space to better align Fisher eigenvectors across tasks, and EWC-DR [34], which uses logit reversal to improve Fisher estimation quality. All of these methods apply importance weights at the level of individual parameters, without modeling which input region a parameter controls. Our per-knot decomposition exposes exactly this granularity for KAN heads; KAN-CL could in principle be combined with improved Fisher estimators such as EWC-DR, which we leave for future work. 
+
+Replay-based CL. iCaRL [8], ER [9], GEM [10], and DER++ [11] use stored or distilled examples to rehearse old tasks. Replay is complementary to regularization; we show that KAN-CL +replay with anchor annealing composes well in class-IL settings. 
+
+Parameter isolation and expansion. Progressive Neural Networks add new columns per task and share via lateral connections [14]; PackNet iteratively prunes and reuses weights [15]. These approaches require task identities, mask management, or growing capacity. Our method keeps a fixed shared head and exploits locality already present in the spline basis. 
+
+Hybrid backbone–head CL. Using a frozen or slowly adapting backbone with a task-specific head is a well-studied strategy [16]. Prior work has demonstrated the effectiveness of pairing CNN backbones with KAN classifi-cation layers for visual recognition [30]. Our contribution is to bring this hybrid design into the continual learning setting and replace the MLP head with a KAN head with per-knot regularization, yielding a principled method for head-level forgetting prevention grounded in the structural properties of B-splines. 
+
+Kolmogorov–Arnold Networks. Liu et al. [17] introduced edge-wise learnable B-spline activations. Subsequent works examine theoretical properties [18], scaling [19], and applications in time-series and graph learning [21, 22]. KAN has also been applied to visual recognition tasks including image classification on standard benchmarks [28] and remote sensing imagery [29, 30]. Efficiency-oriented work such as PowerMLP proposes computationally cheaper surrogates [23]. A critical assessment by Seydi [31] shows that under fair parameter matching, KANs consistently underperform MLPs on vision and NLP benchmarks, with advantages limited to symbolic regression. Our work does not contest this finding. We do not use KAN as a full backbone; instead, KAN serves only as a classification head on top of a CNN backbone, where its spline locality provides a structural inductive bias for continual learning that is 2absent from MLP heads. Our MLP+ bbEWC baseline uses a parameter-matched MLP head and the same backbone and regularizer, directly isolating the CL contribution of the KAN head architecture rather than claiming general KAN superiority. A preliminary study [32] evaluates KAN in class-incremental MNIST but does not analyze the spline locality mechanism or provide a CNN+KAN hybrid or NTK-based analysis. To the best of our knowledge, 
+
+KAN-CL is the first method to exploit per-knot spline structure for continual learning and to provide an NTK-based forgetting bound for spline architectures. 
+
+NTK and forgetting. Jacot et al. [24] and Lee et al. [25] establish the NTK as the kernel governing wide-network gradient dynamics. Doan et al. [26] and Bennani et al. [27] apply the NTK framework to CL on MLPs. We extend their forgetting bound to KAN’s spline parameterization and prove a feature-regime persistence property (Theorem 6) with no MLP analog. 
+
+# 3 Preliminaries 
+
+Problem setup. We consider a continual learning setting with a sequence of tasks D1, . . . , DT presented in order. Let R[s, t ] denote the test accuracy on task t after the model has been trained through task s. We follow the three standard protocols of [16]: task-incremental (Task-IL), domain-incremental (Domain-IL), and class-incremental (Class-IL). Main benchmarks use Task-IL; replay experiments additionally consider Class-IL. 
+
+KAN edge. A KAN edge from input dimension i to hidden dimension j computes 
+
+ϕij (x) = wbij σ(x) + 
+
+> K
+
+X
+
+> k=1
+
+cijk Bk(x),
+
+where σ is a SiLU base function and {Bk}Kk=1 are B-splines of order d on a uniform grid of G+1 knots, giving 
+
+K = G + d basis functions. Each Bk has compact support [tk, t k+d+1 ].
+
+Hybrid architecture. Let ψ : X → R256 denote the convolutional backbone ( SmallCNNBackbone : CIFAR-tailored stem and residual blocks followed by a 256 -dim linear projection and global average pooling) and hϕ : R256 →
+
+RC the KAN classification head. The head applies LayerNorm and tanh to the backbone features before feeding them into a three-layer KAN with hidden width 128 : 256 → 128 → 128 → C (depth 2, grid G=5 , order d=3 ). The full model is f (x) = hϕ(ψ(x)) . During continual training, both components are updated: bbEWC regularizes the backbone parameters ( backbone.* ) together with the feature normalizer ( feat_norm.* ), while KAN-CL regularizes the KAN head spline coefficients exclusively. 
+
+Metrics. ACC = 1
+
+> T
+
+P 
+
+> t
+
+R[T, t ] and FGT = 1 
+
+> T−1
+
+P 
+
+> t<T
+
+max s≤T (R[s, t ]−R[T, t ]) [10]. FGT is the primary diagnostic of retention. 
+
+Empirical Fisher. For parameter θ on task t: F (t) 
+
+> θ
+
+= E(x,y )∼D t [( ∂θ log pθ (y | x)) 2].
+
+NTK notation. Kθ (x, x ′) = ⟨∇ θ fθ (x), ∇θ fθ (x′)⟩. We write K(t1,t 2) 
+
+> θ
+
+for the cross-task Gram matrix be-tween samples from Dt1 and Dt2 . The normalized cross-task NTK operator norm used in Table 2 is 
+
+˜K(t1,t 2) = K(t1,t 2) 
+
+> θop
+
+r
+
+K(t1,t 1) 
+
+> θop
+
+· K(t2,t 2) 
+
+> θop
+
+, which removes the effect of per-task scale and lies in 
+
+[0 , 1] ; a value close to 1 indicates high inter-task coupling. 
+
+# 4 Per-Knot Theory 
+
+4.1 Per-knot Fisher decomposition 
+
+Lemma 1 (Per-knot Fisher decomposition) . For the spline coefficient cijk of a KAN, 
+
+F (t) 
+
+> ijk
+
+= Ex∼D t
+
+Bk(xi)2 G(t) 
+
+> ij
+
+(x),
+
+where G(t) 
+
+> ij
+
+(x) = ( ∂ log pθ (y | x)/∂ϕ ij (xi)) 2 does not depend on the basis index k.
+
+3Proof. By the chain rule, ∂cijk log pθ (y | x) = Bk(xi) · ∂ log pθ /∂ϕ ij (xi). Squaring and taking the expectation yields the result. □
+
+The basis index enters only through Bk(xi)2, isolating each knot’s contribution. When the input xi falls outside the support of Bk, the coefficient cijk contributes zero Fisher mass—and can therefore be freely repurposed for a new task. This is the leverage point of KAN-CL .
+
+4.2 Disjoint-support task decoupling 
+
+Theorem 2 (Cross-task Fisher disjointness) . Suppose tasks t1, t 2 have disjoint marginal supports on input dimen-sion i. Then for any knot k with supp( Bk) ∩ supp( D(i) 
+
+> t2
+
+) = ∅, we have F (t2) 
+
+> ijk
+
+= 0 , hence F (t1) 
+
+> ijk
+
+· F (t2) 
+
+> ijk
+
+= 0 at the same knot. 
+
+The proof follows immediately from Lemma 1: the integrand Bk(xi)2 is zero a.s. under Dt2 . For an MLP weight, 
+
+F (t) 
+
+> ij
+
+= E[f ′(zj )2x2 
+
+> i
+
+H(t) 
+
+> ij
+
+] is non-zero whenever xi̸ = 0 ; there is no architectural mechanism to zero out specific coordinates across disjoint supports. 
+
+4.3 NTK rank deficit and forgetting bound 
+
+The spline contribution to the NTK factors as 
+
+Kspline  
+
+> θ
+
+(x, x ′) = X
+
+> i,j,k
+
+Bk(xi) Bk(x′
+
+> i
+
+) hij (x) hij (x′), (1) where hij (·) is the downstream Jacobian. The product Bk(xi) Bk(x′
+
+> i
+
+) is non-zero iff both inputs lie in supp( Bk).
+
+Theorem 3 (Cross-task NTK rank deficit) . Let K(t1,t 2) 
+
+> θ
+
+∈ RN1×N2 be the cross-task NTK Gram, and let Si be the set of task-local knots for dimension i. Then 
+
+rank  K(t1,t 2)
+
+> θ
+
+ ≤ (1 − ¯ρ) rank  K(t1,t 2)MLP 
+
+, ¯ρ = 1
+
+> din
+
+X 
+
+> i
+> |S i|
+> K
+
+.
+
+Theorem 4 (Forgetting bound) . In the gradient-flow regime, after training task t2 for time T ,
+
+∆fθ (X(t1)) ≤ K(t1,t 2) 
+
+> θop
+
+· (K(t2,t 2) 
+
+> θ
+
+)−1
+
+> op
+
+· ∥ et2 ∥.
+
+By Theorem 3, K(t1,t 2) 
+
+> θop
+
+for KAN is bounded by the shared-support contribution alone, hence below the MLP quantity whenever Si̸ = ∅ for some i.
+
+Corollary 5 (Compact-support density bound) . Each xi activates at most d+1 of K basis functions, so the spline NTK contains at most (d+1) 2 non-zero B-products per input dimension at any (x, x ′), irrespective of marginal supports. 
+
+This explains why KAN’s cross-task NTK is empirically lower than MLP’s even when Theorem 2’s disjoint-support condition does not strictly hold (e.g., Split-MNIST). 
+
+Theorem 6 (Feature-regime persistence) . Let ¯K(t1,t 2) be the time-averaged cross-task NTK during SGD on task t2.Under the disjoint-supports condition of Theorem 3, 
+
+rank   ¯K(t1,t 2)KAN 
+
+ ≤ rank   ¯K(t1,t 2)MLP 
+
+
+
+uniformly in T , and the forgetting ratio of Theorem 4 is preserved. Sketch. The basis functions {Bk} are θ-independent throughout training. Hence Bk(xi) Bk(x′
+
+> i
+
+) factors out of the time-average and is identically zero on task-local knots for any iterate θs. □
+
+Remark 1 (Scope of Theorem 6) . The θ-independence of {Bk} holds for the spline knot grid, which is fixed during training. In the hybrid CNN+KAN setting, the inputs to the KAN head are backbone features ˆz = tanh(LN( ψ(x))) ,which evolve with θ as the backbone trains. Consequently, the evaluated quantities Bk(ˆ zi) are technically θ-dependent via ˆzi(θ), and the strict proof sketch above applies only to a standalone KAN with fixed inputs. For the hybrid setting, the result holds approximately: the tanh ◦LN normalization bounds all inputs to (−1, 1) 256 and keeps the feature distribution within the spline grid throughout training, so the set of active knots changes slowly and the rank advantage is empirically preserved (Table 2). A formal proof for evolving backbone features is left for future work. 4Crucially, Theorem 6 does not require the lazy-training (infinite-width) regime. The rank advantage is architec-tural and holds as long as the spline knot grid is fixed during training—which is always the case in standard KAN training. This is precisely why KAN-CL outperforms KAN+EWC: per-edge EWC collapses the per-knot structure into a single scalar importance, discarding the spatial separation guaranteed by Theorems 2 and 3. 
+
+4.4 Applicability to the CNN+KAN hybrid setting 
+
+Theorems 2–6 are stated for a standalone KAN with raw inputs x ∈ X . In our experimental setting, the KAN head receives backbone features ˆz = tanh(LN( ψ(x))) ∈ (−1, 1) 256 rather than raw pixels. We now argue that the per-knot locality analysis transfers cleanly to this setting. 
+
+Backbone as a task-shared feature extractor. The convolutional backbone ψ is shared across all tasks and is not task-specialized: its role is to produce a general-purpose representation. Task-specific class discrimination is entirely the responsibility of the KAN head. Consequently, the disjoint-support condition of Theorem 2 should be evaluated on the feature distribution ˆz(t), not on the raw input x. The theoretical results apply to the KAN head verbatim, with xi re-interpreted as the i-th backbone feature dimension. 
+
+Approximate feature-space disjointness. Our benchmarks assign disjoint semantic classes to each task (e.g., non-overlapping groups of CIFAR categories). A discriminatively trained backbone maps these disjoint class sets to distinct clusters in feature space: the marginal distributions ˆz(t1) and ˆz(t2) tend to occupy different sub-regions of 
+
+(−1, 1) 256 for different tasks t1̸ = t2. This is a well-established property of class-discriminative representations [1] and is directly evidenced by our empirical NTK measurements (Table 2): the normalized cross-task NTK norm of the KAN head is 6–18% lower than that of a parameter-matched MLP head on every benchmark, which is precisely the signature of reduced inter-task feature overlap predicted by Theorem 3. The empirical gap is largest on CIFAR-100 (ratio 0.816), where 100 diverse semantic categories produce the most distinct feature clusters. 
+
+Density bound without strict disjointness. Where strict disjoint marginals do not hold—for instance, on Permuted-MNIST, where permuted pixels share the same global statistics— Corollary 5 provides a complementary guarantee. Regardless of the marginal overlap, each feature value ˆzi activates at most d+1 of K basis functions, so the cross-task NTK contribution per feature dimension is bounded by (d+1) 2 = 16 non-zero B-products (for d=3 ), compared to K2 in an unconstrained parameterization. This density advantage is purely architectural and requires no assumption on the feature distributions. It is important to note, however, that Corollary 5 holds for any KAN architecture and therefore cannot by itself explain why KAN-CL outperforms vanilla KAN+EWC. The additional advantage of KAN-CL comes from Lemma 1: per-edge EWC collapses the per-knot Fisher into a single scalar importance per edge, discarding the spatial resolution that the density bound depends on. When EWC then anchors the backbone uniformly, it cannot distinguish which knots are task-local and which are cold. KAN-CL preserves and exploits this per-knot resolution— protecting exactly the coefficients that contributed to past tasks and leaving cold knots available for new ones. The density bound establishes the architectural advantage of KAN over MLP; the per-knot decomposition establishes the 
+
+algorithmic advantage of KAN-CL over KAN+EWC. Both are necessary to explain the empirical results. 
+
+Role of LayerNorm and tanh. The tanh ◦LN pre-processing maps all backbone features into (−1, 1) 256 , which coincides exactly with the default spline grid domain. This serves two purposes: (i) it ensures that the entire grid range is active so that task-specific features are spread across different knot intervals rather than clustering in a small sub-range, and (ii) it stabilizes the Fisher and activation-mass estimates by bounding the magnitude of the head inputs. Without this normalization, most knots could be inactive, negating the locality structure that the theory relies on. 
+
+Backbone–head capacity matching. For the theoretical guarantees to transfer empirically, the KAN head must have sufficient capacity to represent the task-relevant structure in the backbone features, but not so much excess capacity that the per-knot locality is diluted across many redundant knots. This motivates co-designing the backbone and head: SmallCNNBackbone produces 256-dim features whose complexity is well-matched to a depth-2 KAN with K=8 knots per edge. As backbone capacity increases, the KAN head should be scaled accordingly (larger G,greater depth) to preserve the capacity match and, with it, the locality-based advantages proven in Theorems 2–6. 55 The KAN-CL Algorithm 
+
+KAN-CL +bbEWC consists of two complementary regularizers applied to separate components of the model, plus optional anchor annealing for class-IL. Algorithm 1 summarizes the full procedure. 
+
+5.1 KAN-CL: per-knot head regularization 
+
+(i) Per-knot importance score. After learning task t on the KAN head, we compute Fisher and activation-mass importance for each spline coefficient: 
+
+F (t) 
+
+> ijk
+
+= 1
+
+> |D t|
+
+X
+
+> (x,y )∈D t
+
+ ∂cijk log pθ (y | x)2, A(t) 
+
+> ik
+
+= Et[|Bk(xi)|].
+
+We normalize per-task to control scale and combine s(t) 
+
+> ijk
+
+= αF ˜F (t) 
+
+> ijk
+
++ αA ˜A(t) 
+
+> ik
+
+, accumulating Sijk ← Sijk + s(t)
+
+> ijk
+
+. Fisher captures gradient sensitivity of the loss at learned coefficients; activation mass captures input coverage. Together, they identify knots that were both used and consequential for past tasks. 
+
+(ii) Gradient masking. On the subsequent task, the spline gradient is multiplicatively suppressed: ∇cijk ←∇cijk · exp( −βS ijk ).
+
+(iii) Per-knot L2 anchor. A quadratic penalty anchors each coefficient to its post-task-t value c∗
+
+> ijk
+
+:
+
+Lanchor = λ X
+
+> ijk
+
+Sijk (cijk − c∗
+
+> ijk
+
+)2.
+
+Unlike EWC, which applies a single scalar weight per parameter, this penalty is tied to the spatially resolved knot importance: the restraint is strong exactly where the task activated, and zero elsewhere. 
+
+5.2 bbEWC: backbone regularization 
+
+bbEWC applies online EWC [5] to the backbone and feature normalizer parameters only—concretely, all tensors under backbone.* and feat_norm.* —leaving the KAN head parameters untouched: 
+
+Lbb = λb
+
+X
+
+> θb∈Θbb
+
+F (t) 
+
+> θb
+
+(θb − θ∗ 
+
+> b
+
+)2,
+
+where Θbb = {backbone.* } ∪ { feat_norm.* }, F (t) 
+
+> θb
+
+is the per-parameter empirical Fisher, and θ∗ 
+
+> b
+
+is the post-task snapshot. The total training loss is L = LCE + Lanchor + Lbb .The design principle is a clean separation of responsibilities: KAN-CL exploits the structural locality of the KAN head, where per-knot granularity is meaningful; bbEWC applies the standard best-available regularizer to the backbone and normalizer, where no such locality exists. The two components are structurally decoupled —they regularize disjoint parameter sets—and can therefore be tuned independently. 
+
+5.3 Anchor annealing for class-IL+replay 
+
+When a replay buffer is active, the head anchor is scaled by ρ ∈ [0 , 1] and decayed linearly within the task by rate δ.Setting ρ = 0 recovers plain backbone+replay; ρ = 1 recovers full KAN-CL . We tune (ρ, δ ) on a held-out split. The rationale is that replay partially covers past tasks, so the anchor provides only the residual protection not supplied by replayed examples. 
+
+# 6 Experiments 
+
+Setup. We evaluate on two CIFAR benchmarks: Split-CIFAR-10/5T and Split-CIFAR-100/10T under Task-IL (oracle task identity at test time). All experiments use 3 independent seeds and Adam (lr 10 −3, batch size 128). 
+
+Architecture. The backbone is SmallCNNBackbone : a CIFAR-tailored convolutional network (stem conv + residual blocks) with a 256-dim linear projection head and global average pooling, producing 256-dim feature vectors. The KAN head applies LayerNorm ( feat_norm ) followed by tanh , then a depth-2 KAN: [256 → 128 → 128 → C]
+
+6Algorithm 1 KAN-CL +bbEWC : Per-Knot CL for CNN+KAN 
+
+Require: Tasks {D t}Tt=1 ; backbone ψ (backbone.* +feat_norm.* ), KAN head ϕ; λ=500 , λ b=1000 , β =5 , α F =1 .0, α A=0 .5 
+
+> 1:
+
+Initialize Sijk ← 0, c∗ 
+
+> ijk
+
+← 0, θ∗ 
+
+> b
+
+← ψ 
+
+> 2:
+
+for each task t = 1 , . . . , T do  
+
+> 3:
+
+for each mini-batch (x, y ) from Dt do  
+
+> 4:
+
+z ← ψ(x) 
+
+> 5:
+
+L ← L CE (hϕ(z), y ) + Lanchor (ϕ; c∗, S ) + Lbb (ψ; θ∗ 
+
+> b
+
+, F b) 
+
+> 6:
+
+Mask head gradient: ∇cijk ← ∇ cijk · e−βS ijk  
+
+> 7:
+
+Update ψ, ϕ with masked gradient  
+
+> 8:
+
+end for  
+
+> 9:
+
+Post-task (head): compute F (t) 
+
+> ijk
+
+and A(t) 
+
+> ik
+
+on Dt 
+
+> 10:
+
+s(t) 
+
+> ijk
+
+← αF ˜F (t) 
+
+> ijk
+
++ αA ˜A(t) 
+
+> ik
+
+; Sijk ← Sijk + s(t) 
+
+> ijk
+
+; c∗ 
+
+> ijk
+
+← cijk  
+
+> 11:
+
+Post-task (backbone+norm): compute F (t) 
+
+> θb
+
+over Θbb = {backbone.* } ∪ { feat_norm.* } on Dt; set θ∗ 
+
+> b
+
+← ψ 
+
+> 12:
+
+end for 
+
+Table 1: Average accuracy ( ↑) and forgetting ( ↓) on Split-CIFAR benchmarks (Task-IL, 3 seeds, mean ±std). Bold :best per column. 
+
+# CIFAR-10 / 5T CIFAR-100 / 10T Method ACC FGT ACC FGT Finetune 0.59 0.30 0.14 0.21 EWC 0.69 0.07 0.24 0.03 SI 0.63 0.14 0.22 0.08 MLP+ bbEWC 0.66 0.19 0.20 0.37 KAN-CL (head only) 0.58 0.29 0.15 0.17 
+
+# KAN-CL+ bbEWC (ours) 0.69 0.04 0.27 0.01 
+
+with grid G=5 , spline order d=3 . The model is implemented as CNNKAN and trained with –method kan_cl_bbewc 
+
+(script: kan_cl/scripts/run_cnn_kancl_bbewc.sh ). 
+
+SmallCNNBackbone is chosen on the principle of backbone–head capacity matching : the KAN head has 
+
+K=G+d=8 basis functions per edge and depth 2, giving it a representational budget that is well-suited to 256-dim feature vectors. Pairing a KAN head of fixed capacity with a substantially more powerful backbone would create a representation bottleneck at the head, conflating head-method quality with head-capacity shortfall—analogous to evaluating a linear probe on a large pretrained encoder and attributing underperformance to the probing method rather than to the capacity mismatch. Scaling KAN heads to larger backbones by increasing grid size and depth is an important direction left for future work (see Limitations). 
+
+Hyperparameters. KAN-CL head: β=5 , λ=500 , αF =1 .0, αA=0 .5. bbEWC backbone: λb=1000 .
+
+Baselines. Finetune : no regularization. EWC : standard global EWC on all parameters (backbone + head). SI :synaptic intelligence applied globally. MLP+ bbEWC : identical SmallCNNBackbone backbone with a standard MLP classification head (same width as the KAN head) regularized by bbEWC ; isolates the contribution of the KAN head architecture. KAN-CL (head only) : KAN-CL on the KAN head alone, with no backbone regularization; isolates the head contribution and serves as the reference for percentage forgetting reductions. KAN-CL + bbEWC (ours) : full method. 
+
+6.1 Main results 
+
+Figure 1 reports average accuracy and forgetting for all five methods across both benchmarks. Table 1 gives numerical values. 7Figure 1: Main results on Split-CIFAR benchmarks (Task-IL, 3 seeds). Left: average accuracy ( ↑); right: forgetting ( ↓). KAN-CL +bbEWC (dark teal) achieves the lowest forgetting on all three benchmarks while matching or exceeding the accuracy of all baselines. Error bars denote standard deviation. 
+
+Take-aways. KAN-CL +bbEWC achieves the lowest forgetting on both benchmarks by a wide margin while matching or exceeding the best accuracy. The comparison with MLP+ bbEWC is especially instructive: replacing the KAN head with a standard MLP head—while keeping the identical backbone and bbEWC regularizer—leads to forgetting of 0.19 and 0.37 on the two benchmarks, versus 0.04 and 0.01 for KAN-CL +bbEWC . This 5–37 × gap isolates the contribution of the KAN head: the per-knot anchor is not redundant with backbone regularization, but provides complementary and spatially surgical protection at the classification level. 
+
+6.2 Forgetting reduction analysis 
+
+Figure 2 quantifies the forgetting reduction of KAN-CL +bbEWC relative to KAN-CL (head only) on both bench-marks. The reductions are 88% (CIFAR-10/5T) and 93% (CIFAR-100/10T). The larger gain on CIFAR-100/10T reflects the fact that the 100-class output space creates more inter-task interference in the KAN head, giving per-knot anchoring the most to contribute. The comparison with EWC (global) is instructive: on CIFAR-100/10T, global EWC reduces forgetting (FGT 
+
+= 0 .03 ) but at the cost of plasticity (ACC = 0 .24 vs. 0.27 for KAN-CL +bbEWC ), because it penalizes all backbone parameters uniformly. KAN-CL adds spatially surgical head-level anchoring on top of backbone EWC, achieving lower forgetting without sacrificing accuracy—the unique advantage conferred by per-knot granularity. 
+
+6.3 Class-incremental learning with replay 
+
+With full anchor strength ( ρ=1 ), KAN-CL is over-regularized when combined with replay. Anchor annealing recovers 
+
++13 .1 pp on Split-MNIST class-IL and achieves +3 .0 pp over MLP+replay on Split-CIFAR-10 class-IL (average accuracy 0.289 at ρ=0 .1, δ=1 ). The optimal ρ reflects task difficulty: ρ=0 on easy tasks where replay alone suffices; 
+
+ρ=0 .1 on harder tasks where the anchor preserves features replay cannot recall. Figure 3 shows accuracy as a function of (ρ, δ ).
+
+6.4 Component ablation 
+
+Figure 4 ablates each component on Permuted-MNIST/10T and CIFAR-100/10T. The L2 anchor is the dominant component: removing it raises forgetting from 0.012 to 0.495 ( +48 pp) on Permuted-MNIST/10T. The gradient-mask term has near-zero marginal effect when the anchor is present; we retain it as a lightweight safeguard that prevents large gradient spikes on high-importance knots during the first mini-batches of a new task, but we acknowledge it does not materially change the final forgetting metric and could be omitted without loss. The bbEWC backbone term is critical on CIFAR: removing it (i.e., reverting to KAN-CL head only) recovers the up-to-17 × forgetting disadvantage 8Figure 2: Forgetting reduction of KAN-CL +bbEWC relative to KAN-CL (head only). Arrows connect the head-only baseline (purple) to the full method (dark teal); EWC (global) is shown as a reference (blue). KAN-CL +bbEWC reduces forgetting by 88% and 93% on CIFAR-10/5T and CIFAR-100/10T respectively. Table 2: Normalized cross-task NTK op-norm (3 seeds, mean ±std). 
+
+# Dataset KAN head MLP head KAN/MLP ratio Split-MNIST 0.901 ±0.029 0.956 ±0.005 0.919 Permuted-MNIST 0.780 ±0.020 0.828 ±0.001 0.942 Rotation-MNIST 0.883 ±0.013 0.958 ±0.002 0.921 Split-CIFAR-10 0.772 ±0.022 0.860 ±0.004 0.898 Split-CIFAR-100 0.762 ±0.042 0.934 ±0.006 0.816 
+
+established in Table 1 (CIFAR-100/10T: head-only FGT = 0 .17 vs. full method FGT = 0 .01 ). Fisher beats activation mass on harder data (CIFAR-100), while both contribute on domain-shift benchmarks (Permuted-MNIST). 
+
+6.5 Empirical NTK validation 
+
+Theorems 3–6 predict that the KAN head’s normalized cross-task NTK should be lower than a parameter-matched MLP head. We measure both at initialization ( n=64 samples per task, 3 seeds) on five datasets (Figure 5, Table 2). 1
+
+KAN’s cross-task NTK norm is 6–18% lower across all five benchmarks, with the largest gap on CIFAR-100. By Theorem 4, this directly upper-bounds forgetting, matching the empirical pattern in Table 1. 
+
+# 7 Discussion 
+
+Why the KAN head outperforms an MLP head. The MLP+ bbEWC baseline directly answers the question of whether the KAN head adds value beyond the backbone regularizer. Despite using the same SmallCNNBackbone 
+
+and the same bbEWC on the backbone, an MLP classification head still forgets 5–37 × more than the KAN head with per-knot anchoring (Table 1). The reason is structural: an MLP head distributes task-specific class discrimination across all its weights, so backbone stabilization alone cannot prevent head-level interference. The KAN head, by contrast, concentrates each task’s activation in a compact set of knots; per-knot anchoring then protects exactly those coefficients while leaving cold knots available for new classes. The head and backbone regularizers are therefore genuinely complementary—neither is redundant with the other.  
+
+> 1The NTK evolves during feature learning; however, Theorem 6 guarantees that the rank advantage of the KAN head over the MLP head is preserved throughout training, since the B-spline basis functions are θ-independent. Initialization-time measurements therefore provide a valid lower bound on the structural gap that persists during optimization.
+
+9Figure 3: Anchor annealing for class-IL with replay. Left: Split-MNIST; right: Split-CIFAR-10. Curves show KAN-CL accuracy versus replay scale ρ for several decay rates δ. Dashed lines indicate KAN+replay and MLP+replay without the anchor. 
+
+Architecture as regularizer. Our results show that replacing an MLP head with a KAN head—and pairing it with appropriate per-knot regularization—achieves a qualitatively different forgetting profile from parameter-level methods. The key mechanism is spatial separation: each knot is responsible for a compact input sub-range, so task-specific knowledge is structurally localized rather than entangled. This makes the anchor precise where it needs to be and non-intrusive where it does not. 
+
+Accuracy–forgetting Pareto improvement. Unlike the classic stability–plasticity trade-off, where reduced for-getting comes at the cost of accuracy, KAN-CL +bbEWC achieves the lowest forgetting and the highest accuracy on CIFAR-100/10T. We attribute this to the surgical nature of per-knot anchoring: it protects only the task-specific knots, leaving the rest of the parameter space fully plastic for subsequent tasks. Standard EWC, by contrast, re-stricts all parameters proportional to their global importance, limiting plasticity even in regions that have not been task-relevant. 
+
+Limitations and future directions. (a) Backbone–head scaling. The current KAN head (depth 2, G=5 )is designed to match SmallCNNBackbone ’s 256-dim features. Applying KAN-CL to more powerful backbones requires proportionally scaling the KAN head (larger grid G, greater depth) to maintain the capacity match that underpins the locality guarantees. Deriving principled scaling rules— e.g., relating G to backbone feature dimen-sionality and inter-task overlap—is an important direction for future work. (b) We tune λb and (ρ, δ ) on held-out validation splits; a principled, data-free method for regularization strength selection would increase practical appli-cability. (c) Disjoint-support assumption. Theorems 2–3 require disjoint marginal supports across tasks on each input dimension, a condition most naturally satisfied in domain-incremental settings (e.g., Permuted- or Rotation-MNIST). Our main experiments use split-class CIFAR benchmarks, where this condition holds only approximately in the learned feature space. The density bound (Corollary 5) and empirical NTK measurements (Table 2) provide com-plementary evidence that the structural advantage transfers to split-class settings, but a formal theoretical treatment of the approximate-disjointness regime—e.g., via distributional overlap bounds on backbone features—remains an open problem and is left for future work. (d) Extending per-knot regularization to adaptive-grid KANs [18], where knot positions evolve during training, requires tracking importance through grid refinement and is left for future work. (e) NTK non-stationarity at task boundaries. Recent NTK-in-CL analyses have shown that the kernel undergoes significant non-stationarity and reactivation at task boundaries in the feature-learning regime, which can invalidate gradient-flow-based forgetting bounds. Our Theorem 6 establishes that the rank advantage of the KAN head over an MLP head persists throughout training, but does not rule out that both kernels jointly become non-10 Figure 4: Component ablation on Permuted-MNIST/10T (left) and CIFAR-100/10T (right). Solid bars: average accuracy; hatched bars: forgetting. Removing the L2 anchor ( λ=0 ) or backbone EWC ( λb=0 ) causes the most severe forgetting increase. stationary. Whether the absolute forgetting bound of Theorem 4 remains tight across task switches—rather than merely the relative KAN vs. MLP comparison—is an open theoretical question. 
+
+# 8 Conclusion 
+
+We introduced KAN-CL +bbEWC , a continual learning system that pairs a per-knot importance regularizer on a KAN classification head with standard EWC on a convolutional backbone. The KAN head’s compact-support spline parameterization enables spatially surgical anchoring: past knowledge is protected precisely at the knots that were active for each task, while inactive regions remain fully plastic. A novel NTK analysis shows that this locality induces a structural rank deficit in the cross-task NTK that survives feature learning, yielding a provably tighter forgetting bound than parameter-level methods. Empirically, KAN-CL +bbEWC reduces forgetting by 88–93% over a head-only KAN baseline and matches or exceeds accuracy on both benchmarks, establishing a Pareto improvement on the stability–plasticity frontier. We hope this work encourages treating the parameterization of network components—not just the training algorithm—as a primary design lever in continual learning. 
+
+Reproducibility. Code, configurations, and per-run logs are released at ... ; all benchmarks complete in approx-imately 50 min on a single A40 GPU. 
+
+# References          
+
+> [1] Y. Bengio, A. Courville, and P. Vincent. Representation learning: A review and new perspectives. IEEE Transactions on Pattern Analysis and Machine Intelligence , 35(8), 2013. [2] M. McCloskey and N. J. Cohen. Catastrophic interference in connectionist networks. In Psychology of Learning and Motivation , vol. 24, 1989. [3] R. M. French. Catastrophic forgetting in connectionist networks. Trends in Cognitive Sciences , 3(4), 1999. [4] J. Kirkpatrick et al. Overcoming catastrophic forgetting in neural networks. PNAS , 114(13), 2017. [5] J. Schwarz et al. Progress & compress: A scalable framework for continual learning. ICML , 2018. [6] F. Zenke, B. Poole, and S. Ganguli. Continual learning through synaptic intelligence. ICML , 2017. [7] R. Aljundi et al. Memory aware synapses: Learning what (not) to forget. ECCV , 2018.
+
+11 Figure 5: Empirical cross-task NTK coupling at initialization. Normalized operator norm for KAN head vs. MLP head across five datasets. KAN is consistently below MLP, with the largest gap on CIFAR-100 (the highest-dimensional feature space). 
+
+[8] S.-A. Rebuffi et al. iCaRL: Incremental classifier and representation learning. CVPR , 2017. [9] A. Chaudhry et al. On tiny episodic memories in continual learning. arXiv:1902.10486 , 2019. [10] D. Lopez-Paz and M. Ranzato. Gradient episodic memory for continual learning. NeurIPS , 2017. [11] P. Buzzega et al. Dark experience for general continual learning. NeurIPS , 2020. [12] Z. Li and D. Hoiem. Learning without forgetting. In ECCV , 2016. [13] M. Farajtabar et al. Orthogonal gradient descent for continual learning. arXiv:1910.07104 , 2020. [14] A. A. Rusu et al. Progressive neural networks. arXiv:1606.04671 , 2016. [15] A. Mallya and S. Lazebnik. PackNet: Adding multiple tasks to a single network by iterative pruning. In CVPR , 2018. [16] G. M. van de Ven, T. Tuytelaars, and A. S. Tolias. Three types of incremental learning. Nature Machine Intelligence , 4, 2022. [17] Z. Liu et al. KAN: Kolmogorov–Arnold Networks. arXiv:2404.19756 , 2024. [18] Z. Liu et al. KAN 2.0: Kolmogorov–Arnold Networks meet science. arXiv:2408.10205 , 2024. [19] S. Somvanshi et al. A survey on Kolmogorov–Arnold Networks. arXiv:2411.06078 , 2024. [20] J. Xu et al. Fourier or wavelet bases as counterpart self-attention in deep learning. ICLR , 2024. [21] R. Genet and M. Inzirillo. TKAN: Temporal Kolmogorov–Arnold Networks. arXiv:2405.07344 , 2024. [22] M. Kiamari, M. Kiamari, and B. Krishnamachari. GKAN: Graph Kolmogorov–Arnold Networks. arXiv:2406.06470 ,2024. [23] S. Qiu et al. PowerMLP: An efficient version of KAN. In AAAI , 2025. [24] A. Jacot, F. Gabriel, and C. Hongler. Neural tangent kernel: Convergence and generalization in neural networks. NeurIPS ,2018. [25] J. Lee et al. Wide neural networks of any depth evolve as linear models under gradient descent. NeurIPS , 2019. 
+
+12 [26] T. Doan et al. A theoretical analysis of catastrophic forgetting through the NTK overlap matrix. AISTATS , 2021. [27] M. Bennani, T. Doan, and M. Sugiyama. Generalisation guarantees for continual learning with orthogonal gradient descent. arXiv:2006.11942 , 2020. [28] M. Cheon. Demonstrating the efficacy of Kolmogorov–Arnold Networks in vision tasks. arXiv:2406.14916 , 2024. [29] M. Cheon. Kolmogorov–Arnold Network for satellite image classification in remote sensing. arXiv:2406.00600 , 2024. [30] M. Cheon and C. Mun. Combining KAN with CNN: KonvNeXt’s performance in remote sensing and patent insights. 
+
+Remote Sensing , 16(18):3417, 2024. [31] S. T. Seydi. Kolmogorov–Arnold Networks: A critical assessment of claims, performance, and practical viability. 
+
+arXiv:2407.11075 , 2024. [32] A. D. Bodner et al. A preliminary study on continual learning in computer vision using Kolmogorov–Arnold Networks. 
+
+arXiv:2409.13550 , 2024. [33] X. Liu et al. Rotate your networks: Better weight consolidation and less catastrophic forgetting. ICPR , 2018. [34] Z. Wang et al. EWC ++ : Improved Bayesian continual learning with optimized plasticity. arXiv:2302.03535 , 2023. 
+
+13 Supplementary Material 
+
+The supplementary material provides additional experimental detail. All main claims are supported by the figures and tables in the main text. 
+
+# S1 Pure KAN Backbone Results 
+
+Table S1.1 reports results for pure KAN backbones (no CNN) on six benchmarks including MNIST-class tasks. These experiments demonstrate that per-knot regularization improves forgetting even without a convolutional backbone, though absolute accuracy is lower than the hybrid CNN+KAN system due to the limited representational capacity of shallow KANs on visual data. Table S1.1: Average accuracy ( ↑) and forgetting ( ↓) for pure KAN backbones (Task-IL, 3 seeds). KAN-CL delivers the lowest forgetting on every benchmark even without a CNN backbone. 
+
+# Split-MNIST 5T Perm-MNIST 10T Rot-MNIST 10T Method ACC FGT ACC FGT ACC FGT MLP finetune 0.760 0.293 0.322 0.716 0.456 0.576 KAN finetune 0.695 0.365 0.425 0.569 0.403 0.609 MLP+EWC 0.984 0.011 0.662 0.170 0.574 0.381 KAN+EWC 0.926 0.075 0.555 0.130 0.504 0.232 MLP+SI 0.987 0.005 0.565 0.156 0.570 0.296 KAN+SI 0.968 0.023 0.578 0.133 0.524 0.233 
+
+# KAN-CL 0.924 0.006 0.524 0.073 0.520 0.134 
+
+# S2 Per-Task Accuracy Trajectories 
+
+Figure S2.1: R[t, j ] trajectories on Split-CIFAR-100/10T. Each panel shows one method; each colored curve tracks accuracy on evaluation task j as training progresses through tasks. KAN-CL +bbEWC (rightmost) shows the flattest trajectory profiles, indicating minimal forgetting across all evaluation tasks. 14 Figure S2.2: Mean accuracy over time on Split-CIFAR-100/10T. Left: mean accuracy over tasks 0..t after training task t; right: accuracy on task 0 (first task) over training. KAN-CL +bbEWC retains first-task performance throughout the sequence. 
+
+# S3 Domain-Incremental MNIST 
+
+Figure S3.1: Domain-incremental MNIST (Task-IL, 10 tasks each). Left: Permuted-MNIST; right: Rotation-MNIST. Solid bars: average accuracy; hatched bars: forgetting for all seven methods. Pure KAN-CL achieves the lowest forgetting while remaining competitive in accuracy. 15 S4 Stability–Plasticity Frontier 
+
+Figure S4.1: Stability–plasticity scatter across split-class benchmarks. Forgetting ( x-axis) versus average accuracy ( y-axis). Marker shape encodes dataset; color encodes method. KAN-CL +bbEWC consistently occupies the upper-left region. 16 S5 Fisher Gradient Overlap 
+
+Figure S5.1: Task-pairwise Fisher overlap (Split-MNIST/5T). Cosine similarity of task-i versus task-j Fisher gradients (diagonal omitted). Left: KAN spline layers; right: parameter-matched MLP. KAN exhibits a sparser overlap structure, consistent with the per-knot disjointness of Theorem 2. 
+
+# S6 Class-IL Buffer Size Sweep 
+
+Figure S6.1: Class-IL buffer size sweep. Left: Split-MNIST; right: Split-CIFAR-10. Average accuracy vs. replay buffer size for KAN+replay, MLP+replay, and KAN-CL +replay. 17 S7 Hyperparameter Sensitivity 
+
+Figure S7.1: Sensitivity to (β, λ ) on Permuted-MNIST/5T. Left: accuracy vs. λ (log scale); right: forgetting vs. λ. λ=500 is a robust operating point across all seeds and β values. 
+
+# S8 Grid Size Sweep 
+
+Figure S8.1: Grid-size sweep ( G ∈ { 3, 5, 7, 10 , 15 }). On Permuted-MNIST (domain-shift), forgetting decreases with G until variance dominates at G∗ ≈ 7−10 . On Split-MNIST (shared marginals) forgetting is flat, matching our theoretical prediction. 18
