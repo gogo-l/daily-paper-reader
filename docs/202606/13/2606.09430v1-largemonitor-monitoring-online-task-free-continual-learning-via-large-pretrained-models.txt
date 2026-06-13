@@ -1,0 +1,410 @@
+Title: LargeMonitor: Monitoring Online Task-Free Continual Learning via Large Pretrained Models
+
+URL Source: https://arxiv.org/pdf/2606.09430v1
+
+Published Time: Tue, 09 Jun 2026 02:13:00 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+Agentic Intelligence Lab | HKU LargeMonitor: Monitoring Online Task-Free Continual Learning via Large Pretrained Models 
+
+Mingqi Yuan 1 Xiaoquan Sun 1 Shihao Luo 2 Jiayu Chen 1
+
+> 1
+
+HKU 2Qicore Tech 
+
+Abstract 
+
+Online task-free continual learning (TFCL) requires intelligent agents to sequentially accumulate knowledge from an unbounded, non-stationary data stream under strict single-pass constraints and without any explicit task identifiers. Existing online TFCL paradigms primarily rely on parameter-efficient prompt tuning or dynamic structure expansion driven by training-coupled optimization dynamics, such as empirical loss fluctuations or evolv-ing latent distances. As a result, these training-coupled solvers remain agnostic to the structural origins of distribution drift, mechanically enforcing a fixed strategy across fundamentally distinct streaming variations. To address this gap, we propose LargeMon-itor , a framework that leverages large pretrained foundation models to autonomously orchestrate task-free continuous adaptation. Specifically, LargeMonitor introduces a de-coupled detection module utilizing the frozen, stable representation space of large vision models (LVMs) to achieve robust, zero-shot drift detection without training-dependent interference or brittle threshold tuning. Upon a confirmed drift, the framework activates a context-aware diagnostic module driven by large multimodal models (LMMs) to inter-pret the precise semantic etiologies of the stream variation ( e.g. , novel class emergence vs. environmental domain shift). This dual-stage capability empowers the continuous learner to dynamically deploy adaptive and shift-specific optimization strategies. Ex-tensive experiments across multiple TFCL settings and benchmarks demonstrate that LargeMonitor achieves precise, robust detection and diagnosis of complex data streams while consistently improving the performance of existing online TFCL algorithms. 
+
+Code: github.com/Agentic-Intelligence-Lab/LargeMonitor 
+
+Website: agentic-intelligence-lab.org/Never 
+
+Correspondence: Jiayu Chen (jiayuc@hku.hk) June, 2026 
+
+1 Introduction 
+
+Continual learning has emerged as an essential paradigm for deploying machine learning systems in dynamic environments, enabling intelligent agents to sequentially accumulate knowledge without the prohibitive costs of retraining from scratch [ 1]. While foundational methods often rely on idealized assumptions of well-defined task boundaries and multiple passes over data [ 2, 3], practical applications ( e.g. , autonomous driving [ 4], robotic manipulation [ 5 ], and personalized user interfaces [ 6]) demand a more challenging setting: online task - free continual learning (TFCL) [ 7, 8]. In this scenario, data arrives as an unbounded, non-stationary stream, with task identities unavailable and each sample processed in a strict single-pass manner [ 9 , 10 ]. Consequently, the learner must dynamically adapt to incoming distributions while retaining prior knowledge and enabling anytime inference capabilities [ 11 , 12 , 13 ]. This strict combination of constraints positions online task - free learning as a critical yet underexplored frontier, particularly regarding how a continuous learner can macroscopically perceive and interpret global shifts in the underlying data distribution. To address the TFCL challenge, recent literature has advanced two representative methodologies.  
+
+> Technical Paper © 2026 Agentic Intelligence Lab
+> arXiv:2606.09430v1 [cs.LG] 8 Jun 2026 Has the task changed? What caused the change?
+> Online Task-Free Data Flow
+> LargeMonitor
+> Large Vision
+> Models
+> Large Multimodal
+> Models
+
+Figure 1: LargeMonitor leverages large vi-sion models to precisely detect data distribu-tion shifts in online TFCL, while introduc-ing large multimodal models to identify the shift cause, thereby enabling adaptive and condition-specific optimization. The first line of work leverages prompt-based parameter-efficient tuning. For instance, the MVP [ 14 ] framework addresses stochastic, blurry task con-figurations by combining instance-wise logit masking with contrastive visual prompts, thereby simplifying online classification and mitigating both intra-task and inter-task forgetting without requiring boundary detection. The second line of work employs explicit model-level expansion, where internal metrics are monitored to trigger parameter growth. For example, ODDL [ 12 ] and DEMD [ 11 ] compute representa-tion discrepancies or dynamic Gaussian summaries to scale up memory components when novel data dis-tributions are registered. Concurrently, Online-LoRA [ 13 ] tracks empirical loss surface plateaus to auto-matically freeze well-trained low-rank adapters and initialize new ones, preserving acquired knowledge via lightweight parameter isolation. Despite their strong empirical performance in driving model adaptation, both prompt-based and structure-expansion paradigms inherently operate within the internal optimization loop, leaving a crucial dimension of the streaming problem unaddressed. First, the tuning or expansion cues in existing methods depend heavily on training-coupled dynamics ( e.g. , gradient-matching coefficients, empirical loss values, or evolving latent distances), which can inevitably drift or require per-dataset threshold tuning as the model updates its underlying representations [ 12 , 11 , 13 ]. More importantly, these internal metrics only offer a binary indicator of whether the optimization landscape has fluctuated, but they lack the macroscopic capacity to interpret the nature of the underlying shift. In practice, a data stream can exhibit heterogeneous variations, ranging from novel semantic categories to gradual environmental domain shifts to sudden sensor corruption. Consequently, these training-coupled solvers remain agnostic to the nature of drift, mechanically executing a fixed strategy to handle fundamentally different types of shifts. This gap suggests that online TFCL could be significantly optimized by a complementary, high-level monitoring mechanism that decouples detection from the training loop and diagnoses semantic variations, thereby enabling more informed, fine-grained continuous adaptation. Inspired by the discussions above, we propose LargeMonitor , a novel framework that leverages large foundation models to enhance existing online TFCL methods. Our key contributions are threefold: • Decoupled Zero-Shot Detection. We introduce a high-level monitoring mechanism that decouples shift detection from the internal optimization loop. By leveraging the strong representational capabilities of large pretrained vision models, our detector operates in a purely zero-shot manner, delivering robust, semantically aware drift detection without the need for fragile, training-dependent signals or per-dataset threshold tuning. • Joint Detection and Diagnosis Paradigm. To the best of our knowledge, this work represents the first attempt to investigate the joint "detect-and-diagnose" paradigm in online TFCL. Upon detecting a distribution shift, LargeMonitor leverages large multimodal models (LMMs) to diagnose the underlying causes, precisely categorizing the drift into scenarios such as novel class emergence, domain variation, or data corruption. Driven by these semantic diagnoses, the system dynamically orchestrates tailored adaptation strategies. This framework serves as a pioneering validation of using large, intelligent models to autonomously manage and optimize continuous learning pipelines. • Comprehensive Evaluation on Broad Benchmarks. We evaluate LargeMonitor across multiple TFCL settings and datasets, including disjoint class-incremental, Si-Blurry class-incremental, domain-incremental, and a designed heterogeneous shift-incremental setting. Extensive experiments demonstrate that our framework can significantly improve the perfor-mance of algorithmic baselines, demonstrating exceptional adaptability and interpretability in complex streaming environments. 22 Related Work 
+
+2.1 Task-Free Continual Learning 
+
+Continual learning aims to acquire knowledge from a stream of incoming data or tasks over time, while preserving previously learned capabilities and remaining adaptable to future changes [ 7 , 1]. Task-free continual learning is a critical scenario in which the task identities are not accessible in either training or testing, posing significant challenges for model expansion, forgetting prevention, and inference. Recent expansion - based methods have made progress in this direction. For instance, [ 9 ] proposes CN -DPM, a neural Dirichlet process mixture that adds new experts when the likelihood of a sample under existing components is sufficiently low. In contrast, [ 15 ] introduces a non -parametric mixture over model-agnostic meta-learning initializations that spawns a new cluster when the task distribution shifts, enabling task -agnostic meta -learning. [ 16 ] presents VariGrow, which uses an energy - based novelty score to decide when to grow a new expert module within a variational architecture. Despite their strengths, these methods rely on low - level statistical signals ( e.g. , likelihood, responsibility, or energy) that only detect whether a distribution shift occurs, without diagnosing its cause. In this paper, we propose LargeMonitor, a novel framework that both detects and diagnoses the nature of distribution shifts, enabling the online learner to adopt diversified strategies accordingly. 
+
+2.2 Large Pretrained Models 
+
+Large pretrained models, such as vision - language models (VLMs) and large vision models (LVMs), have demonstrated remarkable zero - shot transfer and semantic understanding capabilities [ 17 , 18 ]. The CLIP [ 19 ] model learns a shared embedding space for images and text via contrastive learning on 400 million image -text pairs, enabling zero -shot classification of unseen visual concepts without task -specific fine -tuning. LLaVA [ 20 ] is a large multimodal model that connects a vision encoder with a large language model, allowing it to generate natural language descriptions of visual content and reason about semantic differences between images. The DINO model series learns visual features through self - supervised distillation, producing representations that exhibit strong semantic correspondence and out-of-distribution sensitivity [21, 22]. In this paper, we leverage these large pretrained models as a monitor for online task - free continual learning. Equipped with strong priors, LargeMonitor delivers stable and accurate detection, coupled with semantic diagnosis of distribution shifts, enabling the online learner to respond selectively rather than uniformly. 
+
+3 Background 
+
+We consider a stream of data samples {(xt, y t)}∞ 
+
+> t=1
+
+arriving sequentially over time, where each sample is drawn from an unknown distribution that can change arbitrarily. In the online task - free continual learning (TFCL) setting [ 23 ], the learner observes each sample exactly once and must update its model incrementally without knowledge of task boundaries or task identities. Let pt(x, y )
+
+denote the data distribution at time t. The distribution may shift abruptly or gradually, and the learner is not informed of when or how such shifts occur. Formally, we assume a sequence of potentially distinct distributions {p1, p 2, . . . } over the input space 
+
+X and label space Y. At each time t, the learner receives a mini -batch of samples {x(i) 
+
+> t
+
+, y (i) 
+
+> t
+
+}Bi=1 
+
+drawn from pt. The goal is to maintain a model ht : X → Y that minimizes the expected loss under all distributions seen so far, while capable of producing accurate predictions at any point in the stream [7]. The learner has no access to task identifiers during either training or inference. 
+
+4 LargeMonitor Implementation 
+
+4.1 Efficient Detection of Data Distribution Drift 
+
+Detecting changes in data distribution is essential for adaptive online continual learning, especially in the online task - free setting where no task boundaries are provided. A reliable drift detector must operate incrementally, with low latency and without access to future samples. Pretrained large vision 3Current      
+
+> Data Batch Image
+> Embeddings
+> CKA Similarity
+> Pull
+> Shift
+> Cause
+> New
+> Classes
+> Domain
+> Shift
+> Large Vision Models
+> Memo Buer
+> Trend Detector
+> 0.35
+> True False
+> Detected
+> Task Bounda
+> Learning Strategy A
+> Learning Strategy B
+> Learning Strategy C
+> Large Multimodal Models
+> "Indentify the cause of
+> data distribution shift."
+> Text
+> Prompt: Noise
+
+Figure 2: Architecture of the LargeMonitor framework. models (LVMs) provide a stable and semantically rich representation space that is less sensitive to the learner’s evolving internal states. Leveraging this stability, we design an efficient drift detection mechanism that works in a zero-shot manner and requires no per-dataset threshold tuning. Formally, let Bt = {x(i) 
+
+> t
+
+}Bi=1 denote a mini-batch of size B arriving at timestep t. We first project each instance into a stable embedding space via a frozen LVM backbone E(·) (e.g. , DINO [ 21 ] or CLIP vision encoder [ 20 ]), yielding a batch feature matrix Ft = [ ϕ1, ϕ2, . . . , ϕB ]⊤ ∈ RB×d, where 
+
+ϕi = E(x(i) 
+
+> t
+
+) ∈ Rd. Concurrently, a first-in-first-out (FIFO) sliding memory buffer M maintains a short-term historical window of the stream’s recent representations, with a maximum capacity 
+
+|M| = M (M ≫ B). We denote the consolidated representation matrix of this historical baseline as 
+
+FM ∈ RM ×d.To mathematically quantify the statistical discrepancy between the incoming batch Bt and the recent past stored in M, we evaluate the alignment of their feature spaces. Rather than relying on simple prototype distances that collapse variance information, we compute the centered kernel alignment (CKA) [ 24 ] between Ft and FM. Let ¯Ft and ¯FM represent the row-centered variants of Ft and FM,respectively. The linear CKA similarity is defined over their empirical covariance structure: 
+
+CKA( Ft, FM) = ∥ ¯F ⊤ 
+
+> t
+
+¯FM∥2
+
+> F
+
+∥ ¯F ⊤ 
+
+> t
+
+¯Ft∥F ∥ ¯F ⊤M ¯FM∥F
+
+. (1) The sequence of similarity scores Ct = CKA( Ft, FM) serves as our monitoring statistic. Adistribution shift at task boundaries typically manifests as a sustained downward deviation of Ct from its recent baseline. To reliably capture such persistent similarity drops while suppressing transient noise, we employ an online one-sided CUSUM procedure designed for downward shifts. Let ˜μt and ˜σt denote the rolling median and median absolute deviation (MAD) of the CKA scores collected from the baseline period. The inspection statistic St accumulates evidence of similarity degradation: 
+
+St = max  0, S t−1 +  ˜μt − Ct
+
+ − κd · ˜σt
+
+ , (2) where κd is a slack parameter that allows for minor within-task variance. A distribution shift is formally declared at timestep t if St > h t, where ht = κh · ˜σt is a dynamic alarm threshold. Upon triggering, the statistic St and baseline parameters ( ˜μt, ˜σt) are reset to adapt to the new data regime. This approach ensures O(1) time complexity per batch with minimal computational overhead. 44.2 Drift Diagnosis via Large Multimodal Models 
+
+Detecting a distribution shift alone does not enable an adaptive response, yet the system must also characterize the nature of the change. Existing online task -free continual learning methods treat all shifts uniformly, for example, by expanding model capacity or adjusting memory regardless of whether the shift originates from novel classes, domain drift, data corruption, or noise. An adaptive system should instead select distinct strategies according to the diagnosed cause. Upon a detected shift (Section 4.1), LargeMonitor activates its diagnosis module. We employ large multimodal models (LMMs), such as LLaVA [ 20 ] or GPT - 4o [ 25 ], to analyze a small subset of images from the current batch, specifically those with the largest distances to the buffer. A targeted prompt asks the LMM to classify the shift into one or more categories, such as new class emergence, domain shift, data corruption, or noise or false alarm. The LMM returns a structured diagnosis in a zero-shot manner, without any fine-tuning. Based on the diagnosis, the online learner is expected to execute a diverse strategy. For example, if the shift is attributed to new class emergence, the learner can dynamically add a new LoRA module while freezing previously learned parameters to preserve past knowledge. If a domain shift is diagnosed, the learner may apply lightweight feature adaptation or adjust the replay buffer to prioritize samples from the new domain. In the case of data corruption, the learner can skip the affected batch, apply denoising preprocessing, or temporarily reduce the learning rate. When the diagnosis indicates only noise or a false alarm, the learner simply takes no action, thereby avoiding unnecessary expansion or resource consumption. This diagnosis -guided adaptation replaces uniform mechanical rules with context - aware reasoning. The module runs only when shifts are detected, incurring negligible overhead. Our subsequent exper-iments show that this approach outperforms fixed heuristics, especially under mixed or ambiguous distribution shifts. 
+
+5 Experiments 
+
+In this section, we design experiments to investigate the following questions: • Q1 : Can LargeMonitor successfully detect distribution shifts in an online task -free continual learning stream? • Q2 : Can LargeMonitor enhance the performance of existing algorithms when integrated as a monitoring module? • Q3 : Can LargeMonitor successfully diagnose the nature of a detected shift? • Q4 : Does a diagnosis -guided adaptive strategy outperform a fixed, uniform response policy under various shift scenarios? • Q5 : How do different LVMs affect detection accuracy, and how do different LMMs affect diagnosis accuracy? 
+
+5.1 Experimental Setup 5.1.1 Benchmark Selection 
+
+We first evaluate LargeMonitor on three standard continual learning scenarios. Disjoint class - incremental setting: the data stream is divided into sequential tasks with disjoint class sets. 
+
+Stochastic incremental blurry (Si - Blurry) class -incremental setting: class distributions change stochastically with class overlap across tasks and no clear task boundaries. Domain - incremental 
+
+setting: the input distribution shifts over time while the class set remains unchanged. We intro-duce five datasets for the three settings: CIFAR -100 [ 26 ], Tiny-ImageNet [ 27 ], ImageNet -R [ 28 ], ImageNet-Sketch [29], CUB-200 [30], and CORe50 [31]. Furthermore, we design a new setting, heterogeneous shift-incremental (HS-Incremental) , to evaluate the detection and diagnosis capabilities of LargeMonitor under controlled, diverse distribution shifts. Unlike existing settings that focus on a single type of change, HS-Incremental systematically interleaves four distinct shift types: initial baseline, new class emergence, domain shift, and data corruption ( e.g. , noise or blur). Each shift is labeled with its ground-truth type, enabling quantitative 5CIFAR-100 
+
+> ImageNet-R
+> ImageNet-Sketch
+> TinyImageNet
+> CUB-200
+> CORe50
+
+Table 1: Data examples of the introduced datasets. 
+
+Table 2: Task sequence of the HS-Incremental setting on ImageNet-R. 
+
+Task Group Labels Source Shift Type 
+
+T1 A 0–9 Tiny-ImageNet initial T2 A 0–9 ImageNet-R domain shift T3 B 10–19 Tiny-ImageNet new class T4 B 10–19 corr corruption T5 C 20–29 Tiny-ImageNet new class T6 C 20–29 ImageNet-R domain shift T7 D 30–39 Tiny-ImageNet new class T8 D 30–39 corr corruption T9 E 40–49 Tiny-ImageNet new class T10 E 40–49 ImageNet-R domain shift 
+
+evaluation of both detection accuracy and diagnosis precision. The stream consists of 10 tasks, each containing 10 classes drawn from ImageNet-R and its variants. Table 2 illustrates the task sequence. 
+
+5.1.2 Algorithmic Baselines 
+
+We introduce a series of state-of-the-art baselines in online task-free continual learning, including Online-LoRA [ 13 ], AGEM [13], ER [14], EWC++ [12], MIR [2], GDumb [61], DER++ [8], PCR [51], LODE [49], EMA [75], L2P [86] and MVP [58]. These methods span representative categories, including architecture-based, regularization-based, rehearsal-based, and prompt-based methods. Moreover, we build the upper-bound baseline by supervised fine-tuning on the entire i.i.d. dataset, thereby representing optimal performance. 
+
+5.1.3 Large Pretrained Models 
+
+For detection, we introduce the DINOv3 series [ 22 ] as our frozen vision encoders. DINOv3 models are self-supervised vision transformers that learn rich visual features through self-distillation without human annotations. Their representations exhibit strong semantic correspondence, high sensitivity to out-of-distribution inputs, and remarkable linear separability across visual concepts. We employ four variants spanning a wide range of model capacities: ViT-S/16 distilled (21M), ViT-B/16 distilled (86M), ViT-L/16 distilled (300M), and ViT-7B/16 (6,716M). This suite allows us to systematically investigate the trade-off between detection accuracy and computational overhead. For data distribution shift diagnosis, we introduce the Qwen-VL series [ 32 , 33 ]. Qwen-VL models are vision-language foundation models that align visual and textual representations through large-scale pretraining on diverse image-text corpora. They demonstrate strong zero-shot visual reasoning capabilities, enabling them to characterize the nature of distribution shifts. We primarily employ Qwen3.6-Flash for diagnosis, with ablation studies on other Qwen series to assess the impact of LMM scale on diagnosis accuracy and inference latency. All LMMs operate in a zero-shot manner, invoked only upon detection of a shift, thereby minimizing computational overhead for the online learning pipeline. 
+
+5.1.4 Evaluation Metrics 
+
+We evaluate LargeMonitor from three perspectives: detection performance, downstream continual learning performance, and diagnosis-guided adaptation on the proposed HS-Incremental benchmark. For the detection accuracy, a detection is considered correct if a peak is identified within a tolerance window around the actual shift boundary. Following Section 3, we adopt average accuracy (ACC) and negative backward transfer (NBT) to assess whether LargeMonitor enhances existing methods. Higher ACC and lower NBT indicate better performance. On the HS-Incremental setting, we report diagnosis accuracy, i.e. , the proportion of detected shifts for which the LMM correctly identifies the shift type. The ACC and NBT are also reported for this setting. 60 200 400 600                                    
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> CKA  Similarity
+> CIFAR-100 (Disjoint)
+> 0100 200 300
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> ImageNet-R (Disjoint)
+> 0200 400 600
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> ImageNet-Sketch (Disjoint)
+> 020 40 60 80
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> CUB-200 (Disjoint)
+> 0500 1000 1500
+> Batch Index
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> CKA  Similarity
+> Tiny-ImageNet (Si-Blurry)
+> Ground Truth
+> Detected
+> 0100 200 300
+> Batch Index
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> ImageNet-R (Si-Blurry)
+> 0200 400 600
+> Batch Index
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> ImageNet-Sketch (Si-Blurry)
+> 0500 1000 1500
+> Batch Index
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> CORe50 (Domain)
+
+Figure 3: Detailed detection processes across the three introduced TFCL settings and the six datasets. Empowered by the strong representation capabilities of LVMs, LargeMonitor can detect the data distribution shifts accurately and sharply. Notably, LargeMonitor can effectively detect the shift even when the task data is extremely imbalanced. 2 4 6 8 12 16                                                                                                    
+
+> kh
+> 64
+> 256
+> 512
+> 1024
+> Buffer  Size
+> 50 20 18 26 45 45
+> 10 51418 23
+> 13 02518 24
+> 02613 24 33
+> ImageNet-R (Disjoint)
+> 246812 16
+> kh
+> 75 35 60 62 89 92
+> 50210 44 61
+> 10 0511 25 52
+> 615 24 33 51 64
+> ImageNet-Sketch (Disjoint)
+> 246812 16
+> kh
+> 195 45 26 20 20 20
+> 190 31 17 17 20 20
+> 137 20 1158
+> 150 10 0145
+> Tiny-ImageNet (Si-Blurry)
+> 246812 16
+> kh
+> 250 110 54 32 35 35
+> 290 138 57 29 18 35
+> 236 66 32 14 712
+> 193 35 03711
+> CORe50 (Domain)
+
+Figure 4: The cumulative regret versus the memory buffer size on the three TFCL settings and four selected datasets. Here, we utilize the DINOv3-Vit-S/16 as the encoder and set κD = 0 .5. Generally, the buffer size of 512 is the generally best option, while the smaller buffer can significantly degrade the detection accuracy. 
+
+5.2 Results Analysis 
+
+Detection accuracy across diverse settings and datasets. Figure 3 illustrate the detection pro-cesses the CKA similarity trajectory over batch indices, with ground-truth shift boundaries and detected shifts across all the introduced settings and datasets. For the Disjoint setting, the CKA similarity remaining stable within tasks while sharply drops at each task boundary. For the Si-Blurry 
+
+setting, due to the inclusion of blurry classes, the similarity gap within the task and at the task boundary are relatively small, but still show significant differences. Notably, for the Si-Blurry 
+
+setting with the ImageNet-Sketch dataset, the inter-task data distribution is extremely imbalanced, yet LargeMonitor can still capture the similarity variation for each task bounary, demonstrating its generalization to arbitrary settings. Finally, for the Domain setting, our method can also detect all the task boundaries. 
+
+Impact of memory buffer size on the detection. Next, we show how the FIFO memory buffer size detection performance. Figure 4 reports the cumulative regret across four benchmarks under varying buffer sizes. For all the settings and datasets, the buffer size of 1024 produces the lowest cumulative regret, while the size of 64 significantly increases the detection error. Small buffers can amplify noise and cause hesitation under gradual shifts, whereas large buffers smooth out the transition excessively. Notably, a buffer size of 512 can also achieve accurate detection in experiments 7other than the Domain setting. These results suggest that a moderate buffer balances the sensitivity and stability of the LargeMonitor approach. 2 4 6 8 12 16                                                                                                    
+
+> kh
+> ViT-S/16
+> ViT-B/16
+> ViT-L/16
+> ViT-7B/16
+> Large  Vision  Model
+> 13 02518 24
+> 0012815
+> 30 001217
+> 0002811
+> ImageNet-R (Disjoint)
+> 246812 16
+> kh
+> 10 0511 25 52
+> 002520 44
+> 001411 24
+> 003818 47
+> ImageNet-Sketch (Disjoint)
+> 246812 16
+> kh
+> 137 20 1158
+> 170 10 5046
+> 156 18 10 045
+> 130 15 5136
+> Tiny-ImageNet (Si-Blurry)
+> 246812 16
+> kh
+> 236 66 32 14 712
+> 204 60 510 713
+> 246 45 5359
+> 159 50001
+> CORe50 (Domain)
+
+Figure 5: The cumulative regret versus the type of LVMs on the three TFCL settings and four selected datasets. Here, we utilize a memory buffer with a size of 512 and set κD = 0 .5. Generally, the biggest model achieves the lowest regret across all the experiments, while smaller models such as DINOv3-Vit-S/16 can also achieve remarkable performance in most tasks. 
+
+Impact of LVMs on the detection. The detection capability of LargeMonitor is directly empowered by the representation capabilities of LVMs. Figure 5 illustrates the cumulative regret across four benchmarks with varying LVMs. For benchmarks with data from relatively distinct categories, the smallest DINOv3-Vit-S/16 model can achieve precise detection without regret. However, for the CORe50 domain-incremental benchmark, where shifts are gradual and preserve class semantics while altering low-level statistics, only the largest ViT-7B/16 model achieves zero regret. Smaller models exhibit non-zero cumulative regret due to delayed detection or missed shifts, as their rep-resentations lack the fine-grained sensitivity required to distinguish subtle domain variations from natural within-domain fluctuations. This result underscores that while lightweight LVMs suffice for coarse, abrupt shifts, challenging scenarios with gradual or ambiguous distribution changes demand the representational power of large-scale vision models. 
+
+Buffer Size Method CIFAR-100 Tiny-ImageNet ImageNet-R 
+
+AAUC (↑) ALast (↑) AAUC (↑) ALast (↑) AAUC (↑) ALast (↑)
+
+0
+
+Finetuning 19.71 ±3.39 10.42 ±4.92 15.50 ±0.74 10.42 ±4.92 7.51 ±3.94 2.29 ±0.85 Linear Probing 49.69 ±6.09 23.07 ±7.33 42.15 ±2.79 21.97 ±6.43 29.24 ±1.26 16.87 ±3.14 LwF [2] 55.51 ±3.49 36.53 ±10.96 49.00 ±1.52 27.47 ±7.59 31.61 ±1.53 20.62 ±3.67 L2P [34] 57.08 ±4.43 41.63 ±12.73 52.09 ±1.92 35.05 ±5.73 29.65 ±1.63 19.55 ±4.78 MVP [14] 68.18 ±5.42 64.70 ±0.24 71.25 ±1.33 59.35 ±1.68 38.43 ±1.34 31.71 ±4.40 MVP+L.M. 69.86 ±3.82 63.06 ±2.84 70.65 ±2.09 61.36 ±2.00 41.66 ±1.21 33.99 ±3.96 500 
+
+ER [35] 65.57 ±4.77 60.68 ±1.15 59.46 ±1.81 40.60 ±2.71 40.31 ±1.33 28.85 ±1.43 EWC++ [36] 34.54 ±5.19 25.62 ±3.35 55.05 ±1.75 34.88 ±3.65 18.62 ±1.00 11.36 ±2.40 RM [37] 40.86 ±3.32 23.94 ±0.61 31.96 ±0.80 7.43 ±0.27 18.31 ±1.09 4.14 ±0.18 CLIB [38] 69.68 ±2.20 67.16 ±0.72 60.11 ±1.53 48.97 ±1.48 37.18 ±1.52 29.51 ±0.98 MVP-R [14] 76.41 ±3.78 80.73 ±0.65 77.60 ±0.59 69.57 ±0.86 46.49 ±0.47 43.63 ±2.23 MVP-R+L.M. 77.90 ±3.34 79.71 ±1.06 78.21 ±0.83 69.64 ±0.80 49.16 ±0.44 44.03 ±1.54 2,000 
+
+ER [35] 69.86 ±4.08 71.81 ±0.69 66.75 ±1.13 55.07 ±1.28 45.74 ±1.35 38.13 ±0.32 EWC++ [36] 47.75 ±5.35 46.93 ±1.44 64.92 ±1.21 53.04 ±1.53 30.20 ±1.31 21.28 ±1.88 RM [37] 53.27 ±3.00 65.51 ±0.55 47.26 ±1.13 44.55 ±0.37 27.88 ±1.29 24.25 ±0.99 CLIB [38] 71.53 ±2.61 72.09 ±0.49 65.47 ±0.76 56.87 ±0.54 42.69 ±1.30 35.43 ±0.38 MVP-R [14] 78.16 ±3.28 84.10 ±0.39 80.85 ±0.69 76.45 ±0.25 48.11 ±0.27 47.29 ±2.51 MVP-R+L.M. 80.00 ±2.59 84.17 ±0.61 81.47 ±0.64 76.53 ±0.41 51.86 ±0.50 49.28 ±1.73 
+
+Table 3: Average accuracy of continual learning methods on the Si-Blurry setting with three datasets. Here, MVP-R indicates the MVP method integrated with a memory buffer, and +L.M. indicates that the task boundary information is provided by our LargeMonitor approach. 
+
+Algorithm enhancement with the task boundary information. We investigate whether Large-Monitor’s detected task boundaries can enhance existing online TFCL algorithms. Specifically, we augment MVP and MVP-R [ 14 ] with a simple mechanism: upon detection of a task boundary, the learner temporarily increases or decreases its training intensity (gradient updates per batch), then decays back to the baseline via a linear schedule. Table 3 shows consistent improvements across three 8User Que            
+
+> LMM Response
+> Text Prompt:
+> You are an expe in monitoring the task shift in continual learning.
+> Compare the previous batch to the current batch (images only — no
+> external labels).
+> Data Samples:
+> Text Prompt:
+> The current batch features a istic renderings ( sketches, tattoos, line a ,
+> statues ) of the same animal groups found in the previous photo-based
+> batch.
+> Last Data Samples: 0100 200 300 400 500 600
+> Batch Index
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> Linear  CKA
+> HS-Incremental
+> Ground Truth
+> Detected
+
+Figure 6: (Left) A conservation example of using the Qwen-3.6-Flash model to diagnose domain shift. (Right) The detection process on the HS-Incremental setting. 
+
+Buffer Size Method ImageNet-HS 
+
+AAUC (↑) ALast (↑)
+
+2,000 
+
+ER [35] 71.28 ±0.22 72.58 ±1.11 MVP-R [14] 80.51 ±0.11 82.06 ±0.15 MVP-R+LargeMonitor 82.14 ±0.24 82.24 ±0.26 
+
+Table 4: Average accuracy of continual learning methods on the designed ImageNet-HS benchmark. Given the diagnosis result from LargeMonitor, we adjust the use of modules in the MVP method based on different shift types. buffer sizes on the three datasets. For buffer size 0, MVP+LargeMonitor improves ACC over vanilla MVP from 68.18 to 69.86 on CIFAR-100 and from 38.43 to 41.66 on Tiny-ImageNet. With a buffer size of 2,000, where MVP-R already performs strongly, our enhancement still boosts ACC from 78.16 to 80.00 on CIFAR-100 and from 48.11 to 51.86 on Tiny-ImageNet. These results demonstrate that task boundary information effectively enhances replay, enabling proactive adaptation precisely when distributions shift, while incurring minimal overhead. 
+
+Performance on the HS-Incremental setting. The evaluation on the HS-Incremental setting is threefold. First, Figure 6 illustrates the task-shift detection accuracy, showing that the LVMs effectively capture discrepancies in the representation space and precisely mark all task boundaries. Using the detected boundary information, the LMMs are leveraged to compare two data batches from adjacent tasks. Figure 6 illustrates an example of diagnosing domain shift, where LMMs effectively recognize that the new task introduces only a new artistic style for existing categories, without adding any new categories. Based on the specific shift type, we extend MVP with shift-type-aware adaptation (MVP-Shift). Rather than applying a uniform response, MVP-Shift instantiates a shift-specific policy 
+
+π(st) that modulates: (i) the transient increase in online updates via a decaying replay coefficient β;(ii) gradient selective forgetting (GSF), which down-weights samples with diverging per-instance gradients; (iii) adaptive feature scaling (AFS), which rescales features via class-compensation scores; and (iv) memory consolidation with a stochastic skip rate for corrupted inputs. Concretely, new class emergence triggers aggressive plasticity ( β = 1 .0, full GSF, no memory skip); domain shifts favor moderate replay ( β = 0 .5), reduced GSF ( 0.3×), and AFS enabled for feature alignment; corruptions call for conservative replay ( β = 0 .3), GSF/AFS disabled, and a 50% memory skip rate to avoid buffer contamination. Table 4 reports the test performance on HS-Incremental. MVP-Shift (oracle) outperforms both vanilla MVP and uniform-response baselines, demonstrating that diagnosis-guided diverse strategies substantially outperform fixed mechanical responses under mixed distribution shifts. 
+
+6 Conclusion 
+
+In this paper, we present LargeMonitor, a novel framework that leverages large, pretrained foun-dation models to monitor online task-free continual learning. Unlike existing methods that rely on fragile, training-dependent statistical indicators, LargeMonitor introduces a zero-shot, robust 9shift-detection mechanism based on CKA similarity in a stable and frozen LVM representation space. More importantly, we are the first to formalize and investigate the "detect-and-diagnose" paradigm within task-free streams, utilizing LMMs to semanticize the underlying causes of distribution shifts. Extensive evaluations across standard TFCL benchmarks and our newly designed HS-Incremental dataset demonstrate that LargeMonitor not only achieves highly precise boundary detection but also effectively guides downstream models to perform context-aware, adaptive responses, consistently outperforming state-of-the-art baselines. Still, several limitations of the current framework remain to be addressed in future work. First, the reliance on large foundation models introduces significant memory footprints and inference latency, which may pose challenges for immediate deployment on resource-constrained edge devices or real-time robotic systems. Second, while our CUSUM-based trend detector effectively captures abrupt boundary transitions, its sensitivity to extremely gradual or continuous domain shifts heavily relies on larger-scale encoders, as smaller models occasionally suffer from delayed detection or missed alarms under subtle statistical drift. Future iterations will explore multi-scale historical tracking and fine-grained, self-supervised representation calibration to establish a more lightweight yet highly sensitive monitoring ecosystem. 
+
+References 
+
+[1] Liyuan Wang, Xingxing Zhang, Hang Su, and Jun Zhu. A comprehensive survey of continual learning: Theory, method and application. IEEE Transactions on Pattern Analysis and Machine Intelligence , 46(8):5362–5383, 2024. [2] Zhizhong Li and Derek Hoiem. Learning without forgetting. IEEE Transactions on Pattern Analysis and Machine Intelligence , 40(12):2935–2947, 2017. [3] Sylvestre-Alvise Rebuffi, Alexander Kolesnikov, Georg Sperl, and Christoph H Lampert. icarl: Incremental classifier and representation learning. In Proceedings of the IEEE conference on Computer Vision and Pattern Recognition , pages 2001–2010, 2017. [4] Haohan Yang, Yanxin Zhou, Jingda Wu, Haochen Liu, Lie Yang, and Chen Lv. Human-guided continual learning for personalized decision-making of autonomous driving. IEEE Transactions on Intelligent Transportation Systems , 26(4):5435–5447, 2025. [5] Jiarun Zhu, Yijun Hong, Xiaoquan Sun, Zetian Xu, Mingqi Yuan, Zhiyong Wang, Wenjun Zeng, and Jiayu Chen. Can vla models learn from real-world data continually without forgetting? 
+
+arXiv preprint arXiv:2605.26820 , 2026. [6] Ali Ayub, Chrystopher L Nehaniv, and Kerstin Dautenhahn. Interactive continual learning architecture for long-term personalization of home service robots. In 2024 IEEE International Conference on Robotics and Automation (ICRA) , pages 11289–11296. IEEE, 2024. [7] Matthias De Lange and Tinne Tuytelaars. Continual prototype evolution: Learning online from non-stationary data streams. In Proceedings of the IEEE/CVF international conference on computer vision , pages 8250–8259, 2021. [8] Tyler L Hayes, Kushal Kafle, Robik Shrestha, Manoj Acharya, and Christopher Kanan. Remind your neural network to prevent catastrophic forgetting. In European conference on computer vision , pages 466–483. Springer, 2020. [9] Soochan Lee, Junsoo Ha, Dongsu Zhang, and Gunhee Kim. A neural dirichlet process mixture model for task-free continual learning. In International Conference on Learning Representations ,2020. [10] Fei Ye and Adrian G Bors. Online task-free continual generative and discriminative learning via dynamic cluster memory. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 26202–26212, 2024. [11] Fei Ye and Adrian G Bors. Online task-free continual learning via dynamic expansionable mem-ory distribution. In Proceedings of the Computer Vision and Pattern Recognition Conference ,pages 20512–20522, 2025. 10 [12] Fei Ye and Adrian G Bors. Online task-free continual learning via discrepancy mechanism. 
+
+Knowledge-Based Systems , 322:113688, 2025. [13] Xiwen Wei, Guihong Li, and Radu Marculescu. Online-lora: Task-free online continual learning via low rank adaptation. In 2025 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) , pages 6634–6645. IEEE, 2025. [14] Jun-Yeong Moon, Keon-Hee Park, Jung Uk Kim, and Gyeong-Moon Park. Online class incremental learning on stochastic blurry task boundary via mask and visual prompt tuning. In 
+
+Proceedings of the IEEE/CVF international conference on computer vision , pages 11731–11741, 2023. [15] Ghassen Jerfel, Erin Grant, Tom Griffiths, and Katherine A Heller. Reconciling meta-learning and continual learning with online mixtures of tasks. Advances in neural information processing systems , 32, 2019. [16] Randy Ardywibowo, Zepeng Huo, Zhangyang Wang, Bobak J Mortazavi, Shuai Huang, and Xiaoning Qian. Varigrow: Variational architecture growing for task-agnostic continual learning based on bayesian novelty. In International Conference on Machine Learning , pages 865–877. PMLR, 2022. [17] Xiao Wang, Guangyao Chen, Guangwu Qian, Pengcheng Gao, Xiao-Yong Wei, Yaowei Wang, Yonghong Tian, and Wen Gao. Large-scale multi-modal pre-trained models: A comprehensive survey. Machine Intelligence Research , 20(4):447–482, 2023. [18] Yixin Liu, Kai Zhang, Yuan Li, Zhiling Yan, Chujie Gao, Ruoxi Chen, Zhengqing Yuan, Yue Huang, Hanchi Sun, Jianfeng Gao, et al. Sora: A review on background, technology, limitations, and opportunities of large vision models. arXiv preprint arXiv:2402.17177 , 2024. [19] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervision. In International conference on machine learning ,pages 8748–8763. PmLR, 2021. [20] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. Advances in neural information processing systems , 36:34892–34916, 2023. [21] Mathilde Caron, Hugo Touvron, Ishan Misra, Hervé Jégou, Julien Mairal, Piotr Bojanowski, and Armand Joulin. Emerging properties in self-supervised vision transformers. In Proceedings of the IEEE/CVF international conference on computer vision , pages 9650–9660, 2021. [22] Oriane Siméoni, Huy V Vo, Maximilian Seitzer, Federico Baldassarre, Maxime Oquab, Cijo Jose, Vasil Khalidov, Marc Szafraniec, Seungeun Yi, Michaël Ramamonjisoa, et al. Dinov3. 
+
+arXiv preprint arXiv:2508.10104 , 2025. [23] Rahaf Aljundi, Klaas Kelchtermans, and Tinne Tuytelaars. Task-free continual learning. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 11254–11263, 2019. [24] Simon Kornblith, Mohammad Norouzi, Honglak Lee, and Geoffrey Hinton. Similarity of neural network representations revisited. In International conference on machine learning , pages 3519–3529. PMlR, 2019. [25] Aaron Hurst, Adam Lerer, Adam P Goucher, Adam Perelman, Aditya Ramesh, Aidan Clark, AJ Ostrow, Akila Welihinda, Alan Hayes, Alec Radford, et al. Gpt-4o system card. arXiv preprint arXiv:2410.21276 , 2024. [26] Alex Krizhevsky and Geoffrey Hinton. Learning multiple layers of features from tiny images. Technical report, University of Toronto, Toronto, ON, Canada, 2009. [27] Yann Le, Xuan Yang, et al. Tiny imagenet visual recognition challenge. CS 231N , 7(7):3, 2015. 11 [28] Dan Hendrycks, Steven Basart, Norman Mu, Saurav Kadavath, Frank Wang, Evan Dorundo, Rahul Desai, Tyler Zhu, Samyak Parajuli, Mike Guo, et al. The many faces of robustness: A critical analysis of out-of-distribution generalization. In Proceedings of the IEEE/CVF international conference on computer vision , pages 8340–8349, 2021. [29] Haohan Wang, Songwei Ge, Zachary Lipton, and Eric P Xing. Learning robust global repre-sentations by penalizing local predictive power. Advances in neural information processing systems , 32, 2019. [30] Peter Welinder, Steve Branson, Takeshi Mita, Catherine Wah, Florian Schroff, Serge Belongie, and Pietro Perona. Caltech-ucsd birds 200. Technical report, California Institute of Technology, Pasadena, CA, USA, 2010. [31] Vincenzo Lomonaco and Davide Maltoni. Core50: a new dataset and benchmark for continuous object recognition. In Conference on Robot Learning , pages 17–26. PMLR, 2017. [32] Jinze Bai, Shuai Bai, Yunfei Chu, Zeyu Cui, Kai Dang, Xiaodong Deng, Yang Fan, Wenbin Ge, Yu Han, Fei Huang, et al. Qwen technical report. arXiv preprint arXiv:2309.16609 , 2023. [33] Jinze Bai, Shuai Bai, Shusheng Yang, Shijie Wang, Sinan Tan, Peng Wang, Junyang Lin, Chang Zhou, and Jingren Zhou. Qwen-vl: A versatile vision-language model for understanding, localization, text reading, and beyond. arXiv preprint arXiv:2308.12966 , 2023. [34] Zifeng Wang, Zizhao Zhang, Chen-Yu Lee, Han Zhang, Ruoxi Sun, Xiaoqi Ren, Guolong Su, Vincent Perot, Jennifer Dy, and Tomas Pfister. Learning to prompt for continual learning. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 139–149, 2022. [35] David Rolnick, Arun Ahuja, Jonathan Schwarz, Timothy Lillicrap, and Gregory Wayne. Expe-rience replay for continual learning. Advances in neural information processing systems , 32, 2019. [36] James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the National Academy of Sciences , 114(13):3521–3526, 2017. [37] Jihwan Bang, Heesu Kim, YoungJoon Yoo, Jung-Woo Ha, and Jonghyun Choi. Rainbow memory: Continual learning with a memory of diverse samples. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 8218–8227, 2021. [38] Hyunseo Koh, Dahyun Kim, Jung-Woo Ha, and Jonghyun Choi. Online continual learning on class incremental blurry task configuration with anytime inference. In International Conference on Learning Representations , 2022. 12

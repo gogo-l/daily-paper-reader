@@ -6,151 +6,142 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-12 ~ 2026-06-10
-- 运行时间：2026-06-10 07:41:35 UTC
+- 最新运行日期：2026-06-13
+- 运行时间：2026-06-13 21:56:52 UTC
 - 运行状态：成功
-- 本次总论文数：42
-- 精读区：0
-- 速读区：42
+- 本次总论文数：40
+- 精读区：27
+- 速读区：13
 
 ### 今日简报（AI）
-日报速览：聚焦 42 篇前沿速递，重点挖掘机器遗忘与代码隐私新风险。
-
-最值得关注：实验证明“门控激活重定向”可实现推理阶段高效遗忘，而测试生成技术能精准探测大模型代码生成源的隐私泄露。
-
-下步可优先复现这两种轻量防御方案，检视自家模型在遗忘与隐私边界上的真实表现。
-- 详情：[/20260512-20260610/README](/20260512-20260610/README)
+今日精读27篇AI前沿论文，速读13篇，聚焦连续学习抗遗忘突破与医学图像自监督新框架。
+最值得关注：任务粒度调控与睡眠启发回放策略可显著遏制灾难性遗忘，为终身学习提供双路径解法。
+建议读者优先浏览上述满分论文，医学影像工作者可跟进混沌增强与语义自适应预训练方案。
+- 详情：[/202606/13/README](/202606/13/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [Evaluating the Impact of Task Granularity on Catastrophic Forgetting in Continual Learning](/202606/13/2606.08013v1-evaluating-the-impact-of-task-granularity-on-catastrophic-forgetting-in-continual-learning)  
+   标签：评分：10.0/10、query:continual
+   evidence：研究任务粒度对持续学习中灾难性遗忘的影响
+2. [Not Just After One: Sleep-Inspired Replay Prevents Catastrophic Forgetting After Sequential Tasks](/202606/13/2606.08447v1-not-just-after-one-sleep-inspired-replay-prevents-catastrophic-forgetting-after-sequential-tasks)  
+   标签：评分：10.0/10、query:continual
+   evidence：提出睡眠启发的重放以防止顺序任务学习中的灾难性遗忘。
+3. [Theoretical Foundations of Continual Learning via Drift-Plus-Penalty](/202606/13/2606.08452v1-theoretical-foundations-of-continual-learning-via-drift-plus-penalty)  
+   标签：评分：10.0/10、query:continual
+   evidence：提出一种控制论视角的持续学习框架，缓解神经网络中的灾难性遗忘
+4. [LargeMonitor: Monitoring Online Task-Free Continual Learning via Large Pretrained Models](/202606/13/2606.09430v1-largemonitor-monitoring-online-task-free-continual-learning-via-large-pretrained-models)  
+   标签：评分：10.0/10、query:continual
+   evidence：通过大型预训练模型监控实现在线无任务标识持续学习
+5. [Routing-Aware Expert Calibration for Machine Unlearning in Mixture-of-Experts Language Models](/202606/13/2606.10338v1-routing-aware-expert-calibration-for-machine-unlearning-in-mixture-of-experts-language-models)  
+   标签：评分：10.0/10、query:llm-anonym
+   evidence：TRACE: 面向MoE遗忘的目标路由感知专家校准
+6. [Federated continual learning: A comprehensive survey on lifelong and privacy-preserving learning over distributed and non-stationary data](/202606/13/2606.11272v1-federated-continual-learning-a-comprehensive-survey-on-lifelong-and-privacy-preserving-learning-over-distributed-and-non-stationary-data)  
+   标签：评分：10.0/10、query:med-lifelong
+   evidence：联邦持续学习的全面综述，涉及非平稳数据上的终身和隐私保护学习
+7. [Detecting Sensitive Personal Information in Japanese Pre-Training Corpora for Large Language Models](/202606/13/2606.12114v1-detecting-sensitive-personal-information-in-japanese-pre-training-corpora-for-large-language-models)  
+   标签：评分：10.0/10、query:llm-anonym
+   evidence：检测日语LLM预训练语料中的敏感个人信息以遵守隐私法规
+8. [A multi-agent system for spine MRI report generation from multi-sequence imaging](/202606/13/biorxiv-10-64898-2026-06-07-730703-v1-a-multi-agent-system-for-spine-mri-report-generation-from-multi-sequence-imaging)  
+   标签：评分：10.0/10、query:med-lifelong
+   evidence：提出一种用于脊柱MRI自动报告生成的多智能体系统，实现医学图像分析与解读
+9. [Continual Quadruped Robots Coordination via Semantic Skill Discovery](/202606/13/2606.08102v1-continual-quadruped-robots-coordination-via-semantic-skill-discovery)  
+   标签：评分：9.0/10、query:continual
+   evidence：多四足机器人持续协调学习且无遗忘
+10. [CheXanatomy: Anatomy-Aware Vision-Language Modeling for Chest Radiographs](/202606/13/2606.08420v1-chexanatomy-anatomy-aware-vision-language-modeling-for-chest-radiographs)  
+   标签：评分：9.0/10、query:med-lifelong
+   evidence：解剖感知的胸部X光视觉语言模型
+11. [Segmentation-Assisted Brain MRI Synthesis with Cross-Image Multi-Contrast Feature Memory Bank Retrieval Augmentation](/202606/13/2606.08421v1-segmentation-assisted-brain-mri-synthesis-with-cross-image-multi-contrast-feature-memory-bank-retrieval-augmentation)  
+   标签：评分：9.0/10、query:med-lifelong
+   evidence：利用分割和检索增强的脑MRI合成方法，处理缺失对比度
+12. [SkillHone: A Harness for Continual Agent Skill Evolution Through Persistent Decision History](/202606/13/2606.08671v1-skillhone-a-harness-for-continual-agent-skill-evolution-through-persistent-decision-history)  
+   标签：评分：9.0/10、query:continual
+   evidence：基于持久决策历史的持续智能体技能进化框架，实现智能体动态适应
+13. [Active Source-free Domain Adaptation in Open-set Medical Image Segmentation via Decomposed Uncertainty and Prototype Discrepancy](/202606/13/2606.08749v1-active-source-free-domain-adaptation-in-open-set-medical-image-segmentation-via-decomposed-uncertainty-and-prototype-discrepancy)  
+   标签：评分：9.0/10、query:med-lifelong
+   evidence：开放集医学图像分割的主动式无源域自适应，处理新类别和有限样本及隐私限制
+14. [Parameter-Efficient Continual Learning for Automatic Speech Recognition](/202606/13/2606.09342v1-parameter-efficient-continual-learning-for-automatic-speech-recognition)  
+   标签：评分：9.0/10、query:continual
+   evidence：参数高效持续学习方法缓解语音模型灾难性遗忘
+15. [Preserving Plasticity in Continual Learning via Dynamical Isometry](/202606/13/2606.09762v1-preserving-plasticity-in-continual-learning-via-dynamical-isometry)  
+   标签：评分：9.0/10、query:continual
+   evidence：通过动态等距保持持续学习中的可塑性
+16. [HydraCIL: Decoupled Class-Incremental Learning through Prototype-Guided Multi-Head Classifiers](/202606/13/2606.09960v1-hydracil-decoupled-class-incremental-learning-through-prototype-guided-multi-head-classifiers)  
+   标签：评分：9.0/10、query:continual
+   evidence：提出HydraCIL：一种用于资源受限持续学习的原型引导多头分类器类增量学习方法
+17. [FOGO: Forgetting-aware Orthogonalization Optimizer](/202606/13/2606.10406v1-fogo-forgetting-aware-orthogonalization-optimizer)  
+   标签：评分：9.0/10、query:continual
+   evidence：FOGO优化器通过对动量进行谱正交化并在码本记忆存储过往方向来防止遗忘
+18. [AllDayNav: Lifelong Navigation via Real-World Reinforcement Learning](/202606/13/2606.10927v1-alldaynav-lifelong-navigation-via-real-world-reinforcement-learning)  
+   标签：评分：9.0/10、query:continual
+   evidence：终身自我学习导航框架，具有自演化记忆，适用于动态环境
+19. [Null-Space Constrained Low-Rank Adaptation for Response-Specified Large Language Model Unlearning](/202606/13/2606.10989v1-null-space-constrained-low-rank-adaptation-for-response-specified-large-language-model-unlearning)  
+   标签：评分：9.0/10、query:llm-anonym
+   evidence：大语言模型遗忘方法，抑制指定不良知识同时保持良性能力
+20. [Multimodal Brain Tumour Classification Using Feature Fusion](/202606/13/2606.11107v1-multimodal-brain-tumour-classification-using-feature-fusion)  
+   标签：评分：9.0/10、query:med-lifelong
+   evidence：使用MRI和放射组学特征的多模态脑肿瘤分类
+21. [Multimodal Brain Tumour Classification Using Feature Fusion](/202606/13/2606.11107v2-multimodal-brain-tumour-classification-using-feature-fusion)  
+   标签：评分：9.0/10、query:med-lifelong
+   evidence：使用MRI和放射组学特征的多模态脑肿瘤分类
+22. [Accurate and Resource-Efficient Federated Continual Learning](/202606/13/2606.11480v1-accurate-and-resource-efficient-federated-continual-learning)  
+   标签：评分：9.0/10、query:med-lifelong
+   evidence：联邦持续学习，使用截断SVD摘要实现资源高效
+23. [Steering Multirobot Behavior via Closed-Loop Affine Activation Editing](/202606/13/2606.11489v1-steering-multirobot-behavior-via-closed-loop-affine-activation-editing)  
+   标签：评分：9.0/10、query:continual
+   evidence：通过推理时编辑激活来应对多机器人策略适应中的灾难性遗忘问题
+24. [Space-sampled Value Decay: Forgetting Mechanisms for Non-stationary Deep Reinforcement Learning](/202606/13/2606.11797v1-space-sampled-value-decay-forgetting-mechanisms-for-non-stationary-deep-reinforcement-learning)  
+   标签：评分：9.0/10、query:continual
+   evidence：为非平稳深度强化学习提出显式遗忘机制
+25. [TaskFusion: Continual Anomaly Detection for Heterogeneous Tabular Data](/202606/13/2606.11844v1-taskfusion-continual-anomaly-detection-for-heterogeneous-tabular-data)  
+   标签：评分：9.0/10、query:continual
+   evidence：提出一种面向异质表格数据的持续异常检测方法
+26. [Deep learning super-resolution of paediatric ultra-low-field MRI without paired high-field scans](/202606/13/biorxiv-10-1101-2024-11-29-625898-v2-deep-learning-super-resolution-of-paediatric-ultra-low-field-mri-without-paired-high-field-scans)  
+   标签：评分：9.0/10、query:med-lifelong
+   evidence：无需配对高场扫描的儿科MRI深度学习超分辨率
+27. [Untrained Convolutional Neural Networks as Feature Extractors for Structural MRI](/202606/13/biorxiv-10-64898-2026-06-07-730652-v1-untrained-convolutional-neural-networks-as-feature-extractors-for-structural-mri)  
+   标签：评分：9.0/10、query:med-lifelong
+   evidence：使用未训练CNN从结构MRI中提取特征
 
 ### 速读区论文标签
-1. [Inference-Time Machine Unlearning via Gated Activation Redirection](/20260512-20260610/2605.12765v1-inference-time-machine-unlearning-via-gated-activation-redirection)  
-   标签：评分：10.0/10、query:llm-anonym
-   evidence：通过门控激活重定向在推理时实现遗忘，用于机器遗忘学习
-2. [Probing Privacy Leaks in LLM-based Code Generation via Test Generation](/20260512-20260610/2605.15248v1-probing-privacy-leaks-in-llm-based-code-generation-via-test-generation)  
-   标签：评分：10.0/10、query:llm-anonym
-   evidence：直接处理代码生成大语言模型训练数据中个人身份信息的隐私泄露问题，提出测试驱动方法提取记忆化PII。
-3. [Interference-Aware Multi-Task Unlearning](/20260512-20260610/2605.19042v1-interference-aware-multi-task-unlearning)  
-   标签：评分：10.0/10、query:llm-anonym
-   evidence：处理机器遗忘学习中的多任务干扰
-4. [LLM Anonymization Against Agentic Re-Identificatio](/20260512-20260610/2605.30848v1-llm-anonymization-against-agentic-re-identificatio)  
-   标签：评分：10.0/10、query:llm-anonym
-   evidence：基于大模型的匿名化方法，抵御智能体网络搜索重新识别，兼顾隐私与效用
-5. [LLM Anonymization Against Agentic Re-Identification](/20260512-20260610/2605.30848v2-llm-anonymization-against-agentic-re-identification)  
-   标签：评分：10.0/10、query:llm-anonym
-   evidence：基于LLM的文本匿名化抵御智能体再识别
-6. [De-attribute to Forget for LLM Unlearning](/20260512-20260610/2605.30919v1-de-attribute-to-forget-for-llm-unlearning)  
-   标签：评分：10.0/10、query:llm-anonym
-   evidence：通过强化学习去归因遗忘数据来实现LLM遗忘
-7. [Forgetting Has Neighbors: Localized Collateral Forgetting in Machine Unlearning](/20260512-20260610/2605.31317v1-forgetting-has-neighbors-localized-collateral-forgetting-in-machine-unlearning)  
-   标签：评分：10.0/10、query:llm-anonym
-   evidence：直接研究机器遗忘学习在实例层面的附带损害
-8. [Fast Unlearning at Scale via Margin Self-Correction](/20260512-20260610/2606.02920v1-fast-unlearning-at-scale-via-margin-self-correction)  
-   标签：评分：10.0/10、query:llm-anonym
-   evidence：通过边缘自校正实现快速遗忘，高效移除训练示例
-9. [PURGE: Projected Unlearning via Retain-Guided Erasure](/20260512-20260610/2606.03808v1-purge-projected-unlearning-via-retain-guided-erasure)  
-   标签：评分：10.0/10、query:llm-anonym
-   evidence：提出PURGE机器遗忘算法，选择性地擦除特定数据点并保持模型性能，直接实现了机器遗忘技术。
-10. [KAN-CL: Per-Knot Importance Regularization for Continual Learning with Kolmogorov-Arnold Networks](/20260512-20260610/2605.12306v1-kan-cl-per-knot-importance-regularization-for-continual-learning-with-kolmogorov-arnold-networks)  
-   标签：评分：9.0/10、query:continual
-   evidence：使用KANs进行持续学习以防止灾难性遗忘
-11. [Inference-Time Machine Unlearning via Gated Activation Redirection](/20260512-20260610/2605.12765v2-inference-time-machine-unlearning-via-gated-activation-redirection)  
-   标签：评分：9.0/10、query:llm-anonym
-   evidence：通过门控激活重定向实现LLM推理时机器遗忘
-12. [Locale-Conditioned Few-Shot Prompting Mitigates Demonstration Regurgitation in On-Device PII Substitution with Small Language Models](/20260512-20260610/2605.13538v1-locale-conditioned-few-shot-prompting-mitigates-demonstration-regurgitation-in-on-device-pii-substitution-with-small-language-models)  
-   标签：评分：9.0/10、query:llm-anonym
-   evidence：端侧 PII 替换流程，结合区域条件少样本提示保持文本效用
-13. [MetaMoE: Diversity-Aware Proxy Selection for Privacy-Preserving Mixture-of-Experts Unification](/20260512-20260610/2605.14289v1-metamoe-diversity-aware-proxy-selection-for-privacy-preserving-mixture-of-experts-unification)  
-   标签：评分：9.0/10、query:llm-anonym
-   evidence：无需共享私密数据的隐私保护专家混合模型融合
-14. [DP-SelFT: Differentially Private Selective Fine-Tuning for Large Language Models](/20260512-20260610/2605.17432v1-dp-selft-differentially-private-selective-fine-tuning-for-large-language-models)  
-   标签：评分：9.0/10、query:llm-anonym
-   evidence：差分隐私选择性微调大语言模型，限制更新位置以改善隐私-效用权衡
-15. [CATA: Continual Machine Unlearning via Conflict-Averse Task Arithmetic](/20260512-20260610/2605.18610v1-cata-continual-machine-unlearning-via-conflict-averse-task-arithmetic)  
-   标签：评分：9.0/10、query:llm-anonym
-   evidence：通过冲突规避任务算术实现视觉语言模型的持续机器遗忘，支持序列化移除
-16. [Causal Unlearning in Collaborative Optimization: Exact and Approximate Influence Reversal under Adversarial Contributions](/20260512-20260610/2605.20341v1-causal-unlearning-in-collaborative-optimization-exact-and-approximate-influence-reversal-under-adversarial-contributions)  
-   标签：评分：9.0/10、query:llm-anonym
-   evidence：联邦学习中的因果遗忘以移除客户端数据，满足合规要求
-17. [Approximate Machine Unlearning through Manifold Representation Forgetting Guided by Self Mode Connectivity](/20260512-20260610/2605.22871v1-approximate-machine-unlearning-through-manifold-representation-forgetting-guided-by-self-mode-connectivity)  
-   标签：评分：9.0/10、query:llm-anonym
-   evidence：通过流形表征遗忘实现机器忘却，旨在执行被遗忘权。
-18. [Kernel-Based ReLU Approximation for Homomorphic Encryption-Compatible Privacy-preserving Deep Learning Models](/20260512-20260610/2605.23641v1-kernel-based-relu-approximation-for-homomorphic-encryption-compatible-privacy-preserving-deep-learning-models)  
-   标签：评分：9.0/10、query:llm-anonym
-   evidence：通过近似ReLU实现同态加密兼容的隐私保护深度学习，适用于大语言模型。
-19. [Efficient DP-SGD for LLMs with Randomized Clipping](/20260512-20260610/2605.24879v1-efficient-dp-sgd-for-llms-with-randomized-clipping)  
-   标签：评分：9.0/10、query:llm-anonym
-   evidence：利用随机裁剪的高效 DP-SGD 降低了大语言模型差分隐私训练的内存与计算开销
-20. [SAE-FD: Sparse Autoencoder Feature Distillation for Continual Learning of Large Language Models](/20260512-20260610/2605.25525v1-sae-fd-sparse-autoencoder-feature-distillation-for-continual-learning-of-large-language-models)  
-   标签：评分：9.0/10、query:continual
-   evidence：稀疏自编码器特征蒸馏实现大语言模型的持续学习
-21. [ICCU: In-Context Continual Unlearning via Pattern-Induced Refusal Rules](/20260512-20260610/2605.27138v1-iccu-in-context-continual-unlearning-via-pattern-induced-refusal-rules)  
-   标签：评分：9.0/10、query:llm-anonym
-   evidence：基于上下文持续忘却的大语言模型框架，通过学习拒绝规则实现数据删除。
-22. [Mask the Target: A Plug-and-Play Regularizer Against LoRA Forgetting](/20260512-20260610/2605.29498v1-mask-the-target-a-plug-and-play-regularizer-against-lora-forgetting)  
-   标签：评分：9.0/10、query:continual
-   evidence：即插即用正则化器防止LoRA微调中的灾难性遗忘
-23. [Foundation-Preserving Adaptation via Generalized Rayleigh-Quotient Optimization](/20260512-20260610/2606.00132v1-foundation-preserving-adaptation-via-generalized-rayleigh-quotient-optimization)  
-   标签：评分：9.0/10、query:continual
-   evidence：通过广义瑞利商优化的遗忘记感知LoRA微调
-24. [Multi-Objective Reference-Aligned Machine Unlearning](/20260512-20260610/2606.00399v1-multi-objective-reference-aligned-machine-unlearning)  
-   标签：评分：9.0/10、query:llm-anonym
-   evidence：多目标机器遗忘框架，在保持效用的同时删除训练样本。
-25. [Turning Back Without Forgetting: Selective Backward Refinement for Parameter-Efficient Continual Learning](/20260512-20260610/2606.01379v1-turning-back-without-forgetting-selective-backward-refinement-for-parameter-efficient-continual-learning)  
-   标签：评分：9.0/10、query:continual
-   evidence：参数高效持续学习的选择性反向精炼，实现反向知识迁移
-26. [Turning Back Without Forgetting: Selective Backward Refinement for Parameter-Efficient Continual Learning](/20260512-20260610/2606.01379v2-turning-back-without-forgetting-selective-backward-refinement-for-parameter-efficient-continual-learning)  
-   标签：评分：9.0/10、query:continual
-   evidence：面向持续学习的向后知识迁移，避免灾难性遗忘
-27. [Selective Token-Level Cryptographic Redaction for Privacy-Preserving Clinical Deployment of Large Language Models](/20260512-20260610/2606.03399v1-selective-token-level-cryptographic-redaction-for-privacy-preserving-clinical-deployment-of-large-language-models)  
-   标签：评分：9.0/10、query:llm-anonym
-   evidence：通过令牌级加密编辑保护大模型临床部署中的敏感健康信息。
-28. [Don't Forget Your Embeddings: Robust Knowledge Erasure via Precise Editing of Embeddings](/20260512-20260610/2606.03695v1-dont-forget-your-embeddings-robust-knowledge-erasure-via-precise-editing-of-embeddings)  
-   标签：评分：9.0/10、query:llm-anonym
-   evidence：通过精确编辑词嵌入实现LLM知识擦除
-29. [SharedRequest: Privacy-Preserving Model-Agnostic Inference for Large Language Models](/20260512-20260610/2606.05004v1-sharedrequest-privacy-preserving-model-agnostic-inference-for-large-language-models)  
-   标签：评分：9.0/10、query:llm-anonym
-   evidence：通过批处理级混合与噪声实现LLM隐私保护推理
-30. [Learning What to Forget: Improving LLM Unlearning via Learned Token-Level Importance](/20260512-20260610/2606.06320v1-learning-what-to-forget-improving-llm-unlearning-via-learned-token-level-importance)  
-   标签：评分：9.0/10、query:llm-anonym
-   evidence：提出针对大语言模型遗忘的令牌级重要性学习方法，直接处理目标知识删除问题。
-31. [Reconstruction of Personally Identifiable Information from Supervised Finetuned Models](/20260512-20260610/2605.12264v1-reconstruction-of-personally-identifiable-information-from-supervised-finetuned-models)  
-   标签：评分：8.0/10、query:llm-anonym
-   evidence：从监督微调的大语言模型中重建个人身份信息
-32. [ICED: Concept-level Machine Unlearning via Interpretable Concept Decomposition](/20260512-20260610/2605.14309v1-iced-concept-level-machine-unlearning-via-interpretable-concept-decomposition)  
-   标签：评分：8.0/10、query:llm-anonym
-   evidence：通过可解释概念分解实现视觉语言模型的概念级机器遗忘
-33. [ICED: Concept-level Machine Unlearning via Interpretable Concept Decomposition](/20260512-20260610/2605.14309v2-iced-concept-level-machine-unlearning-via-interpretable-concept-decomposition)  
-   标签：评分：8.0/10、query:llm-anonym
-   evidence：视觉语言模型的概念级机器遗忘
-34. [Privacy Policy Enforcement Guardrails for Data-Sensitive Retrieval-Augmented Generation](/20260512-20260610/2605.17034v1-privacy-policy-enforcement-guardrails-for-data-sensitive-retrieval-augmented-generation)  
-   标签：评分：8.0/10、query:llm-anonym
-   evidence：基于隐私策略的执行护栏，防止RAG系统中的上下文数据泄露
-35. [Revisiting ML Training under Fully Homomorphic Encryption: Convergence Guarantees, Differential Privacy, and Efficient Algorithms](/20260512-20260610/2605.27782v1-revisiting-ml-training-under-fully-homomorphic-encryption-convergence-guarantees-differential-privacy-and-efficient-algorithms)  
-   标签：评分：8.0/10、query:llm-anonym
-   evidence：全同态加密下的差分隐私训练，实现可扩展的隐私保护机器学习
-36. [Private Embedding Lookup with Encrypted Compact Queries under Fully Homomorphic Encryption](/20260512-20260610/2606.03191v3-private-embedding-lookup-with-encrypted-compact-queries-under-fully-homomorphic-encryption)  
-   标签：评分：8.0/10、query:llm-anonym
-   evidence：使用全同态加密实现嵌入查找的隐私保护，适用于大模型推理阶段隐私保护。
-37. [Need to Know: Contextual-Integrity-Grounded Query Rewriting for Privacy-Conscious LLM Delegation](/20260512-20260610/2606.04067v1-need-to-know-contextual-integrity-grounded-query-rewriting-for-privacy-conscious-llm-delegation)  
-   标签：评分：8.0/10、query:llm-anonym
-   evidence：基于情境完整性的查询重写，移除不必要的敏感信息以保护隐私
-38. [Seeing Without Exposing: Adaptive Privacy Control for Open-World, Context-Hungry MLLMs](/20260512-20260610/2606.07175v1-seeing-without-exposing-adaptive-privacy-control-for-open-world-context-hungry-mllms)  
-   标签：评分：8.0/10、query:llm-anonym
-   evidence：通过漂移敏感元素实现多模态大模型的自适应隐私控制
-39. [Unveiling Privacy Risks in Multi-modal Large Language Models: Task-specific Vulnerabilities and Mitigation Challenges](/20260512-20260610/2606.09125v1-unveiling-privacy-risks-in-multi-modal-large-language-models-task-specific-vulnerabilities-and-mitigation-challenges)  
-   标签：评分：8.0/10、query:llm-anonym
-   evidence：识别多模态大语言模型泄漏敏感图像数据的隐私漏洞
-40. [Vision Language Model Helps Private Information De-Identification in Vision Data](/20260512-20260610/2606.09132v1-vision-language-model-helps-private-information-de-identification-in-vision-data)  
-   标签：评分：8.0/10、query:llm-anonym
-   evidence：基于视觉语言模型的视觉数据中敏感文本去标识化
-41. [Benchmarking Empirical Privacy Protection for Adaptations of Large Language Models](/20260512-20260610/2606.09401v1-benchmarking-empirical-privacy-protection-for-adaptations-of-large-language-models)  
-   标签：评分：8.0/10、query:llm-anonym
-   evidence：对大语言模型适配中差分隐私保护的实证基准测试
-42. [Clinically Grounded Privacy Evaluation of Medical LMs](/20260512-20260610/2606.09590v1-clinically-grounded-privacy-evaluation-of-medical-lms)  
-   标签：评分：8.0/10、query:llm-anonym
-   evidence：基于临床的医疗语言模型患者信息泄漏评估
+1. [Chaos-SSL: An Attention-Based Self-Supervised Learning Framework with Chaotic Transformation for Medical Image Classification](/202606/13/2605.27146v1-chaos-ssl-an-attention-based-self-supervised-learning-framework-with-chaotic-transformation-for-medical-image-classification)  
+   标签：评分：8.0/10、query:med-lifelong
+   evidence：利用混沌变换的自监督学习，在有限标注下进行医学图像分类
+2. [ASAP: Advancing Medical Volumetric Representation Learning with Anatomy-aware Semantically-adaptive Pre-training](/202606/13/2606.00602v1-asap-advancing-medical-volumetric-representation-learning-with-anatomy-aware-semantically-adaptive-pre-training)  
+   标签：评分：8.0/10、query:med-lifelong
+   evidence：通过解剖感知和语义自适应预训练推进医学体积表示学习
+3. [XSSR: Cross-Domain Self-Supervised Representative Selection for Efficient Annotation in Medical Image Segmentation](/202606/13/2606.04301v1-xssr-cross-domain-self-supervised-representative-selection-for-efficient-annotation-in-medical-image-segmentation)  
+   标签：评分：8.0/10、query:med-lifelong
+   evidence：跨域自监督框架，用于医学图像分割的极小标注。
+4. [Enhancing MedSAM with a Lightweight Box Predictor for Medical Image Segmentation](/202606/13/2606.04705v1-enhancing-medsam-with-a-lightweight-box-predictor-for-medical-image-segmentation)  
+   标签：评分：8.0/10、query:med-lifelong
+   evidence：用轻量级框预测器增强MedSAM用于医学图像分割
+5. [DualGate-Net: A Prior-Gated Dual-Encoder Framework for Histopathology Cell Detection](/202606/13/2606.07222v1-dualgate-net-a-prior-gated-dual-encoder-framework-for-histopathology-cell-detection)  
+   标签：评分：8.0/10、query:med-lifelong
+   evidence：双编码器框架结合先验门控融合，用于组织病理学图像中的细胞检测
+6. [AUCp: Pseudo-AUC for Inference Model Selection with Unlabeled Validation Data in Abnormality Detection](/202606/13/2606.08742v1-aucp-pseudo-auc-for-inference-model-selection-with-unlabeled-validation-data-in-abnormality-detection)  
+   标签：评分：8.0/10、query:med-lifelong
+   evidence：通过伪AUC指标在无标签验证数据下进行医学图像异常检测的模型选择
+7. [UMITIC: An unsupervised framework for the joint characterization of cellular phenotypes and spatial neighborhoods in multiplex and hyperplex immunofluorescence imaging data](/202606/13/biorxiv-10-64898-2026-05-29-728633-v1-umitic-an-unsupervised-framework-for-the-joint-characterization-of-cellular-phenotypes-and-spatial-neighborhoods-in-multiplex-and-hyperplex-immunofluorescence-imaging-data)  
+   标签：评分：8.0/10、query:med-lifelong
+   evidence：无监督分析多路复用免疫荧光图像，属于医学图像分析任务
+8. [DINMC: A Deep Learning Framework for Interpretable Normative Model Construction and Pathological Brain Alteration Detection](/202606/13/biorxiv-10-64898-2026-05-29-728652-v1-dinmc-a-deep-learning-framework-for-interpretable-normative-model-construction-and-pathological-brain-alteration-detection)  
+   标签：评分：8.0/10、query:med-lifelong
+   evidence：可解释规范建模用于脑图像分析，检测神经退行性疾病相关改变
+9. [ConMem: Structured Memory-Guided Adaptation in Training-Free Multi-Agent Systems](/202606/13/2606.08702v1-conmem-structured-memory-guided-adaptation-in-training-free-multi-agent-systems)  
+   标签：评分：7.0/10、query:continual
+   evidence：使用结构化记忆卡片的训练无关多智能体动态环境适应方法
+10. [IDP-Bench: Benchmarking ability of LLMs to protect personal information in interdependent privacy contexts](/202606/13/2606.09908v1-idp-bench-benchmarking-ability-of-llms-to-protect-personal-information-in-interdependent-privacy-contexts)  
+   标签：评分：7.0/10、query:llm-anonym
+   evidence：面向大语言模型相互依赖隐私场景的基准，评估隐私保护能力
+11. [Quantifying and Defending against the Privacy Risk in Logit-based Federated Learning](/202606/13/2606.08252v1-quantifying-and-defending-against-the-privacy-risk-in-logit-based-federated-learning)  
+   标签：评分：6.0/10、query:llm-anonym
+   evidence：量化并防御联邦学习中的隐私风险，联邦学习是一种隐私保护训练策略
+12. [LongMoE: Longitudinal Multimodal Learning via Trajectory-Aware Mixture-of-Experts](/202606/13/2606.09907v1-longmoe-longitudinal-multimodal-learning-via-trajectory-aware-mixture-of-experts)  
+   标签：评分：6.0/10、query:med-lifelong
+   evidence：在纵向临床分析中整合医学影像进行多模态学习。
+13. [Agentic Environment Engineering for Large Language Models: A Survey of Environment Modeling, Synthesis, Evaluation, and Application](/202606/13/2606.12191v1-agentic-environment-engineering-for-large-language-models-a-survey-of-environment-modeling-synthesis-evaluation-and-application)  
+   标签：评分：6.0/10、query:continual
+   evidence：关于驱动大语言模型智能体持续进化的智能体环境综述
 
 
 <div class="dpr-home-promo-card">

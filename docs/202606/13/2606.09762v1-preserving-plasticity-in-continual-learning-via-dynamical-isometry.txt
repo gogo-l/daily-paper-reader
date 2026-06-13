@@ -1,0 +1,1817 @@
+Title: Preserving Plasticity in Continual Learning via Dynamical Isometry
+
+URL Source: https://arxiv.org/pdf/2606.09762v1
+
+Published Time: Tue, 09 Jun 2026 02:46:06 GMT
+
+Number of Pages: 38
+
+Markdown Content:
+# Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Andries Rosseau 1 Robert M ¨ uller 2 Ann Now´ e 1
+
+## Abstract 
+
+Continual training of deep neural networks un-der non-stationarity often leads to a progressive loss of plasticity, eventually limiting further learn-ing. We relate plasticity to the empirical Neural Tangent Kernel, and identify dynamical isome-try (the condition that layer-wise Jacobian singu-lar values remain close to one) as a key mecha-nism for preserving plasticity in continual learn-ing. We revisit a class of networks that are almost-everywhere isometric while remaining universal Lipschitz function approximators, demonstrating that near-dynamical isometry is compatible with expressive nonlinear representations. For general architectures, we propose an efficient isometry-promoting regularization scheme and identify a novel mechanism by which it can reactivate dor-mant ReLU units. Building on this, we intro-duce AdamO , an Adam-style adaptive optimizer that decouples isometry regularization from gra-dient updates, analogous to AdamW. We further reinterpret prior plasticity-preserving approaches through the lens of dynamical isometry, show-ing that they target only a partial measure of isometry. Across supervised and reinforcement-learning continual-learning benchmarks designed to induce plasticity loss, our methods consistently match or outperform existing approaches. 
+
+## 1. Introduction 
+
+Training a neural network typically optimizes parameters by gradient-based methods to minimize an expected loss. The effectiveness of this process depends strongly on the initial-ization of the network parameters, and a good initialization ideally places the network in a region of parameter space from which gradient descent can make rapid progress across a wide range of tasks (Martens et al., 2021; Saxe et al., 2013; Pennington et al., 2017; 2018; Xiao et al., 2018). For 
+
+> 1
+
+AI Lab, Vrije Universiteit Brussel 2Aganthos. Correspondence to: Andries Rosseau <andries.rosseau@vub.be >.
+
+Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s). 
+
+a single task, optimization often has ample time to move parameters to a region with low task loss. However, in the non-stationary setting of continual learning, inputs and losses may vary arbitrarily over time. In this setting, the learned parameters from one phase effectively become the initialization for the next, which might be a suboptimal start-ing point. Empirically, standard architectures and optimizers that succeed in single-task training often struggle under sus-tained non-stationarity, shown as a degradation in learning performance on new tasks (Dohare et al., 2024; Nikishin et al., 2022; Lyle et al., 2022; 2023; 2024b; Abbas et al., 2023). This gradual diminishing of a network’s adaptive capabilities is commonly termed plasticity loss , and poses a major challenge for the development of continually learning systems. 1
+
+Several mechanisms have been implicated. In ReLU net-works, units may become inactive (“dying ReLUs”) and receive zero gradients (Sokar et al., 2023; Lu et al., 2019), or become perpetually active, reducing effective nonlinear-ity (Lyle et al., 2024b). Both correspond to pre-activations drifting to one side of the activation threshold. In rein-forcement learning, primacy bias can arise when early boot-strapping targets dominate representation learning, limiting later adaptation (Nikishin et al., 2022). The optimization dynamics themselves can also cause plasticity loss. For example, the tendency of parameters to increase during learning can lead to overly sharp loss directions (high Hes-sian spectral norm), potentially making stable optimization difficult 2 (Lyle et al., 2023). Moreover, in scale-invariant net-works, growing weight norms decrease the effective learning rate and make it increasingly difficult to change the direc-tion of the weight vectors (Van Laarhoven, 2017; Lyle et al., 2024a). While these failure modes are well documented, they are often studied in isolation and tied to specific architectures, losses, or tasks. In this paper, we argue that the common denominator is a deterioration in how efficiently gradient descent can update the network in all relevant output-space directions, expressed as an increase in anisotropy of the 
+
+> 1
+
+Plasticity loss is related to, but different from, catastrophic forgetting, which concerns retention of past knowledge. We focus on the ability to acquire new knowledge. 
+
+> 2
+
+There is evidence indicating that gradient descent itself can limit this effect, though not remove it (Cohen et al., 2021). 
+
+1
+
+> arXiv:2606.09762v1 [cs.LG] 8 Jun 2026 Preserving Plasticity in Continual Learning via Dynamical Isometry
+
+empirical Neural Tangent Kernel (NTK) (Jacot et al., 2018). This leads to a functional task-agnostic definition of plastic-ity in terms of the local geometry of the parameter-function map. A finite network cannot have an isotropic empirical NTK for all input distributions simultaneously. However, under a task/input-agnostic prior where inputs are modeled as isotropic high-dimensional samples, a dynamically iso-metric network has an empirical NTK that concentrates near isotropy in expectation. Therefore, keeping the net-work near dynamical isometry yields a principled target for plasticity. A network is dynamically isometric when perturbations are propagated through its layers without sys-tematic expansion or contraction, so that the singular values of the input-output Jacobian remain concentrated near one. This geometric condition has also been central to the signal propagation literature and is empirically known to lead to good network initializations (Saxe et al., 2013; Pennington et al., 2017; 2018; Xiao et al., 2018). Here, we connect it to plasticity and use it to derive plasticity-preserving ar-chitectures and training methods with the goal of driving the singular values of the layer-wise Jacobians to one. This helps gradient descent retain the capacity to make nontriv-ial progress from the current parameters, regardless of the current objective. Concretely, we (i) define plasticity functionally and show that approximate dynamical isometry is a principled and tractable task-agnostic surrogate for NTK isotropy in finite networks; (ii) revisit almost-everywhere isometric architec-tures to establish that layer-wise isometry is compatible with universal Lipschitz approximation; (iii) propose an efficient isometry-promoting regularizer for general architectures, analyze a mechanism by which it revives dead ReLU units, and introduce AdamO , which decouples this regularization from the adaptive update in analogy to AdamW; and (iv) evaluate across supervised and RL continual-learning bench-marks, where promoting isometry preserves plasticity and yields strong continued performance. 
+
+## 2. Plasticity, the NTK and dynamical isometry 
+
+2.1. Defining plasticity 
+
+We define plasticity as the ability of a learning system to efficiently adapt its represented function toward minimizing achievable loss with respect to a distribution of tasks. Our definition applies to both the standard stationary single-task setting, as well as to non-stationary or multi-task settings. Let fθ : X → Rdout denote the learner’s function repre-sented by a model with parameters θ ∈ RP , and let τ ∼ T 
+
+denote a task sampled from a task distribution. A task τ
+
+specifies a data distribution Pτ (x, y ) and a loss function 
+
+ℓτ (f (x), y ), where y = f ⋆τ (x) + ϵ with f ⋆τ the underlying target function and ϵ stochastic noise. The corresponding population loss for task τ is 
+
+Lτ (f ) = E(x,y )∼Pτ [ℓτ (f (x), y )] . (1) In the deterministic realizable setting ( ϵ = 0 ), minimizing the population loss to zero corresponds to recovering the unique target function f ⋆τ and therefore achieving perfect task generalization. 
+
+Plasticity vs expressivity Let F = {fθ : θ ∈ RP } de-note the induced function class. Since the target function may not be representable within F, the optimal achievable population loss for task τ is 
+
+L⋆ 
+
+> F,τ
+
+= inf   
+
+> f∈F
+
+Lτ (f ),
+
+and the corresponding optimal-loss set is 
+
+MF,τ = f ∈ F : Lτ (f ) = L⋆ 
+
+> F,τ
+
+,
+
+which need not contain a unique function. To separate plasticity from expressivity, we define plasticity in terms of the loss reduction with respect to the optimal achievable 
+
+population loss, rather than convergence to the ideal target function. This distinction can be made explicit by noting that the loss difference for a task τ relative to the target function decomposes as 
+
+Lτ (fθ ) − Lτ (f ⋆τ ) = Lτ (fθ ) − L⋆
+
+> F,τ
+
+| {z }
+
+> plasticity gap
+
++ L⋆ 
+
+> F,τ
+
+− Lτ (f ⋆τ )
+
+| {z }
+
+> approximation gap
+
+.
+
+The approximation gap depends on the expressivity of the function class, whereas the plasticity gap measures the ex-tent to which the learning dynamics fail to efficiently ap-proach the optimal-loss set, i.e., reduce excess achievable loss. 
+
+Resource efficiency Intuitively, plasticity is not only about minimizing loss, but also about how efficiently this can be attained. Different learning systems may eventually reach similar performance while requiring different amounts of compute, data, optimization steps, memory, or energy. Plasticity should therefore contain some notion of resource-sensitivity. Exhaustive parameter search, for example, may eventually discover near-optimal solutions, but can require a prohibitively large amount of compute. To account for this, we characterize plasticity with respect to some update mechanism. Let 
+
+θτt = Ut,τ (θ)
+
+denote the parameter state obtained after adapting the initial state θ to task τ using t resource units. Here t may denote optimization steps, samples, wall-clock time, floating-point operations, energy, or another resource. In this work we fo-cus mainly on first-order gradient-based optimization, where 
+
+t denotes the number of update steps. 2Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Definition 2.1 (Plasticity) . Define the excess achievable loss, or plasticity gap, at parameter state θ by ∆τ (θ) = 
+
+Lτ (fθ ) − L⋆ 
+
+> F,τ
+
+. For a task τ with ∆τ (θ) > 0, define the fraction of eliminated excess achievable loss after budget t
+
+as 
+
+ρτ,t (θ) = 1 − ∆τ (θτt )∆τ (θ) .
+
+The plasticity of state θ with respect to task distribution T ,update mechanism U, and budget t is then 
+
+PT ,t (θ) = Eτ ∼T [ρτ,t (θ)] . (2) Thus, PT ,t (θ) measures the expected fraction of excess achievable loss that can be eliminated using budget t. 3
+
+2.2. Task-agnostic plasticity and the NTK 
+
+We now relate plasticity under first-order gradient descent to the geometry of the empirical Neural Tangent Kernel (NTK) (Jacot et al., 2018). For a task dataset Dτ =
+
+{(xi, y i)}nτ
+
+> i=1
+
+, write Xτ = ( x1, . . . , x nτ ), and collect the network outputs into a vector 
+
+fθ (Xτ ) ∈ Rm, m = nτ dout .
+
+Let 
+
+Jθ (Xτ ) = ∂f θ (Xτ )
+
+∂θ ∈ Rm×P
+
+be the parameter-output Jacobian, and let 
+
+gτ = ∇f Lτ (fθ (Xτ )) 
+
+be the empirical loss gradient in output space. A gradi-ent descent step in parameter space induces the first-order functional update 
+
+∆f = −ηJ θ (Xτ )Jθ (Xτ )⊤gτ = −ηK θ (Xτ )gτ ,
+
+where 
+
+Kθ (Xτ ) = Jθ (Xτ )Jθ (Xτ )⊤
+
+is the empirical NTK. Hence, to first order, 
+
+∆Lτ = Lτ (fθ + ∆ f ) − Lτ (fθ )= −η g ⊤ 
+
+> τ
+
+Kθ (Xτ )gτ + O(η2). (3) The quantity controlling local progress is therefore the Rayleigh coefficient 
+
+RKθ (Xτ )(gτ ) = g⊤ 
+
+> τ
+
+Kθ (Xτ )gτ
+
+∥gτ ∥22
+
+. (4) Large Rayleigh coefficients correspond to directions in which gradient descent can rapidly change the represented function. Small coefficients correspond to directions in which the network is locally rigid. Directions in the nullspace of Kθ (Xτ ) cannot be updated at all. 4                  
+
+> 3One can avoid choosing tby integrating PT,t into a discounted plasticity Pγ
+> T(θ) = (1 −γ)P∞
+> t=0 γtPT,t (θ),with γ∈[0 ,1) .
+> 4Although Eqs. (3)–(4) are written for full-batch gradient de-scent, they hold for SGD in expectation: the minibatch gradient is
+
+Task-agnostic plasticity A natural notion of plasticity is 
+
+task-agnostic plasticity, where we assume no prior over the task distribution. This means that any direction g ∈ Rm
+
+should be considered a possible task-gradient. Therefore, task-agnostic plasticity ideally requires first-order gradient descent to make comparable progress for all possible output-space directions, with no direction preferred in advance. The ideal task-agnostic NTK is consequently 
+
+Kθ (X) ≈ cI m, c > 0 (5) for any X, meaning that the empirical NTK is isotropic for any set of inputs. Equivalently, 
+
+RKθ (X)(g) ≈ c for all g̸ = 0 .
+
+The overall scale of this progress cannot simply be made arbitrarily large, as this would lead to unstable dynamics. Standard stability conditions for gradient descent on an L-smooth objective require η ≲ 1/L , so increasing c forces 
+
+η to shrink proportionally, which cancels the amplification in the loss update. The optimal scaling can in principle be found using the local curvature/Hessian, but requires costly second order calculations. In practice, for first-order gradient descent, the learning rate is simply tuned for global trade-off between speed and stability. More precisely, fix a stability budget η ≤ 1/λ max (Kθ (X)) .The worst-case first-order progress over unit-norm task-gradient directions is then η λ min (Kθ (X)) , which is max-imized exactly when λmin = λmax , i.e. when Kθ (X) is isotropic. Under first-order gradient descent, task-agnostic plasticity is therefore controlled by the anisotropy (condi-tion number) of the empirical NTK rather than its scale: anisotropy forces the learning rate to respect the largest eigenvalue while progress along the smallest-eigenvalue directions stalls. 
+
+Isotropy as a prior, not a frozen target Task-agnostic isotropy is the idealized target only before a task is known, or equivalently as a property of the parameter state at the moment the new task is presented. Once a task arrives, gra-dient descent should and does specialize the NTK toward the task-relevant subspace; this evolution is precisely fea-ture learning. We therefore will not aim to make Kθ strictly isotropic in practice. Rather, we keep the network near a well-conditioned NTK spectrum that balances pure plas-ticity and performance to both avoid that an output-space direction has already collapsed when the next, unknown task is presented, while also not prohibiting all feature learning.           
+
+> unbiased, so taking the expectation over minibatch sampling gives
+> E[∆ f] = −ηK θ(X)gand E[∆ Lτ] = −η g ⊤Kθ(X)g+O(η2).The empirical NTK and its anisotropy therefore govern first-order progress for both GD and SGD.
+
+3Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+2.3. Dynamical isometry 
+
+Exact isotropy of the empirical NTK for all input distribu-tions is an idealization, and cannot hold for a finite network. Since 
+
+rank( Kθ (X)) ≤ P, 
+
+any dataset with m > P necessarily produces an NTK with a nontrivial nullspace. Even when m ≤ P , requir-ing Kθ (X) = cI m for every possible X would require the parameter-gradient features ∇θ fθ,a (x) to be mutually orthogonal for arbitrarily many distinct input-output pairs. A finite parameter space cannot support this. Thus exact input-agnostic NTK isotropy is unattainable. We therefore relax the requirement from isotropy for every input dataset to isotropy in expectation over a task-agnostic input prior. Since a task-agnostic prior gives no preferred input direction, we take the input distribution to be isotropic in expectation. For normalized samples xi ∈ Rd, this gives 
+
+E[XX ⊤] = In, x⊤ 
+
+> i
+
+xj = OP(d−1/2) (i̸ = j),
+
+so when d is large, samples become nearly orthogonal. The goal under this relaxation then becomes 
+
+EX [Kθ (X)] ∝ Im,
+
+with finite-sample deviations controlled by the random cor-relations in X. We now ask what architectural condition preserves this property most directly. Consider a depth-L network 
+
+h0(x) = x, zl(x) = Wlhl−1(x) + bl,hl(x) = ϕl(zl(x)) .
+
+(6) Let Hl ∈ Rn×dl collect the activations hl(xi) as rows. For output coordinate a, define 
+
+Bl,a ∈ Rn×dl , (Bl,a )i, : = ∂f θ,a (xi)
+
+∂z l(xi) .
+
+For the weight parameters of layer l, the NTK block between output coordinates a, b can then be written compactly as 
+
+Kab l = ( Hl−1H⊤
+
+> l−1
+
+) ⊙ (Bl,a B⊤
+
+> l,b
+
+), (7) where ⊙ denotes the Hadamard product. Summing over the layers gives the total NTK: 
+
+Kab θ (X) = 
+
+> L
+
+X
+
+> l=1
+
+Kab l , (8) with analogous bias terms depending only on the sensitivity Gram matrices. 5 
+
+> 5The decomposition focuses on the weight contribution to the NTK. Bias parameters add terms of the form Bl,a B⊤
+> l,b . These obey the same backward-conditioning requirement and do not affect the main argument about preservation of input geometry through weight maps.
+
+In order to keep the NTK isotropic under this isotropic input prior, the forward Gram matrices HlH⊤ 
+
+> l
+
+should preserve the (expected) isotropy of XX ⊤ and the backward sensitiv-ity Grams Bl,a B⊤ 
+
+> l,b
+
+should not introduce output-directional anisotropy. This can be accomplished when the network has layer-wise input-output Jacobian singular values that are close to one, known as dynamical isometry (Saxe et al., 2013; Pennington et al., 2017; 2018; Xiao et al., 2018). Layer-wise isometry is strictly stronger than end-to-end isometry of JL · · · J1: isometry of each factor implies isom-etry of the product, but not conversely. The NTK needs the stronger version, since by (7) – (8) it is a sum of per-layer terms coupling the intermediate Gram Hl−1H⊤ 
+
+> l−1
+
+with the backward sensitivity Bl,a B⊤
+
+> l,b
+
+, which stay well-conditioned only if every layer is isometric—an expanding layer can-celled by a contracting one leaves the intermediate Grams distorted even when the product is an isometry. As an example, consider the deep linear case with square orthogonal weights and identity activations, where this con-dition holds exactly. We have 
+
+HlH⊤ 
+
+> l
+
+= XX ⊤ for all l, 
+
+and the layer-to-output maps are orthogonal, meaning 
+
+Bl,a B⊤ 
+
+> l,b
+
+= δab 11 ⊤.
+
+Substituting into Eq. (7) yields 
+
+Kab θ (X) ∝ δab XX ⊤,
+
+or, equivalently, 
+
+Kθ (X) ∝ XX ⊤ ⊗ Idout . (9) Thus, for an isometric network, the NTK inherits the input Gram geometry. Under the task-agnostic isotropic input prior, 
+
+EX [Kθ (X)] ∝ In ⊗ Idout ,
+
+and for high-dimensional sampled inputs the empirical NTK is close to this isotropic expectation up to the random off-diagonal correlations of XX ⊤. Hence, layer-wise isometry is a principled and tractable surrogate to task-agnostic NTK isotropy, whereas no sufficient condition exists absent a prior over future tasks, owing to the unavoidable NTK nullspace. We note that our result complements insights from the theory of random network initialization (Pennington et al., 2017; 2018; Martens et al., 2021; Saxe et al., 2013; Xiao et al., 2018). This line of work analyzes semi-formally how depth affects signal and gradient propagation at initialization, and shows that training is facilitated when networks are initial-ized near dynamical isometry. This encourages singular values of the relevant input-output Jacobians to remain con-centrated near one, so that signals and gradients neither 4Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+systematically expand nor contract across depth. We extend this viewpoint by treating dynamical isometry not only as an initialization target for random networks, but as a geometric condition whose drift provides insight into plasticity loss. For nonlinear networks, exact data-independent dynami-cal isometry is generally impossible because the Jacobians depend on the activation pattern. The practical target is therefore approximate dynamical isometry: keep the layer-wise Jacobian spectra close to 1 by controlling the weights and the activations. In the next sections, we will soften strict isometry to allow for more expressive networks, while still aiming to keep close to the isometric manifold in order to preserve plasticity. 
+
+## 3. Isometry and expressivity 
+
+A natural concern is whether staying close to an (approx-imately) isometric manifold is actually compatible with expressive nonlinear hypothesis classes. Pennington et al. (2018) show that for random networks at initialization, strict dynamical isometry is only possible when the network col-lapses to a linear (orthogonal) network. However, for prac-tical networks, we do not require strict isometry. Here, we first address expressivity near the isometric manifold by briefly revisiting a class of networks that are isometric almost-everywhere, providing an existence proof of archi-tectures that are (i) (almost-everywhere) isometric in the layer-wise sense relevant for task-agnostic plasticity, yet (ii) remain universal approximators over a rich function class. 
+
+3.1. An almost-everywhere isometric universal class. 
+
+Consider fully-connected networks of the form 
+
+h0(x) = x, x ∈ Rdin 
+
+hℓ(x) = ϕ(Wℓhℓ−1(x) + bℓ) , ℓ = 1 , . . . , L, fθ (x) = hL(x),
+
+(10) where each linear map is orthonormal (all singular values equal 1; in the square case Wℓ is orthogonal) and the ac-tivation ϕ is GroupSort , as proposed in Anil et al. (2019); Chernodub & Nowicki (2016). GroupSort partitions pre-activations into fixed-size groups and sorts within each group. For groups of size two, it is called MaxMin . These non-linear activations are 1-Lipschitz, and wherever they are differentiable their input-output Jacobian is a (block) per-mutation matrix. Consequently, at points of differentiability, 
+
+∇ϕ(z) is orthogonal and hence norm-preserving. Let Jℓ(x) = ∇hℓ−1 hℓ(x) denote the layer-wise input– output Jacobian. For GroupSort networks with orthonormal 
+
+Wℓ, at any x where all layers are differentiable we have the factorization 
+
+Jℓ(x) = Pℓ(x) Wℓ, (11) where Pℓ(x) is a (block) permutation matrix induced by the local sorting pattern. Therefore, 
+
+Jℓ(x)⊤Jℓ(x) = I (12) and hence the singular values σi are 
+
+σi(Jℓ(x)) = 1 ∀i, (13) i.e., each layer is an isometry at such x. The set of non-differentiability corresponds to within-group ties (changes in sorting order). This set is contained in a finite union of affine hyperplanes in pre-activation space and is therefore Lebesgue-null. Equivalently, the network is differentiable and satisfies (13) almost everywhere (a.e.) on Rdin . In par-ticular, for any data distribution D absolutely continuous w.r.t. Lebesgue measure, these isometry statements hold 
+
+D-almost surely. 
+
+Implication for loss-agnostic plasticity. Recall the back-propagation (suffix) Jacobians Bℓ(x) = ∇hℓ fθ (x) =
+
+JL(x) · · · Jℓ+1 (x). If every Jk(x) is orthogonal (or, more generally, an isometry in the sense Jk(x)⊤Jk(x) = I), then 
+
+Bℓ(x) is also an isometry, and for every output direction 
+
+v ∈ Rdout ,
+
+∥Bℓ(x)⊤v∥2 = ∥v∥2 for a.e. x. (14) Concretely, this means GroupSort networks (with orthogo-nal linear layers) preserve norms, but not necessarily angles. There are no vanishing or exploding gradient signals, but gradients for different samples can still become correlated or anti-correlated, which is necessary for feature learning. 
+
+3.2. Expressivity of isometric a.e. networks 
+
+The apparent simplicity of sorting-based activations is mis-leading. GroupSort networks are highly expressive, for reasons closely analogous to the expressivity of element-wise piecewise-linear activations, but without sacrificing norm preservation. For example, ReLU achieves expres-sivity through input-dependent gating: different activation patterns induce a combinatorial number of affine linear re-gions, at the cost of locally collapsing certain directions and reducing the rank of the Jacobian. GroupSort induces a similar combinatorial partition of input space, but replaces gating with input-dependent permutations (reflections in the case of MaxMin) of coordinates within fixed-size groups. The network is therefore still piecewise linear, with linear regions indexed by sorting patterns, but each region is as-sociated with an orthogonal (norm-preserving) map rather than a rank-deficient projection. Expressivity arises from the rapid growth in the number of such regions with depth, while all directions are preserved locally. As Anil et al. (2019) show, orthogonal linear maps com-posed with GroupSort activations are dense in the class of 1-5Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Lipschitz functions on compact domains (a universal approx-imation theorem based on a restricted Stone–Weierstrass argument). This establishes the existence of highly expres-sive solutions within architectures that are (a.e.) isometric at the layer level. Existence alone, however, does not guarantee that such solutions are readily reached by optimization. In our experiments, we show that gradient descent on almost-everywhere isometric networks reliably finds functions that are expressive enough to match, and in some settings sur-pass, the performance of unrestricted architectures. 
+
+## 4. Promoting isometry through regularization 
+
+The preceding sections motivate (approximate) layer-wise dynamical isometry as a proxy for preserving task-agnostic plasticity under sustained non-stationarity. We now turn to more general architectures with element-wise activations, for which exact isometry is generally unattainable (with-out linearization), and discuss a regularization scheme that keeps the linear components of each layer close to a partial isometry by driving their singular values toward one. 
+
+4.1. Isometry of weight matrices 
+
+Consider a standard feedforward layer of the form 
+
+hℓ(x) = ϕ(zℓ(x)) , zℓ(x) = Wℓhℓ−1(x) + bℓ,
+
+with elementwise nonlinearity ϕ and weight matrix Wℓ ∈
+
+Rdℓ×dℓ−1 . At inputs where ϕ is differentiable, the layer Jacobian factorizes as 
+
+Jℓ(x) = ∇hℓ−1 hℓ(x) = Dℓ(x) Wℓ,Dℓ(x) := Diag  ϕ′(zℓ(x)) . (15) Since Dℓ(x) depends on both the data and the current param-eters through zℓ(x), any attempt to enforce Jℓ(x)⊤Jℓ(x) ≈
+
+I uniformly over x is necessarily limited by the variability (and potential rank-deficiency) of Dℓ(x). However, we can still control the multiplicative part Wℓ and thereby prevent the weights from introducing additional ill-conditioning be-yond that already imposed by the activation gates. This statement can be made precise at the level of sin-gular values and condition numbers. For any (fixed) di-agonal D and matrix W , submultiplicativity of the sin-gular values yields σmax (DW ) ≤ σmax (D) σmax (W ),
+
+and σmin (DW ) ≥ σmin (D) σmin (W ), and hence (when 
+
+σmin (D) > 0) the condition number, defined as κ =
+
+σmax /σ min , yields κ(DW ) ≤ κ(D)κ(W ). Thus, among all choices of W , the choice that minimizes distortion of gradient transport is precisely κ(W ) = 1 , i.e., W is (pseudo-)orthogonal . In short: without architectural control over Dℓ(x) (as we did for GroupSort networks), the best general-purpose target is to make Wℓ isometric, so that the layer’s conditioning is dominated by the nonlinearity rather than by weight drift. 
+
+4.2. Regularizing toward (pseudo-)orthogonality 
+
+We implement this principle via a differentiable penalty that drives the singular values of each Wℓ toward one. A square matrix is orthogonal iff W ⊤ 
+
+> ℓ
+
+Wℓ = WℓW ⊤ 
+
+> ℓ
+
+= I. For rectangular matrices, only one of these constraints can hold. Accordingly, for each layer we define the Gram deviation 
+
+penalty 
+
+Riso (Wℓ) := 
+
+( W ⊤ 
+
+> ℓ
+
+Wℓ − Idℓ−1 
+
+> 2
+> F
+
+, dℓ ≥ dℓ−1,
+
+WℓW ⊤ 
+
+> ℓ
+
+− Idℓ 
+
+> 2
+> F
+
+, dℓ < d ℓ−1. (16) This objective directly penalizes deviations of the squared 
+
+singular values from one. For example, when dℓ ≥ dℓ−1,
+
+W ⊤ 
+
+> ℓ
+
+Wℓ − I 2 
+
+> F
+
+=
+
+> dℓ−1
+
+X
+
+> i=1
+
+ σi(Wℓ)2 − 12, (17) and analogously in the wide case with WℓW ⊤ 
+
+> ℓ
+
+. Hence minimizing (16) encourages σi(Wℓ) ≈ 1 for all nonzero singular values, directly promoting approximate isometry and good conditioning. Moreover, the penalty (16) is effi-cient: it requires only matrix multiplications (no SVD), and its gradient has a closed form. We note that this form of regularization is not novel to our work and has been successfully employed in single-task learning settings (Bansal et al., 2018; Li et al., 2019; Huang et al., 2020). Here, we extend its application to plasticity and continual learning. We refer to Appendix A for implementation details. Putting things together, our training objective at time t is 
+
+min  
+
+> θ
+
+E(x,y )∼Pt
+
+ℓ(fθ (x), y ) + λ
+
+> L
+
+X
+
+> ℓ=1
+
+Riso (Wℓ), (18) with λ ≥ 0 controlling the strength of the isometry-promoting term. While (18) does not guarantee dynamical isometry in the presence of strongly saturating or gating nonlinearities, it prevents a prominent and empirically com-mon failure mode in continual learning: progressive growth of weight norms and condition numbers that drives Jaco-bian singular values away from one and collapses gradient transport. 
+
+4.3. Revival of dead ReLUs 
+
+A key feature of (18) is that the orthogonality regularizer acts directly on each weight matrix, rather than propagating through downstream nonlinearities. This is relevant in ReLU networks, where dead units (strictly negative pre-activations on the current stream) receive zero task gradient. If we write Wℓ = [ w⊤ 
+
+> 1
+
+; . . . ; w⊤ 
+
+> dℓ
+
+], then even if the task gradient for some weight vectors wi is zero, the Gram-deviation penalty 6Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+generally still produces a nonzero update unless wi already has unit norm and is orthogonal to the other weight vectors. Consequently, as the subset of active neurons moves under the task loss, the regularizer couples the rows of Wℓ, rotating inactive wi to maintain an approximately orthonormal set. Under non-stationarity, this coupling provides a plausible reactivation mechanism: as long as a subset of neurons re-main active and move under the task loss, the orthogonality penalty tends to push the remaining weight vectors to be orthogonal to the active span. Unless the active subspace evolves entirely within the hyperplane orthogonal to all dead weights, this redistribution can move some previously dead units back into regions with positive pre-activations. The ef-fect is indirect and does not guarantee revival in adversarial settings where Dℓ(x) collapses on all inputs, but it supplies a mechanism absent from purely task-driven updates and matches our empirical finding that orthogonal regulariza-tion can sustain ReLU activity during continual learning (Section 6). 
+
+4.4. Orthogonal adaptive optimization: AdamO 
+
+Adaptive optimizers such as Adam (Kingma, 2014) are widely used in deep learning. A subtle practical issue is that if one naively optimizes the composite objective (18) with Adam, the moment estimates are built from the sum 
+
+of task and regularizer gradients. Since the statistics and geometry of ∇R iso differ substantially from those of the task gradient (it is dense, layer-coupled, and targets a spe-cific matrix manifold), mixing them inside the adaptive preconditioner can undesirably rescale task updates or make the effective regularization strength highly parameter- and time-dependent. We therefore propose AdamO , which decouples isometry updates from the adaptive gradient step, in direct analogy to decoupled weight decay (Loshchilov & Hutter, 2017). Con-cretely, let gt := ∇θ ℓt(θ) be the stochastic task gradient and 
+
+rt := ∇θ
+
+P 
+
+> ℓ
+
+Riso (Wℓ) the regularizer gradient. AdamO updates Adam’s moments using gt only: 
+
+mt = β1mt−1 + (1 − β1)gt,vt = β2vt−1 + (1 − β2)gt ⊙ gt, (19) and then applies a parameter update with a decoupled isom-etry step 
+
+θt+1 = θt − η ˆmt
+
+√ˆvt + ε − ηiso λ r t, (20) where ˆmt, ˆvt are the bias-corrected moments, η is the base learning rate, and ηiso is an isometry step size (set equal to 
+
+η by default, but tunable). Computing Riso (Wℓ) and its gradient requires only the Gram product W ⊤ 
+
+> ℓ
+
+Wℓ (no SVD), at cost O(dℓd2
+
+> ℓ−1
+
+) per layer (comparable to a single forward pass when the batch size is of order dℓ−1) plus one additional Gram matrix in memory. In our experiments this amounted to a few percent of wall-clock time and ≈4–5% memory. 
+
+## 5. Analysis of related work 
+
+A growing body of work addresses plasticity loss by identi-fying specific training pathologies (e.g., dead units, primacy bias, parameter growth) or by regularizing the network to-ward a “trainable” reference state like initialization. In this section, we review the key approaches used as baselines in our evaluation and demonstrate that many can be reinter-preted as targeting a restricted notion of dynamical isometry. 
+
+Normalize-and-Project (NaP). Lyle et al. (2024a) propose the combination of layer normalization (Ba et al., 2016) with a regular rescaling of the Frobenius norm of the weight matrices toward its value at initialization. The authors motivate this as stabilizing the effective learning rate in scale-invariant networks. Empirically, NaP is a compe-tent plasticity-preserving baseline and outperforms many common techniques. Notably, when combined with earlier heuristics (ReDo (Sokar et al., 2023), regenerative regu-larization (Kumar et al., 2023), shrink-and-perturb (Ash & Adams, 2020)), the performance gap between methods be-comes negligible, suggesting that NaP addresses a dominant failure mode and largely equalizes remaining differences. We relate this result to our work by noting that resetting the Frobenius norm of the weights to its initialization value to stabilize gradients is equivalent to keeping the mean squared singular value of each weight matrix constant (often near 1). In contrast, isometry (i.e., orthogonality) requires all 
+
+squared singular values to be one. Thus, while NaP stabi-lizes the average gradient scale (in combination with the stabilizing and loss-smoothing effect of layer normaliza-tion (Ba et al., 2016)), isometry stabilizes all gradient di-rections 6. Additionally, NaP offers its own ReLU revival pathway: since normalization combines signals from all pre-activations, it can route gradient signals from active neu-rons back to dead ones. Our revival mechanism (Section 4.3) is related but distinct: the movement of active neu-rons in the embedded space causes the other (dead) neurons to “follow”, potentially reviving them. Finally, we note that NaP is tied to its architecture: its projection step relies on scale-invariance, whereas our isometry regularization applies broadly to linear/convolutional operators without requiring normalization. 
+
+ReLU recycling. ReDo (Sokar et al., 2023) recycles dor-mant/dead neurons in deep RL by resetting them to their   
+
+> 6A directly analogous distinction exists in the history of net-work initialization: classic Gaussian initialization (He et al., 2015) controlled only the mean signal variance, whereas orthogonal ini-tialization controls all signal directions identically.
+
+7Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+original weight when they are below an activity criterion. From our perspective, this can be viewed as restoring a subset of units to form a partial isometry (assuming stan-dard orthogonal initialization). An obvious drawback is that resetting discards learned information; in environments where previously useful features reoccur at later times, such recycling may have exacerbated forgetting. 
+
+L2 Init. Regenerative regularization (Kumar et al., 2023), or L2 Init, adds an ℓ2 penalty toward the initial parameters. Again, when assuming orthogonal initialization, this pro-motes dynamical isometry. A potential limitation is reduced expressivity if good solutions lie far from the initialization basin; however, in sufficiently wide regimes, NTK-style arguments (Jacot et al., 2018) suggest that remaining close to initialization can still yield adequate function classes. 
+
+Spectral norm regularization. Closest to our work, Lewandowski et al. (2025) propose to regularize the max-imal singular value of each weight matrix toward 1, moti-vated by the observation that the norms of the weight ma-trices grow during training. They acknowledge that preser-vation of the spectral properties of the weights at initial-ization can potentially be beneficial for continual learning and promote gradient diversity. However, they eventually only regularize the maximal singular value of the weight matrices (i.e., σmax (Wℓ) → 1), while we propose to di-rectly control the entire spectrum of singular values (i.e., 
+
+Pdℓ−1
+
+> i=1
+
+ σi(Wℓ)2 − 12 → 0, cf. (17) ). Notably, the authors find empirically that squaring the spectral norm results in improved performance. This finding is explained by our framework: minimizing the squared spectral norm deviation 
+
+σ2 
+
+> max
+
+−1 becomes mathematically equivalent to minimizing solely the largest term in the sum of (17). 
+
+Weight decay. We briefly mention weight decay/L2 regular-ization (Krogh & Hertz, 1991; Loshchilov & Hutter, 2017) as a classic regularization technique. From the perspective of controlling singular values, weight decay explicitly drives the mean squared singular value of weight matrices toward 0. When combined with layer normalization, it can perform adequately in continual learning (Lyle et al., 2024b), but it needs careful finetuning. This finding is again explained by our framework: weight decay pushes singular values to 0, and not to 1, so it can easily over- or undershoot the “correct” target. NaP directly sets this target to 1 and outperforms weight decay, so we refer to NaP for our baselines. 7
+
+## 6. Experiments 
+
+To demonstrate that remaining close to dynamical isom-etry reduces plasticity loss, we evaluate combinations of the following architectural components across both fully connected (MLP) and convolutional (CNN) networks: 
+
+> 7
+
+For experiments, see Figures 5, 6, and 4. 0 5000 10000 15000 20000 25000 30000 35000 40000                
+
+> Epoch
+> 0.35
+> 0.40
+> 0.45
+> 0.50
+> 0.55
+> Validation Accuracy
+> AdamO (ReLU)
+> AdamO (MaxMin)
+> NS (ReLU)
+> NS (MaxMin)
+> NaP
+> SN Reg
+> ReDo
+> L2 Init
+> Baseline 2000 4000 6000 8000 10000 12000 14000 16000
+> Epoch
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> Training Accuracy
+> AdamO (ReLU)
+> NS (MaxMin)
+> NS (ReLU)
+> NaP
+> SN Reg
+> ReDo
+> Baseline (ReLU) 05000 10000 15000 20000 25000 30000 35000 40000
+> Epoch
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Validation Accuracy
+> AdamO (ReLU)
+> AdamO (MaxMin)
+> NaP
+> SN Reg
+> ReDo
+> Baseline (ReLU)
+
+Figure 1. Top to bottom: Results for Pixel-Permutation (40 epochs/task, 1000 tasks, batch size 250), Random-Label Mem-orization (256 epochs/task, 200 tasks, batch size 128) and Label-Shuffling (40 epochs/task, 1000 tasks, batch size 250). Results for ReDo and L2 Init have similar noise profiles as e.g., NaP, but are smoothed for Pixel-Permutation to not clog the figure. Pixel-Permutation and Random-Label Memorization use MLPs, Label-Shuffling uses CNNs. We refer to Appendix B for architec-ture and implementation details. 
+
+(i) Strictly orthogonal linear operators , implemented via the differentiable Newton–Schulz method (Bj ¨orck & Bowie, 1971; Huang et al., 2020; Grishina et al., 2025). 
+
+(ii) Soft-orthogonal linear operators , subject to regu-larization via our proposed AdamO optimizer (Sec-tion 4.4). 
+
+(iii) GroupSort activations , specifically MaxMin (Anil et al., 2019), which applies sorting on binary feature partitions and is isometric almost-everywhere. 
+
+(iv) ReLU activations , included to assess compatibility with (near-)orthogonal weights and to evaluate the pro-posed ReLU revival mechanism (Section 4.3). We evaluate these methods in continual supervised and re-inforcement learning settings. Overall, our methods con-sistently maintain plasticity and yield strong continued per-formance, consistently matching or surpassing prior meth-ods. For practical use we recommend AdamO + ReLU :it adds little compute over standard Adam (Section 4.4), and ReLU’s high expressive efficiency together with our re-vival mechanism (Section 4.3) provide strong performance. 8Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Newton-Schulz is used as the orthogonal limit of AdamO. 
+
+6.1. Supervised learning experiments 
+
+We validate our approach on three benchmarks widely used to quantify plasticity loss. First, we use Random-Label Memorization (CIFAR-10) (Zhang et al., 2016) to test the network’s raw capacity to fit arbitrary data streams; since generalization is impossible on random noise, we report training accuracy to strictly measure optimization plasticity. Second, we evaluate on Permuted MNIST/CIFAR-10 (Good-fellow et al., 2013) and Label-Shuffled CIFAR-100 (Ash & Adams, 2020), which test adaptation to distribution shifts. For these, we report performance on held-out validation sets, verifying that our method preserves generalization capabil-ity rather than just memorization. Since we use sufficiently expressive networks, the optimal achievable loss L⋆ 
+
+> F,τ
+
+≈ 0,so the plasticity gap ∆τ (θ) ≈ Lτ (fθ ) and continued task performance directly tracks the plasticity metric PT ,t of Eq. (2) . As shown in Figure 1, our methods consistently outperform competing approaches across all three scenarios, with narrower margins on Label-Shuffled due to perfor-mance saturation. This confirms that promoting dynamical isometry not only maintains the raw plasticity required to fit new data (Random Labels) but also supports generaliza-tion to unseen data (Permuted/Shuffled). We additionally conducted a preliminary small-scale transformer study on the continual CIFAR-10 pixel-permutation benchmark, with diagnostics and discussion provided in Appendix B.7. In Appendix B.4, Figure 7, we show that our methods re-vive dead ReLU units, substantiating our revival mecha-nism outlined in Section 4.3. We also include metrics such as condition number, effective NTK rank, Jacobians, and weight vectors in Appendix B.3 (Figures 5–6). Our methods improve conditioning and rank diagnostics across these cat-egories, supporting our theoretical arguments on plasticity. 
+
+6.2. Reinforcement Learning experiments 
+
+We consider continual reinforcement learning (RL), where non-stationarity arises both from inherent policy shifts dur-ing training and from external changes to the environment. We use Proximal Policy Optimization (PPO) (Schulman et al., 2017) as the base algorithm for all experiments. First, we use a modified, continual version of MinAtar (Young & Tian, 2019) to evaluate MLP architectures. The agent cycles through miniaturized versions of four Atari games for 20 cycles (15M steps/game), with the next game sampled randomly at each switch (balanced to ensure uni-form coverage). To further heighten non-stationarity, we randomly permute the observation channels at the onset of each new game instance. Results in Figure 2 show that while the PPO baseline loses its ability to learn over time, AdamO, combined with either ReLU or MaxMin (GroupSort) acti-0 5 10 15 19                  
+
+> Cycle
+> 0
+> 20
+> 40
+> 60
+> Final Return
+> Breakout
+> 0510 15 19
+> Cycle
+> 0
+> 5
+> 10
+> 15
+> Final Return
+> Asterix
+> 0510 15 19
+> Cycle
+> 50
+> 100
+> 150
+> Final Return
+> SpaceInvaders
+> 0510 15 19
+> Cycle
+> 20
+> 40
+> 60
+> Final Return
+> Freeway
+> Baseline AdamO+GS L2-Init NaP AdamO+ReLU WSN
+
+Figure 2. Continual MinAtar with random channel permutations. Results are reported over 8 random seeds. Each environment runs for 15 million steps per cycle for a total of 1.2B steps. GS is GroupSort/MaxMin. 
+
+vations, maintains consistent performance throughout the 20 cycles. Our method matches or outperforms the base-lines on regular evaluation runs. (We detail explicit learning curves and additional RL diagnostics in Appendix B; see Figures 9–15, 18–23.) Next, we consider convolutional architectures (CNNs) us-ing a continual version of Octax (Radji et al., 2025), which emulates classic arcade games with dynamics similar to the Arcade Learning Environment (Bellemare et al., 2013). Here, the agent cycles through eight distinct games for three full repetitions in a fixed order. The results for continual Octax (Figure 17) reaffirm our findings: AdamO combined with GroupSort or ReLU consistently preserves plasticity and achieves superior cumulative rewards compared to stan-dard approaches. Additional Octax diagnostics are provided in Appendix B.6, Figures 18–23. 
+
+## 7. Discussion 
+
+We characterized plasticity functionally, tied it to the geome-try of the empirical NTK, and identified approximate dynam-ical isometry as a tractable surrogate under task uncertainty— compatible with expressive nonlinear function classes via almost-everywhere isometric networks and orthogonality-promoting regularization. A promising future direction is genuinely deep reinforcement learning– networks are typi-cally kept shallow because depth tends to destabilize train-ing. Since dynamical isometry was originally introduced to enable signal propagation through very deep networks, promoting it may help unlock stable training of deeper RL agents. A second is large language models, where isome-try could improve pre- and post-training: skip connections keep models near isometry at initialization, but residuals erode it as their contributions grow over time. Isometry-preserving methods may improve depth-related issues, or improve continual learning. 9Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none which we feel must be specifically highlighted here. 
+
+## References 
+
+Abbas, Z., Zhao, R., Modayil, J., White, A., and Machado, M. C. Loss of plasticity in continual deep reinforcement learning. In Conference on lifelong learning agents , pp. 620–636. PMLR, 2023. Anil, C., Lucas, J., and Grosse, R. Sorting out lipschitz function approximation. In International conference on machine learning , pp. 291–301. PMLR, 2019. Ash, J. and Adams, R. P. On warm-starting neural network training. Advances in neural information processing sys-tems , 33:3884–3894, 2020. Ba, J. L., Kiros, J. R., and Hinton, G. E. Layer normalization. 
+
+arXiv preprint arXiv:1607.06450 , 2016. Bansal, N., Chen, X., and Wang, Z. Can we gain more from orthogonality regularizations in training deep networks? 
+
+Advances in Neural Information Processing Systems , 31, 2018. Bellemare, M. G., Naddaf, Y., Veness, J., and Bowling, M. The arcade learning environment: An evaluation plat-form for general agents. Journal of Artificial Intelligence Research , 47:253–279, jun 2013. Bj ¨orck, ˚A. and Bowie, C. An iterative algorithm for com-puting the best estimate of an orthogonal matrix. SIAM Journal on Numerical Analysis , 8(2):358–364, 1971. Chernodub, A. and Nowicki, D. Norm-preserving orthog-onal permutation linear unit activation functions (oplu). 
+
+arXiv preprint arXiv:1604.02313 , 2016. Cohen, J. M., Kaur, S., Li, Y., Kolter, J. Z., and Talwalkar, A. Gradient descent on neural networks typically occurs at the edge of stability. arXiv preprint arXiv:2103.00065 ,2021. Dohare, S., Hernandez-Garcia, J. F., Lan, Q., Rahman, P., Mahmood, A. R., and Sutton, R. S. Loss of plasticity in deep continual learning. Nature , 632(8026):768–774, 2024. Goodfellow, I. J., Mirza, M., Xiao, D., Courville, A., and Bengio, Y. An empirical investigation of catastrophic for-getting in gradient-based neural networks. arXiv preprint arXiv:1312.6211 , 2013. Grishina, E., Smirnov, M., and Rakhuba, M. Ac-celerating newton-schulz iteration for orthogonaliza-tion via chebyshev-type polynomials. arXiv preprint arXiv:2506.10935 , 2025. He, K., Zhang, X., Ren, S., and Sun, J. Delving deep into rectifiers: Surpassing human-level performance on imagenet classification. In Proceedings of the IEEE inter-national conference on computer vision , pp. 1026–1034, 2015. Huang, L., Liu, L., Zhu, F., Wan, D., Yuan, Z., Li, B., and Shao, L. Controllable orthogonalization in training dnns. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition , pp. 6429–6438, 2020. Jacot, A., Gabriel, F., and Hongler, C. Neural tangent ker-nel: Convergence and generalization in neural networks. 
+
+Advances in neural information processing systems , 31, 2018. Kingma, D. P. Adam: A method for stochastic optimization. 
+
+arXiv preprint arXiv:1412.6980 , 2014. Krogh, A. and Hertz, J. A simple weight decay can im-prove generalization. Advances in neural information processing systems , 4, 1991. Kumar, S., Marklund, H., and Van Roy, B. Maintaining plas-ticity in continual learning via regenerative regularization. 
+
+arXiv preprint arXiv:2308.11958 , 2023. Lewandowski, A., Bortkiewicz, M., Kumar, S., Gy ¨orgy, A., Schuurmans, D., Ostaszewski, M., and Machado, M. C. Learning continually by spectral regularization. ICLR ,2025. Li, S., Jia, K., Wen, Y., Liu, T., and Tao, D. Orthogonal deep neural networks. IEEE transactions on pattern analysis and machine intelligence , 43(4):1352–1368, 2019. Loshchilov, I. and Hutter, F. Decoupled weight decay regu-larization. arXiv preprint arXiv:1711.05101 , 2017. Lu, L., Shin, Y., Su, Y., and Karniadakis, G. E. Dying relu and initialization: Theory and numerical examples. arXiv preprint arXiv:1903.06733 , 2019. Lyle, C., Rowland, M., and Dabney, W. Understanding and preventing capacity loss in reinforcement learning. arXiv preprint arXiv:2204.09560 , 2022. Lyle, C., Zheng, Z., Nikishin, E., Pires, B. A., Pascanu, R., and Dabney, W. Understanding plasticity in neural net-works. In International Conference on Machine Learning ,pp. 23190–23211. PMLR, 2023. 10 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Lyle, C., Zheng, Z., Khetarpal, K., Martens, J., van Hasselt, H. P., Pascanu, R., and Dabney, W. Normalization and effective learning rates in reinforcement learning. Ad-vances in Neural Information Processing Systems , 37: 106440–106473, 2024a. Lyle, C., Zheng, Z., Khetarpal, K., van Hasselt, H., Pas-canu, R., Martens, J., and Dabney, W. Disentangling the causes of plasticity loss in neural networks. arXiv preprint arXiv:2402.18762 , 2024b. Martens, J., Ballard, A., Desjardins, G., Swirszcz, G., Dal-ibard, V., Sohl-Dickstein, J., and Schoenholz, S. S. Rapid training of deep neural networks without skip connections or normalization layers using deep kernel shaping. arXiv preprint arXiv:2110.01765 , 2021. Nikishin, E., Schwarzer, M., D’Oro, P., Bacon, P.-L., and Courville, A. The primacy bias in deep reinforcement learning. In International conference on machine learn-ing , pp. 16828–16847. PMLR, 2022. Pennington, J., Schoenholz, S., and Ganguli, S. Resurrecting the sigmoid in deep learning through dynamical isometry: theory and practice. Advances in neural information processing systems , 30, 2017. Pennington, J., Schoenholz, S., and Ganguli, S. The emer-gence of spectral universality in deep networks. In Inter-national Conference on Artificial Intelligence and Statis-tics , pp. 1924–1932. PMLR, 2018. Radji, W., Michel, T., and Piteau, H. Octax: Accelerated chip-8 arcade environments for reinforcement learning in jax, 2025. URL https://arxiv.org/abs/2510. 01764 .Saxe, A. M., McClelland, J. L., and Ganguli, S. Exact solutions to the nonlinear dynamics of learning in deep linear neural networks. arXiv preprint arXiv:1312.6120 ,2013. Schulman, J., Wolski, F., Dhariwal, P., Radford, A., and Klimov, O. Proximal policy optimization algorithms. 
+
+arXiv preprint arXiv:1707.06347 , 2017. Sokar, G., Agarwal, R., Castro, P. S., and Evci, U. The dor-mant neuron phenomenon in deep reinforcement learning. In International Conference on Machine Learning , pp. 32145–32168. PMLR, 2023. Van Laarhoven, T. L2 regularization versus batch and weight normalization. arXiv preprint arXiv:1706.05350 , 2017. Xiao, L., Bahri, Y., Sohl-Dickstein, J., Schoenholz, S., and Pennington, J. Dynamical isometry and a mean field theory of cnns: How to train 10,000-layer vanilla convo-lutional neural networks. In International conference on machine learning , pp. 5393–5402. PMLR, 2018. Young, K. and Tian, T. Minatar: An atari-inspired testbed for thorough and reproducible reinforcement learning ex-periments, 2019. URL https://arxiv.org/abs/ 1903.03176 .Zhang, C., Bengio, S., Hardt, M., Recht, B., and Vinyals, O. Understanding deep learning requires rethinking general-ization. arXiv preprint arXiv:1611.03530 , 2016. 11 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+# Appendix 
+
+## A. Implementation details for regularizing toward (pseudo-)orthogonality 
+
+A square matrix is orthogonal iff W ⊤ 
+
+> ℓ
+
+Wℓ = WℓW ⊤ 
+
+> ℓ
+
+= I. For rectangular matrices, only one of these constraints can hold. Satisfying W ⊤ 
+
+> ℓ
+
+Wℓ = I (when dℓ ≥ dℓ−1) makes Wℓ an isometric embedding, while satisfying WℓW ⊤ 
+
+> ℓ
+
+= I (when 
+
+dℓ ≤ dℓ−1) makes it an isometry on the output space (equivalently, W ⊤ 
+
+> ℓ
+
+is an isometric embedding), which is particularly relevant for backward signal transport. For convolutional layers, we follow the standard convention of reshaping the kernel tensor into a 2D matrix (e.g., (k2cin ) ×
+
+cout ) and applying the same penalty to encourage diversity/orthogonality across filters. Biases do not enter the layer Jacobian and are therefore not directly constrained by isometry; in our experiments we either leave them unregularized or apply a weak standard penalty for numerical stability. 
+
+## B. Extra experiments 
+
+B.1. Supervised learning: architectural details 
+
+The architectures used for learning are outlined below (finetuned with hyperparameter sweeps). We use orthogonal initialization of weights in all architectures. When not explicitly specified otherwise, we use ReLU activations. 
+
+Multi-layer Perceptron: We use standard fully connected feed forward networks with depth 4 and size 512 for each hidden layer. Learning rate for Adam and AdamO is 1e-4. We run 8 seeds per method. 
+
+Convolutional Neural Networks: We use a combination of 3 convolutional layers, with each 32 channels (3 x 3), with strides [1, 1, 2], followed by 2 fully connected layers, with hidden size 256. Learning rate for Adam and AdamO is 1e-3. We run 8 seeds per method. For Lipschitz-1 networks, we leave the output head unrestricted (or regularize it with a softer regularizer) so the network can approximate L-lipschitz functions. 
+
+Algorithm hyperparameters: 
+
+• For AdamO, we use a regularization strength of 1e-3 for the orthogonal penalty. Learning rate is kept the same as for the task loss. • Newton-Schulz orthogonalization is run through the network’s forward pass for 7 iterations per weight matrix, with spectral norm guardrailing using 1 power iteration. See (Anil et al., 2019). Every 10 000 (arbitrarily set, any reasonable number works) training steps, the ”raw” weights are orthogonalized using Newton-Schulz, to ensure gradients remain well-conditioned on the raw weights too. • For ReDo, we use τ = 0 .1, and apply ReDo every 1000 steps with a batch size of 64. These are the standard settings, and worked best in our experiments. • For NaP, we use LayerNorm with fixed scale (1 or √2) and offset (0), which performed better in our experiments compared to regularizing them (Lyle et al., 2024a). We project either every 1000 or 10 000 steps (we observed no functional difference). • L2 init: regularization strength: 1e-3. • Spectral norm regularization strength: 1e-3, and we used one power iteration to calculate largest singular value of the weight matrices. 
+
+B.2. Sensitivity to the orthogonal regularization strength 
+
+We include an ablation over the orthogonal-regularization strength λ for AdamO on the continual CIFAR-10 random-label benchmark. As expected, the regularization strength should be tuned for best performance, since too little regularization 12 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+does not sufficiently preserve conditioning, while too much regularization can begin to interfere with task optimization. At the same time, the ablation indicates a reasonably broad good operating regime rather than a single sharp optimum, suggesting that AdamO is practically robust once λ is chosen in the appropriate range. 10 5 10 4 10 3 10 2 10 1 10 0
+
+## Orthogonal regularization strength 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+> Final Training Accuracy
+
+# CIFAR-10 Random Labels    
+
+> Figure 3. Sensitivity of AdamO to the orthogonal-regularization strength λon the continual CIFAR-10 random-label benchmark.
+
+B.3. Additional diagnostic metrics 
+
+We provide additional diagnostics for the CIFAR-10 pixel-permutation benchmark in Figures 4, 5, and 6, focusing respectively on the weight spectra, empirical NTK statistics, and intermediate Jacobian spectra. These figures complement the performance plots in the main text by showing that the methods which preserve plasticity also maintain better-conditioned dynamics and richer effective dimensionality throughout training. Across these supervised diagnostics, our methods are favorable essentially across the board. In Figure 4, they maintain tighter weight spectra and higher effective rank; in Figure 5, the empirical NTK remains better conditioned and closer to isotropic; and in Figure 6, the Jacobian spectra stay more stable throughout training. Taken together, these trends support the main claim of the paper: the methods that preserve plasticity are also the ones that better preserve dynamical isometry and avoid progressive spectral collapse. 
+
+B.4. Dead ReLU revival 
+
+To make the dormant-unit mechanism explicit, we include the dedicated dormant-unit diagnostic in Figure 7. The figure tracks how the number of Sokar-style dormant ReLU units evolves during training, and highlights that the isometry-preserving methods substantially reduce or reverse the buildup of inactive features relative to the baselines. This provides direct empirical support for the revival mechanism discussed in Section 4.3. 
+
+B.5. Minatar 
+
+The RL diagnostics mirror the supervised picture. For both MinAtar and Octax, the methods that perform best also tend to keep the spectra, Jacobian statistics, and NTK metrics in a visibly healthier regime over time. In particular, they generally preserve broader effective rank, better conditioning, and lower dormant-neuron buildup, which is consistent with the 13 Preserving Plasticity in Continual Learning via Dynamical Isometry  
+
+> Table 1. Experimental setup for continual MinAtar.
+
+Network 
+
+Architecture MLP: 64-64-64-64 Activation ReLU Initialization Orthogonal ( √2), output: 0.01 
+
+PPO 
+
+Parallel environments 2048 Rollout length 128 PPO epochs 4Minibatches 128 Learning rate 2.5 × 10 −4 (constant) GAE λ 0.95 Clip ϵ 0.2 Entropy coefficient 0.01 Value coefficient 0.5 
+
+Continual Learning 
+
+Wrapped Observation Shape (10 , 10 , 10) 
+
+Wrapped Action Shape 6Steps per game 15M Training cycles 20 Seeds 8Games Breakout, Asterix, SpaceInvaders, Freeway interpretation that plasticity loss in RL is likewise accompanied by a gradual deterioration of the network’s local geometry. We provide full learning curves for all configurations over all cycles in figure 16. The experiments hyperparameters are provided in table 1. 
+
+B.6. Octax 
+
+We consider the environemnts ”brix”, ”submarine”, ”filter”, ”tank”, ”blinky”, ”missile”, ”ufo”, ”wipe off” in this sequence for 3 cycles with 5 million training steps per env. We utilise PPO with shared backbone following the implementation provided in (Radji et al., 2025). A precise list of our hyperparameters is given in table 2. 
+
+B.7. Attention and transformers 
+
+We also include a preliminary transformer study on the continual CIFAR-10 pixel-permutation benchmark. The setup is as follows: a 4-block transformer with 4 attention heads per block and MLP sublayers, evaluated across vanilla training, LayerNorm, LayerNorm with weight decay, and AdamO, all with skip connections. These experiments are intentionally small-scale and should be interpreted as an initial diagnostic rather than a final statement on large transformer training. In particular, attention is typically contractive and residual-path interactions with normalization and weight decay have become increasingly important in modern deep transformers. A larger-scale study on deeper architectures and LLM-style fine-tuning remains an important direction for future work. Even with those caveats, the results are encouraging. The validation-accuracy curves show that AdamO remains stable and competitive at learning rates where vanilla baselines degrade and where LayerNorm and weight decay alone do not provide the same degree of robustness. The input-output Jacobian statistics show the same pattern as in our MLP and CNN experiments: AdamO preserves substantially higher effective rank and lower condition number, indicating that gradient propagation remains richer and less anisotropic over continual training. For the weight and dormant-neuron diagnostics, we show the skip-connection transformer runs, where the same pattern persists: AdamO maintains broader effective rank, tighter control of the smallest and largest singular values, and better preservation of the overall singular-value scale, while 14 Preserving Plasticity in Continual Learning via Dynamical Isometry  
+
+> Table 2. Octax Continual Learning: Environment and Hyperparameters
+
+Parameter Value 
+
+Environment 
+
+Observation shape (4 , 32 , 64) 
+
+Action space 6 (unified) Games 8
+
+Cycles 3
+
+Steps per task 5 × 10 6
+
+Network Architecture 
+
+CNN Layer 1 32 filters, 8 × 4 kernel, stride (4 , 2) 
+
+CNN Layer 2 64 filters, 4 × 4 kernel, stride (2 , 2) 
+
+CNN Layer 3 64 filters, 3 × 3 kernel, stride (1 , 1) 
+
+MLP hidden layers (64 , 64 , 64 , 64) 
+
+Activation ReLU 
+
+PPO Hyperparameters 
+
+Parallel environments 512 
+
+Rollout length 32 
+
+Epochs per update 4
+
+Minibatches 32 
+
+Learning rate 5 × 10 −4
+
+Discount ( γ) 0.99 
+
+GAE λ 0.95 
+
+Clip ϵ 0.2
+
+Entropy coefficient 0.01 
+
+Value function coefficient 0.5
+
+Max gradient norm 0.5
+
+also reducing feature collapse. Taken together, these figures support the claim that the dynamical-isometry perspective remains useful in attention-based architectures, while also reinforcing that a comprehensive study on larger transformers is still needed. 15 Preserving Plasticity in Continual Learning via Dynamical Isometry 0 10000 20000 30000 
+
+Global Epoch 
+
+10 0
+
+> Min Singular Value
+
+Min Singular Value 
+
+0 10000 20000 30000 
+
+Global Epoch 
+
+10 0
+
+10 1
+
+> Mean Singular Value
+
+Mean Singular Value 
+
+0 10000 20000 30000 
+
+Global Epoch 
+
+10 1
+
+10 2
+
+> Max Singular Value
+
+Max Singular Value 
+
+0 10000 20000 30000 
+
+Global Epoch 
+
+10 1
+
+10 0
+
+10 1
+
+> Singular Value Std
+
+Singular Value Std 
+
+0 10000 20000 30000 
+
+Global Epoch 
+
+0
+
+100 
+
+200 
+
+300 
+
+400 
+
+> Weight Effective Rank
+
+Weight Effective Rank 
+
+0 10000 20000 30000 
+
+Global Epoch 
+
+0
+
+25000 
+
+50000 
+
+75000 
+
+100000 
+
+125000 
+
+> Condition Ratio
+
+Condition Ratio 
+
+AdamO (ReLU) 
+
+AdamO (MaxMin) 
+
+NS (ReLU) 
+
+NS (MaxMin) 
+
+NaP 
+
+SN Reg 
+
+ReDo 
+
+L2 Init 
+
+Baseline 
+
+Figure 4. Weight-space diagnostics for CIFAR-10 pixel permutation, including singular-value statistics, effective rank, and the weight condition ratio over training. 
+
+16 Preserving Plasticity in Continual Learning via Dynamical Isometry 0 200 400 600 800 
+
+Task Boundary 
+
+10 3
+
+10 4
+
+10 5
+
+10 6
+
+10 7
+
+10 8
+
+> Condition Number
+
+Condition Number 
+
+0 200 400 600 800 
+
+Task Boundary 
+
+10 4
+
+10 5
+
+10 6
+
+10 7
+
+10 8
+
+> Eigenvalue Std
+
+Eigenvalue Std 
+
+0 200 400 600 800 
+
+Task Boundary 
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+> Participation Rank
+
+Participation Rank 
+
+0 200 400 600 800 
+
+Task Boundary 
+
+10 1
+
+10 2
+
+> Isotropy Gap
+
+Isotropy Gap 
+
+AdamO (ReLU) 
+
+AdamO (MaxMin) 
+
+NS (ReLU) 
+
+NS (MaxMin) 
+
+NaP 
+
+SN Reg 
+
+ReDo 
+
+L2 Init 
+
+Baseline 
+
+Figure 5. Core empirical NTK diagnostics for CIFAR-10 pixel permutation, including condition number, eigenvalue spread, participation rank, and isotropy gap. 
+
+17 Preserving Plasticity in Continual Learning via Dynamical Isometry 0 200 400 600 800 
+
+Task Boundary 
+
+10 9
+
+10 7
+
+10 5
+
+10 3
+
+10 1
+
+> Min Singular Value
+
+Min Singular Value 
+
+0 200 400 600 800 
+
+Task Boundary 
+
+10 0
+
+2 × 10 1
+
+3 × 10 1
+
+4 × 10 1
+
+6 × 10 1
+
+> Mean Singular Value
+
+Mean Singular Value 
+
+0 200 400 600 800 
+
+Task Boundary 
+
+10 1
+
+> Max Singular Value
+
+Max Singular Value 
+
+0 200 400 600 800 
+
+Task Boundary 
+
+10 2
+
+10 4
+
+10 6
+
+10 8
+
+10 10 
+
+10 12 
+
+> Condition Number
+
+Condition Number 
+
+AdamO (ReLU) 
+
+AdamO (MaxMin) 
+
+NaP 
+
+SN Reg 
+
+ReDo L2 Init Baseline 
+
+Figure 6. Intermediate-layer Jacobian diagnostics for CIFAR-10 pixel permutation, showing how the singular-value spectrum and conditioning evolve through training. 
+
+18 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Figure 7. Dormant-unit diagnostics for the supervised continual-learning experiments. The figure shows how the number of Sokar-style dormant ReLU units evolves during training, and how the isometry-preserving methods reduce or reverse the buildup of inactive features relative to the baselines. 
+
+19 Preserving Plasticity in Continual Learning via Dynamical Isometry 0 2 4 6 8 10 12 14 
+
+Steps (M) 
+
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Return
+
+Breakout        
+
+> 0246810 12 14
+
+Steps (M) 
+
+> 0
+> 5
+> 10
+> 15
+> Return
+
+Asterix        
+
+> 0246810 12 14
+
+Steps (M) 
+
+> 0
+> 50
+> 100
+> 150
+> Return
+
+SpaceInvaders        
+
+> 0246810 12 14
+
+Steps (M) 
+
+> 0
+> 20
+> 40
+> Return
+
+Freeway    
+
+> Baseline (C0) Baseline (C19) AdamO+GS (C0) AdamO+GS (C19)
+
+Figure 8. Training curves for MinAtar games. The color gradient indicates early (light) to late (dark) cycles (20 cycles). 
+
+20 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Figure 9. Weight-spectrum diagnostics for continual MinAtar. The plotted quantities summarize the singular-value distribution of the learned weight operators over training, making visible whether layers develop strong anisotropic directions or preserve a tighter spectrum. 
+
+21 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Figure 10. Layer-wise weight effective-rank diagnostics for continual MinAtar. These panels track how many singular directions of each layer remain meaningfully used, helping distinguish balanced representations from spectra that collapse onto a small subspace. 
+
+22 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Figure 11. Full Jacobian diagnostics for continual MinAtar. These figures summarize the singular-value spectrum of the input-output Jacobian, directly probing dynamical isometry through quantities such as singular-value spread and conditioning. 
+
+23 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Figure 12. Layer-wise Jacobian diagnostics for continual MinAtar. Unlike the full Jacobian view, these panels localize where along the network depth singular values drift away from one, revealing which layers are responsible for deteriorating gradient transport. 
+
+24 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Figure 13. Empirical NTK diagnostics for continual MinAtar. These panels track kernel conditioning and rank-related quantities, indicating how isotropically parameter updates can move the represented function in output space over time. 
+
+25 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Figure 14. Dormant-neuron diagnostics for continual MinAtar. These figures quantify inactive or weakly active units, making the connection between revival of dormant features and preserved plasticity explicit. 
+
+26 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Figure 15. Per-game evaluation performance for continual MinAtar. Breaking the aggregate score down by environment shows whether gains come from broadly preserved plasticity across games rather than from improvements on only a small subset. 
+
+27 Preserving Plasticity in Continual Learning via Dynamical Isometry 0 5 10 15 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+> Baseline
+> Return
+
+Breakout 
+
+0 5 10 15 
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+Asterix 
+
+0 5 10 15 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+SpaceInvaders 
+
+0 5 10 15 
+
+0
+
+10 
+
+20 
+
+30 
+
+Freeway 
+
+0 5 10 15 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+> AdamO+GS
+> Return
+
+0 5 10 15 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+0 5 10 15 
+
+0
+
+25 
+
+50 
+
+75 
+
+100 
+
+125 
+
+0 5 10 15 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+50 
+
+0 5 10 15 
+
+0
+
+10 
+
+20 
+
+30 
+
+> AdamO+ReLU
+> Return
+
+0 5 10 15 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+0 5 10 15 
+
+0
+
+25 
+
+50 
+
+75 
+
+100 
+
+125 
+
+0 5 10 15 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+50 
+
+0 5 10 15 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+> L2-Init
+> Return
+
+0 5 10 15 
+
+1
+
+2
+
+3
+
+4
+
+5
+
+0 5 10 15 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+0 5 10 15 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+0 5 10 15 
+
+0
+
+10 
+
+20 
+
+30 
+
+> NaP
+> Return
+
+0 5 10 15 
+
+1
+
+2
+
+3
+
+4
+
+0 5 10 15 
+
+0
+
+25 
+
+50 
+
+75 
+
+100 
+
+125 
+
+0 5 10 15 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+0 5 10 15 
+
+Steps (M) 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+> WSN
+> Return
+
+0 5 10 15 
+
+Steps (M) 
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+0 5 10 15 
+
+Steps (M) 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+120 
+
+0 5 10 15 
+
+Steps (M) 
+
+0
+
+10 
+
+20 
+
+30 
+
+0 5 10 15 19 
+
+Cycle 
+
+Figure 16. Training curves for MinAtar games. The color gradient indicates early (light) to late (dark) cycles (20 cycles). 
+
+28 Preserving Plasticity in Continual Learning via Dynamical Isometry 0 2 4
+
+Steps (M) 
+
+0
+
+10 
+
+20 
+
+> Return
+
+## Brix 
+
+0 2 4
+
+Steps (M) 
+
+0
+
+25 
+
+50 
+
+> Return
+
+## Submarine 
+
+0 2 4
+
+Steps (M) 
+
+0
+
+50 
+
+100 
+
+> Return
+
+## Filter 
+
+0 2 4
+
+Steps (M) 
+
+0
+
+10 
+
+> Return
+
+## Tank 
+
+0 2 4
+
+Steps (M) 
+
+0
+
+100 
+
+> Return
+
+## Blinky 
+
+0 2 4
+
+Steps (M) 
+
+10 
+
+20 
+
+30 
+
+> Return
+
+## Missile 
+
+0 2 4
+
+Steps (M) 
+
+50 
+
+100 
+
+> Return
+
+## Ufo 
+
+0 2 4
+
+Steps (M) 
+
+20 
+
+25 
+
+30 
+
+> Return
+
+## Wipe_off    
+
+> Cycle 1
+> Cycle 2
+> Cycle 3 Baseline AdaMO+GroupSort AdaMO+ReLU
+
+Figure 17. Training curves for Octax games showing return on evaluation environments against training steps. The line style indicates the cycle within the continual experiment. 
+
+29 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Figure 18. Weight-spectrum diagnostics for continual Octax. These panels summarize the singular-value statistics of the convolutional and linear operators, highlighting whether training preserves a balanced spectrum or develops highly anisotropic directions. 
+
+30 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Figure 19. Layer-wise weight effective-rank diagnostics for continual Octax. Effective rank measures how broadly each layer uses its singular directions, complementing raw norm or spectral diagnostics with a notion of dimensional richness. 
+
+31 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Figure 20. Full Jacobian diagnostics for continual Octax. These plots summarize the singular-value spectrum of the end-to-end Jacobian and therefore directly monitor whether the network stays near a dynamically isometric regime. 
+
+32 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Figure 21. Layer-wise Jacobian diagnostics for continual Octax. By decomposing Jacobian statistics across depth, these panels identify where conditioning degrades and where isometry-preserving methods stabilize signal propagation. 
+
+33 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Figure 22. Empirical NTK diagnostics for continual Octax. These figures track kernel condition numbers and rank-related measures, which quantify how uniformly policy/value gradients can move the represented function. 
+
+34 Preserving Plasticity in Continual Learning via Dynamical Isometry 
+
+Figure 23. Dormant-neuron diagnostics for continual Octax. These panels measure inactivity and feature collapse in the network, providing an RL-side analogue of the dormant-unit behavior discussed for supervised settings. 
+
+35 Preserving Plasticity in Continual Learning via Dynamical Isometry 80 160 240 320 400 480 560 
+
+Task 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+> Validation Accuracy
+
+ViT CIFAR-10 PP Skips, lr=1e-2 
+
+AdamO 
+
+LN 
+
+LN + WD=0.01 
+
+Vanilla 
+
+Figure 24. Validation accuracy for the continual CIFAR-10 pixel-permutation transformer experiments at learning rate 10 −2. This plot summarizes the primary stability and performance comparison across the transformer variants considered in the rebuttal study. 80 160 240 320 400 480 560         
+
+> Task
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9
+> IO Jac. Effective Rank
+> ViT CIFAR-10 PP Skips, lr=1e-2
+> AdamO
+> LN
+> LN + WD=0.01
+> Vanilla 80 160 240 320 400 480 560
+> Task
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> IO Jac. Condition Number
+> ViT CIFAR-10 PP Skips, lr=1e-2
+> AdamO
+> LN
+> LN + WD=0.01
+> Vanilla
+
+Figure 25. Input-output Jacobian diagnostics for the transformer experiments with skip connections at learning rate 10 −2. Left: input-output effective rank, which measures how many singular directions of the end-to-end Jacobian remain meaningfully used. Right: input-output condition number, which captures worst-case anisotropy of gradient transport. Together these panels directly probe whether the transformer remains in a healthier dynamical-isometry regime throughout continual learning. 
+
+36 Preserving Plasticity in Continual Learning via Dynamical Isometry 80 160 240 320 400 480 
+
+Task       
+
+> 32
+> 33
+> 34
+> 35
+> 36
+> 37
+> 38
+> Weight Effective Rank
+> ViT CIFAR-10 PP Skips, lr=1e-3
+> AdamO
+> LN
+> LN + WD=0.01
+> Vanilla 80 160 240 320 400 480
+
+Task       
+
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> Weight Mean-Sq. SV
+> ViT CIFAR-10 PP Skips, lr=1e-3
+> AdamO
+> LN
+> LN + WD=0.01
+> Vanilla 80 160 240 320 400 480
+
+Task       
+
+> 2
+> 4
+> 6
+> 8
+> 10
+> Weight  min
+> ViT CIFAR-10 PP Skips, lr=1e-3
+> AdamO
+> LN
+> LN + WD=0.01
+> Vanilla 80 160 240 320 400 480
+
+Task  
+
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Weight  max
+> ViT CIFAR-10 PP Skips, lr=1e-3
+> AdamO
+> LN
+> LN + WD=0.01
+> Vanilla
+
+Figure 26. Weight-spectrum diagnostics for the transformer experiments with skip connections. The effective-rank panel measures how broadly each layer uses its singular directions; the mean-squared singular-value panel tracks preservation of the overall weight scale; and the smallest and largest singular-value panels expose anisotropic extremes. These figures make clear whether the optimizer preserves a balanced spectrum rather than allowing progressive spectral collapse. 
+
+37 Preserving Plasticity in Continual Learning via Dynamical Isometry 80 160 240 320 400 480 
+
+Task 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Dormant Neurons (fraction)
+
+ViT CIFAR-10 PP Skips, lr=1e-3 
+
+AdamO 
+
+LN 
+
+LN + WD=0.01 
+
+Vanilla 
+
+Figure 27. Dormant-neuron diagnostics for the transformer experiments with skip connections. This plot tracks the buildup of inactive or weakly active units over training and shows whether improved conditioning is accompanied by reduced feature collapse. 
+
+38

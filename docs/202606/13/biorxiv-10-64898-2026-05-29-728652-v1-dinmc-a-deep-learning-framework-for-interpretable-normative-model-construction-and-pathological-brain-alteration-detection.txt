@@ -1,0 +1,409 @@
+Title: 56646212
+
+URL Source: https://www.biorxiv.org/content/10.64898/2026.05.29.728652v1.full.pdf
+
+Number of Pages: 18
+
+Markdown Content:
+# DINMC: A Deep Learning Framework for Interpretable Normative Model Construction and Pathological Brain Alteration Detection 
+
+Zewu Ge a, Shui Liu b, Weibei Dou a, ∗
+
+> aDepartment of Electronic Engineering, Beijing National Research Center for Information Science and Technology (BNRist), Tsinghua University, Beijing 100084, China
+> bAerospace Center Hospital, Beijing, China.
+
+Abstract Background and Objective: Normative modeling is a key tool for understanding brain alterations in neurodegenerative diseases, such as cerebellar-type multiple system atrophy. However, existing methods lack interpretability and fail to capture clinically meaningful pathological changes. This study presents DINMC, a Deep Interpretable Normative Model Construction framework, which combines autoencoder-based learning with statistical hypothesis testing to better capture and interpret disease-specific neu-roanatomical changes. 
+
+Methods: The DINMC framework constructs normative models using neuroimaging data from multi-site large healthy cohorts. It utilizes a U-shaped convolutional autoencoder to train these models, which are then applied to reconstruct brain features from both patients and healthy controls within the same study cohort. Pathological confidence values are derived by fusing original and de-viation feature spaces, o ff ering a measure of disease-related pathology reflected in each dimension of the features. The framework was validated through statistical analysis and prognostic classification and regression tasks. 
+
+Results: The pathological confidence provides valuable insights into the neuroanatomical regions most a ff ected by the disease, as well as the correlation between changes in these regions and clinical assessment scales. Our optimal model outperform traditional methods in prognostic prediction tasks, with an AUC of 0.972 for classification tasks and an R2 of 0.432 for regression tasks. 
+
+Conclusion: DINMC provides a novel and interpretable framework for neuroimaging analysis. By combining deep learning and statistical hypothesis testing, this framework o ff ers a unique solution to improving both the interpretability and performance of normative models in neuroimaging. The approach is scalable to other neuroimaging datasets, o ff ering a versatile tool for broader biomedical applications. 
+
+Keywords: Normative models, Neuroimaging, Pathological confidence, Autoencoder, Cerebellar-type multiple system atrophy, Clinical prediction 
+
+1. Introduction 
+
+Normative models are standardized population-based frame-works designed to quantify biological variability within large healthy cohorts [1]. Analogous to growth charts in pediatric medicine, lifespan brain charts have been proposed to char-acterize normative trajectories of brain development and ag-ing [2]. Statistical approaches for modeling population dis-tributions and individual deviations have long been applied in biomedical research [3], although these methods were not ex-plicitly framed as “normative models.” Unlike binary classifica-tions of individuals as “normal” or “abnormal,” normative mod-els explicitly characterize the distribution of biological mea-sures within a healthy population [4], thereby enabling indi-vidualized deviation assessment [5, 6]. With the recent re-lease of large-scale public magnetic resonance imaging (MRI)      
+
+> ⋆Preprint notice: This manuscript is a preprint and has not undergone peer review. It should not be used to guide clinical practice.
+> ∗Corresponding author
+> Email addresses: gezw22@mails.tsinghua.edu.cn (Zewu Ge),
+> leomita@icloud.com (Shui Liu), douwb@tsinghua.edu.cn (Weibei Dou)
+
+datasets of healthy individuals [7, 8, 9, 10], normative mod-eling has been increasingly applied to the diagnosis and per-sonalized treatment of neurological and psychiatric disorders [11, 12, 13, 14]. The construction of robust normative models critically de-pends on high-quality reference data [15]. Although large multi-site datasets alleviate data scarcity, their e ff ectiveness is challenged by substantial inter-site heterogeneity arising from protocol di ff erences, scanner hardware, and acquisition param-eters [16, 17]. ComBat, an empirical Bayesian harmoniza-tion technique originally developed for gene expression anal-ysis [18], has been widely adopted to mitigate site e ff ects in multi-site neuroimaging studies [19, 20]. Alternatively, some normative modeling approaches explicitly include site e ff ects as covariates during model construction. However, such data-dependent correction strategies may inadvertently remove bio-logically meaningful signals, particularly when clinical covari-ates are intrinsically correlated with site e ff ects [21]. As a re-sult, aggressive site correction can obscure disease-related vari-ability rather than clarify it. A variety of methodological approaches have been proposed 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted May 29, 2026. ;https://doi.org/10.64898/2026.05.29.728652 doi: bioRxiv preprint
+
+for normative model construction, including Gaussian process regression [3, 14], generalized additive models for location, scale, and shape (GAMLSS) [2, 15], autoencoder-based deep learning models [11, 22, 23], and other regression-based frame-works [21, 24]. Several of these methods have been integrated into open-source software platforms that leverage large healthy population datasets [25, 26]. Following normative model con-struction, deviation metrics—such as Z-scores—are typically derived and used as substitutes for original features in down-stream analyses [1, 14]. While deviation features have been shown to enhance group-level statistical sensitivity and improve classification or prediction performance [27], the complemen-tary information contained in the original features is often un-derutilized. Moreover, many existing normative modeling frameworks su ff er from limited clinical interpretability. Neurobiological features are inherently multidimensional [28], with spatially distributed patterns that encode clinically relevant pathologi-cal information [29]. However, current approaches typically ei-ther collapse multidimensional features into a single deviation metric or treat each dimension independently without a princi-pled mechanism for identifying pathologically meaningful di-mensions. Although covariates can be statistically adjusted, the biological interpretation of such adjustments remains un-clear. Traditional clinical neuroimaging studies often rely on carefully matched pathological control groups to address con-founding factors, but limited sample sizes constrain analyses to group-level hypothesis testing. Importantly, normative mod-eling is fundamentally a bottom-up, data-driven approach and cannot replace theory-driven hypothesis testing [17], particu-larly given the risk of introducing spurious biological signals during covariate correction. Consequently, there is a critical need for interpretable normative modeling frameworks that ex-plicitly integrate statistical inference with deviation modeling to support biologically grounded and clinically meaningful con-clusions. Here, we propose a Deep Interpretable Normative Model Construction (DINMC) framework that integrates statistical hy-pothesis testing with autoencoder-based normative modeling. The framework begins by training a U-shaped convolutional autoencoder (UCAE) on a large-scale multi-site healthy co-hort. The trained normative model learns the feature distribu-tion patterns of the healthy population while simultaneously re-constructing features of patients to resemble those of matched healthy controls[23]. Building on this model, we introduce the concept of pathological confidence, which quantifies the degree to which features reflect genuine disease-related pathology. We hypothesize that when original features are pathologically rel-evant, the normative model will struggle to accurately recon-struct them, leading to the creation of deviation features that highlight pathological di ff erences. By statistically comparing significant di ff erences between the original and deviation fea-ture spaces, we compute dimensional pathological confidence values, enabling precise identification of neuroanatomical re-gions that contribute to clinical abnormalities. 
+
+2. Materials and Methods 
+
+Fig. 1 illustrates the main modules and key concepts of the DINMC framework applied to real clinical datasets. The de-tails of each part of Fig. 1 are presented throughout Sections 2.1–2.4. 
+
+2.1. Datasets 
+
+This study utilized multimodal MRI data from three dis-tinct sources. Two large-scale healthy cohorts were in-cluded: the Human Connectome Project Aging (HCPA)[10], the AeroSpace Center Hospital (ASCH) dataset. The third dataset was a clinical study cohort from Dongfang Hospital of Beijing University of Chinese Medicine, comprising 29 pa-tients with cerebellar-type multiple system atrophy (CMSA) and 27 healthy controls (HC)[30]. Each patient was as-sessed by the Unified Multiple System Atrophy Rating Scale (UMSARS), which comprises Part I (UMSARS-I): a 12-item historical /activities-of-daily-living questionnaire and Part II (UMSARS-II): a 14-item clinician-rated motor examination; higher scores indicate greater disability. To ensure demographic comparability, healthy subjects from large-scale healthy cohorts were selectively matched to the clinical participants by age and gender. Table 1 shows the detailed demographics.  
+
+> Table 1: Demographic and Clinical Characteristics of the Multimodal MRI Datasets
+
+dataset Age, years Sex M /F UMSARS-I UMSARS-II 
+
+HCPA 56.29 1±6.91 2 136 /184 NA 3 NA ASCH 55.35 1±5.59 2 94 /101 NA NA CMSA 57.62 1±6.00 2 18 /11 17.34 1±5.65 2 17.07 1±5.66 2
+
+HC 57.37 1±5.64 2 11 /16 NA NA    
+
+> UMSARS, Unified Multiple System Atrophy Rating Scale;
+> 1represents average value;
+> 2stands for standard deviation;
+> 3represents Not Applicable.
+
+2.2. MRI Acquisition and Preprocessing 
+
+The primary multimodal MRI modalities analyzed were T1-weighted imaging and di ff usion tensor imaging (DTI). De-tailed information about these datasets and their acquisition pa-rameters is presented in the Table 2 and Table 3. All T1-weighted and DTI data were processed through stan-dardized pipelines. T1 preprocessing was performed in SPM12 software[31] in MATLAB 2023b (MathWorks, Natick, MA, United States) for tissue segmentation by a posteriori maxi-mum estimation within a Gaussian mixture model framework, producing gray matter density (GMD) maps. DTI preprocess-ing was performed in FSL 6.0’s di ff usion toolbox (FMRIB, Oxford)[32], implementing brain extraction, eddy current cor-rection, and tensor fitting to generate fractional anisotropy (FA) maps. GMD and FA feature maps were spatially normalized to the MNI152 template at 1 mm 3 and 2 mm 3 isotropic resolution using FSL[32], respectively. Multimodal feature extraction integrated three di ff erent brain parcellation atlas, including Automated Anatomical Labeling 2
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted May 29, 2026. ;https://doi.org/10.64898/2026.05.29.728652 doi: bioRxiv preprint
+
+Figure 1: Overview of the proposed DINMC Framework. (A) Datasets used in this study included both large healthy cohorts and study cohorts (Human Connectome Project Aging, HCPA; AeroSpace Center Hospital, ASCH; cerebellar-type multiple system atrophy, CMSA; Healthy Controls, HC).(B) Multimodal MRI features were extracted through standardized processing: gray matter density (GMD) was derived from T1-weighted imaging while fractional anisotropy (FA) was calculated from di ff usion tensor imaging (DTI). Regional feature averaging was performed using the brain atlas to obtain brain region-level features. (C) The framework builds a U-shaped convolutional autoencoder (UCAE) normative model using healthy control data to reconstruct original features and derive deviation features. These are then analyzed through statistical tests and fused to calculate pathological confidence (H) values using the Dempster-Shafer Evidence Theory. (D) Prognosis was conducted through leave-one-out cross-validation (LOOCV) using both support vector machine (SVM) classification and Lasso regression. Table 2: T1-weighted imaging scan parameters for di ff erent datasets. 
+
+Parameter ASCH HCPA CMSA 
+
+Manufacturer Siemens Siemens GE Magnetic field strength (T) 3 3 3Repetition time (ms) 2530 2500 8172 Echo time (ms) 3.07 1.8 /3.6 /5.4 /7.2 3.18 Inversion time (ms) 1100 1000 450 Flip angle (°) 12 8 12 Voxel spacing (mm³) 0.4316 × 0.4316 × 1 0.8 × 0.8 × 0.8 0.5 × 0.5 × 1Acquisition matrix 512 × 512 × 19 320 × 300 × 208 512 × 512 × 18 
+
+Table 3: Di ff usion tensor imaging (DTI) scan parameters for di ff erent datasets. 
+
+Parameter ASCH HCPA CMSA 
+
+Manufacturer Siemens Siemens GE Magnetic field strength (T) 3 3 3Repetition time (ms) 2700 3230 6000 Echo time (ms) 82 89.2 62.2 Voxel spacing (mm³) 2 × 2 × 2 1.5 × 1.5 × 1.5 1 × 1 × 3Acquisition matrix 112 × 112 × 76 140 × 140 × 92 256 × 256 × 50 Directions 128 99 64 b-values (s /mm²) 1000 / 2000 1500 / 3000 1000 3
+
+(which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted May 29, 2026. ;https://doi.org/10.64898/2026.05.29.728652 doi: bioRxiv preprint (AAL116) atlas[33],the Atlas of Intrinsic Connectivity of Ho-motopic Areas (AICHA384)[34] and the Shen268 atlas[35]. For each participant, region-specific features were calculated by averaging voxel values within each ROI defined by brain atlas, generating distinct multidimensional feature vectors cor-responding to biomarkers GMD and FA. This integrated pro-cessing workflow enabled cross-modal analysis within a stan-dardized neuroanatomical framework while preserving essen-tial individual variation patterns. 
+
+2.3. Normative Model Construction and Pathological Confi-dence Calculation 
+
+Our DINMC framework comprises two main integrated modules: (1) Normative Model Construction, which utilizes unsupervised representation learning to construct a model that captures the normative distribution of features from large healthy cohorts, and (2) Pathological Confidence Calculation, which identifies features that are pathologically specific by computing pathological confidence values. The key procedures of the framework are outlined in Algorithm 1. 
+
+Algorithm 1: DINMC Framework 
+
+Input: OF LHC , OF PT , OF HC , N-dimensional original features of large health cohorts and patients and healthy controls in study cohorts 
+
+Output: H, pathological confidence values 
+
+Train_UCAE (OF LHC )(θenc , θ dec ) ← InitializeNetwork() 
+
+for epoch = 1 to epochs do 
+
+OF noisy ← OF LHC + ϵ, ϵ ∼ N (0 , 0.1) 
+
+\OF LHC ← UCAE( OF noisy )
+
+L ← P ∥OF LHC − \OF LHC ∥22
+
+(θenc , θ dec ) ← AdamOptimizer( ∇θL)
+
+end return UCAE θ
+
+Pathological_Confidence (OF PT , OF HC , UCAE θ)
+
+RF HC , RF PT ← UCAE θ(OF PT , OF HC )
+
+DF HC ← RF HC − OF HC 
+
+DF PT ← RF PT − OF PT 
+
+pOF ← StatisticalAnalysis( OF PT , OF HC )
+
+pDF ← StatisticalAnalysis( DF PT , DF HC )
+
+mOF , mDF ← BasicBeliefAssignment( pOF , pDF )
+
+H ← EvidenceFusion( mOF , mDF )
+
+return H2.3.1. Deep Normative Model Construction 
+
+Our normative model is a U-shaped convolutional autoen-coder (UCAE), integrating U-Net’s hierarchical feature fusion capabilities with autoencoder reconstruction principles[36]. As shown in Fig. 2, UCAE processes the multidimensional brain feature vectors through a symmetric encoder-decoder archi-tecture optimized for precise biomarker reconstruction. This hierarchical design balances nonlinear representational capac-ity with geometric precision through cascaded convolutions 
+
+> Figure 2: The network architecture of our U-shaped Convolutional AutoEn-coder
+
+and skip-fused upsampling, enabling context-aware recovery of normative patterns for multimodal MRI features. To prevent the normative model from learning the ef-fects of multi-site covariates during training, we applied the ComBat[18] method to harmonize the large multi-site healthy control cohorts by calibrating it to the healthy controls from the test site (CMSA). Furthermore, to learn robust normative rep-resentations, the UCAE implemented a denoising autoencoder protocol[37]. The features of large healthy cohorts were cor-rupted by additive Gaussian noise. The model was optimized to reconstruct the original uncorrupted features, minimizing the mean squared error (MSE) loss: 
+
+LMSE = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+∥OF (i) − UCAE( OF (i) + ϵi)∥22, ϵi ∼ N (0 , 0.1) Training used the Adam optimizer[38] with scheduled learn-ing rate decay: 0 .001 (epochs 1–10), 0 .0001 (epochs 11–30), 0.00001 (epochs 31–60). Optimization was performed by mini-batch gradient descent with a batch size of 20. 
+
+2.3.2. Pathological Confidence Calculation 
+
+Following UCAE training in large healthy cohorts, we used this model to reconstruct the original features (OF) of both pa-tients and healthy controls within the study cohort, resulting in reconstructed features (RF). The deviation features (DF) were derived by subtracting OF from RF. We then calculated the sta-tistical significance for both OF and DF, obtaining p-value vec-tors pOF and pDF . To integrate statistical significances from both domains, we adopted the Dempster-Shafer evidence the-ory framework[39], which provides a mathematical foundation 4
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted May 29, 2026. ;https://doi.org/10.64898/2026.05.29.728652 doi: bioRxiv preprint
+
+for combining uncertain evidence from multiple sources. The core principles include: 1. Frame of discernment : Define Θ = {A, ¬A} where A de-notes “pathology exists” and ¬A denotes “no pathology” 2. Basic Belief Assignment : Map the p-values to the belief masses m : 2 Θ → [0 , 1] 3. Evidence Fusion : Combine OF and DF evidence by Dempster’s orthogonal rule. 
+
+Basic Belief Assignment : We used a negative exponential function to define a belief function m(p) to map p-values to the belief mass, reflecting decreasing confidence with increasing p-value: 
+
+m(p) =
+
+
+
+1 (p = 0) 
+
+exp (−p/α ) (0 < p < 1) 0 (p = 1) where α alpha is an adjustable parameter, and it is recom-mended to use the traditional empirical significance threshold (e.g. 0.1, 0.05, 0.01) to obtain a reasonable mapping value. This satisfies the hypothesis of the evidence theory: 
+
+m(∅) = 0
+
+X 
+
+> X⊆Θ
+
+m(X) = m(A) + m(¬A) + m(Θ) = 1where m(Θ) = 1 − | m(A) − m(¬A)| quantifies the uncertainty. 
+
+Evidence fusion : We fused the belief masses derived from the original ( mOF ) and deviation ( mDF ) features for each dimen-sion to obtain the final pathological confidence H:
+
+H(A) = mfused (A) = 11 − K
+
+X
+
+> B∩C=A
+
+mOF (B) · mDF (C)
+
+K =
+
+X
+
+> B∩C=∅
+
+mOF (B) · mDF (C) (Conflict Coe ffi cient) This rule combined evidence supporting pathology from both feature domains. High confidence in both domains amplified the result (e.g. mDF = 0.7, mOF = 0.8 ⇒ H ≈ 0.90), while low confidence diminished it (e.g. mDF = 0.3, mOF = 0.2 ⇒
+
+H ≈ 0.10). Although the original and deviation features are not strictly independent, we treat them as complementary evidence sources reflecting distinct statistical perspectives (raw pheno-type vs. normative deviation), following a pragmatic interpre-tation of evidence fusion in biomedical applications. 
+
+2.3.3. Statistical Analysis 
+
+All statistical analyses were performed using custom Python code. Two-sample t-tests and Pearson correlation analyses were conducted to assess the feature di ff erences between CMSA pa-tients and healthy controls, as well as the correlations between features of CMSA patients and clinical scores, respectively. The parameter α controls the sensitivity of belief mass map-ping and was explored across multiple values (0.1, 0.05, 0.01) to assess robustness, with α = 0.1 selected for downstream analyses based on stability considerations (see Results 3.2.1). In addition, the Benjamini–Hochberg procedure was applied to the original statistical significance p-values to control the false discovery rate (FDR). All statistical analyses were performed separately across three brain atlases and across GMD and FA features. 
+
+2.4. Prognostic Prediction 
+
+To evaluate the e ff ectiveness of the proposed pathological confidence ( H) in clinical prognostic prediction, we performed classification and score regression tasks after applying H–value based feature selection to original features. For comparison, we implemented the same models using a conventional p-value based feature filtering strategy as well as without any feature selection. For classification, features were selected based on statistically significant di ff erences between patients and healthy controls, whereas for regression, features were selected based on statistically significant correlations between patient features and clinical scores. All prognostic prediction models were per-formed separately across three brain atlases, integrating both GMD and FA features. 
+
+2.4.1. Classification 
+
+We employed a Support Vector Machine (SVM) as the classification algorithm, implemented using Python’s 
+
+sklearn.svm.SVC with default settings [40]. To obtain low-bias estimates of classification performance on a relatively small dataset, a leave-one-out cross-validation (LOOCV) strat-egy was adopted. Specifically, classifiers were trained on N − 1subjects and evaluated on the held-out subject, and perfor-mance metrics were subsequently averaged across all N folds. To prevent data leakage, all feature selection procedures were performed exclusively on the training data within each cross-validation fold. Classification performance was quantified us-ing standardized diagnostic metrics: Accuracy = TP + TN TP + TN + FP + FN Sensitivity = TP TP + FN Specificity = TN TN + FP where TP = True Positives, TN = True Negatives, FP = False Positives, FN = False Negatives. The receiver operating char-acteristic (ROC) curves were plotted with the area under curve (AUC) values computed by trapezoidal integration. In addition, the bootstrap method was used to estimate the 95% confidence interval (CI) of AUC. 
+
+2.4.2. Regression 
+
+We performed regression analyses using the Lasso regression model, implemented with Python’s 
+
+sklearn.linear_model.Lasso . The same LOOCV and fea-ture selection strategies as those used in the classification analysis were adopted. Model performance was quantified using the mean absolute error (MAE) and the root mean squared error (RMSE). MAE = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+|yi − ˆyi|
+
+RMSE =
+
+vt 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+(yi − ˆyi)2
+
+5
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted May 29, 2026. ;https://doi.org/10.64898/2026.05.29.728652 doi: bioRxiv preprint
+
+where yi is the true value and ˆ yi is the predicted value for the 
+
+i-th sample. In addition, the bootstrap method was employed to estimate the 95% CI for both MAE and RMSE. Furthermore, the coe ffi cient of determination ( R2) was used as an additional metric to further evaluate the predictive performance of the re-gression models. 
+
+R2 = 1 −
+
+Pni=1(yi − ˆyi)2
+
+Pni=1(yi − ¯y)2
+
+3. Results 
+
+3.1. Deep Normative Model Training 
+
+The UCAE normative model was trained for both GMD and FA features across three brain atlases (AAL116, Shen268, and AICHA384), with convergence curves displayed in Fig. 3. As shown, all models exhibited rapid convergence within the first 10 epochs, and no apparent signs of overfitting were observed throughout the training process. The inset violin plots in each panel display the MSE-based deviation metrics for CMSA pa-tients and healthy controls. Although all models showed higher MSE in CMSA patients compared to healthy controls, most ob-served group-level di ff erences did not reach statistical signifi-cance ( p > 0.05), likely due to the limited sample size. These findings suggest that group-level comparisons of devi-ation metrics throughout the whole brain might not be sensitive enough to detect subtle di ff erences, underscoring the impor-tance of the brain-region-level feature-wise analyses for more accurate disease characterization. 
+
+3.2. Statistical Analysis 3.2.1. H Distributions across α Parameters 
+
+The pathological confidence H is modulated by the param-eter α, and we explored its distribution across three di ff erent values of α (0.1, 0.05, and 0.01). The distributions of H for di ff erent brain atlases and imaging features (GMD and FA) are shown in Fig. 4. It is evident that a more lenient α leads to stronger H in detecting pathological changes. As α decreases, H gradually weakens, especially under stricter α = 0.01, where the con-fidence is substantially reduced. It should also be notewor-thy that, under di ff erent α, the ranking of H for di ff erent re-gions is not entirely the same. This is due to the sensitivity of H-values to the p-values near the parameter α. Specifically, when p = α, the model assigns a relatively smaller belief mass, 
+
+m(p) = exp (−1) ≈ 0.37, resulting in a lower final patholog-ical confidence value. To address this, we adopted a conven-tional significance threshold of pth = 0.05 and set α = 0.1for subsequent analyses, which resulted in belief masses of 
+
+mOF (pth ) = mDF (pth ) = exp (−0.5) ≈ 0.6, corresponding to a pathological confidence threshold of Hth ≈ 0.7. 
+
+3.2.2. Group-Wise Feature Analysis 
+
+The group-wise feature analysis results for GMD and FA across di ff erent brain atlases are summarized in Fig. 5, in-cluding raw p-values, FDR-corrected p-values, and H-values calculated with α = 0.1. After performing two-sample t-tests, no statistically significant features were observed for the AICHA384 atlas following FDR correction, whereas multiple significant features emerged for both the Shen268 and AAL116 atlases. Across the three atlases and imaging modalities, a con-sistent trend was observed where smaller p-values generally corresponded to higher H-values, with a few isolated excep-tions. Furthermore, when considering the correspondence be-tween pathological confidence and statistical significance, fea-tures that survived FDR correction of p < 0.05 showed a sub-stantial overlap with those exceeding the pathological confi-dence threshold of H > 0.7. This highlights the substantial con-sistency between the proposed pathological confidence measure and conventional statistical inference methods. 
+
+3.2.3. Analysis of Significant Features 
+
+To further investigate the contribution of significant di ff er-ences to disease pathology, we analyzed the correlation be-tween the significantly di ff erent features and the clinical scores of the patients. Table 4 presents the number of significant fea-tures identified using FDR-corrected p-values and H-values. Specifically, the term “Sig. Di ff ." denotes the features show-ing significant di ff erences, while “S1 Sig." and “S2 Sig." cor-respond to these significantly di ff erent features that were sig-nificantly correlated with UMSARS-I and UMSARS-II scores, respectively. As described in 3.2.1, p < 0.05 and H > 0.7 are considered significant.   
+
+> Table 4: Significant features identified using p-value and H-value statistics
+
+Statistics Atlas Feature Sig. Di ff . S1 Sig. S2 Sig. 
+
+p-value AAL116 GMD 31 0 0FA 24 0 17 Shen268 GMD 51 0 2FA 54 0 32 AICHA384 GMD 0 0 0FA 0 0 0
+
+H-value AAL116 GMD 32 0 3FA 26 3 8Shen268 GMD 62 1 9FA 64 4 12 AICHA384 GMD 30 1 2FA 23 0 1From the results, it is observed that for the AAL116 and Shen268 atlases, a large number of features still show statis-tical significance even after FDR correction, indicating the ro-bustness of the identified features. However, for the AICHA384 atlas, features that were initially significant disappear after FDR correction, highlighting a lack of consistent statistical support across the dataset for this particular atlas. Interestingly, the number of significant features identified us-ing p-value and H-value were relatively close, with both meth-ods identifying a comparable number of features that were sig-nificant. When focusing on the clinically relevant features, both the p-value and H-value consistently demonstrated better cor-relations with UMSARS-II (S2 Sig.) compared to UMSARS-6  
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted May 29, 2026. ;https://doi.org/10.64898/2026.05.29.728652 doi: bioRxiv preprint Figure 3: UCAE Model Training Convergence for GMD and FA Features Across Di ff erent Brain Atlases. This figure shows the convergence curves of the UCAE normative model training for GMD (A, B, C) and FA (D, E, F) features across three di ff erent brain atlases (AAL116, Shen268, and AICHA384). Each subplot represents the training loss, and test loss (CMSA loss and HC loss) over the course of 60 epochs. In each panel, a violin plot inset provides a two-sample t-test of the Mean Squared Error (MSE) between CMSA patients and healthy controls, with corresponding t-values and p-values.
+
+I (S1 Sig.). This finding suggests that the features identified as significant are more strongly related to UMSARS-II, while their relationship with UMSARS-I is comparatively weaker. 
+
+3.3. Prognostic Prediction 3.3.1. Classification 
+
+Table 5 summarizes the classification performance for dif-ferent feature selection (FS) methods across three brain atlases. Due to the small sample size, the primary evaluation metrics for classification performance were AUC and its 95% CI. All models across the di ff erent atlases exhibited AUC val-ues greater than 0.5, indicating that each method outperforms random classification. This confirms that there are significant feature di ff erences between CMSA patients and healthy con-trols. Among the various models, the H-based method showed the best classification performance when using the Shen268 at-las. In this case, the H-based method achieved the highest AUC of 0.972, with a 95% CI ranging from 0.932 to 0.999, indicating strong and consistent predictive power. 
+
+3.3.2. Regression 
+
+Table 6 presents the regression performance metrics, includ-ing RMSE, MAE, and their respective 95% CI across di ff erent methods and brain atlases. The R2 values indicate the over-all e ff ectiveness of each model in predicting the clinical scores, where a higher R2 value signifies a better predictive ability. For all atlases, the regression results show that the R2 val-ues for UMSARS-I are consistently negative. Negative R2 val-ues indicate that the predictive models did not outperform a constant baseline, rather than reflecting numerical instability. This suggests that the features used in the model are insu ffi -cient or inadequately aligned with the information required to predict UMSARS-I e ff ectively. Conversely, for UMSARS-II, the R2-values are generally positive, with the exception of the AICHA384 atlas. This indicates that the models, especially those based on UMSARS-II, perform well in predicting the clinical scores, with higher predictive power demonstrated in most atlases. In terms of model performance, MAE and RMSE o ff er com-plementary insight into model accuracy and error. Among the various models, the H-based method showed the best regres-sion performance when using the AAL116 atlas and preditc-ing UMSARS-II. Specifically, this model achieved the lowest RMSE of 4.267 with a 95% CI ranging from 3.213 to 5.216 and the lowest MAE of 3.460 with a 95% CI ranging from 2.575 to 4.332, indicating strong predictive power. 
+
+3.3.3. Summary 
+
+Overall, these results underscore the influence of di ff er-ent brain atlases on model performance. The AAL116 and Shen268 atlases respectively provided the best results, partic-ularly with the H-based method, while the performance of the AICHA384 atlas was consistently the worst. This highlights the H-based method’s ability to capture the pathological alter-ations of CMSA and emphasizes the importance of selecting the appropriate brain atlas for optimal prediction results. 7
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted May 29, 2026. ;https://doi.org/10.64898/2026.05.29.728652 doi: bioRxiv preprint
+
+Figure 4: Distributions of pathological confidence H calculated under di ff erent parameters α across brain atlases and imaging modalities. Panels (A–C) show results for gray matter density (GMD) features using the AAL116, Shen268, and AICHA384 atlases, respectively, while panels (D–F) show corresponding results for fractional anisotropy (FA) features. 
+
+Figure 5: The group-wise feature analysis results for GMD and FA across di ff erent brain atlases. Panel (A,D) shows results for the AAL116 atlas, (B,E) for Shen268, (C,F) for AICHA384. Each plot compares the raw p-values, FDR-corrected p-values, and the H-values calculated with α = 0.1. 
+
+8
+
+(which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted May 29, 2026. ;https://doi.org/10.64898/2026.05.29.728652 doi: bioRxiv preprint Table 5: Classification results for AUC, AUC CI (95%), Accuracy, Specificity, and Sensitivity across di ff erent brain atlases and feature selection (FS) methods 
+
+Atlas FS Method AUC AUC CI (95%) Accuracy Specificity Sensitivity 
+
+AAL116 None 0.852 [0.736, 0.944] 0.821 0.778 0.862 
+
+p-value Based 0.851 [0.726, 0.956] 0.821 0.852 0.793 
+
+H-value Based 0.835 [0.703, 0.946] 0.804 0.852 0.759 Shen268 None 0.907 [0.797, 0.981] 0.893 0.852 0.931 
+
+p-value Based 0.893 [0.783, 0.981] 0.875 0.815 0.931 
+
+H-value Based 0.972 [0.932, 0.999] 0.929 0.889 0.966 
+
+AICHA384 None 0.807 [0.671, 0.921] 0.732 0.630 0.828 
+
+p-value Based 0.708 [0.559, 0.837] 0.589 0.593 0.586 
+
+H-value Based 0.738 [0.600, 0.863] 0.714 0.667 0.759   
+
+> Table 6: Regression results for RMSE, MAE, and R2for UMSARS-I and UMSARS-II across di ff erent brain atlases and feature selection (FS) methods.
+
+Assessment Scale Atlas FS Method RMSE RMSE CI (95%) MAE MAE CI (95%) r² 
+
+UMSARS-I AAL116 None 6.389 [4.799, 7.822] 5.194 [3.832, 6.633] -0.280 
+
+p-value Based 6.398 [5.068, 7.807] 5.287 [4.090, 6.573] -0.284 
+
+H-value Based 6.631 [5.179, 7.945] 5.523 [4.258, 6.856] -0.379 Shen268 None 6.530 [4.478, 8.366] 5.194 [3.921, 6.665] -0.337 
+
+p-value Based 6.603 [4.636, 8.704] 5.214 [3.882, 6.785] -0.367 
+
+H-value Based 6.787 [4.901, 8.576] 5.439 [4.126, 6.994] -0.445 AICHA384 None 8.042 [6.705, 9.315] 7.172 [5.897, 8.505] -1.029 
+
+p-value Based 7.864 [6.310, 9.241] 6.365 [5.510, 8.371] -0.940 
+
+H-value Based 7.301 [5.936, 8.590] 6.365 [5.151, 7.666] -0.672 
+
+UMSARS-II AAL116 None 4.591 [3.562, 5.497] 3.729 [2.793, 4.698] 0.343 
+
+p-value Based 4.488 [3.410, 5.428] 3.666 [2.701, 4.512] 0.372 
+
+H-value Based 4.267 [3.213, 5.216] 3.460 [2.575, 4.332] 0.432 
+
+Shen268 None 4.953 [3.773, 6.203] 4.018 [3.028, 5.108] 0.235 
+
+p-value Based 4.713 [3.539, 5.924] 3.784 [2.785, 4.824] 0.307 
+
+H-value Based 4.977 [3.688, 6.288] 3.990 [2.994, 5.104] 0.228 AICHA384 None 5.726 [4.473, 7.016] 4.669 [3.567, 5.886] -0.022 
+
+p-value Based 5.703 [4.251, 7.112] 4.608 [3.406, 5.958] -0.014 
+
+H-value Based 5.462 [4.261, 6.805] 5.280 [4.043, 6.433] -0.213 
+
+4. Discussion 
+
+In this study, we proposed the DINMC framework, which consists of two integrated components. The first, Deep Norma-tive Model Construction , uses multi-site healthy data to train the UCAE normative model, which then reconstructs the original features of both patients and controls within the study cohort, generating deviation features. The second component, Patho-logical Confidence Calculation , quantifies the pathological rel-evance of these features by calculating pathological confidence values using Dempster-Shafer evidence theory. Our results demonstrate that the pathological confidence patterns computed using the DINMC framework provide a more accurate reflec-tion of the pathological progression of CMSA compared to traditional statistical approaches based on significance thresh-olds. Furthermore, feature selection based on pathological con-fidence thresholds outperformed traditional p-value threshold-based methods in clinical prognosis prediction tasks, including classification and regression. 
+
+4.1. Interpretability of Normative Models in Neuroimaging 
+
+Neuroimaging features are highly susceptible to multi-site eff ects caused by di ff erences in scanner manufacturers and ac-quisition protocols, which can bias normative model estima-tions unless accounted for [41, 16]. While some harmonization techniques help, they may also remove meaningful biological signals [42, 43]. Although traditional case-control studies that use the same equipment for both patients and healthy controls can mitigate some of these e ff ects, such studies are often lim-ited by small sample sizes. Existing normative studies attempt to address these challenges by using larger samples and innova-tive methodologies, but no approach has yet fully resolved the issues related to multi-site covariates. In particular, when ap-plying a model to data from a previously unseen site, a certain amount of data from that site is still required for fine-tuning or calibration. Our DINMC framework does not seek to resolve multi-site issues from a theoretical perspective but rather focuses on im-proving the interpretability of normative models in neuroimag-ing applications. Existing normative models often rely on fea-ture deviations as standalone substitutes for original features, 9
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted May 29, 2026. ;https://doi.org/10.64898/2026.05.29.728652 doi: bioRxiv preprint
+
+but lack statistical assurances that these deviations truly reflect pathology. Moreover, normative models built with large sam-ples often focus on relatively simple structural features, such as brain development, limiting their clinical applicability. In con-trast, our approach integrates the interpretability of hypothesis testing frameworks, combining statistical results from both the original and deviation feature spaces. By framing statistical dif-ferences in terms of pathological confidence, our model shifts the focus from controlling error rates to understanding the bio-logical plausibility of feature deviations, providing more robust interpretations of the results. This bridges the gap in existing normative models, ensuring that deviation features are not sim-ply a replacement for original features, but o ff er meaningful insights into disease pathology. 
+
+4.2. Impact of Brain Parcellation and Atlas Selection 
+
+The impact of preprocessing on neuroimaging research is significant, and brain parcellation is a critical preprocessing step in neuroimaging studies[44]. Using brain atlases to define a unified space and "node" structure o ff ers at least two advan-tages. First, Using brain atlases creates standardized feature spaces that support cross-modal and cross-study comparability [45, 46]. Currently, neuroimaging studies use varying coordinate systems, resolutions, and statistical methods, which can hinder the reproducibility and integration of results. By using a com-mon feature space, brain atlases facilitate the fusion of mul-timodal data and are particularly important for building func-tional normative models in future studies. Second, parcellation also reduces the burden of multiple comparisons and enhances signal-to-noise ratio compared to voxel-based analyses [47]. When voxel-based features are analyzed, the number of statistical tests can reach millions, and traditional methods such as FDR correction often become overly conservative, potentially masking meaningful biological eff ects. This has led to the development of specialized methods, such as network-based statistics [48] or cluster-based statistics [49], but these also limit the reproducibility and integration of results. In contrast, averaging features across the entire brain re-sults in a low signal-to-noise ratio and weak interpretability. For instance, when analyzing the MSE deviation metrics for CMSA patients and healthy controls across the whole brain, although there was a trend of higher error in patients, the di ff erence was not statistically significant and could not be directly applied. In this study, we used three di ff erent brain atlases: AAL116, Shen268, and AICHA384. The AAL116 atlas is based on anatomical structures, including both the brain and cerebellum, while the Shen268 and AICHA384 atlases use functional con-nectivity to define brain regions. The AICHA384 atlas only includes brain regions. Our statistical analysis revealed that the significance of original p-values for features based on the AICHA384 atlas was weaker than that computed for the same features in the other two atlases. As a result, after FDR cor-rection, no features in the AICHA384 atlas reached statistical significance. 
+
+4.3. Analysis of CMSA Pathology 
+
+CMSA is a progressive neurodegenerative disorder charac-terized by α-synuclein-positive glial inclusions that primarily aff ect cerebellar and olivopontine circuits [50]. Previous studies [30] have confirmed widespread GMD atrophy and FA reduc-tion in cerebellar subregions using the AAL116 atlas. In our study, we observed that the AICHA384 atlas, which does not include cerebellar regions, exhibited the worst performance in both statistical analysis and prognostic prediction. This obser-vation is highly consistent with the known cerebellar-dominant pathology of CMSA, reinforcing the biological validity of atlas-dependent findings. This finding highlights the crucial role of the cerebellum in the pathological progression of CMSA. The absence of cerebellar structures in the AICHA384 atlas likely limits the model’s ability to capture the disease-related abnor-malities in these regions, which are key to understanding the clinical manifestations of CMSA. Furthermore, we observed that the model’s performance for predicting UMSARS-II scores was consistently better than for UMSARS-I. The higher accuracy of UMSARS-II prediction may be attributed to the fact that UMSARS-II reflects more di-rect motor dysfunction, which is often more pronounced and easier to correlate with neuroimaging features. In contrast, UMSARS-I focuses on activities of daily living, which can be influenced by factors such as cognitive or mood disturbances, leading to more variability in the assessment and potentially making it more challenging to predict accurately using neu-roimaging data. Therefore, the stronger correlation between neuroimaging features and UMSARS-II scores further rein-forces the notion that motor impairments in CMSA are more directly linked to structural brain changes than functional limi-tations assessed in UMSARS-I. 
+
+4.4. Limitations and Future Directions 
+
+Several limitations should be considered in this study. First, the theoretical foundation of our pathological confidence calcu-lation requires further refinement. The belief function currently relies on empirically determined parameters, which could intro-duce bias and impact the robustness of our findings. Second, the Dempster-Shafer framework assumes that the evidence sources are statistically independent, a condition not fully satisfied in our methodology. Additionally, the current validation is limited to structural neuroimaging features, and future studies should include functional metrics, which are crucial to understanding brain organization and o ff er a more holistic perspective. Finally, longitudinal studies are needed to capture the dynamic patho-logical progression of CMSA, enabling a better understanding of temporal changes in biomarkers. 
+
+5. Conclusion 
+
+This study introduces an interpretable normative model-ing framework that integrates statistical hypothesis testing with deep autoencoder-based reconstruction. Validated on a cerebellar-type multiple system atrophy cohort, the proposed 10 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted May 29, 2026. ;https://doi.org/10.64898/2026.05.29.728652 doi: bioRxiv preprint
+
+DINMC framework enables the quantification of pathologi-cal confidence at the feature dimension level, providing bio-logically grounded interpretation of neuroimaging deviations. The results demonstrate that confidence-guided feature selec-tion improves downstream classification and clinically relevant score prediction, particularly for motor impairment. The frame-work is generalizable to other multimodal neuroimaging set-tings and o ff ers a scalable paradigm for interpretable precision analysis in biomedical engineering. 
+
+Ethics statement 
+
+The study was approved by the Medical Research Ethical Committee of AeroSpace Center Hospital (No.2023-071) in ac-cordance with the Declaration of Helsinki and relevant ethical guidelines. Written informed consent was obtained from each participant or their legal representatives. 
+
+CRediT authorship contribution statement Zewu Ge: Conceptualization, Data curation, Formal analy-sis, Investigation, Methodology, Software, Visualization, Writ-ing – original draft, Writing – review & editing. Shui Liu: In-vestigation, Resources, Data curation, Writing – review & edit-ing. Weibei Dou: Conceptualization, Resources, Funding ac-quisition, Project administration, Resources, Supervision, Vali-dation, Writing – review & editing. 
+
+Declaration of competing interest 
+
+The authors declare no competing interests. 
+
+Acknowledgements 
+
+This work was supported by the National Key Research and Development Program of China under Grant 2022YFC3601100 and Grant 2022YFC3601105. Zewu Ge wishes to thank Dong-fang Hospital of Beijing University of Traditional Chinese Medicine for the data collection of the CMSA cohort. Research reported in this publication was supported by the National Insti-tute On Aging of the National Institutes of Health under Award Number U01AG052564. The content is solely the responsibil-ity of the authors and does not necessarily represent the o ffi cial views of the National Institutes of Health. 
+
+References 
+
+[1] A. F. Marquand, I. Rezek, J. Buitelaar, C. F. Beckmann, Understanding heterogeneity in clinical cohorts using nor-mative models: beyond case-control studies, Biological psychiatry 80 (7) (2016) 552–561. [2] R. A. Bethlehem, J. Seidlitz, S. R. White, J. W. Vogel, K. M. Anderson, C. Adamson, S. Adler, G. S. Alexopou-los, E. Anagnostou, A. Areces-Gonzalez, et al., Brain charts for the human lifespan, Nature 604 (7906) (2022) 525–533. [3] G. Ziegler, G. R. Ridgway, R. Dahnke, C. Gaser, A. D. N. Initiative, et al., Individualized gaussian process-based prediction and detection of local and global gray matter abnormalities in elderly subjects, NeuroImage 97 (2014) 333–348. [4] A. F. Marquand, T. Wolfers, M. Mennes, J. Buitelaar, C. F. Beckmann, Beyond lumping and splitting: a review of computational approaches for stratifying psychiatric dis-orders, Biological psychiatry: cognitive neuroscience and neuroimaging 1 (5) (2016) 433–447. [5] J. Lv, M. Di Biase, R. F. Cash, L. Cocchi, V. L. Crop-ley, P. Klauser, Y. Tian, J. Bayer, L. Schmaal, S. Cetin-Karayumak, et al., Individual deviations from norma-tive models of brain structure in a large cross-sectional schizophrenia cohort, Molecular psychiatry 26 (7) (2021) 3512–3523. [6] Q. Lv, M. Yan, X. Shen, J. Wu, W. Yu, S. Yan, F. Yang, K. Zeljic, Y. Shi, Z. Zhou, et al., Normative analysis of in-dividual brain di ff erences based on a population mri-based atlas of cynomolgus macaques, Cerebral Cortex 31 (1) (2021) 341–355. [7] D. C. Van Essen, S. M. Smith, D. M. Barch, T. E. Behrens, E. Yacoub, K. Ugurbil, W.-M. H. Consortium, et al., The wu-minn human connectome project: an overview, Neu-roimage 80 (2013) 62–79. [8] B. J. Casey, T. Cannonier, M. I. Conley, A. O. Cohen, D. M. Barch, M. M. Heitzeg, M. E. Soules, T. Teslovich, D. V. Dellarco, H. Garavan, et al., The adolescent brain cognitive development (abcd) study: imaging acquisition across 21 sites, Developmental cognitive neuroscience 32 (2018) 43–54. [9] C. Bycroft, C. Freeman, D. Petkova, G. Band, L. T. El-liott, K. Sharp, A. Motyer, D. Vukcevic, O. Delaneau, J. O’Connell, et al., The uk biobank resource with deep phenotyping and genomic data, Nature 562 (7726) (2018) 203–209. [10] S. Y. Bookheimer, D. H. Salat, M. Terpstra, B. M. Ances, D. M. Barch, R. L. Buckner, G. C. Burgess, S. W. Curtiss, M. Diaz-Santos, J. S. Elam, et al., The lifespan human connectome project in aging: an overview, Neuroimage 185 (2019) 335–348. [11] W. H. Pinaya, C. Scarpazza, R. Garcia-Dias, S. Vieira, L. Baecker, P. F da Costa, A. Redolfi, G. B. Frisoni, M. Pievani, V. D. Calhoun, et al., Using normative mod-elling to detect disease progression in mild cognitive impairment and alzheimer’s disease in a cross-sectional multi-cohort study, Scientific reports 11 (1) (2021) 15746. [12] V. Itälinna, H. Kaltiainen, N. Forss, M. Liljeström, L. Parkkonen, Using normative modeling and machine learning for detecting mild traumatic brain injury from magnetoencephalography data (2023). 11 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted May 29, 2026. ;https://doi.org/10.64898/2026.05.29.728652 doi: bioRxiv preprint
+
+[13] X. Shan, L. Q. Uddin, J. Xiao, C. He, Z. Ling, L. Li, X. Huang, H. Chen, X. Duan, Mapping the heterogeneous brain structural phenotype of autism spectrum disorder us-ing the normative model, Biological Psychiatry 91 (11) (2022) 967–976. [14] T. Wolfers, N. T. Doan, T. Kaufmann, D. Alnæs, T. Moberget, I. Agartz, J. K. Buitelaar, T. Ueland, I. Melle, B. Franke, et al., Mapping the heterogeneous phenotype of schizophrenia and bipolar disorder using normative mod-els, JAMA psychiatry 75 (11) (2018) 1146–1155. [15] J. Bozek, L. Gri ff anti, S. Lau, M. Jenkinson, Normative models for neuroimaging markers: Impact of model se-lection, sample size and evaluation criteria, NeuroImage 268 (2023) 119864. [16] J. M. Bayer, P. M. Thompson, C. R. Ching, M. Liu, A. Chen, A. C. Panzenhagen, N. Jahanshad, A. Marquand, L. Schmaal, P. G. Sämann, Site e ff ects how-to and when: An overview of retrospective techniques to accommodate site e ff ects in multi-site neuroimaging analyses, Frontiers in neurology 13 (2022) 923988. [17] A. F. Marquand, S. M. Kia, M. Zabihi, T. Wolfers, J. K. Buitelaar, C. F. Beckmann, Conceptualizing mental disor-ders as deviations from normative functioning, Molecular psychiatry 24 (10) (2019) 1415–1424. [18] W. E. Johnson, C. Li, A. Rabinovic, Adjusting batch ef-fects in microarray expression data using empirical bayes methods, Biostatistics 8 (1) (2007) 118–127. [19] J.-P. Fortin, N. Cullen, Y. I. Sheline, W. D. Taylor, I. Asel-cioglu, P. A. Cook, P. Adams, C. Cooper, M. Fava, P. J. McGrath, et al., Harmonization of cortical thickness mea-surements across scanners and sites, Neuroimage 167 (2018) 104–120. [20] T. K. Bell, K. J. Godfrey, A. L. Ware, K. O. Yeates, A. D. Harris, Harmonization of multi-site mrs data with combat, NeuroImage 257 (2022) 119330. [21] S. M. Kia, H. Huijsdens, R. Dinga, T. Wolfers, M. Mennes, O. A. Andreassen, L. T. Westlye, C. F. Beck-mann, A. F. Marquand, Hierarchical bayesian regression for multi-site normative modeling of neuroimaging data, in: International Conference on Medical Image Comput-ing and Computer-Assisted Intervention, Springer, 2020, pp. 699–709. [22] M. Chamberland, S. Genc, C. M. Tax, D. Shastin, K. Koller, E. P. Raven, A. Cunningham, J. Doherty, M. B. van den Bree, G. D. Parker, et al., Detecting microstruc-tural deviations in individuals with deep di ff usion mri tractometry, Nature computational science 1 (9) (2021) 598–606. [23] W. H. Pinaya, A. Mechelli, J. R. Sato, Using deep au-toencoders to identify abnormal brain structural patterns in neuropsychiatric disorders: A large-scale multi-sample study, Human brain mapping 40 (3) (2019) 944–954. [24] S. M. Kia, A. F. Marquand, Neural processes mixed-eff ect models for deep normative modeling of clinical neu-roimaging data, in: International Conference on Medical Imaging with Deep Learning, PMLR, 2019, pp. 297–314. [25] S. Vieira, L. Baecker, W. Pinaya, R. Garcia-Dias, C. Scarpazza, V. Calhoun, A. Mechelli, Neurofind: using deep learning to make individualised inferences in brain-based disorders, Translational psychiatry 15 (1) (2025) 69. [26] S. Rutherford, S. M. Kia, T. Wolfers, C. Fraza, M. Zabihi, R. Dinga, P. Berthet, A. Worker, S. Verdi, H. G. Ruhe, et al., The normative modeling framework for computa-tional psychiatry, Nature protocols 17 (7) (2022) 1711– 1734. [27] S. Rutherford, P. Barkema, I. F. Tso, C. Sripada, C. F. Beckmann, H. G. Ruhe, A. F. Marquand, Evidence for embracing normative modeling, Elife 12 (2023) e85082. [28] H. Soltanian-Zadeh, D. J. Peck, Feature space analysis: Eff ects of mri protocols, Medical physics 28 (11) (2001) 2344–2351. [29] M. Li, Y. Qin, F. Gao, W. Zhu, X. He, Discriminative anal-ysis of multivariate features from structural mri and di ff u-sion tensor images, Magnetic resonance imaging 32 (8) (2014) 1043–1051. [30] Y. Ge, W. Zheng, Y. Li, W. Dou, S. Ren, Z. Chen, Z. Wang, Altered brain volume, microstructure met-rics and functional connectivity features in multiple sys-tem atrophy, Frontiers in Aging Neuroscience 14 (2022) 799251. [31] J. Ashburner, G. Barnes, C.-C. Chen, J. Daunizeau, G. Flandin, K. Friston, S. Kiebel, J. Kilner, V. Litvak, R. Moran, et al., Spm12 manual, Wellcome Trust Centre for Neuroimaging, London, UK 2464 (4) (2014) 53. [32] M. Jenkinson, C. F. Beckmann, T. E. Behrens, M. W. Woolrich, S. M. Smith, Fsl, Neuroimage 62 (2) (2012) 782–790. [33] N. Tzourio-Mazoyer, B. Landeau, D. Papathanassiou, F. Crivello, O. Etard, N. Delcroix, B. Mazoyer, M. Joliot, Automated anatomical labeling of activations in spm us-ing a macroscopic anatomical parcellation of the mni mri single-subject brain, Neuroimage 15 (1) (2002) 273–289. [34] M. Joliot, G. Jobard, M. Naveau, N. Delcroix, L. Petit, L. Zago, F. Crivello, E. Mellet, B. Mazoyer, N. Tzourio-Mazoyer, Aicha: An atlas of intrinsic connectivity of homotopic areas, Journal of Neuroscience Methods 254 (2015) 46–59. doi:10.1016/j.jneumeth.2015.07. 013 .12 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted May 29, 2026. ;https://doi.org/10.64898/2026.05.29.728652 doi: bioRxiv preprint
+
+[35] X. Shen, F. Tokoglu, X. Papademetris, R. T. Consta-ble, Groupwise whole-brain parcellation from resting-state fmri data for network node identification, Neuroim-age 82 (2013) 403–415. [36] O. Ronneberger, P. Fischer, T. Brox, U-net: Convolutional networks for biomedical image segmentation, in: Inter-national Conference on Medical image computing and computer-assisted intervention, Springer, 2015, pp. 234– 241. [37] P. Vincent, H. Larochelle, Y. Bengio, P.-A. Manzagol, Ex-tracting and composing robust features with denoising au-toencoders, in: Proceedings of the 25th international con-ference on Machine learning, 2008, pp. 1096–1103. [38] D. P. Kingma, J. Ba, Adam: A method for stochastic opti-mization, arXiv preprint arXiv:1412.6980 (2014). [39] G. Shafer, A mathematical theory of evidence (2020). [40] F. Pedregosa, G. Varoquaux, A. Gramfort, V. Michel, B. Thirion, O. Grisel, M. Blondel, P. Prettenhofer, R. Weiss, V. Dubourg, et al., Scikit-learn: Machine learn-ing in python, the Journal of machine Learning research 12 (2011) 2825–2830. [41] J. Villalón-Reina, et al., Multi-site normative modeling of di ff usion tensor imaging, Human Brain Mapping (2022). [42] J. Bayer, et al., Accommodating site variation in neu-roimaging data using hierarchical bayesian normative modeling, NeuroImage 255 (2022) 119104. [43] Y.-W. Wang, et al., A toolbox for harmonizing multi-site brain imaging for big datasets, Neuroinformatics (2024). [44] P. M. Tuan, M. Adel, N. L. Trung, E. Guedj, Does brain atlas choice matter? an empirical study in alzheimer’s di-agnosis using fdg-pet images, in: 2024 Asia Pacific Signal and Information Processing Association Annual Summit and Conference (APSIPA ASC), IEEE, 2024, pp. 1–6. [45] S. B. Eickho ff , B. T. Yeo, S. Genon, Imaging-based par-cellations of the human brain, Nature Reviews Neuro-science 19 (11) (2018) 672–686. [46] Y.-C. Lin, et al., Mapping brain–behavior networks using functional parcellation, Brain and Behavior 10 (6) (2020) e01647. [47] S. Smith, T. Nichols, Network modeling methods for fmri, in: Statistical Challenges in Functional MRI, Springer, 2011, pp. 317–336. [48] A. Zalesky, A. Fornito, E. T. Bullmore, Network-based statistic: identifying di ff erences in brain networks, Neu-roimage 53 (4) (2010) 1197–1207. [49] C. E. Han, S. W. Yoo, S. W. Seo, D. L. Na, J.-K. Seong, Cluster-based statistics for brain connectivity in correla-tion with behavioral measures, PLoS one 8 (8) (2013) e72332. [50] V. Beliveau, F. Krismer, E. Skalla, M. M. Schocke, E. R. Gizewski, G. K. Wenning, W. Poewe, K. Seppi, C. Scher-fler, Characterization and diagnostic potential of di ff usion tractography in multiple system atrophy, Parkinsonism & Related Disorders 85 (2021) 30–36. 13

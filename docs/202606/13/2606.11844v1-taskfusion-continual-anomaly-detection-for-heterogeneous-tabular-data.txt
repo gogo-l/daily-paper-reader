@@ -1,0 +1,559 @@
+Title: TaskFusion: Continual Anomaly Detection for Heterogeneous Tabular Data
+
+URL Source: https://arxiv.org/pdf/2606.11844v1
+
+Published Time: Thu, 11 Jun 2026 00:48:36 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+# TaskFusion: Continual Anomaly Detection for Heterogeneous Tabular Data 
+
+Dayananda Herurkar 1,2, Federico Raue 1, Joachim Folz 1, Jörn Hees 1,3, and Andreas Dengel 1,2 
+
+> 1
+
+German Research Center for Artificial Intelligence (DFKI), Kaiserslautern, Germany  
+
+> 2
+
+RPTU Kaiserslautern-Landau, Germany  
+
+> 3
+
+Hochschule Bonn-Rhein-Sieg (H-BRS), Germany 
+
+firstname.lastname@dfki.de 
+
+Abstract. Continual anomaly detection in tabular data is challenging and re-mains largely underexplored, particularly in settings with heterogeneous feature schemas, distribution shifts, and severe class imbalance. In many real-world ap-plications, data arrive sequentially from diverse domains, rendering conventional continual learning methods ineffective due to their reliance on a fixed input space. We propose a continual learning (CL) method, which can overcome these chal-lenges and continually learn from different tasks. Our method consists of three main parts: our AGF model, Taskfusion augmentation, and outlier exposure. The 
+
+AGF-model maps task-specific features into a shared space, then aligns distribu-tions to reduce representation drift, and learns anomaly decision boundaries in the aligned space. To improve stability, we introduce Taskfusion augmentation , com-bining boundary-aware interpolation within tasks to refine the model anomaly boundaries and cross-task mixing to transfer anomaly structure across datasets. To handle class imbalance and memory constraints, we employ tabular dataset distillation to store compact synthetic replay samples, which are jointly used with augmented data in an outlier exposure objective for robust anomaly detection. We evaluate the approach on 21 heterogeneous datasets across multiple domains. Results show that our approach substantially improves continual anomaly detec-tion performance over sequential fine-tuning and other CL baselines while reduc-ing catastrophic forgetting and maintaining stable detection across heterogeneous datasets. 
+
+Keywords: Continual Learning · Lifelong Learning · Anomaly Detection · Tab-ular Data · Outlier Exposure · Data Augmentation. 
+
+## 1 Introduction 
+
+Outlier detection in tabular data plays a critical role in many real-world applications, including fraud detection, system monitoring, healthcare analytics, and industrial in-spection [14]. In practical deployments, however, data rarely arrive as a single static dataset. Instead, new tabular datasets emerge sequentially from different sources or domains, each characterized by distinct feature schemas, statistical distributions, and anomaly patterns. This setting naturally gives rise to a situation where a model must incrementally or continuously incorporate new knowledge while preserving previously  
+
+> arXiv:2606.11844v1 [cs.LG] 10 Jun 2026 2Herurkar et al.
+
+learned behavior. A key opportunity in continual anomaly detection lies in aggregating outlier information across datasets. Anomalies observed in different domains often cap-ture complementary failure modes, and combining such signals can lead to more robust and generalizable detectors. However, realizing this potential is particularly challeng-ing for heterogeneous tabular data. As a result, joint training is often infeasible, pre-venting effective knowledge sharing across datasets. While effective in homogeneous settings, existing continual learning (CL) strategies do not address schema mismatch or cross-domain anomaly representation inconsistency. The challenge is further amplified in anomaly detection, where labeled anomalies are scarce, with large class imbalance, and decision boundaries are sparse and unstable. Consequently, naive sequential train-ing rapidly forgets earlier anomaly patterns, while standard replay methods struggle with severe class imbalance and storage constraints. Existing continual anomaly detection approaches typically assume homogeneous feature spaces or operate within a single domain, making them unsuitable for het-erogeneous settings where feature schemas and distributions differ across tasks [4,6]. Moreover, standard replay mechanisms struggle under severe class imbalance and lim-ited memory, limiting their ability to preserve anomaly knowledge over long sequences [19]. In this work, we address these limitations by shifting the focus from feature-level transfer to representation-level knowledge accumulation. We propose a continual learn-ing framework called AGF , that first maps heterogeneous tabular inputs into a shared latent space and aligns task-specific distributions, enabling anomaly knowledge to be combined across datasets with different sets of feature spaces. Furthermore, we intro-duce TaskFusion augmentation, which improves robustness through boundary-aware interpolation to refine sparse anomaly decision regions within tasks and cross-task la-tent mixing to transfer anomaly structure across domains. To further stabilize learning under class imbalance and memory constraints, we integrate tabular dataset distillation [12] as a compact replay mechanism and leverage outlier exposure to reinforce anomaly discrimination. Together, these components enable scalable, continual anomaly detec-tion without requiring access to raw historical data. This work makes the following contributions: 
+
+– We propose a continual anomaly detection approach called AGF for heterogeneous tabular data. 
+
+– We introduce TaskFusion augmentation, combining boundary-aware interpolation and cross-task mixing to improve robustness and anomaly generalization. 
+
+– We integrate tabular dataset distillation to enable efficient replay under limited memory and to overcome class imbalance constraints. 
+
+## 2 Related Work 
+
+Continual Learning: Continual learning (CL) studies how to learn from a sequence of tasks without catastrophic forgetting. A prominent direction constrains parameter drift, such as Elastic Weight Consolidation (EWC), which penalizes updates to parameters estimated to be important for previously learned tasks [16]. A complementary direction performs functional regularization through distillation, e.g., Learning without Forget-ting (LwF), which preserves prior behavior by matching outputs of the previous model TaskFusion: Continual Anomaly Detection for Heterogeneous Tabular Data 3
+
+while training on new-task data [17]. Replay-based CL mitigates forgetting by main-taining a memory of past examples and interleaving them during training. iCaRL popu-larized exemplar-based rehearsal for incremental representation learning [19]. Further-more, continual and lifelong anomaly detection have been explored through unlearning-based mechanisms [3], sequential one-class formulations such as ARCADe [6], and broader evaluations of lifelong anomaly learning protocols [4]. 
+
+Anomaly Detection for Tabular Data: Recent advances in tabular anomaly detection have shifted toward deep learning and self-supervised representation learning to bet-ter capture complex feature interactions. Reconstruction-based methods remain widely used, but modern variants enhance them with retrieval or contextual mechanisms, such as retrieval-augmented models that leverage sample dependencies to improve recon-struction quality [20], [10], [13]. Self-supervised learning has become a prominent di-rection, with masked modeling approaches (e.g., masked cell modeling) capturing fea-ture dependencies through reconstruction of partially observed inputs [24], [9], [12]. Transformer-based and context-conditioned models further improve performance by learning feature interactions and adapting to heterogeneous contexts within tabular data [15]. Additionally, recent works explore hybrid architectures that combine representa-tion learning with classical principles, such as deep extensions of isolation-based meth-ods [23] and influence-based anomaly scoring [21], [11]. Despite these advances, most existing approaches operate in a static setting and assume a fixed feature schema, lim-iting their applicability to continual and heterogeneous scenarios where datasets evolve over time. 
+
+Outlier Exposure and Data Augmentation: Outlier Exposure (OE) enhances anomaly detection by training models against auxiliary outlier datasets, improving robustness to unseen anomalies [8]. Such a technique highlights the importance of exposing models to diverse anomaly patterns over time. Complementary to OE, data augmentation and in-terpolation strategies have emerged as powerful regularizers. MixUp [25] and Manifold Mixup [22] improve generalization by interpolating samples or hidden representations to smooth decision boundaries. For tabular domains, specialized augmentation mecha-nisms have been proposed, including pseudo-anomaly generation via nearest-neighbor Gaussian Mixup [2] and feature corruption–based contrastive learning (SCARF) [1]. While these approaches demonstrate that representation-space corruption and interpo-lation are effective for tabular learning, they are primarily designed for static or single-dataset settings. Our work integrates outlier exposure with augmentation within a con-tinual learning framework, enabling progressive aggregation of anomaly knowledge across heterogeneous tabular datasets. 
+
+## 3 Approach 
+
+We consider a CL setting consisting of a sequence of tabular tasks T1, T2, . . . , TT , where each task Tt = {Xt, Y t} corresponds to a dataset with feature dimension dt. Each sample x ∈ Rdt is associated with a binary label y ∈ { 0, 1} indicating inlier (normal) or outlier (anomaly). Unlike continual learning in homogeneous settings, feature schemas 4 Herurkar et al. 
+
+can differ across tasks ( dt̸ = dt′ ). The objective is to learn a unified anomaly detector that incrementally integrates knowledge from heterogeneous datasets while preventing catastrophic forgetting. Formally, the model learns a function fΘ : Rdt → [0 , 1] , shared across all tasks, which predicts anomaly probability. The main challenge is therefore twofold: (1) aligning heterogeneous tabular schemas into a shared representation space, and (2) maintaining stable anomaly detection under continual distribution shifts. 
+
+3.1 AGF Model 
+
+The proposed framework follows a model architecture composed of three stages, re-ferred to as AGF (see Figure 1): 
+
+fΘ (Xt) = Fθf (Gθg (Atθa (Xt))) (1) The parameters θg and θf are shared across tasks and updated sequentially while θa is updated only during the respective task. The task-specific feature spaces are mapped into a shared latent space via a learnable schema adapter. While raw input dimension-alities differ across tasks, the downstream modules operate in a fixed latent space. 
+
+Schema Adapter (A): The adapter maps heterogeneous tabular inputs into the same latent dimensionality dz ie., Aθa : Rdt → Rdz . This module enables learning across datasets with different feature dimensions by performing schema-level harmonization. 
+
+General Distribution (G): The distribution alignment component maps task-specific embeddings into a unified latent distribution Gθg : Rdz → Rdg . The alignment emerges implicitly through joint optimization across tasks, where shared parameters are updated to minimize anomaly classification loss across heterogeneous domains. By calibrat-ing representations across tasks, the model reduces domain discrepancies and enables knowledge transfer between datasets. Given an input x, its latent embedding becomes 
+
+g = Gθg (Aθa (x)) .
+
+Anomaly Classifier (F): The final module performs binary anomaly classification based on aligned representations. It learns a robust decision boundary separating normal and anomalous samples while adapting continuously as new tasks arrive. Fθf : Rdg →
+
+R2 produces logits used for binary anomaly classification. The anomaly probability is computed via softmax. Together, these components allow the model to accumulate knowledge across het-erogeneous domains without requiring identical feature schemas. The task loss is de-fined as standard cross-entropy: Ltask = 1
+
+> N
+
+PNi=1 CE  fΘ (xi), y i
+
+. The architecture enables combining outlier information from multiple datasets through a shared latent representation, which would otherwise be infeasible in raw feature space. 
+
+3.2 Augmentation Techniques 
+
+To improve robustness and mitigate catastrophic forgetting, we introduce TaskFusion Augmentation, which operates in the learned latent space (G). TaskFusion: Continual Anomaly Detection for Heterogeneous Tabular Data 53 Attributes/Columns 
+
+> 5 Attributes/Columns
+> 4 Attributes/Columns
+> Adapter
+> (A 1)
+> Adapter
+> (A 2)
+> Adapter
+> (A n)
+> General
+> Distribution
+> (G)
+> Anomaly
+> Classifier
+> (F)
+> Buffer
+> Buffer
+> Buffer
+> Output
+
+Fig. 1. AGF architecture for heterogeneous continual anomaly detection. Task-specific tabular datasets with different feature dimensions are learned using AGF to perform anomaly prediction by knowledge accumulation without shared raw samples. After each task, the buffer is created via tabular dataset distillation to store compact synthetic samples and added to the replay memory that is used in subsequent tasks. 
+
+Within-Task Boundary-Aware Augmentation: Samples with uncertain predictions, typ-ically located near the anomaly decision boundary, are identified within the current task. Interpolation among these samples generates additional training points that den-sify boundary regions. This encourages smoother decision surfaces and improves cal-ibration in sparse anomaly regimes. Within each task, uncertain samples located near the anomaly boundary are identified using prediction confidence: Ut = {xi | τ1 <panom (xi) < τ 2} where τ1 and τ2 are adaptive quantile-based thresholds over pre-dicted scores. Pairs (αi, α j ) drawn from Ut are then combined using a MixUp with 
+
+λ ∈ (0 , 1) : ˜aug ij = λα i + (1 − λ)αj . Mixing is restricted to samples with identical labels (anomalies with anomalies or normal with normal samples) to preserve seman-tic consistency. This augmentation densifies sparse boundary regions and encourages smooth decision surfaces. 
+
+Cross-Task Augmentation: To transfer knowledge between tasks, embeddings from the current and previous tasks are combined in latent space. Nearest-neighbor simi-larity is used to identify compatible samples, and convex interpolation produces hy-brid representations. Pre- and post-consistency checks ensure that generated samples remain semantically valid and consistent with anomaly labels. To combine anomaly information across datasets, embeddings from the current task and previous tasks are mixed. For a current embedding α(t) 
+
+> i
+
+, a compatible historical embedding is selected via nearest-neighbor search: j = arg min k ∥α(t) 
+
+> i
+
+− α(t−1)  
+
+> k
+
+∥2. MixUp then generates 6 Herurkar et al. 
+
+˜aug ij = λα (t) 
+
+> i
+
++ (1 − λ)α(t−1)  
+
+> j
+
+. Furthermore, compatibility constraints ensure safe mixing with cos (α(t) 
+
+> i
+
+, α (t−1)  
+
+> j
+
+) ≥ τcos , ∥α(t) 
+
+> i
+
+− α(t−1)  
+
+> j
+
+∥2 ≤ ϵ. where, the cosine simi-larity enforces directional alignment, while Euclidean proximity controls local density compatibility. This mechanism enables aggregation of outlier characteristics across het-erogeneous datasets, which is otherwise infeasible in raw tabular feature space. 
+
+3.3 Outlier Exposure Loss 
+
+Augmented samples are incorporated as additional training signals through an outlier exposure mechanism. Synthetic samples generated via augmentation, together with dis-tilled samples of replay memory from previous tasks, provide diverse anomaly-related supervision during training. This strategy allows the model to reuse historical anomaly information without requiring raw data storage. As learning progresses, the detector benefits from accumulated exposure to heterogeneous anomaly patterns originating from multiple datasets. Augmented and replay synthetic samples are incorporated us-ing a supervised outlier exposure (OE) objective. Let zi = Fθf (aug i) denote classifier logits and yi ∈ { 0, 1} the anomaly label. The weighted cross-entropy loss is defined as ℓi = CE (zi, y i). To emphasize anomaly samples, anomaly instances ( yi=1) are as-signed a weight( wi) 0.9, while normal instances ( yi=0) receive unit weight. The OE loss becomes LOE = 1
+
+> N
+
+PNi=1 wi ℓi. This formulation corresponds to supervised OE using weighted binary classification, where anomaly samples receive stronger optimization pressure. The final optimization objective combines task learning, augmentation, and outlier exposure: 
+
+Ltotal = Ltask + λoe LOE . (2) This objective promotes stable continual learning by aligning heterogeneous repre-sentations, refining decision boundaries, and aggregating anomaly information across tasks. 
+
+## 4 Experimental Setup 
+
+4.1 Datasets 
+
+We evaluate the proposed framework on 21 heterogeneous tabular benchmark datasets spanning multiple domains, including finance, image-derived representations, astronau-tics and sensor monitoring, and document-based tabular features. The datasets vary sub-stantially in feature dimensionality, sample size, and anomaly ratio. Feature dimensions range from low-dimensional structured attributes to high-dimensional derived repre-sentations, and anomaly rates vary across domains, creating realistic class imbalance scenarios. Crucially, feature schemas differ across datasets ( dt̸ = dt′ ), making joint training in raw feature space infeasible. This heterogeneous setting reflects practical deployment conditions where new tabular sources emerge over time with incompatible schemas. Detailed statistics for all datasets are provided in the Appendix. TaskFusion: Continual Anomaly Detection for Heterogeneous Tabular Data 7
+
+4.2 Continual Learning Protocol 
+
+Datasets are presented sequentially as tasks T1, . . . , TT . At each step, the model has access only to current task data and a fixed-size replay memory constructed via tabular dataset distillation [12]. After completing task Tt, a distilled subset of size K (instances per class, IPC) is generated with the distribution matching [26] approach and stored in memory. Replay capacity remains fixed throughout training. Unless otherwise speci-fied, results are averaged over multiple random task orderings to reduce ordering bias. After completing training on each task, the model is evaluated on all observed tasks to measure knowledge retention and forward transfer. This protocol measures adaptation to new heterogeneous datasets, knowledge retention, and cross-task anomaly accumu-lation. 
+
+4.3 Baseline Methods 
+
+We compare the proposed framework against several representative baselines: 
+
+Independent Training (w/o CL): Standard anomaly detection models are trained in-dependently on each dataset without any continual learning. The final performance is reported as the average across all datasets/tasks. These methods represent conventional single-domain approaches. 
+
+Finetune: Sequential training or finetuning of the model on each task. 
+
+Multitask: A non-continual upper-bound setting where all datasets are jointly trained. This provides a reference performance assuming simultaneous access to all data. 
+
+CaSSLe [5]: A continual self-supervised learning baseline where representation drift is mitigated via a predictor-based distillation mechanism that aligns current representa-tions with their past states. 
+
+EDSR [18]: We adopt Effective Data Selection and Replay (EDSR), a CL method that selects representative samples based on entropy and replays them with noise-enhanced knowledge distillation. To analyze the contribution of individual components, we consider the following ablations of the proposed method: 
+
+AGF (No Augmentation): The proposed AGF architecture trained without TaskFusion augmentation. 
+
+AGF (No Outlier Exposure): A variant where the outlier exposure is disabled, iso-lating the impact of augmented and other task synthetic outliers across heterogeneous datasets. All methods use identical architecture, capacity, and optimization settings for fair comparison. The complete implemetation details are described in Appendix. Perfor-mance is evaluated using Balanced Accuracy, ROC-AUC, and PR-AUC, along with task-wise performance evolution to assess how well models retain past knowledge while adapting to new tasks. We report average continual performance and forgetting, where high final performance and low forgetting indicate effective knowledge retention and accumulation across heterogeneous tasks. Details on evaluation metrics can also be found in Appendix. 8 Herurkar et al. 
+
+## 5 Results 
+
+We evaluate our approach under two research questions: 
+
+Research Question 1: Can AGF effectively combine outlier information across hetero-geneous tabular datasets for continual learning? 
+
+Research Question 2: Do TaskFusion and outlier exposure (OE) stabilize learning un-der tasks with long sequences and mitigate catastrophic forgetting? 
+
+5.1 Overall Performance on Heterogeneous Benchmarks 
+
+Table 1 summarizes the performance of continuous anomaly detection across 21 hetero-geneous tabular datasets grouped by domain, with results averaged over three indepen-dent runs. Sequential finetuning exhibits severe degradation across all domains, con-firming that naive sequential learning fails under schema mismatch and strong distribu-tion shifts. Multitask training provides a strong upper bound but is impractical; notably, the proposed AGF framework with TaskFusion and outlier exposure (OE) substantially narrows this gap and even matches or exceeds multitask performance in some cases. Representation alignment via AGF already improves stability over finetuning, and re-placing random replay with dataset distillation further enhances performance. Incorpo-rating OE yields consistent gains across all metrics (e.g., Balanced Accuracy improves), highlighting the importance of exposing the model to diverse anomaly structures. Task-Fusion augmentation provides additional improvements, with combined within-task and cross-task augmentation achieving the best results across nearly all settings, par-ticularly in Image and Finance domains, where feature heterogeneity is high. Gains are more moderate in Astronautics and Document domains, where baseline performance is already strong or task diversity is limited. Overall, the results demonstrate that integrat-ing representation alignment, augmentation, and OE enables effective knowledge accu-mulation and robust continual anomaly detection across heterogeneous tabular datasets. 
+
+5.2 Ablation Study Impact of Augmentation Components: We further analyze the contribution of in-dividual components by progressively enabling augmentation mechanisms within the AGF framework (in Table 1). While representation alignment with tabular dataset distil-lation already improves over finetuning, it remains insufficient in long sequences (e.g., in the 21-task setting), indicating accumulated boundary drift. Introducing within-task boundary-aware augmentation significantly improves performance by densifying un-certain regions and stabilizing anomaly decision boundaries. Cross-task augmentation further enhances results, with notable gains in PR-AUC, suggesting improved detec-tion of rare anomalies through shared representation exposure across tasks. The com-bination of both mechanisms achieves the best and most consistent performance across domains, demonstrating complementary effects: within-task augmentation refines lo-cal decision boundaries, while cross-task mixing facilitates knowledge transfer across heterogeneous datasets. Overall, these results confirm that augmentation acts as an ef-fective structural regularizer, mitigating representation drift and improving robustness in long continual learning sequences. TaskFusion: Continual Anomaly Detection for Heterogeneous Tabular Data 9
+
+Table 1. Continual anomaly detection performance across 21 heterogeneous tabular datasets. Best continual results are shown in bold. RS: Replay with Random Sampling, DD: Replay with Dataset Distillation, WT: WithinTask Augmentation, CT: CrossTask Augmentation.                                                                                                                                                                                      
+
+> Field Tasks w/o CL Finetune Multitask CaSSLe EDSR AGF+ RS AGF+ DD AGF+OE +DD AGF+OE +WT +DD AGF+OE +CT +DD AGF+OE +WT+CT +DD Balanced Accuracy All 21 78.74 51.12 79.73 63.52 67.43 72.97 75.09 80.37 82.99 83.34 83.92 Image 671.55 53.02 72.80 54.27 62.75 69.54 72.06 74.72 75.87 75.29 76.91 Finance 570.92 51.92 71.01 56.57 58.43 67.82 69.09 72.93 72.68 73.10 74.75 Astronautics 392.12 66.21 94.37 68.43 75.83 88.56 92.55 92.91 92.54 92.87 93.77
+> Document 281.02 56.65 83.05 62.70 64.70 73.32 76.20 76.99 78.64 78.39 78.43
+> PR-AUC All 21 68.14 32.88 70.09 46.27 48.91 56.97 62.76 65.26 66.66 66.76 68.85
+> Image 654.74 32.96 55.49 27.01 40.26 46.48 50.32 51.14 52.44 52.12 52.83
+> Finance 554.56 35.84 55.85 35.91 40.71 46.14 51.98 52.60 53.85 53.85 55.10
+> Astronautics 395.61 66.53 96.56 47.31 41.23 85.84 94.87 94.78 95.30 95.89 96.36
+> Document 276.15 43.69 77.67 46.72 56.55 62.28 67.04 69.11 69.03 70.42 70.88
+> ROC-AUC All 21 86.26 51.50 88.88 69.58 71.46 80.52 87.00 88.28 89.53 89.53 90.54 Image 684.00 59.43 85.06 65.94 74.91 80.86 84.60 84.72 84.65 84.13 85.20 Finance 581.78 53.47 82.30 68.69 72.83 74.47 81.35 82.14 81.34 82.02 82.41 Astronautics 397.43 71.19 98.63 62.85 60.46 90.25 97.95 98.02 98.66 98.24 98.85 Document 288.94 61.74 90.95 65.46 75.36 79.34 85.80 85.88 87.31 87.37 90.88
+
+Boundary Selection Analysis: We analyze the influence of the boundary-quality (BQ) threshold used for selecting samples in task-wise augmentation. Table 2 reports the re-sulting Balanced Accuracy, True Positive Rate (TPR), and True Negative Rate (TNR). The results reveal a clear trade-off between anomaly sensitivity and normal-class preser-vation. Lower BQ thresholds favor conservative augmentation, yielding very high TNR values (e.g., 95 .27 at BQ = 0 .6) but comparatively lower TPR, indicating limited im-provement in detecting difficult anomalies. As the threshold increases, augmentation focuses more strongly on uncertain boundary samples, leading to substantial gains in TPR, which steadily improves and reaches its maximum at BQ = 0 .95 . Balanced Accu-racy peaks at a moderate threshold (BQ = 0 .8), suggesting that selecting samples near but not exclusively at the decision boundary provides the best overall balance between detecting anomalies and maintaining stable inlier classification. Beyond this point, fur-ther increasing the threshold continues to improve anomaly sensitivity but causes a noticeable reduction in TNR, indicating overemphasis on ambiguous regions. Overall, these results confirm that boundary-aware augmentation is most effective when applied to moderately uncertain samples. Rather than uniformly augmenting the dataset, focus-ing on informative boundary regions enables improved anomaly detection while pre-serving overall classification stability. 
+
+5.3 Influence of Replay Method and Capacity 
+
+Figure 2 evaluates replay capacity by varying instances per class (IPC) and under dif-ferent replay strategies. Across all metrics, increasing IPC consistently improves per-formance. Dataset distillation achieves the strongest results at every capacity level, in-10 Herurkar et al. 
+
+Table 2. Effect of boundary-quality (BQ) threshold in task-wise augmentation. Moderate thresh-olds provide the best balance between anomaly detection (TPR) and inlier preservation (TNR), yielding the highest Balanced Accuracy at BQ = 0 .8.Metric (BQ) 0.6 0.7 0.8 0.9 0.95 Bal Acc 75.68 77.95 78.92 77.18 78.25 TPR 56.09 62.95 67.94 68.44 74.21 
+
+TNR 95.27 92.95 89.91 85.92 82.31 10 50 100 200 500 1000           
+
+> Instances Per Class (IPC) Per Dataset
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> Balanced Accuracy
+> 10 50 100 200 500 1000
+> Instances Per Class (IPC) Per Dataset
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> PR-AUC
+> Dataset Distillation
+> Random Sample
+> Herding
+> Forgetting
+> 10 50 100 200 500 1000
+> Instances Per Class (IPC) Per Dataset
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> ROC-AUC
+
+Fig. 2. Influence of replay capacity measured by instances per class (IPC). Increasing IPC con-sistently improves performance across Balanced Accuracy, PR-AUC, and ROC-AUC. Dataset distillation achieves the strongest results across all capacities, while herding is highly sensitive to memory size and random sampling shows moderate gains. 
+
+dicating that replay quality is as important as replay quantity [12]. Random sampling improves steadily with IPC, but remains below distillation. Herding is highly sensi-tive to small memory budgets, performing poorly at low IPC and improving only when sufficient capacity is available. In contrast, dataset distillation maintains strong per-formance even under moderate memory constraints. These findings demonstrate that structured data representations in replay memory enable efficient knowledge retention and improved anomaly discrimination. 
+
+## 6 Conclusion 
+
+We addressed continual anomaly detection on heterogeneous tabular data, where datasets differ in feature dimensionality, distribution, and anomaly structure. Unlike continual learning in homogeneous settings, raw feature spaces are incompatible, making direct data reuse or joint optimization infeasible. We introduced a continual learning frame-work that enables progressive aggregation of outlier knowledge across heterogeneous domains. The approach integrates three complementary components: (i) the AGF ar-chitecture for schema adaptation and distribution alignment in a shared latent space, (ii) TaskFusion augmentation combining boundary-aware within-task interpolation and cross-task latent mixing, and (iii) outlier exposure with distilled replay representations and augmented samples to refine anomaly boundaries without storing raw historical TaskFusion: Continual Anomaly Detection for Heterogeneous Tabular Data 11 
+
+data. Experiments on 21 benchmark datasets demonstrate improved stability and detec-tion performance over sequential fine-tuning and non-continual baselines. The frame-work achieves reduced forgetting, knowledge accumulation across domains, and robust behavior under long heterogeneous task sequences. More broadly, our results suggest that heterogeneous continual anomaly detection is best formulated as progressive out-lier exposure in representation space rather than parameter-constrained preservation in raw feature space. By combining alignment, augmentation, and structured replay, our approach provides a practical and scalable solution for continual anomaly detection across diverse structured data sources. While the proposed framework improves continual anomaly detection on hetero-geneous tabular data, challenges remain in handling extremely long task sequences. Additionally, the current approach relies on implicit feature alignment and fixed aug-mentation strategies, which may limit robustness under diverse or highly dissimilar domains. Future work will focus on adaptive augmentation, semantic-aware alignment, and extending the framework to fully online or streaming settings for scalable real-world deployment. 
+
+Acknowledgments. This work was supported by the BMBF project Albatross(Grant 01IW24002). 
+
+## References 
+
+1. Bahri, D., Jiang, H., Tay, Y., Metzler, D.: Scarf: Self-supervised contrastive learning using random feature corruption (2022), https://arxiv.org/abs/2106.15147 
+
+2. Dong, H., Frusque, G., Zhao, Y., Chatzi, E., Fink, O.: Nng-mix: Improving semi-supervised anomaly detection with pseudo-anomaly generation. IEEE Transactions on Neural Networks and Learning Systems 36 (6), 10635–10647 (2025). https://doi.org/10.1109/ TNNLS.2024.3497801 
+
+3. Du, M., Chen, Z., Liu, C., Oak, R., Song, D.: Lifelong anomaly detection through unlearning. In: Proceedings of the 2019 ACM SIGSAC Conference on Computer and Communications Security. p. 1283–1297. CCS ’19, Association for Computing Machinery, New York, NY, USA (2019). https://doi.org/10.1145/3319535.3363226 , https://doi. org/10.1145/3319535.3363226 
+
+4. Faber, K., Corizzo, R., Sniezynski, B., Japkowicz, N.: Lifelong continual learning for anomaly detection: New challenges, perspectives, and insights. IEEE Access 12 , 41364– 41380 (2024). https://doi.org/10.1109/ACCESS.2024.3377690 
+
+5. Fini, E., Da Costa, V.G.T., Alameda-Pineda, X., Ricci, E., Alahari, K., Mairal, J.: Self-supervised models are continual learners. In: 2022 IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition (CVPR). pp. 9611–9620 (2022). https://doi.org/10. 1109/CVPR52688.2022.00940 
+
+6. Frikha, A., Krompass, D., Tresp, V.: ARCADe: A Rapid Continual Anomaly De-tector . In: 2020 25th International Conference on Pattern Recognition (ICPR). pp. 10449–10456. IEEE Computer Society, Los Alamitos, CA, USA (Jan 2021). 
+
+https://doi.org/10.1109/ICPR48806.2021.9412627 , https: //doi.ieeecomputersociety.org/10.1109/ICPR48806.2021.9412627 
+
+7. Han, S., Hu, X., Huang, H., Jiang, M., Zhao, Y.: Adbench: Anomaly detection benchmark. Advances in Neural Information Processing Systems 35 , 32142–32159 (2022) 12 Herurkar et al. 8. Hendrycks, D., Mazeika, M., Dietterich, T.: Deep anomaly detection with outlier exposure (2019), https://arxiv.org/abs/1812.04606 
+
+9. Herurkar, D., Hees, J., Tzvetkov, V., Dengel, A.: Tabular data adapters: Pseudo-labeling un-labeled private tabular data for outlier detection. IEEE Access 14 , 25691–25705 (2026). 
+
+https://doi.org/10.1109/ACCESS.2026.3663975 
+
+10. Herurkar, D., Meier, M., Hees, J.: Recol: Reconstruction error columns for outlier detection. In: KI 2023: Advances in Artificial Intelligence: 46th German Conference on AI, Berlin, Germany, September 26–29, 2023, Proceedings. p. 60–74. Springer-Verlag, Berlin, Hei-delberg (2023). https://doi.org/10.1007/978-3-031-42608-7_6 , https: //doi.org/10.1007/978-3-031-42608-7_6 
+
+11. Herurkar, D., Palacio, S.M., Anwar, A., Hees, J., Dengel, A.: Fin-fed-od: Federated out-lier detection on financial tabular data. ArXiv abs/2404.14933 (2024), https://api. semanticscholar.org/CorpusID:269303016 
+
+12. Herurkar, D., Raue, F., Dengel, A.: Tab-distillation: Impacts of dataset distillation on tabular data for outlier detection. In: Proceedings of the 5th ACM International Conference on AI in Finance. p. 804–812. ICAIF ’24, Association for Computing Machinery, New York, NY, USA (2024). https://doi.org/10.1145/3677052.3698660 , https://doi. org/10.1145/3677052.3698660 
+
+13. Herurkar, D., Sattarov, T., Hees, J., Palacio, S., Raue, F., Dengel, A.: Cross-domain transfor-mation for outlier detection on tabular datasets. In: International Joint Conference on Neural Networks, IJCNN 2023, Gold Coast, Australia, June 18-23, 2023. pp. 1–8. IEEE (2023). 
+
+https://doi.org/10.1109/IJCNN54540.2023.10191326 , https://doi. org/10.1109/IJCNN54540.2023.10191326 
+
+14. Hilal, W., Gadsden, S.A., Yawney, J.: Financial fraud: A review of anomaly detection tech-niques and recent advances. Expert Systems with Applications 193 , 116429 (2022). https: //doi.org/https://doi.org/10.1016/j.eswa.2021.116429 , https:// www.sciencedirect.com/science/article/pii/S0957417421017164 
+
+15. King, S., Zhang, Z., Yu, R., Coskun, B., Ding, W., Cui, Q.: Contextual learning for anomaly detection in tabular data (2025), https://arxiv.org/abs/2509.09030 
+
+16. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Desjardins, G., Rusu, A.A., Mi-lan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., Hassabis, D., Clopath, C., Ku-maran, D., Hadsell, R.: Overcoming catastrophic forgetting in neural networks. Proceedings of the National Academy of Sciences 114 (13), 3521–3526 (2017). https://doi.org/ 10.1073/pnas.1611835114 , https://www.pnas.org/doi/abs/10.1073/ pnas.1611835114 
+
+17. Li, Z., Hoiem, D.: Learning without forgetting (2017), https://arxiv.org/abs/ 1606.09282 
+
+18. LIU, H., DI, S., LI, H., LI, S., CHEN, L., ZHOU, X.: Effective data selection and replay for unsupervised continual learning. In: 2024 IEEE 40th International Conference on Data Engi-neering (ICDE). pp. 1449–1463 (2024). https://doi.org/10.1109/ICDE60146. 2024.00119 
+
+19. Rebuffi, S.A., Kolesnikov, A., Sperl, G., Lampert, C.H.: icarl: Incremental classifier and rep-resentation learning. In: 2017 IEEE Conference on Computer Vision and Pattern Recognition (CVPR). pp. 5533–5542 (2017). https://doi.org/10.1109/CVPR.2017.587 
+
+20. Thimonier, H., Popineau, F., Rimmel, A., Doan, B.L.: Retrieval augmented deep anomaly de-tection for tabular data. In: Proceedings of the 33rd ACM International Conference on Infor-mation and Knowledge Management. p. 2250–2259. CIKM ’24, Association for Computing Machinery, New York, NY, USA (2024). https://doi.org/10.1145/3627673. 3679559 , https://doi.org/10.1145/3627673.3679559 TaskFusion: Continual Anomaly Detection for Heterogeneous Tabular Data 13 21. Thimonier, H., Popineau, F., Rimmel, A., Doan, B.L., Daniel, F.: Tracinad: Mea-suring influence for anomaly detection. 2022 International Joint Conference on Neu-ral Networks (IJCNN) pp. 1–6 (2022), https://api.semanticscholar.org/ CorpusID:248505883 
+
+22. Verma, V., Lamb, A., Beckham, C., Najafi, A., Mitliagkas, I., Lopez-Paz, D., Bengio, Y.: Manifold mixup: Better representations by interpolating hidden states. In: International Conference on Machine Learning (2018), https://api.semanticscholar.org/ CorpusID:59604501 
+
+23. Xu, H., Pang, G., Wang, Y., Wang, Y.: Deep isolation forest for anomaly detection. IEEE Transactions on Knowledge and Data Engineering 35 (12), 12591–12604 (2023). https: //doi.org/10.1109/TKDE.2023.3270293 
+
+24. Yin, J., Qiao, Y., Zhou, Z., Wang, X., Yang, J.: MCM: Masked cell modeling for anomaly detection in tabular data. In: The Twelfth International Conference on Learning Representa-tions (2024), https://openreview.net/forum?id=lNZJyEDxy4 
+
+25. Zhang, H., Cissé, M., Dauphin, Y.N., Lopez-Paz, D.: mixup: Beyond empirical risk mini-mization. In: 6th International Conference on Learning Representations, ICLR 2018, Van-couver, BC, Canada, April 30 - May 3, 2018, Conference Track Proceedings. OpenRe-view.net (2018), https://openreview.net/forum?id=r1Ddp1-Rb 
+
+26. Zhao, B., Bilen, H.: Dataset condensation with distribution matching. In: Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision. pp. 6514–6523 (2023) 
+
+## A Appendix: 
+
+To further understand the behavior of the proposed framework under long continual learning sequences, we provide additional qualitative and distributional analyses of the learned latent space and anomaly scoring function. The Figure 3 describes the idea of our approach. 
+
+A.1 Experimental Datasets 
+
+For our study, we utilize a comprehensive selection of datasets shown in Table 3, pri-marily sourced from ADBench [7], one of the most extensive benchmarks for tabular outlier detection. 
+
+A.2 Implementation Details 
+
+All models are trained using the same optimization settings to ensure fair compari-son. The AGF framework is trained using cross-entropy classification loss combined with outlier exposure objectives. Models are implemented in PyTorch 2.1 and opti-mized using Adam optimizer. Each task is trained for a fixed number of epochs with a consistent batch size and learning rate across methods. The AGF model is instanti-ated as a multi-layer perceptron (MLP) architecture for all three components (adapter 
+
+A, shared representation G, and classifier F ), with LeakyReLU activation functions. For most datasets, the adapter, representation, and classifier consist of hidden layers of sizes [256 , 128] , [64 , 64] , and [32] , respectively. For higher-dimensional domains such as image-derived features, larger configurations [512 , 256] , [128 , 128] , and [64] 
+
+are used, while for certain datasets (e.g., astronautics and document), deeper classifier 14 Herurkar et al. 3 Attributes/Columns  5 Attributes/Columns  4 Attributes/Columns          
+
+> .
+> .
+> ..
+> .
+> .
+> ...
+> ...X
+> X
+> X
+> .
+> .
+> ..
+> .
+> .
+> ...
+> ...X
+> X
+> X
+> .
+> .
+> .
+> .
+> .
+> .
+> .
+> .
+> X
+> X
+> X
+> .
+> .
+> ..
+> .
+> .
+
+Task 1  Task 2  Task N 
+
+AGF 
+
+with 
+
+TaskFusion 
+
+Fig. 3. Conceptual illustration of continual anomaly detection across heterogeneous tabular datasets. Each task corresponds to a dataset with a different feature schema and decision bound-ary. In standard sequential learning (top), models trained independently on each task cannot effec-tively transfer anomaly knowledge across datasets. The proposed AGF with TaskFusion frame-work (bottom) aligns heterogeneous feature spaces into a shared representation and augments training through boundary-aware interpolation (represented as .) and cross-task mixing (repre-sented as x). This enables the model to accumulate anomaly knowledge across tasks, improving decision boundary stability and detection performance under heterogeneous continual learning. Here, green represents the normal (inlier) space and red represents the anomaly space. TaskFusion: Continual Anomaly Detection for Heterogeneous Tabular Data 15                                                                                       
+
+> Table 3. Description of the 21 tabular outlier detection datasets used in our study, in terms of Sample counts, Columns, Outlier counts/% and Fields.
+> Dataset Samples Cols Outliers Outlier% Field
+> 1 ALOI 49534 27 1508 3.04 Image 2 backdoor 95329 196 2329 2.44 Network 3 campaign 41188 62 4640 11.26 Finance 4 celeba 202599 39 4547 2.24 Image 5 census 299285 500 18568 6.21 Sociology 6 cover 286048 10 2747 0.96 Botany 7 donors 619326 10 36710 5.92 Sociology 8 http 567498 32211 0.38 Web 9 landsat 6435 36 1333 20.71 Astronautics 10 magicgamma 19020 10 6688 35.16 Physical 11 satellite 6435 36 2036 31.63 Astronautics 12 shuttle 49097 93511 7.15 Astronautics 13 skin 245057 350859 20.75 Image 14 SpamBase 4207 57 1679 39.91 Document 15 creditdef. 30000 146 6636 22.12 Finance 16 adultdata 48842 108 11687 23.92 Finance 17 blastchar 7043 20 1869 26.54 Image 18 bankmarketing 45211 51 5289 11.69 Finance 19 Income 32561 108 7841 24.08 Finance 20 shoppers 12330 75 1908 15.47 Document 21 shrutime 10000 15 2037 20.37 Image
+
+heads (e.g., [32 , 16 , 8, 4] ) are employed. All methods are trained for a fixed number of epochs (1000) with consistent batch size and learning rate across methods to ensure fair comparison. Replay buffers are constructed using dataset distillation with a fixed size of 1000 instances per class (IPC). The replay regularization coefficient is set to λ = 0 .95 .The AGF framework is trained using cross-entropy classification loss combined with outlier exposure objectives. Latent dimensions dz and dg , augmentation mixing coeffi-cient α, and OE weighting parameter ωoe are kept fixed across datasets. The code and models used in this study will be publicly released upon the publication of this paper to facilitate reproducibility and further research. 
+
+A.3 Evaluation Measure 
+
+Performance is evaluated using Balanced Accuracy, ROC-AUC, and PR-AUC, which are standard for imbalanced settings such as anomaly detection. Beyond final perfor-mance, continual learning methods must balance two competing objectives: retaining knowledge from previously learned tasks while effectively integrating information from new datasets. To analyze this behavior, we evaluate models using task-wise performance evolution across the learning sequence. Let Ri,j denote the performance (e.g., ROC-AUC or Balanced Accuracy) measured on task Ti after completing training on task Tj ,16 Herurkar et al.           
+
+> Table 4. Average forgetting across domains (lower is better). Values near zero indicate stable retention, while negative values suggest knowledge accumulation.
+> Forgetting Metric All Image Finance Astronautics Document
+> Balanced Accuracy 1.28 -0.97 0.56 -0.69 -0.30
+> TPR 0.18 -4.45 -0.45 -1.37 -1.78
+
+where j ≥ i. The matrix R ∈ RT ×T therefore captures how performance evolves as new tasks are learned. 
+
+Average Continual Performance: The overall continual learning performance after the final task is defined as Score = 1
+
+T
+
+> T
+
+X
+
+> i=1
+
+Ri,T ,
+
+which measures the model’s ability to maintain performance across all observed datasets. 
+
+Forgetting Measure: Catastrophic forgetting is quantified as the average performance degradation on previously learned tasks: Forgetting = 1
+
+T − 1 
+
+> T−1
+
+X
+
+> i=1
+
+max   
+
+> j∈{ i,...,T −1}
+
+Ri,j − Ri,T .
+
+This metric captures how much performance is lost after subsequent tasks are learned. Low forgetting and high average continual performance indicate stable knowledge re-tention and successful accumulation of anomaly information across heterogeneous tasks. 
+
+A.4 Forgetting and Knowledge Accumulation 
+
+We further analyze forgetting behavior using taskwise performance evolution and quan-titative forgetting measurements. Figure 4 illustrates taskwise accuracy for all tasks as new datasets are introduced, while Table 4 reports average forgetting across domains. Sequential finetuning shows repeated performance drops whenever a new task is intro-duced. This confirms severe interference under heterogeneous schema changes. AGF without OE and TaskFusion reduces but does not eliminate degradation. Some tasks still experience noticeable drops as training progresses. With OE and augmentation enabled, taskwise curves remain nearly flat. Once a task is learned, its performance re-mains stable despite subsequent updates. This indicates strong robustness against catas-trophic forgetting. In Table 4, average forgetting remains close to zero across domains. Notably, image and astronautics domains exhibit negative forgetting values, indicating slight performance improvement after learning additional tasks. This suggests knowl-edge accumulation rather than interference. Together, these results demonstrate that AGF with TaskFusion enables continual refinement of anomaly representations without strong forgetting. TaskFusion: Continual Anomaly Detection for Heterogeneous Tabular Data 17 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19                      
+
+> Tasks/Number of Datasets Learnt
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Balanced Accuracy
+> Finetune
+> 12345678910 11 12 13 14 15 16 17 18 19
+> Tasks/Number of Datasets Learnt
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100 AGF w/o OE and Aug
+> 12345678910 11 12 13 14 15 16 17 18 19
+> Tasks/Number of Datasets Learnt
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100 AGF with OE and Aug Task 1
+> Task 2
+> Task 3
+> Task 4
+> Task 5
+> Task 6
+> Task 7
+> Task 8
+> Task 9
+> Task 10
+> Task 11
+> Task 12
+> Task 13
+> Task 14
+> Task 15
+> Task 16
+> Task 17
+> Task 18
+> Task 19
+
+Fig. 4. Taskwise performance evolution during continual learning. Each curve tracks a task as new datasets are introduced. Finetuning shows repeated drops due to catastrophic forgetting. AGF without OE partially reduces degradation, while AGF with OE and augmentation maintains nearly stable performance across tasks. 
+
+A.5 Effect of Long Sequences 
+
+Figure 5 shows the evolution of average performance over all previously learned tasks as the number of tasks or sequential datasets increases. This analysis evaluates the ro-bustness of different approaches under prolonged continual learning for heterogeneous data. Sequential finetuning rapidly deteriorates as new tasks are introduced. Across all metrics, performance becomes highly unstable after only a few tasks, confirming that naive optimization leads to severe forgetting when feature spaces and data distribu-tions change. The AGF framework without OE or augmentation performs well during early stages but begins to degrade after approximately 8–9 tasks. This drop is consis-tently observed across Balanced Accuracy, PR-AUC, ROC-AUC, and TPR, indicating that representation alignment alone is insufficient to prevent accumulated drift in long heterogeneous sequences. Introducing OE substantially improves stability. AGF with OE maintains nearly constant performance as additional datasets are learned, demon-strating that exposure to broader anomaly structure helps preserve previously acquired decision boundaries. The most robust behavior is achieved when OE is combined with augmentation. AGF with OE and augmentation shows consistently high and stable per-formance across the entire sequence, with no noticeable degradation even after learning many datasets. The improvement is particularly evident in all metrics, suggesting better preservation of rare anomaly detection capability over time. Overall, these results indi-cate that long-horizon continual learning on heterogeneous tabular data requires both distribution-aware alignment and augmentation-based regularization. While alignment enables knowledge accumulation, augmentation plays a critical role in preventing per-formance collapse as task length increases. 
+
+A.6 Evolution of the Latent Representation 
+
+Figure 6 visualizes the evolution of the learned latent G-space across all tasks. Each row corresponds to a task learned at a particular stage, while columns show the repre-sentation of the same task after subsequent tasks have been introduced. Blue and red 18 Herurkar et al. 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19                            
+
+> Tasks/Number of Datasets Learnt
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> Balanced Accuracy
+> 12345678910 11 12 13 14 15 16 17 18 19
+> Tasks/Number of Datasets Learnt
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> PR-AUC
+> 12345678910 11 12 13 14 15 16 17 18 19
+> Tasks/Number of Datasets Learnt
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> ROC-AUC
+> finetune
+> AGF w/o OE
+> AGF with OE
+> AGF with OE and Aug
+> 12345678910 11 12 13 14 15 16 17 18 19
+> Tasks/Number of Datasets Learnt
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> TPR
+
+Fig. 5. Performance evolution over long task sequences. The plots show average performance across previously learned tasks as new datasets are introduced. Finetuning rapidly deteriorates due to catastrophic forgetting. AGF without OE degrades after several tasks, while OE and aug-mentation stabilize learning and maintain consistently high performance across all metrics. 
+
+points denote inliers and outliers respectively. Several consistent patterns can be ob-served. First, the global geometry of previously learned tasks remains largely preserved as new datasets are incorporated. Earlier task manifolds do not collapse or shift dras-tically, indicating that the encoder maintains stable feature representations throughout training. This behavior contrasts with typical continual fine-tuning scenarios, where representations drift significantly as new tasks overwrite earlier knowledge. Second, in-lier and outlier structures remain well separated across later evaluations. In many cases, the separation becomes progressively clearer after additional tasks are learned, suggest-ing positive transfer between datasets. Exposure to diverse anomaly patterns appears to refine the shared latent manifold rather than introducing interference. Third, the ab-sence of abrupt geometric changes across columns indicates minimal representation drift. Once a task representation is formed, its embedding remains visually consistent even after many subsequent updates, providing qualitative evidence that the proposed alignment and augmentation mechanisms effectively mitigate catastrophic forgetting. 
+
+A.7 Anomaly Score Stability Across Tasks 
+
+Figure 7 analyzes the stability of anomaly scores by comparing score distributions at task learning time and after completion of the full task sequence. For each task, his-tograms show the distribution of anomaly scores computed immediately after learning (blue) and after the final task (orange). Across all tasks, the two distributions exhibit strong overlap, indicating that the scoring function remains stable over time. Impor-tantly, previously learned tasks do not experience distributional shifts toward higher or lower anomaly scores, suggesting that decision boundaries remain consistent de-spite continued training. This stability implies that newly learned tasks do not over-write earlier anomaly detection behavior. In several cases, score distributions become slightly sharper after later tasks, which suggests improved calibration rather than degra-dation. This observation supports the hypothesis that continual exposure to hetero-geneous datasets helps refine shared anomaly representations, leading to incremental knowledge accumulation. Together (Figure 6 and Figure 7), these analyses provide complementary qualita-tive and statistical evidence supporting the robustness of the proposed framework. The TaskFusion: Continual Anomaly Detection for Heterogeneous Tabular Data 19 
+
+Fig. 6. Evolution of the learned latent G-space across the continual learning sequence. Each row corresponds to a task, while columns show the embedding of the same task after subsequent tasks are learned. Blue and red points denote inliers and outliers, respectively. The overall geometry of previously learned tasks remains stable over time, and inlier–outlier separation is preserved, indicating minimal representation drift and robustness against catastrophic forgetting. 20 Herurkar et al. 
+
+Fig. 7. Anomaly score stability across tasks. For each task, histograms compare anomaly score distributions at learning time (blue) and after completion of the full task sequence (orange). The strong overlap between distributions indicates that decision boundaries remain stable over con-tinual updates, demonstrating preservation of previously learned anomaly detection behavior. TaskFusion: Continual Anomaly Detection for Heterogeneous Tabular Data 21 
+
+latent-space visualization demonstrates structural stability of learned representations, while the score-distribution analysis confirms functional stability of anomaly predic-tions. These results reinforce the main experimental findings by showing that continual learning proceeds through progressive refinement rather than destructive interference.

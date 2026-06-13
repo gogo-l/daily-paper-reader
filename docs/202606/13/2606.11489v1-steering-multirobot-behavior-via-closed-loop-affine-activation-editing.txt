@@ -1,0 +1,579 @@
+Title: Steering Multirobot Behavior via Closed-Loop Affine Activation Editing
+
+URL Source: https://arxiv.org/pdf/2606.11489v1
+
+Published Time: Thu, 11 Jun 2026 00:17:42 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# Steering Multirobot Behavior via Closed-Loop Affine Activation Editing 
+
+Satyajeet Das 1, Darren Chiu 1, Shashank Hegde 1, Gaurav S. Sukhatme 11Department of Computer Science University of Southern California Los Angeles, CA, USA 
+
+{satyajee, chiudarr, khegde, gaurav }@usc.edu 
+
+Abstract: Real-world robots need to adapt their behavior beyond the envelope of their pre-trained policy. Policy finetuning or retraining are options, but they risk catastrophic forgetting, degrading the pretrained policy’s base performance. To combat this, we introduce CLAE : Closed-Loop Affine Activation Editing , an inference-time framework for steering the behavior of a frozen policy by edit-ing intermediate activations while keeping the base policy weights and down-stream action head untouched. CLAE approaches behavior steering as a closed-loop problem whose outputs edit policy activations that adapt online to the robot state, environment, target behavior, and multi-robot context. It trains a sparse autoencoder over frozen-policy activations, selects behavior-relevant latent fea-tures via post-hoc probing, and learns a lightweight RL-based steering policy that applies state-dependent affine edits to selected latents during inference. We val-idate CLAE on a frozen multi-quadrotor navigation policy trained to perform a single task: navigating robots to a set of goal locations while avoiding obstacles. Through extensive simulations and physical tests, we show that while navigating to their goal positions, CLAE can 1. steer individual robot behavior by control-ling each robot’s velocity profile; 2. coordinate multirobot behavior by preserving a desired formation, and 3. produce entirely new behavior wherein robots are required to reduce their exposure to surveillance cameras in the environment. 
+
+Keywords: Multi-Robot Systems, Behavior Steering 
+
+# 1 Introduction 
+
+Learned robot policies are commonly obtained via imitation learning on robot demonstrations, rein-forcement learning from environment interaction, or hybrid pipelines that combine large-scale robot data, pretrained vision-language models, and task-specific supervision.When deployed, a trained policy expresses a set of behaviors (a ”behavioral envelope”) supported by its training data, objec-tive, conditioning interface, and deployment assumptions. In practice, robots need to modify or extend their behavioral envelope when deployed: a mobile robot or manipulator trained for aggres-sive navigation or goal reaching may need to behave more cautiously around people, a legged robot trained for energy-efficient navigation may need to trade efficiency for speed, and a team of flying robots trained to navigate to a goal may need to track a new velocity profile, maintain a formation, or avoid certain regions. Fine-tuning or retraining may adapt a policy to such requirements, but it changes the base policy weights, requires additional demonstrations/simulated interaction, and necessitates revalidation of the updated policy. Weight updates may also alter previously learned behaviors. These concerns become more pronounced as the community moves toward generalist pretrained models, where maintaining separate fine-tuned variants for every behavioral preference is increasingly unattractive. The multirobot setting amplifies the challenge: the correct adaptation for each robot depends not only on its own state but also on teammates’ states. These considerations motivate our central 
+
+> arXiv:2606.11489v1 [cs.RO] 9 Jun 2026
+
+Figure 1: Closed-Loop Affine Activation Editing (CLAE). (a) An intermediate activation xi,t 
+
+from the frozen base policy is encoded into SAE latents ℓi,t . The steering policy πsteer  
+
+> ϕb
+
+outputs 
+
+(mi,t , c i,t ), which applies the affine edit ℓ′ 
+
+> i,t,j
+
+= mi,t,j ℓi,t,j + ci,t,j on the select latent set Sb, while unselected latents pass through unchanged. The edited latents are decoded and inserted back into the frozen policy. Bottom panels show real-world deployment of four quadrotors on the multi-robot formation task. In (b ), the base policy navigates independently, dispersing around obstacles. In (c) ,CLAE edits activations to steer the quadrotors toward the formation geometry (red overlays), bal-ancing the effort to stay in formation with the core collision-avoidance and goal-reaching behavior of the underlying policy. question: can we modify/expand the inference-time behavioral envelope of a trained robot policy while keeping the base policy fixed? We study this problem as post-training behavior steering : modifying the closed-loop behavior of a trained policy at inference time while preserving its base competence. Recent inference-time steer-ing work [1] makes a similar point for pretrained robot policies under spatial or semantic shifts: failures may reflect the absence of a mechanism for selectively adapting existing skills at test time, rather than the absence of the underlying motor skill itself. Existing post-training steering meth-ods [2, 3, 4, 1, 5, 6] typically act around the policy output, by modifying prompts, command in-terfaces, sampling trajectories, latent noise, candidate actions, or action selection. In contrast, acti-vation steering modifies behavior by editing intermediate representations within the frozen policy. Prior work in language models [7, 8, 9, 10]. shows that internal activations can be modified to steer outputs. Recent robotics work [11, 12, 13] extends this idea to robot policies, demonstrating scalar, direction-based, or safety-specific interventions. However, these methods do not formulate activa-tion editing as closed-loop behavior steering, in which edit parameters vary online with the robot’s state, environment, target behavior, and other robots. We propose closed-loop affine activation editing (CLAE), a framework for steering a frozen robot policy by editing intermediate activations rather than updating weights or adding an action-residual controller. At each policy step, we encode an intermediate activation block into a sparse autoencoder (SAE) basis, apply affine edits to a small set of behavior-relevant SAE latents, and insert the decoded edited activation back into the frozen policy. A lightweight steering policy predicts the affine edit parameters online; the base policy’s frozen downstream layers produce the final robot action. We evaluate CLAE on a frozen multi-quadrotor navigation policy across three behavior-steering tasks: velocity-profile tracking, multi-robot formation control, and camera-aware stealth navigation. Together, these test whether CLAE can steer robot-level motion, coordinate team behavior, and inject deployment-time behavior using the same activation-editing interface without modifying the base policy. CLAE is the first framework for inference-time, closed-loop behavior steering of a multirobot policy through learned affine activation editing. Although we validate the framework on a multirobot policy learned using reinforcement learning, CLAE only requires white-box access to intermediate activations, suggesting a path toward steering behaviors of generalist robot policies such as VLA models, where fine-tuning for every deployment objective may be impractical. 2Our contributions are: 1. We introduce closed-loop affine activation editing (CLAE), a post-training behavior-steering framework that modifies intermediate activations at inference time while preserv-ing the base policy weights, rather than fine-tuning the policy or adding action-residual commands. 2. We build a sparse activation-editing interface by training an SAE on frozen-policy acti-vations and using post-hoc behavior probes to select a compact set of behavior-relevant SAE latents. A lightweight RL steering policy then outputs state-dependent affine edits (multiplicative gains and additive offsets) over those latents at each policy step. 3. We evaluate CLAE on a frozen multi-quadrotor navigation policy across three behaviors spanning robot-level motion, coordinated multi-robot behavior, and deployment-time be-havior injection: velocity-profile tracking, multi-robot formation control, and stealth navi-gation, with validation in large-scale simulation and hardware experiments. 
+
+# 2 Related Work 
+
+Post-training steering of frozen robot policies. A growing body of work studies deployment-time adaptation of frozen robot policies. Value-guided policy steering reranks candidate actions using an offline value function [2]; inference-time policy steering biases generative-policy sampling with human interaction signals [3]; and diffusion steering optimizes the latent-noise space of frozen diffusion policies with reinforcement learning [4]. Recent methods also guide frozen diffusion or flow policies with VLM-derived rewards [1], select candidate plans using predicted outcomes and VLM reasoning [5], or improve controllability by training VLAs to follow richer command abstrac-tions [6]. These methods demonstrate the importance of deployment-time steering, but primarily act through prompts, commands, sampling, latent noise, candidate actions, or action selection. In contrast, we steer behavior by editing intermediate activations inside the frozen policy. 
+
+Activation and representation steering. Activation steering provides a complementary mechanism for modifying model behavior without weight updates. In language models, activation engineering modifies intermediate activations at inference time [7], while representation engineering studies in-ternal representations as objects that can be monitored and manipulated [8]. Sparse autoencoders provide sparse feature bases for analyzing and intervening on dense activations [9, 10], and repre-sentation surgery studies feature transformations beyond simple additive directions [14]. Our work brings these representation-intervention ideas to robot policies, where activation edits affect not only the current action but also future observations induced by a closed-loop system. 
+
+Activation editing for robot behavior steering. Recent robotics work shows that internal acti-vations of robot policies can be causally linked to behavior. Mechanistic interpretability methods identify semantic directions such as speed and direction in VLA models and steer them with acti-vation interventions [11]; SAE-based VLA analyses show that sparse features can influence closed-loop robot behavior through decoder-direction interventions [12]; feature-controllability methods use linear probes and minimal raw-representation interventions to steer VLA outputs toward desired feature values [15]; and Latent Activation Editing modifies activations of a frozen multirobot nav-igation policy to improve safety [13]. These works demonstrate that robot behavior can be steered through internal activations. In contrast, CLAE learns a closed-loop affine edit policy whose param-eters vary online with robot state, environment, neighboring agents, and target behavior, enabling behavior steering of a frozen multirobot policy without weight updates or action-residual commands. 
+
+# 3 Method 
+
+We propose closed-loop affine activation editing (CLAE), an inference-time mechanism for steer-ing a frozen multirobot policy πθ0 (Figure 1a). At each policy step, we intercept an intermediate activation of the frozen base policy πθ0 and encode it into a sparse autoencoder (SAE) basis, ap-ply an affine edit to a small target-behavior-specific subset of SAE latents, decode the edited latent, 3and insert it back into the frozen policy. The base policy parameters θ0 remain fixed throughout: we do not fine-tune the policy, modify its architecture, or train an action-residual controller. For each target behavior b, rollout-derived metrics select a behavior-relevant SAE latent set Sb, and a behavior-specific reward trains a lightweight steering policy πsteer  
+
+> ϕb
+
+that chooses affine edits online. The base policy, SAE, and steering policy are decentralized and shared across all robots. 
+
+3.1 Frozen-Policy Activation Interface 
+
+For a given intervention layer ℓ, we view the frozen base policy as a composition of the computation before ℓ (F ≤ℓθ0 ) and after ℓ (G>ℓ θ0 ). Therefore, the base policy can be written as: πθ0 = G>ℓ θ0 ◦ F ≤ℓθ0 .
+
+Given the robot observation oi,t , the frozen computation up to layer ℓ produces the intervention activation xi,t , and the remaining frozen layers map this activation to the robot action: 
+
+xi,t = F ≤ℓθ0 (oi,t ), ui,t = G>ℓ θ0 (xi,t ). (1) We replace xi,t with edited activation x′ 
+
+> i,t
+
+before the frozen downstream policy is evaluated: ui,t =
+
+G>ℓ θ0 (x′
+
+> i,t
+
+). The steering policy does not output a motor command or an action residual ∆ui,t ; it acts only by modifying selected SAE latents inside the frozen base policy. 
+
+3.2 Sparse Activation Basis and Behavior Latent Selection 
+
+Editing the dense activation xi,t ∈ Rd directly would require the steering policy to jointly control all d of its dimensions (which could be large). Instead, we move to a sparse SAE basis where a few behavior-relevant latents can be edited in isolation while the rest pass through unchanged. We train an SAE on activations xi,t collected from rollouts of the frozen base policy. The encoder Eψ maps each activation to a sparse latent vector, and the linear decoder Dψ reconstructs it back: 
+
+ℓi,t = Eψ (xi,t ), ˆxi,t = Dψ (ℓi,t ) = WD ℓi,t + bD , ℓi,t ∈ RKSAE . (2) The SAE is trained post-hoc using the standard reconstruction-plus-sparsity objective used for sparse feature decomposition of neural activations [9, 16]: 
+
+LSAE = Ex
+
+∥x − Dψ (Eψ (x)) ∥22 + λsparse ∥Eψ (x)∥1
+
+ . (3) After training the SAE, we use post-hoc probing to select a compact set of behavior-relevant latents for the steering policy to edit. This builds on standard representation probing [17, 18, 19] and SAE feature decomposition [9, 10]. For each target behavior b, rollout-derived metrics serve as probes. We score latents using a split-stable absolute Pearson score S(b) 
+
+> j
+
+= mean s |ρ(b) 
+
+> j,s
+
+| − std s |ρ(b) 
+
+> j,s
+
+|, where 
+
+ρ(b) 
+
+> j,s
+
+is the correlation between latent j and the metric on trajectory split s. For multiple metrics, 
+
+S(b) 
+
+> j
+
+combines these scores. We select the editable latent set as Sb = TopK j S(b) 
+
+> j
+
+. The SAE basis is behavior-agnostic, while Sb is behavior-specific (probe details in Appendix C). 
+
+3.3 Closed-Loop Affine Activation Editing 
+
+Given the selected latent set Sb, we learn a behavior-specific steering policy πsteer  
+
+> ϕb
+
+. At each time step, the steering policy provides an affine edit, ξi,t = ( mi,t , c i,t ) ∈ R2|S b|, where mi,t , c i,t ∈ R|S b|
+
+are its multiplicative and additive components respectively. This edit is applied directly within the SAE latent basis before decoding: 
+
+ℓ′ 
+
+> i,t,j
+
+=
+
+mi,t,j ℓi,t,j + ci,t,j , j ∈ S b,ℓi,t,j , j / ∈ S b. (4) Thus, only the behavior-selected SAE latents are modified; all unselected SAE latents are copied unchanged. The full edited SAE latent is decoded to obtain the edited activation, x′ 
+
+> i,t
+
+= Dψ (ℓ′
+
+> i,t
+
+),which is then inserted into the frozen policy activation. When mi,t = 1 and ci,t = 0, the edited latent reduces to its SAE reconstruction Dψ (Eψ (xi,t )) .43.4 Learning Closed-Loop Affine Activation Edits 
+
+The affine edit ξi,t is not observed as a supervised target: its effect is only revealed after the edited activation is decoded, passed through the frozen policy, executed as a robot action, and propa-gated through the multi-agent simulator. Because useful edits depend on the current robot, envi-ronment, and team state, we learn them with closed-loop reinforcement learning. The affine edit 
+
+ξi,t = ( mi,t , c i,t ) is the action of the steering policy. This induces a closed-loop transition over the simulator state through the fixed base policy and fixed SAE, st+1 ∼ Pθ0,ψ (· | st, ξ 1: N,t ). Here, st is the simulator state and ξ1: N,t are the affine edits for all robots. The transition kernel Pθ0,ψ denotes the closed-loop rollout dynamics induced by the simulator, the frozen base policy πθ0 , the frozen SAE (Eψ , D ψ ), and the activation-editing interface from Sec. 3.3. We do not learn this transition model; the steering policy interacts with it through rollouts. Only the steering-policy parameters ϕb
+
+are optimized. The steering policy maximizes the expected discounted return 
+
+Jb(ϕb) = Eτ ∼(πsteer   
+
+> ϕb,P θ0,ψ )
+
+" TX
+
+> t=0
+
+γt 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+r(b)
+
+> i,t
+
+#
+
+, θ0, ψ fixed . (5) The expectation is over closed-loop rollouts of the steering policy. The base policy parameters 
+
+θ0 and SAE parameters ψ remain fixed during both steering-policy training and evaluation. The steering observation contains a task-specific head and a common latent-control tail (Appendix A). All target behaviors use the same activation-editing mechanism but different steering observations and rewards. We use the common reward form 
+
+r(b) 
+
+> i,t
+
+= r(b)task ,i,t + w(b)stab rstab  
+
+> i,t
+
+− λ(b)crash Ci,t (6) Here, r(b)task ,i,t is the behavior-specific steering objective, Ci,t is a weighted crash/contact score, and 
+
+rstab  
+
+> i,t
+
+= −1[Ci,t > 0] penalizes unstable or failed states. We optimize Eq. (5) with PPO, using a Beta-parameterized policy [20] that produces bounded affine edits (Appendix A). 
+
+# 4 Experimental Results 
+
+4.1 Experimental Setup Simulator & Base Policy: We use the QuadSwarm [21] simulator with 8 quadrotors navigating a 
+
+10 × 10 × 10 m room with static cylindrical obstacles. We adopt the end-to-end, decentralized RL policy [22] as the base controller. Each robot observes its state and goal, the relative states of its two nearest neighbors, and a 3 × 3 signed-distance field of nearby obstacles. Three separate MLPs encode these observations. Neighbor and obstacle embeddings are fused via multi-head attention, concatenated with the self embedding, and passed through downstream MLPs to an action head outputting four normalized rotor thrusts. 
+
+Intervention point: CLAE requires only white-box intermediate activation access; the SAE trains on the intercepted block, and probing selects behavior-relevant latents. We intercept the first fused activation xi,t post-attention, as it is the earliest representation combining self, neighbor, and obsta-cle information. All baselines and ablations edit this same activation, so observed differences reflect the editing mechanism rather than layer choice. 
+
+4.2 Behaviors 
+
+We steer the pretrained multi-robot navigation policy towards the following behaviors: Velocity-profile tracking. Each robot is assigned a reference velocity profile v⋆i,t and must track it while still reaching its goal and avoiding obstacles. The reference is generated by a minimum snap planner [23], independent of the learned policy and made feasible in the obstacle-rich environment using CBF-based [24] filter. Multi-robot formation control. The robots are partitioned into two four-robot groups, and each group is assigned a target formation. We use a square with desired side length 
+
+s⋆ = 0 .5 m; other formations can be specified by changing the reference distance pattern. Camera-aware stealth navigation. We introduce surveillance cameras that are absent from the base policy’s original training. Each environment contains three cameras with surveillance radius 2.5 m, placed 5Figure 2: Qualitative behavior: CLAE versus the frozen base policy. Trajectory color encodes per-step velocity error |v − v⋆| in (a), team membership in (b,c), and speed in (d,e). In (b), both the initial and goal configurations are square formations; in (c), robots start from an arbitrary configura-tion and form the target square. (d,e) Stealth navigation under two layouts. to cover large portions of the free space. The steering policy receives camera-risk features and must reduce exposure while preserving goal reaching and collision avoidance. All behaviors use the reward form in Eq. (6), with only the task reward changing across behaviors: 
+
+rvel task ,i,t = wtrack rtrack  
+
+> i,t
+
+, rform task ,i,t = wshape rshape  
+
+> i,t
+
++ wgoal rgoal 
+
+> i,t
+
+rstealth task ,i,t = wzone rzone  
+
+> i,t
+
++ wmargin rmargin  
+
+> i,t
+
++ wstealth goal rgoal 
+
+> i,t
+
+(7) 
+
+rvel task ,i,t rewards reference tracking, rform task ,i,t rewards formation geometry and goal progress, and 
+
+rstealth task ,i,t primarily rewards reduced camera exposure, with a small goal-progress term to bias the edited policy toward goal reaching. Full observation heads, action bounds, reward definitions, and hyperparameters are provided in Appendix A. 
+
+4.3 Baselines and Evaluation Protocol Baselines. We compare CLAE against the frozen base policy, two activation editing baselines, and a multiplicative-only ablation, all using the same intervention layer and frozen downstream policy (Appendix D, Table 4). Since existing robotic learning activation-steering methods are not designed for closed-loop multi-robot behavior steering, we adapt the closest single-robot VLA-style interven-tions: fixed SAE decoder-direction steering [12] and linear-probe intervention [15]. We evaluate these on velocity tracking and formation control, but not for stealth navigation because the stealth objective is exogenous to the frozen policy’s training objective and does not correspond to a behav-ior variable that is directly represented or can be readily linearly probed in the base policy activation space. We also evaluate Closed-Loop Multiplicative Editing , which removes the additive offset from Eq. (4) and applies only ℓ′ 
+
+> S,t
+
+= mt ⊙ ℓS,t , isolating the contribution of the full affine edit. 
+
+Metrics. Behavior-specific: Velocity Error (Vel. Err.) (m/s) is the mean absolute component-wise error between each robot’s velocity and its reference, |v − v⋆|, averaged over axes, robots, and timesteps; |ex|, |ey |, |ez | are its per-axis components. Formation Error (Form. Err.) measures how closely each four-robot group maintains the target square formation, with 0 corresponding to perfect target geometry (full definition in Appendix B). Watchability is the total number of robot-camera visibility events per episode, summed over robots, cameras, and timesteps; 0 means no robot was ever visible to any camera. General: Collision-Free Rate (CF) (%) is the fraction of episodes with no robot–robot or robot–obstacle collisions; Success Rate (SR) is the fraction of robots that reach the goal safely, defined as ending within 0.8 m of the assigned goal in a collision-free episode; Goal Distance (Goal Dist.) (m) is the mean final distance between each robot and its assigned goal. 6Method Behavior-specific ↓ General (a) Velocity-Profile Tracking Vel. Err. |ex| |ey | |ez | CF (%) ↑ SR ↑ Goal (m) ↓                                                                                 
+
+> Base Policy 0.322 0.221 0.212 0.149 99.0 0.888 0.457 Fixed Scalar SAE Steering [12] 0.305 0.200 0.189 0.134 99.0 0.882 0.559 Linear Probe Intervention [15] 0.294 0.189 0.185 0.139 99.0 0.836 0.593 Closed-Loop Multiplicative Editing 0.318 0.214 0.219 0.134 98.8 0.861 0.501
+> CLAE (ours) 0.085 0.075 0.057 0.039 98.7 0.899 0.456
+> (b) Multi-Robot Formation Control Form. Err. CF (%) ↑SR ↑Goal (m) ↓
+> Base Policy 0.280 99.5 0.997 0.271 Fixed Scalar SAE Steering [12] 0.466 22.3 0.000 3.713 Linear Probe Intervention [15] 0.315 95.8 0.972 0.483 Closed-Loop Multiplicative Editing 0.276 99.2 0.989 0.242
+> CLAE (ours) 0.086 98.5 0.994 0.281
+> (c) Camera-Aware Stealth Navigation Watchability CF (%) ↑SR ↑Goal (m) ↓
+> Base Policy 3596.6 99.1 0.924 0.530 Closed-Loop Multiplicative Editing 3453.2 97.0 0.897 0.604
+> CLAE (ours) 1151.3 95.5 0.912 0.552
+
+Table 1: Behavior-steering results across three tasks. All methods use the same frozen base policy and intervention point. Each row averages 1000 episodes. 
+
+4.4 Results 
+
+Table 1 summarizes the quantitative behavior-steering results and Figure 2 shows the corresponding qualitative behavior changes in representative rollouts. 
+
+Velocity-profile tracking. CLAE reduces the mean velocity-tracking error from 0.322 m/s (base policy) to 0.085 m/s, a ∼3.8× improvement, with consistent per-axis gains on |ex|, |ey |, and |ez |
+
+(Table 1a). The qualitative result in Figure 2a confirms the effect at the trajectory level: CLAE trajectories, coloured by tracking residual |v − v⋆|, remain uniformly pale, whereas the base-policy trajectories show large residuals throughout. Figure 3 (Appendix E) shows the per-axis velocity traces for two representative robots: CLAE follows the reference profile closely on vx, vy , and vz ,while the base policy produces its own goal-driven velocity profile that diverges sharply from the reference. The prior-style baselines improve tracking marginally, and the multiplicative-only variant does not improve over the base policy; state-dependent affine edits are needed to track a time-varying reference rather than change speed along a fixed direction. 
+
+Multi-robot formation control. CLAE reduces formation error from 0.280 (base policy) to 0.086 ,a ∼3.2× improvement, while maintaining 98 .5% collision-free episodes and 99 .4% robot-success (Table 1b). Figure 2b and 2c show two representative configurations. In (b), where the start and goal are both square-structured, the base policy lets the two four-robot groups drift apart near the obstacle, while CLAE preserves a tight square formation geometry during navigation. In (c), the starting configuration is arbitrary and only the goal forms a square; CLAE pulls the robots into formation en route and arrives in the target geometry, whereas the base policy reaches goals without maintaining team structure. The prior-style baselines struggle on this team-dependent objective, while the multiplicative-only variant barely changes to the base policy formation behavior, indicating that formation steering requires affine edits that vary with teammate configuration. 
+
+Camera-aware stealth navigation. CLAE reduces the Watchability score from 3596 .6 to 1151 .3, a 
+
+∼3.1× reduction in cumulative camera exposure, while maintaining a 95 .5% collision-free rate and a 91 .2% robot-success rate (Table 1c). The multiplicative-only ablation reduces exposure by less than 4% despite using the same selected SAE latents and RL training, suggesting that gain modula-tion alone is insufficient for injecting camera-aware behavior. In Fig. 2d, where low-exposure goal-reaching paths exist, CLAE routes robots around camera footprints or drives them quickly through exposed regions, reducing cumulative rather than instantaneous exposure. In Fig. 2e, where camera coverage is denser, CLAE prioritizes exposure reduction over goal reaching, reducing Watchabil-ity to 0 while some robots stop short of their goals. Together, these examples show that the same 7activation-editing interface can discover qualitatively different deployment-time strategies, trading off goal progress and stealth behavior. 
+
+Summary. Across all three tasks, CLAE steers the frozen base policy toward behaviors it was never trained to primarily express, per-robot velocity tracking, multi-robot formation control, and camera-aware stealth navigation, while keeping collision avoidance and goal reaching behavior close to the unedited base policy. These results show that small, bounded affine edits at each policy step can compound over closed-loop execution to produce substantial behavior-level steering. 
+
+4.5 Design Ablations 
+
+We conducted a series of ablations on the formation control task (detailed in Appendix F, Table 5). Our findings demonstrate three key insights: (1) Activation editing prevents catastrophic forget-ting: Unlike fine-tuning or training from scratch, CLAE preserves the base policy’s core skills while improving the formation objective by a factor of 3. (2) Bounded action heads are critical for sta-bility: Utilizing a Beta-PPO action head is necessary to maintain the strictly bounded, small-edit regime required for stable closed-loop editing. Unbounded Gaussian or saturating Gaussian-tanh al-ternatives push activations outside the downstream layers’ reliable bounds, resulting in frequent crashes. (3) Targeted SAE latents ensure robust editing: Bypassing the SAE and behavior-probing stage to edit full raw activations significantly expands the steering-policy search space and degrades performance (dropping collision-free rates to 66.6%). Restricting edits to a small subset of behavior-relevant latents is essential to preserving the frozen policy. 
+
+4.6 Real-World Deployment 
+
+We deploy CLAE on Crazyflie 2.1 quadrotors, a severely resource-constrained platform. We focus on the formation control task and deploy the frozen base policy, SAE, and steering policy zero-shot from simulation. The entire CLAE pipeline is implemented in C for real-time execution on the STM32 microcontroller while remaining compatible with the 1 kHz stabilization loop. Each quadrotor performs onboard localization through optical flow, broadcasts its state to neighbors over a radio link, and generates a local SDF ( 2 m range) onboard from a priori obstacle positions. All computation runs entirely onboard at 100 Hz. Figure 1(b,c) shows representative trajectories: the base policy reaches the goals by splitting the formation between the middle obstacle, while CLAE keeps the team flying close together as a group retaining the base navigation behavior. 
+
+# 5 Conclusion 
+
+We introduced CLAE, a framework that treats post-training behavior steering of frozen robot policies as a closed-loop problem over SAE latents of an intermediate activation. By learning state-dependent affine edits on a small set of behavior-relevant SAE latents, CLAE steers individual robot behavior, coordinates multirobot behavior, and supports novel behavior injection, all without touching the base policy weights or action head. Because the interface requires only white-box access to an intermediate activation, we see CLAE as a step toward a general recipe for adapting pretrained robot policies to deployment-time behavior objectives that were not the primary objective of, or were absent from, the base policy’s training, complementing well-established finetuning approaches. 
+
+# 6 Limitations 
+
+CLAE relies on rollout-derived behavior metrics to identify behavior-relevant activations. For behaviors exogenous to the base policy’s training objective, such as stealth navigation, we used trajectory-modulation proxies that capture how the behavior manifests through the base policy’s ex-isting motion repertoire. Principled alternatives for selecting behavior-relevant latents in this regime remain an open question. We validated CLAE on a multi-quadrotor RL policy. Applying the same activation-editing interface to large pretrained models, such as VLAs, is a natural next step we have not yet explored. Finally, although edits stayed within the activation regime the frozen policy han-dles reliably across all our experiments, we provide no formal safety or stability guarantees on the edited closed-loop system, which we view as an important direction for future work. 8Acknowledgments 
+
+If a paper is accepted, the final camera-ready version will (and probably should) include acknowl-edgments. All acknowledgments go at the end of the paper, including thanks to reviewers who gave useful comments, to colleagues who contributed to the ideas, and to funding agencies and corporate sponsors that provided financial support. 
+
+# References 
+
+[1] S. Liu, I. S. Singh, Y. Xu, J. Duan, and R. Krishna. Vls: Steering pretrained robot policies via vision–language models, 2026. [2] M. Nakamoto, O. Mees, A. Kumar, and S. Levine. Steering your generalists: Improving robotic foundation models via value guidance, 2024. [3] Y. Wang, L. Wang, Y. Du, B. Sundaralingam, X. Yang, Y.-W. Chao, C. Perez-D’Arpino, D. Fox, and J. Shah. Inference-time policy steering through human interactions, 2024. [4] A. Wagenmaker, Y. Zhang, M. Nakamoto, S. Park, W. Yagoub, A. Nagabandi, A. Gupta, and S. Levine. Steering your diffusion policy with latent space reinforcement learning, 2025. [5] Y. Wu, R. Tian, G. Swamy, and A. Bajcsy. From foresight to forethought: Vlm-in-the-loop policy steering via latent alignment, 2025. [6] W. Chen, J. S. Bhatia, C. Glossop, N. Mathihalli, R. Doshi, A. Tang, D. Driess, K. Pertsch, and S. Levine. Steerable vision-language-action policies for embodied reasoning and hierarchical control, 2026. [7] A. M. Turner, L. Thiergart, G. Leech, D. Udell, J. J. Vazquez, U. Mini, and M. MacDiarmid. Steering language models with activation engineering, 2023. [8] A. Zou, L. Phan, S. Chen, J. Campbell, P. Guo, R. Ren, A. Pan, X. Yin, M. Mazeika, et al. Representation engineering: A top-down approach to ai transparency, 2023. [9] H. Cunningham, A. Ewart, L. Riggs, R. Huben, and L. Sharkey. Sparse autoencoders find highly interpretable features in language models, 2023. [10] A. Templeton. Scaling monosemanticity: Extracting interpretable features from claude 3 son-net . Anthropic, 2024. [11] B. H¨ aon, K. Stocking, I. Chuang, and C. Tomlin. Mechanistic interpretability for steering vision-language-action models, 2025. [12] A. Swann, L. McGranahan, H. Buurmeijer, M. Kennedy, and M. Schwager. Sparse autoen-coders reveal interpretable and steerable features in vla models, 2026. [13] S. Das, D. Chiu, Z. Huang, L. Lindemann, and G. S. Sukhatme. Latent activation editing: Inference-time refinement of learned policies for safer multirobot navigation, 2025. [14] S. Singh, S. Ravfogel, J. Herzig, R. Aharoni, R. Cotterell, and P. Kumaraguru. Representation surgery: Theory and practice of affine steering, 2024. [15] H. Buurmeijer, C. A. Alonso, A. Swann, and M. Pavone. Observing and controlling features in vision-language-action models. arXiv preprint arXiv:2603.05487 , 2026. [16] T. Bricken, A. Templeton, J. Batson, B. Chen, A. Jermyn, T. Conerly, N. Turner, C. Anil, C. Denison, A. Askell, R. Lasenby, Y. Wu, S. Kravec, N. Schiefer, T. Maxwell, N. Joseph, Z. Hatfield-Dodds, A. Tamkin, K. Nguyen, B. McLean, J. E. Burke, T. Hume, S. Carter, C. Olah, and T. Henighan. Towards monosemanticity: Decomposing language mod-els with dictionary learning. Transformer Circuits Thread , 2023. URL https:// transformer-circuits.pub .9[17] G. Alain and Y. Bengio. Understanding intermediate layers using linear classifier probes, 2016. [18] B. Kim, M. Wattenberg, J. Gilmer, C. Cai, J. Wexler, F. Vi´ egas, and R. Sayres. Interpretability beyond feature attribution: Quantitative testing with concept activation vectors (TCAV). In 
+
+Proceedings of the 35th International Conference on Machine Learning , volume 80 of Pro-ceedings of Machine Learning Research , pages 2668–2677. PMLR, 2018. [19] Y. Belinkov. Probing classifiers: Promises, shortcomings, and advances. Computational Lin-guistics , 48(1):207–219, 2022. doi:10.1162/coli a 00422. [20] I. G. Petrazzini and E. A. Antonelo. Proximal policy optimization with continuous bounded action space via the beta distribution. In 2021 IEEE symposium series on computational intel-ligence (SSCI) , pages 1–8. IEEE, 2021. [21] Z. Huang, S. Batra, T. Chen, R. Krupani, T. Kumar, A. Molchanov, A. Petrenko, J. A. Preiss, Z. Yang, and G. S. Sukhatme. Quadswarm: A modular multi-quadrotor simulator for deep reinforcement learning with direct thrust control. arXiv preprint arXiv:2306.09537 , 2023. [22] Z. Huang, Z. Yang, R. Krupani, B. S ¸ enbas ¸lar, S. Batra, and G. S. Sukhatme. Collision avoid-ance and navigation for a quadrotor swarm using end-to-end deep reinforcement learning. In 
+
+IEEE Int. Conf. Robot. Autom. (ICRA) , 2024. [23] D. Mellinger and V. Kumar. Minimum snap trajectory generation and control for quadrotors. In 2011 IEEE international conference on robotics and automation , pages 2520–2525. Ieee, 2011. [24] L. Wang, A. Ames, and M. Egerstedt. Safety barrier certificates for heterogeneous multi-robot systems. In Amer. cont. conf. (ACC) , 2016. 10 A Steering Policy Details 
+
+This appendix summarizes the steering-policy observations, edit constraints, and task rewards used in our experiments. Across all tasks, the base policy πθ0 , the SAE encoder Eψ , and the SAE decoder 
+
+Dψ are kept fixed. Only the lightweight steering policy is optimized. 
+
+A.1 Steering Policy Action 
+
+The main text defines the frozen-policy activation interface and the affine SAE edit. Here we only specify the steering action used in our experiments. For a target behavior b, let Sb denote the selected behavior-relevant SAE latent set. At each step, the steering policy outputs an affine edit on these latents, 
+
+ξi,t = ( mi,t , c i,t ) ∈ R2|S b|, (8) where mi,t and ci,t are the multiplicative and additive components of the affine edit. The edit is applied only to latents in Sb:
+
+ℓ′ 
+
+> i,t,j
+
+= mi,t,j ℓi,t,j + ci,t,j , j ∈ S b, (9) while all unselected latents are copied unchanged: 
+
+ℓ′ 
+
+> i,t,j
+
+= ℓi,t,j , j / ∈ S b. (10) The edited latent is decoded to produce the edited activation block x′ 
+
+> i,t
+
+= Dψ (ℓ′
+
+> i,t
+
+), which is then passed through the remaining frozen layers of the base policy. The steering policy therefore acts only through selected SAE latents and never outputs motor commands or action residuals. In the multiplicative-only setting, the additive component is removed, so the steering action is ξi,t =
+
+mi,t ∈ R|S b|.
+
+Bounded PPO action head. For stable PPO training, we use a Beta-parameterized bounded con-tinuous action head for the steering policy. The sampled action is converted into the affine edit ξi,t ,after which the multiplicative and additive components are clipped to task-level maximum bounds during rollout. These bounds are implementation hyperparameters used to prevent unstable activa-tion edits, not constraints imposed by the CLAE formulation itself. In our experiments, the realized multiplicative edits were bounded by [0 .5, 10 .0] and additive offsets by [−0.1, 0.1] .
+
+A.2 Steering Observations 
+
+All steering policies use a shared latent-control context together with a compact task-specific obser-vation head. The shared context contains selected SAE latents and lightweight edit-history informa-tion used by the steering policy. We keep this latent-control context fixed across tasks and report below only the task-specific heads, which are the components that differ between behaviors. Table 2: Task-specific steering observation heads. Each head is concatenated with the shared latent-control context. Task Task-specific observation head Velocity vi,t − v⋆i,t , p i,t , g i,t 
+
+
+
+Formation [vi,t , g i,t − pi,t , p i,t , ϕ i, 1, ϕ i, 2, ϕ i, 3, s ⋆]
+
+Stealth pi,t , v i,t , g i,t − pi,t , dcam 
+
+> i,t
+
+
+
+Here pi,t , vi,t , and gi,t denote the drone position, velocity, and goal, and v⋆i,t is the reference velocity for the velocity-tracking task. For formation, s⋆ is the target square side length and ϕi,r is a relative teammate feature for the r-th nearest teammate in the same four-drone group: 
+
+ϕi,r = di,r , p xy jr ,t − pxy i,t , v xy jr ,t − vxy i,t 
+
+ , (11) where jr is the r-th nearest teammate and di,r is the corresponding XY distance. 11 For stealth, dcam  
+
+> i,t
+
+∈ R9 denotes a local camera-distance field sampled on a fixed 3 × 3 neighborhood around the drone’s XY position. Each entry stores an SDF-like signed distance to the nearest camera surveillance boundary: negative values indicate points inside a surveillance radius, zero corresponds to the boundary, and positive values indicate distance outside the nearest surveillance region. We use this local distance-field representation to provide compact surveillance geometry, rather than passing raw camera centers and radii directly to the steering policy. All inputs used in the steering observation are available at inference time: they are obtained from the robot state estimate, the task specification, the deployment-time environment context, or the fixed frozen-policy activation stream. 
+
+# B Task-Reward Instantiations 
+
+Section 3.4 defines the common steering objective used to train the steering policy. Here we specify the behavior-specific task terms used in the reported experiments. Tunable reward coefficients are kept symbolic in the equations and listed in Table 3. These values were selected during preliminary tuning for stable PPO learning and validation performance; they are experimental hyperparameters rather than constraints imposed by the CLAE formulation. Across all tasks, the per-drone steering reward follows 
+
+r(b) 
+
+> i,t
+
+= r(b)task ,i,t + w(b)stab rstab  
+
+> i,t
+
+− λ(b)crash Ci,t , (12) 
+
+Velocity steering. The velocity task steers each drone toward a reference velocity v⋆i,t . The task reward is the negative tracking error, 
+
+rtrack  
+
+> i,t
+
+= − vi,t − v⋆i,t 1 , rvel task ,i,t = wtrack rtrack  
+
+> i,t
+
+. (13) 
+
+Formation steering. The formation task steers each four-drone group toward square geometry while preserving navigation progress. For a group G, let d(1) ≤ · · · ≤ d(6) be the sorted pairwise XY distances. The group-level square error is 
+
+EG = 16
+
+> 4
+
+X
+
+> a=1
+
+|d(a) − s⋆|
+
+s⋆ +
+
+> 6
+
+X
+
+> a=5
+
+|d(a) − √2s⋆|√2s⋆
+
+!
+
+, (14) where s⋆ is the target side length. For drone i, let ri, (1) , r i, (2) , r i, (3) be its sorted XY distances to the other three drones in the same group. The local neighbor error is 
+
+Enbr  
+
+> i
+
+=
+
+> 2
+
+X
+
+> a=1
+
+|ri, (a) − s⋆|
+
+s⋆ + |ri, (3) − √2s⋆|√2s⋆ . (15) Let ¯pG,t be the group center. The radial error is 
+
+Erad  
+
+> i
+
+=
+
+∥pxy i,t − ¯pxy G,t ∥2 − s⋆/√2
+
+s⋆/√2 . (16) The local formation error and shape reward are 
+
+Elocal  
+
+> i
+
+= βnbr Enbr  
+
+> i
+
++ βrad Erad  
+
+> i
+
+, rshape  
+
+> i,t
+
+= −  αgrp EG + αloc Elocal 
+
+> i
+
+ . (17) The goal-progress term penalizes normalized distance to the assigned goal: 
+
+rgoal  
+
+> i,t
+
+= − ∥gi,t − pi,t ∥2
+
+∥gi, 0 − pi, 0∥2
+
+. (18) The formation task reward is 
+
+rform task ,i,t = wshape rshape  
+
+> i,t
+
++ wgoal rgoal  
+
+> i,t
+
+. (19) 12 Stealth steering. The stealth navigation task introduces camera surveillance regions that are not part of the base-policy training objective. The reward contains sparse and dense exposure penalties, plus a small goal-progress term. The exposure penalty directly penalizes entering a valid surveil-lance footprint, while the margin penalty provides a smoother training signal near camera-facing regions. Let cm denote the center of camera region m, R its surveillance radius, and Hm the valid camera-facing half-plane. A drone is exposed to camera m when it lies inside both the surveillance radius and the valid camera-facing region: 
+
+Ii,m,t = 1 ∥pxy i,t − cm∥2 ≤ R ∧ pxy i,t ∈ Hm
+
+ . (20) The zone penalty is 
+
+rzone  
+
+> i,t
+
+= − X
+
+> m
+
+Ii,m,t . (21) Because the binary exposure penalty is sparse, we also use a soft margin around camera-facing regions. Let Rout = R + δ and define 
+
+ηi,m,t = clip Rout − ∥ pxy i,t − cm∥2
+
+Rout 
+
+, 0, 1
+
+!
+
+. (22) The value ηi,m,t is zero outside the outer margin and increases as the drone approaches the camera center. The margin penalty is 
+
+rmargin  
+
+> i,t
+
+= − X
+
+> m
+
+1 pxy i,t ∈ Hm, ∥pxy i,t − cm∥2 ≤ Rout 
+
+ ηκi,m,t . (23) Thus, the margin term gives PPO a dense signal before and inside the surveillance radius: states farther from the camera footprint receive little or no penalty, whereas states closer to the camera center receive larger penalty. Entering a surveillance region affects reward but does not terminate the episode. The stealth task reward is 
+
+rstealth task ,i,t = wzone rzone  
+
+> i,t
+
++ wmargin rmargin  
+
+> i,t
+
++ wstealth goal rgoal  
+
+> i,t
+
+. (24) The goal-progress term uses a small weight and serves only to bias the edited policy toward reach-ing the goal; the exposure terms remain the primary stealth objective. The reward coefficients are kept symbolic in the definitions above. Table 3 lists the values used in the reported PPO steering experiments. Table 3: Reward hyperparameters used in the reported PPO steering experiments. Hyperparameter Value 
+
+wtrack 2
+
+wshape 1
+
+wgoal 1
+
+wzone 0.5
+
+wmargin 1
+
+wstab 2
+
+λcrash 50 (αgrp , α loc ) (0 .6, 0.4) (βnbr , β rad ) (0 .75 , 0.25) 
+
+# C Sparse Latent Probe Metrics 
+
+Section 3.2 describes the split-stable probing procedure used to select behavior-relevant SAE latents. Here we summarize the rollout metrics used as post-hoc probes for each target behavior. These metrics are computed only after SAE training; the SAE itself is trained solely to reconstruct frozen-policy activations. 13 Method SAE Learned State- Edit form Purpose policy dependent                                          
+
+> Base Policy ———x′
+> t=xtFrozen, no intervention Fixed Scalar SAE Steering ✓x′
+> t=xt+α d jSingle fixed SAE direction Linear Probe Intervention ✓x′
+> t=xt+ clip η(ut)Raw linear representation control Closed-Loop Multiplicative Editing ✓✓✓ℓ′
+> S,t =mt⊙ℓS,t CLAE without additive offset
+> CLAE (ours) ✓✓✓ℓ′
+> S,t =mt⊙ℓS,t +ctFull affine activation edit
+
+Table 4: Compared methods. All methods share the same frozen base policy and act at the same intermediate activation. Fixed Scalar SAE Steering and Linear Probe Intervention are adapted from single-robot VLA activation-steering methods [12, 15]. For velocity steering, probes use the velocity components and scalar speed. For formation steer-ing, probes use relational square-geometry quality and inter-drone spacing within each four-drone group. For stealth steering, where camera avoidance is not part of the frozen policy’s original train-ing objective, probes use trajectory-modulation metrics, including lateral motion, heading change, goal progress, clearance, and collision risk. We do not list selected latent indices because they are checkpoint- and SAE-basis-specific. The reproducible component is the post-hoc selection proce-dure and the rollout metrics used for ranking. 
+
+# D Baseline and CLAE Variant Details 
+
+We compare four activation-intervention methods against the frozen base policy (Table 4). Activa-tion steering for robot policies is nascent, and to our knowledge no prior method targets closed-loop multirobot activation steering. We adapt the two closest existing families, both developed for single-robot VLA policies. Fixed Scalar SAE Steering [12] shifts the activation by a fixed scalar along the decoder direction of the top behavior-associated latent, testing whether one state-independent SAE direction suffices. Linear Probe Intervention [15] fits a linear probe and applies a minimum-norm perturbation toward the target value, testing whether the behavior is linearly readable and control-lable from the raw representation. Neither uses a learned closed-loop steering policy. They are the nearest existing comparisons in robotics, not methods designed for our tasks: velocity tracking is the closest match to their regime; formation is intermediate, since a single agent’s activation may still implicitly encode multi-agent behavior; and stealth lies outside their regime, as the target be-havior is exogenous to the base policy’s training objective, so we omit them there. Closed-Loop Multiplicative Editing is an ablation of CLAE with the additive offset removed, applying only the multiplicative gain mt ⊙ ℓS,t (Table 4). Comparing it to the full affine edit isolates the contribution of the additive component. 
+
+# E Additional Qualitative Results : Per-Axis Velocity Tracking 
+
+Figure 3 provides the per-axis view underlying the aggregate velocity error reported in Table 1a. CLAE tracks the reference closely on vx, vy , and vz throughout the episode, whereas the base policy, never trained to follow an external velocity signal, produces a goal-driven profile that diverges sharply on all three axes. 
+
+# F Design Ablations Details 
+
+We isolate three design choices on the formation-control task. First, we compare CLAE against weight-update alternatives, fine-tuning the base policy and training from scratch on the forma-tion reward, to test whether activation editing offers a meaningfully different operating point than modifying the policy itself. Second, we compare the Beta-PPO action head against Gaussian and Gaussian-tanh alternatives, to test whether the bounded edit head matters for stable closed-loop edit-ing. Third, we remove the SAE and behavior-probing stage and let the steering policy edit the raw intercepted activation, to test the value of restricting edits to a small set of behavior-relevant latents. 14 Figure 3: Per-axis velocity tracking. CLAE (blue) follows the reference (dashed grey) on vx, vy , vz
+
+for two representative robots; the unedited base policy (dashed orange) follows its own goal-driven velocity profile and diverges from the reference on every axis. All variants share the same intervention point, base policy, reward, and environment-step budget. Results appear in Table 5; learning curves for the first two ablations are shown in Figure 4.                                     
+
+> Method Form. Err. ↓CF (%) ↑SR ↑Goal (m) ↓
+> Base Policy 0.280 99.5 0.997 0.271
+> CLAE (ours) 0.086 98.5 0.994 0.281 Fine-tune base policy 0.199 93.5 0.890 0.199 Train from scratch 4.715 0.0 0.000 —CLAE w/ Gaussian PPO 0.761 2.6 0.000 0.761 CLAE w/ Gaussian-tanh PPO 3.276 0.0 0.000 —CLAE w/o SAE (full-activation edit) 0.797 66.6 0.127 0.797
+
+Table 5: Design ablations of CLAE on the multi-robot formation-control task. All variants share the same intervention point, reward, and environment-step budget. 
+
+Activation editing versus weight updates. Fine-tuning the base policy on the formation reward starts competitively because the pretrained navigation behavior is initially preserved, but soon opti-mizes away from it. As the policy learns the formation objective, collision-free rate drops from 
+
+99 .5% to 93 .5% and formation error plateaus at 0.199 , more than twice the CLAE level (Fig-ure 4a, Table 5). Training from scratch never acquires the underlying flight behavior within the same environment-step budget, producing complete failure on every metric. CLAE, by contrast, only edits a small set of behavior-relevant SAE latents at inference time. The base policy’s navi-gation skill is preserved by construction, and the steering policy improves the formation metric by 
+
+∼3.2× over the base. 
+
+Bounded action head. CLAE relies on a Beta-parameterized PPO action head that produces bounded affine edits, with multiplicative gains in [0 .5, 10 .0] and additive offsets in [−0.1, 0.1] (Ap-pendix A). We compare it against two standard PPO action heads. The Gaussian head samples each edit parameter from an unbounded normal distribution with learned mean and variance. The Gaussian-tanh head samples from a normal and then squashes through tanh before linearly mapping to the bounds, so samples are bounded by construction but the mapping is nonlinear and saturating. Both alternatives collapse the closed-loop system and the learning signal (Figure 4b, Table 5). Gaus-sian PPO drops to 2.6% collision-free, and Gaussian-tanh is catastrophic. The editable bounds are 15 Figure 4: Training dynamics. (a) Activation editing (CLAE) versus weight updates (fine-tune, train from scratch) on the formation reward. Fine-tuning begins competitively because the base naviga-tion behavior is preserved early, but collapses as the formation objective overwrites the base skills. Training from scratch never acquires the underlying flight behavior within the same environment-step budget. CLAE preserves the base policy’s navigation skills and improves on the formation objective. (b) Steering-policy action head. Gaussian and Gaussian-tanh PPO struggle to remain within the small bounded edit regime needed for stable closed-loop editing, while Beta-PPO learns smoothly. Curves are from representative runs and smoothed for visualization (raw traces shown faintly); statistical reliability is evaluated separately on rollouts of the final checkpoints, reported in Table 5. tight, and large or saturating edits push the activation outside the regime the frozen downstream lay-ers handle reliably. The Beta head is naturally bounded with a flexible shape on the interior of the bounds, which lets the steering policy explore the small-edit regime CLAE relies on, consistent with the closed-loop argument in Sec. 4.4 that small per-step edits accumulated through the closed-loop dynamics produce large behavior changes while keeping each step within the activation regime the frozen policy was trained on. 
+
+Sparse autoencoder and behavior probing. Without the SAE and probing stage, the steering pol-icy must output affine parameters for every dimension of the intercepted activation. This raises the steering action dimension from 2|Sb| to 2d, substantially enlarging the steering-policy search space and the chance of edits that disrupt the frozen downstream layers. Even though the intercepted layer here is only 30 -dimensional, the no-SAE variant drops to 66 .6% collision-free and 0.797 formation error, an order of magnitude worse than CLAE (Table 5). The benefit of restricting edits to a small, probe-selected subset of behavior-relevant SAE latents is expected to grow with the activation width, which is relevant as the framework is applied to larger foundational models. 16
