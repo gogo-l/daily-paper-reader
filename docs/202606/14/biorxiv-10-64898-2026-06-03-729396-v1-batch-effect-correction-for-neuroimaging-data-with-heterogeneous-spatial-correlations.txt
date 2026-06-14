@@ -1,0 +1,1189 @@
+Title: Batch Effect Correction for Neuroimaging Data with Heterogeneous Spatial Correlations
+
+URL Source: https://www.biorxiv.org/content/10.64898/2026.06.03.729396v1.full.pdf
+
+Number of Pages: 21
+
+Markdown Content:
+# Batch Effect Correction for Neuroimaging Data with Heterogeneous Spatial Correlations 
+
+## Ryan Xie, Dhivya Srinivasan, Gareth A. Harman, Christos Davatzikos, Russell T. Shinohara, Haochang Shou 
+
+Abstract 
+
+Magnetic resonance imaging scans are effective tools for unveiling brain structures and under-standing pathology for complex neurodevelopmental and aging processes. The spatial correlations among various brain regions reveal critical information and insights into the mechanisms of brain functions and their associations with cognitive abilities. Large-scale neuroimaging studies that ac-quire or aggregate imaging scans from multiple sites have become increasingly popular. Doing so enhances the diversity of study samples and robustness of study findings, and increases the statistical power of any analysis conducted for the biological hypotheses of interest. However, collecting images across different sites introduces non-biological variability attributed to differences in imaging proto-col and configurations, known as batch effects. While there are methods to perform this batch effect correction, there are limited methods that directly account for the spatial patterns found in images of the brain. We develop Covariance-Aware Multivariate (CAM) ComBat that accounts for such spatial correlation across high-dimensional features, which could be heterogeneous across batches. We also propose a computationally efficient alternative of CAM-ComBat, Spatially-Informed Iterative Block (SIB) ComBat, that is scalable for very high dimension of features. We show that these methods outperform existing batch effect correction methods through simulation studies and an application to real neuroimaging data. 
+
+Key words: batch effects; data harmonization; neuroimaging; spatial correlations; voxel-based morphometry. 
+
+# 1 Introduction 
+
+Magnetic resonance imaging (MRI) has proven to be a valuable technology in understanding brain pathology and development. The spatial patterns in these images inform the mechanisms and processes underlying brain functions and diseases-related changes [Botz et al., 2023, McIntosh et al., 1996]. Voxel-based morphometry has been especially useful for its ability to detect structural abnormalities and clinically relevant changes in gray and white matter [Mechelli et al., 2005]. Many studies have leveraged voxel-based morphometric analysis to associate changes in the brain with neurological and psychiatric conditions such as schizophrenia, Parkinson’s disease, and epilepsy [Kubicki et al., 2002, Price et al., 2004, Keller et al., 2004] Pooled analyses by aggregating neuroimaging scans acquired across multiple sites and studies have become an increasingly popular strategy. Doing so not only helps to enhance the diversity of study sam-ples and improve generalizability of the findings, but also boosts the statistical power of any subsequent analysis for the biological hypotheses of interest via larger sample size. Various consortia have imple-mented this multi-site approach for collecting neuroimaging data [Mueller et al., 2005, Sudlow et al., 2015]. For example, the imaging-based SysTem for AGing and NeurodeGenerative diseases (iSTAGING) consortium collects multimodal MRI scans from over 70,000 individuals across 32 study sites, with the goal of better understanding the mechanism and manifestation of aging and neurodegeneration with respect to the brain [Pomponio et al., 2020, Habes et al., 2021]. However, collecting images at different sites introduces potential non-biological variability attributed to differences in imaging protocol and con-figurations, known as batch effects [Fortin et al., 2017, 2018]. Previous work has identified inter-scanner variability in voxel-based morphometry and shown it can affect the results of many subsequent analyses [Takao et al., 2011]. 1
+
+> .CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint
+
+Many methods to address these effects aim to remove variability in the means and variances between sites [Fortin et al., 2016, Rao et al., 2017, Yamashita et al., 2019]. A state-of-the-art imaging harmoniza-tion method is ComBat, initially formulated to eliminate batch effects for microarray gene expression data prior to its adaptation to neuroimaging data. ComBat uses an empirical Bayes framework to esti-mate and then adjust for site-specific effects [Johnson et al., 2007]. ComBat has been successfully applied to harmonize various types of neuroimaging data, including cortical thickness and diffusion tensor imag-ing data [Fortin et al., 2017, 2018]. In its method, ComBat assumes that features are independent of one another, and therefore, does not directly account for differences in correlation patterns between sites. Multiple methods have been developed to better address this correlation between features. Chen et al. (2021) demonstrated the presence of site covariance differences in cortical thickness measurements from the Alzheimer’s Disease Neuroimaging Initiative (ADNI), and subsequently developed CovBat to mitigate these effects. It expands upon the existing ComBat framework by assuming correlation between residuals and shifting within-site covariances to the pooled covariance through modification of principal component scores [Chen et al., 2022]. While this method proved effective for harmonizing this data, this assumption about the covariance site effects may be less suitable when data present large covariance heterogeneity between batches, especially when dealing with higher dimensions of data. Larger heterogeneity can occur if the batch-specific covariances cannot be captured within the same principal component space, which CovBat assumes. Figure 12 in the Appendix illustrates this idea, in which the similarity of the first ten principal component eigenvectors were compared between data from two study sites. For this specific example, most of the dot products between eigenvectors were close to zero, demonstrating the batch-specific covariances lie in different principal component spaces. Zhang et al. (2024) proposed spatial autocorrelation normalization (SAN) to harmonize vertex level cortical thickness data using spatial Gaussian processes. However, they acknowledged the practical limitations of applying SAN to data with a larger number of features [Zhang et al., 2024]. In addition, calculating covariances using spatial autocorrelation functions may be less flexible for other types of heterogeneity between batches, especially if such heterogeneity arises from batch-specific covariances lying in different principal component spaces. We developed Covariance-Aware Multivariate (CAM) ComBat to account for heterogeneous spatial correlations in brain images, and show that it outperforms existing batch effect correction methods through simulation tests. To further allow the algorithm to be scalable with higher dimension of features at the voxel-level, we then propose an extension of the CAM ComBat framework to ease the computa-tional burden. We demonstrate through simulation experiments and an application to voxel-wise gray matter density of RAVENS maps from the iSTAGING consortium at the scale of 640,000 features, that our proposed method achieves superior performance compared to other existing batch effect correction methods. Throughout this manuscript, batch and site effects are terms that will be used interchangeably. 
+
+# 2 Methods 
+
+We first discuss the general framework of ComBat. In summary, ComBat uses an empirical Bayes framework to estimate and then adjust for mean and variance site-specific effects. Specifically, if Yijv is the vth feature from the jth individual of the ith batch, ComBat assumes these features can be represented by the following model 
+
+Yijv = αv + xTij βv + γ∗ 
+
+> iv
+
++ δ∗ 
+
+> iv
+
+eijv , (1) in which αv is the intercept, xij is the vector of covariates that are biologically relevant to the outcome, 
+
+βv are the regression coefficients, γiv is the additive site effect, δiv is the multiplicative site effect, and eijv 
+
+are independent, normally distributed error terms. αv and βv are first estimated based on their feature-wise ordinary least squares estimates ˆ αv and ˆβv . To estimate γiv and δiv , ComBat assumes independent normal priors on γiv and independent inverse gamma priors on δiv . Using the method of moments to estimate the hyperparameters of these distributions, estimates of the additive and multiplicative site effects, γ∗ 
+
+> iv
+
+and δ∗ 
+
+> iv
+
+, are derived based on the expected value of their respective posterior distribution. The final harmonized dataset Y ∗ 
+
+> ijv
+
+is calculated as follows [Johnson et al., 2007, Fortin et al., 2017, 2018] 2
+
+> .CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint
+
+Y ∗ 
+
+> ijv
+
+= Yijv − ˆαv − xTij ˆβv − γ∗
+
+> iv
+
+δ∗
+
+> iv
+
++ ˆ αv + xTij ˆβv . (2) CovBat builds upon this model by assuming the residuals have mean 0 and site-specific covariance Σ i. To address the covariance site effects, principal component analysis is performed on these full data residuals and the resulting principal component scores are shifted and scaled to get rid of site-specific means and variances in the scores. In the next section, we expand upon the ComBat framework to specifically address heterogeneous correlations between sites. We introduce two sets of methods: CAM ComBat and Spatially-informed Iterative Block (SIB) ComBat. 
+
+## 2.1 CAM ComBat 
+
+We assume a similar model as in equation (1) for Yijv from batch i. However, unlike in con-ventional ComBat where eijv is assumed to follow N (0 , σ 2 
+
+> v
+
+), we model site-specific covariance pat-terns in eij and allow them to be correlated following a multivariate normal distribution. That is, 
+
+{eij 1, · · · , e ijv }T ∼ M V N (γi, Σi). We assume that Σ i = AiΣATi and allow site-specific rotations Ai
+
+to be applied onto the common underlying covariance matrix Σ that is shared across sites. This is in contrast to CovBat, in which we assume that Σ i can be approximated as ΦΛ iΦT , where Φ are the matrix of the first q eigenvectors shared between batches and estimated from the pooled sample covariance, and Λi is a diagonal matrix of eigenvalues for batch i and are correspond to the variances of the principal component scores. Compared to CovBat, CAM ComBat’s assumption enables covariances to be much more heterogeneous between batches. CAM ComBat will be implemented in the following way. 
+
+Step 1: Standardize the data similarly to ComBat where residuals are achieved after estimating and removing the biological variabilities and rescaled. Letting Zijv represent the standardized data, 
+
+Zijv = Yijv − (ˆ αv + xTij ˆβv )ˆσv
+
+, (3) where ˆ αv , ˆβv , ˆγiv are the feature-wise ordinary least squares estimates and ˆ σ2 
+
+> v
+
+= 1
+
+> N
+
+P 
+
+> ij
+
+(Yijv − (ˆ αv +
+
+xTij ˆβv + ˆ γiv )) 2 with N = P 
+
+> i
+
+ni.
+
+Step 2: Let Zij = ( Zij 1, ..., Z ijV )T and assume γi ∼ M V N (γ0i, τ 20iI). Using the formula for the expectation of the posterior distribution of γi, calculate the posterior mean for γi (derivations shown in Appendix): 
+
+γ∗ 
+
+> i
+
+=
+
+
+
+ni ˆτ 20i ˆΣ−1 
+
+> i
+
++ I
+
+−1
+
+ˆγ0i + ˆ τ 20i ˆΣ−1
+
+> i
+
+X
+
+> j
+
+Zij 
+
+ (4) in which ˆ γi, ˆΣi, ˆγ0i, and ˆ τ 20i are their corresponding method of moments estimates. 
+
+Step 3: Assume that Σ i = AiΣATi . Using the eigendecomposition of ˆΣi and ˆΣ, the sample covariance estimate of Σ, Ai can be estimated as follows (see calculations in Appendix): ˆAi = ˆLi ˆP −1. (5) ˆLi and ˆP are calculated as ˆLi = U D 1/2, ˆP = EK 1/2. (6) where U is the matrix of eigenvectors of ˆΣi, D1/2 is the diagonal matrix of the square root of the eigenvalues of ˆΣi, E is the matrix of eigenvectors of ˆΣ, and K1/2 is the diagonal matrix of the square root of the eigenvalues of ˆΣ. 
+
+Step 4: Adjust the data as follows to get the final data Mij :
+
+Mij = ˆ σ ˆAi
+
+> −1
+
+(Zij − γ∗ 
+
+> i
+
+) + ˆ α + Xij ˆβ, (7) 3
+
+> .CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint
+
+where ˆ α = (ˆ α1, ... ˆαV )T , ˆβ = ( ˆβ1, ... ˆβV )T , ˆ σ = diag (ˆ σ1, ...., ˆσv ), and Xij is the matrix of covariate information. 
+
+## 2.2 SIB ComBat for High Dimensional Vertex Level Data 
+
+In practice, applying CAM ComBat to a high dimension of features can be computationally intensive due to the estimation of the overall and within-site covariance matrices across all features of interest. If we are interested in harmonizing vertex-level neuroimaging data, which can have hundreds of thousands of features, CAM ComBat becomes impractical. To address this limitation, we developed an extension of the method, Spatially-informed Iterative Block (SIB) ComBat, that can alternatively be used. Raw Image  
+
+> Spatial ComBat with
+> Parcellation 1
+> Spatial ComBat with
+> Parcellation 2 Harmonized Image
+
+Figure 1: Diagram visualizing the SIB ComBat harmonization process. SIB ComBat implements an iterative process for harmonization within pre-defined clusters of fea-tures. Clusters of features are harmonized separately using CAM ComBat in a given iteration and the process iterates through different partition of features. In each iteration, feature clusters are harmonized separately using CAM ComBat, and the procedure cycles through multiple feature partitions across iterations. Optimal cluster assignments are those in which features exhibit strong within-cluster corre-lations while remaining relatively independent across clusters. Examples of such cluster assignments are shown in Figure 1, which visualizes clusters determined using multi-scale structural imaging covariance (MuSIC) atlases that will be discussed later [Wen et al., 2023]. Applying CAM ComBat on subsets of features instead of all features helps to make this method more computationally feasible. The iterative harmonization process enables us to account for correlation between more pairs of features by harmoniz-ing different groups of features in each iteration, which allows us to better adjust for overall covariance site effects in the data. The steps of the algorithm can be found in algorithm 1. 
+
+Algorithm 1 SIB ComBat  
+
+> 1:
+
+Harmonize the data Yij using ComBat to get the initial dataset ˜Yij = ( ˜Yij 1, ..., ˜YijV )T . 
+
+> 2:
+
+Divide features into k1 clusters, giving ( ˜Yijv , ω v ) in which ωv = {1, ..., k 1}. Let Ω k = { ˜Yijv | ωv = k}
+
+for k = 1 , ..., k 1. Apply CAM ComBat (see Section 2.1) to harmonize each Ω k simultaneously, and combine clusters of harmonized data to achieve updated harmonized dataset ˜Y SIB 1 
+
+> ij
+
+. 
+
+> 3:
+
+Reassign features to k2 new cluster assignments to get new ( ˜Y SIB 1 
+
+> ijv
+
+, ω v ) in which ωv = {1, ..., k 2}.Defining Ω k in an analogous way as before, apply CAM ComBat to harmonize these new Ω k with respect to ˜Y SIB 1 
+
+> ij
+
+to achieve an updated harmonized dataset ˜Y SIB 2 
+
+> ij
+
+. 
+
+> 4:
+
+Repeat step 3 for m iterations. Adjust the final iteration of harmonized data to include the effects of relevant biological covariates. 
+
+# 3 Simulations 
+
+## 3.1 Experiment Set Up 
+
+We first conducted simulation experiments to compare the performance of CAM ComBat and SIB ComBat to ComBat and CovBat. To do so, data were simulated from n individuals with 100 features each based on the following model, in which {eij 1, · · · , e ijv }T ∼ M V N (0, Σi): 4
+
+> .CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint
+
+Yijv = αv + Xij βv + γ∗ 
+
+> iv
+
++ eijv . (8) Individuals were generated to have a binary covariate and belong to one of two batches, with each batch having an equal number of individuals. Binary covariates were randomly generated for each individual from a Bernoulli(0.5) distribution. αv and βv were generated from a N (0 , 1) distribution, and γ∗ 
+
+> iv
+
+for each batch was generated from a N (4 , 1) distribution. Σ i for each batch was generated from an Inverse-Wishart distribution with scale matrix Ψ and degrees of freedom ν.Datasets were simulated under various scenarios to evaluate the performance of the harmonization methods in different settings. Comparisons were made between total sample sizes of 100 and 200, and with sets of batch-specific covariance matrices with varying magnitudes of difference, as calculated using the Frobenius distance. To achieve different levels of site effects, each pair of Σ i matrices were generated from an inverse Wishart distribution with the same scale matrix Ψ but different degrees of freedom ν,using the riwishart function from the M CM Cpack package in R [Martin et al., 2011]. Larger degrees of freedom were used to generate Σ i that were less variable, resulting in more similar covariance matrices. Batch-specific covariance matrices were specifically generated with ν values of 108, 106, and 104.5. The resulting Frobenius distances of the respective pairs of covariance matrices were 617.04, 1641.62, and 3532.028, which will represent small, medium, and large matrix differences. The simulated data were harmonized using ComBat, CovBat, CAM ComBat, and SIB ComBat. For each simulated dataset, SIB ComBat was fixed to apply two iterations of harmonization for all datasets. Each iteration harmonized two randomly determined clusters of features, with 50 features in each cluster. To compare the performance of each method, data from 50 individuals were randomly chosen as the training set, and data from another 50 subjects were randomly selected as the validation set. A random forest algorithm was trained to detect batch using the training data with the randomF orest function from the randomF orest package in R [Liaw and Wiener, 2002]. To evaluate the predictive performance of the random forest model on the validation data for batch detection, we calculated the area under the curve (AUC), using the auc function from the pROC package in R [Robin et al., 2011]. This was repeated over ten random permutations of training and validation sets, and the resulting AUC’s were averaged. The same analysis was conducted for classifying the binary covariate level. The overall setup was repeated for 100 simulated datasets, and results were visualized with side-by-side boxplots. 
+
+## 3.2 Simulation Results 
+
+With a smaller difference in the covariances between batches, the total sample size affected the relative performance of every harmonization method in mitigating batch effects. When the total sample size was 100, all methods had relatively comparable AUC’s for batch detection, with the lowest AUC achieved using CovBat and the highest AUC achieved using SIB ComBat on average. In contrast, when the sample size was 200, Spatial and SIB ComBat had notably lower AUC values for detecting batch on average and showed more notable improvements in mitigating batch effects compared to the other methods. This shows that Spatial and SIB ComBat better mitigate batch detection with a larger sample size. Given the comparable AUC’s between Spatial and SIB ComBat when the total sample size was 200, this indicates that SIB ComBat may be a good alternative to CAM ComBat if the sample size is sufficient. However, regardless of the sample size, all methods were relatively sufficient to mitigate batch effects, which makes sense in this setup since the covariances between batches are more similar, and thus, the batch effects are more directly tied to the means and variances (see Figure 2). If the difference in Σ i between batches was large, CAM ComBat was able to consistently remove batch effects, regardless of the total sample size. It decreased the mean AUC for detecting batch to a value below 0.7, which was not seen for ComBat and CovBat. SIB ComBat also demonstrated a comparable performance in mitigating the detection of batch, achieving AUC’s that were comparable to those of CAM ComBat. In general, these results support SIB ComBat as a potential alternative to CAM ComBat when the dimension of features is high. For both Spatial and SIB ComBat, there was a particularly large improvement when the total sample size was 200, further emphasizing the benefit of larger sample sizes found previously. These results suggest that when there is more heterogeneity of covariances between batches, Spatial and SIB ComBat will perform the best in removing batch effects, especially when the sample size is larger (see Figure 2). 5
+
+> .CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint
+
+0.5 0.6 0.7 0.8 0.9 1.0 
+
+Unharm ComBat CovBat CAM SIB 
+
+> Average AUC for Batch Detection
+
+# N=100: Small Difference 
+
+0.5 0.6 0.7 0.8 0.9 1.0 
+
+Unharm ComBat CovBat CAM SIB 
+
+# N=200: Small Difference 
+
+0.5 0.6 0.7 0.8 0.9 1.0 
+
+Unharm ComBat CovBat CAM SIB 
+
+Harmonization Method 
+
+> Average AUC for Batch Detection
+
+# N=100: Large Difference 
+
+0.5 0.6 0.7 0.8 0.9 1.0 
+
+Unharm ComBat CovBat CAM SIB 
+
+Harmonization Method 
+
+# N=200: Large Difference Figure 2: Side-by-side boxplots comparing AUC for detecting batch between ComBat, CovBat, CAM ComBat, and SIB ComBat. Comparisons done between N=100 (left) and N=200 (right) and between smaller (top row) versus larger (bottom row) differences between covariances. In addition, under both magnitudes of matrix differences, every harmonization method was able to preserve the ability of classifying the binary covariate with similar or higher AUC’s compared to the unharmonized data. This indicates that every harmonization method was able to maintain at least as strong a relationship with relevant biological covariates as found in the original data. We do notice a particularly large increase in the AUC’s for binary covariate classification when using SIB ComBat compared to the other methods, regardless of the total sample size. This suggests that SIB ComBat can magnify the strength of a relationship with respect to a biological covariate (see Figure 3). 6
+
+.CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint 0.80 0.85 0.90 0.95 
+
+Unharm ComBat CovBat CAM SIB 
+
+> Average AUC for Binary Covariate
+
+# N=100: Small Difference 
+
+0.80 0.85 0.90 0.95 
+
+Unharm ComBat CovBat CAM SIB 
+
+# N=200: Small Difference 
+
+0.6 0.7 0.8 0.9 
+
+Unharm ComBat CovBat CAM SIB 
+
+Harmonization Method 
+
+> Average AUC for Binary Covariate
+
+# N=100: Large Difference 
+
+0.6 0.7 0.8 0.9 
+
+Unharm ComBat CovBat CAM SIB 
+
+Harmonization Method 
+
+# N=200: Large Difference Figure 3: Side-by-side boxplots comparing AUC for detecting binary covariate level between ComBat, CovBat, CAM ComBat, and SIB ComBat. Comparisons done between N=100 (left) and N=200 (right) and between smaller (top row) versus larger (bottom row) differences between covariances. 
+
+# 4 Real Data Application 
+
+## 4.1 Data 
+
+We applied the proposed methods to voxel-wise RAVENS gray matter density maps from two studies of the iSTAGING consortium: the Harvard Aging Brain Study (HABS) and the Open Access Series of Imaging Studies (OASIS). Scans were obtained from HABS using the Siemens Magnetom Tim Trio 3T 7
+
+.CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint scanner at Massachussett’s General Hospital, while those from OASIS were obtained with the Siemens MPRAGE sequence at 1.5 or 3 T [Dagley et al., 2017, LaMontagne et al., 2019]. T1-weighted MRI scans were processed using an in-house automated pipeline. Each T1 scan was first reoriented, correcting for intensity inhomogeneities. Multi-atlas based skull-stripping using a large set of reference atlases was used for the extraction of brain from extra cranial tissues. Skull-stripped T1 images were segmented into a set of anatomical regions of interest (ROIs) (145 single ROIs – 119 Gray Matter (GM), 20 White Matter (WM) and 6 ventricular regions) using a multi-atlas label fusion method, MUSE. This is an atlas guided segmentation of anatomical regions that involves warping an atlas into the subject space to establish spatial correspondence between two images and then transferring atlas ROI labels to the subject space using two deformable registration algorithms, DRAMMS and ANT [Doshi et al., 2016, Ou et al., 2011, Avants et al., 2008]. We used label fusion wherein labels from multiple warped atlases were fused together to determine final labels. RAVENS tissue density maps were generated after segmenting the brain into GM, WM, and Cerebrospinal Fluid (CSF) followed by high dimensional warping to a common template [Davatzikos et al., 2001]. For our analysis, we focused on a subset of 500 individuals, half of which came from HABS, and half of which came from OASIS. Our final processed dataset consists of 641,838 features measuring RAVENS gray matter density maps derived from structural MRI, where the intensity value at each voxel represents the amount of gray matter present in that particular region of the brain [Wen et al., 2023]. On average, subjects were 71.6 years old, with 61.6% of individuals reporting being female and 85.2% of individuals reporting being Caucasian. Additionally, 1.6% of subjects were reported to have some form of cognitive impairment, including mild cognitive impairment, Alzheimer’s disease, and dementia. More specific overall and study-specific demographic information are provided in Table 1. As illustrated in Figure 6, the average map of the voxel-wise intensity measurements from the two studies demonstrate visual differences in the mean measurements of voxels depending if the subject was from the HABS or OASIS studies. We are specifically interested in harmonizing such data to eliminate study-specific effects. 
+
+Table 1: Table comparing age, sex, deep learning intracranial volume (DLICV), race (% Caucasian), and % with reported cognitive impairment (CI) such as dementia and Alzheimer’s disease (DX) between the subset of HABS and OASIS subjects. For age and DLICV, we conducted two-sample t-tests and reported the means and standard deviations. Fisher’s exact tests were performed for sex, DX, and race, with the respective percentages reported. Overall OASIS HABS P-Value Age 71.6 (8.7) 69.4 (10.2) 73.8 (6.2) 1.31e-08 DLICV (x 10 6) 1.39 (0.144) 1.39 (0.147) 1.40 (0.140) 0.38 Sex (% Female) 61.6 60.8 62.4 0.78 DX (% CI) 1.6 2.0 1.2 0.72 Race (% Caucasian) 85.2 89.2 81.2 0.02 N 500 250 250 
+
+## 4.2 Analysis 
+
+The data were harmonized using ComBat, CovBat, and SIB ComBat. In the harmonization process, we account for age, sex, intracranial volume at baseline, cognitive impairment, and race. When using SIB ComBat, two iterations of harmonization were conducted, where clusters for each iteration were determined using a MuSIC atlas. These atlases were derived from data using stochastic orthogonally projective non-negative matrix factorization to capture patterns in structural covariance across brain regions at various scales. Non-negative matrix factorization decomposes complex neuroimaging data into a sparse, part-based brain representation by projecting it onto a few components, and has been lauded for its improved clinical interpretability compared to other unsupervised methods [Wen et al., 2023]. For the first iteration of SIB ComBat harmonization, features were clustered based on the 512 MuSIC atlas, while features were clustered based on the 256 MuSIC atlas for the second iteration of harmonization. 8
+
+> .CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint
+
+To evaluate the performance of these harmonization methods and avoid overfitting due to the large dimensions of features, we first calculated the average feature measurement within a cluster across 256 clusters, determined using the 256 MuSIC atlas. Data from 100 individuals were randomly chosen as the training set, and data from another 100 subjects were randomly selected as the validation set. Random forest algorithms were trained to detect study site and classify sex using the training data. To evaluate the predictive performance of the random forest models in the validation data for study site detection and sex classification, we calculated the AUC [Robin et al., 2011]. This was repeated over 100 random permutations of training and validation sets, and results were visualized with side-by-side boxplots. In addition to this analysis, we conducted a voxel-based morphometry (VBM) analysis, in which we fit a linear model for gray matter density maps at each voxel, including age, sex, intracranial volume at baseline, cognitive impairment, and race as covariates. We extracted the t-statistics testing for the significance of age and mapped those statistics back to images of the brain. This analysis was conducted for the unharmonized data and the SIB-ComBat harmonized data to analyze the effects of harmonization on the associations with age. Furthermore, we calculated the respective t-statistics if we only used data from the HABS or OASIS studies and analyzed their concordance using a concordance at the top (CAT) plot across different harmonization methods [Irizarry et al., 2005]. We also conducted another analysis similar to before in which we fit a linear model for gray matter density maps at each voxel, and included study site along with age, sex, intracranial volume at baseline, cognitive impairment, and race as covariates. The t-statistic for study site was computed across all voxels and the distributions of these statistics were compared between different harmonized datasets. 0.6 0.8 1.0 
+
+Unharm ComBat CovBat SIB 
+
+Harmonization Method 
+
+> AUC
+
+# Study Site Detection 
+
+0.7 0.8 0.9 
+
+Unharm ComBat CovBat SIB 
+
+Harmonization Method 
+
+> AUC
+
+# Sex Classification 
+
+Figure 4: Side-by-side boxplots comparing AUC for detecting study site (HABS or OASIS) and classify-ing sex between ComBat, CovBat, and SIB ComBat using multi-site voxel-level intensity measurements. 
+
+## 4.3 Results 
+
+Across all methods, SIB ComBat was the most effective in removing study-specific effects, being the only method to decrease the mean AUC for detecting study site to a value below 0.7. SIB ComBat was also able to magnify the association with respect to sex, as seen by the higher AUC’s for classifying sex compared to the other harmonization methods (see Figure 4). Furthermore, looking at the maps of the VBM t-statistics before and after SIB ComBat was applied, they appear pretty similar to each other. 9
+
+> .CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint −15
+> −10
+> −5
+> 0
+> 5
+> 10
+> 15
+
+Unharmonized 
+
+SIB ComBat 
+
+T-statistic 
+
+> −15
+> −10
+> −5
+> 0
+> 5
+> 10
+> 15
+> −15
+> −10
+> −5
+> 0
+> 5
+> 10
+> 15
+
+Figure 5: Voxel-based morphometry maps illustrating magnitude of t-statistics when testing for sig-nificance of age, conditioned on sex, deep learning intracranial volume, race, and cognitive impairment, using unharmonized and SIB-ComBat harmonized data. 1:X 
+
+> 1:Z
+> 1:Y
+> 1:Z
+> 1:X
+> 1:Y
+> 0
+> 500
+> 1000
+> 1500
+> 2000
+> 2500
+
+OASIS 
+
+OASIS  OASIS OASIS 
+
+OASIS  OASIS 
+
+HABS  HABS HABS 
+
+HABS  HABS  HABS 
+
+Before SIB ComBat Harmonization 
+
+After SIB ComBat Harmonization 
+
+Voxel 
+
+Intensity 
+
+> 1:X
+> 1:Z
+> 1:Y
+> 1:Z
+> 1:X
+> 1:Y
+> 0
+> 500
+> 1000
+> 1500
+> 2000
+> 2500
+> 1:X
+> 1:Z
+> 1:Y
+> 1:Z
+> 1:X
+> 1:Y
+> 0
+> 500
+> 1000
+> 1500
+> 2000
+> 2500
+
+Figure 6: Maps of the brain representing average voxel-level intensity measurements if individuals were from OASIS or HABS before and after harmonizing with SIB ComBat. There are no visually significant differences in both the relative magnitudes of the test statistics and their spatial location within the brain, indicating that the association with age was generally preserved after harmonization (see Figure 5). Maps of the average voxel intensities between HABS and OASIS 10 
+
+.CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint 012    
+
+> 0.0 0.5 1.0 1.5 2.0
+> Value
+> Density  Harmonization
+> ComBat
+> CovBat
+> SIB ComBat
+
+Batch T−Statistic Magnitudes Figure 7: Densities of t-statistic magnitudes for study site for different harmonized data sets, after adjusting for age, sex, deep learning intracranial volume, race, and cognitive impairment. participants showed less noticeable differences after harmonizing with SIB ComBat compared to the original data (see Figure 6). This finding was further supported by the low t-statistics for study site, which were generally comparable across harmonization methods (Figure 7). There was also uniformly better concordance between the HABS and OASIS t-statistics testing for the association with age after SIB ComBat was applied, and had the best concordance across different harmonization methods (see Figure 8). This indicates that SIB ComBat harmonization was able to achieve better agreement between sites in voxels significantly associated with age compared to other unharmonized and harmonized datasets. Interestingly, the concordances for the datasets harmonized with ComBat and CovBat were uniformly lower compared to the unharmonized data. When looking into this result, we noticed that some features showed differing distributions of intensities between HABS and OASIS individuals. Specifically, we saw a larger proportion of individuals from OASIS having relatively lower intensity values. ComBat and CovBat further emphasized these distributional differences, resulting in t-statistics for age that differed more between sites and subsequently worse concordance. This behavior makes sense given ComBat and CovBat both remove site-specific variability by rescaling the residuals with respect to the site-specific variance. While CovBat also shifts and rescales the principal component (PC) scores corresponding to the PC decomposition of the full covariance matrix, the difference in the distribution of intensities between HABS and OASIS individuals is still notable. In CAM (and subsequently SIB) ComBat, the individual’s vector of residuals is multiplied by the matrix A−1 
+
+> i
+
+, which is estimated using the eigendecompositions of the full and site-specific covariance matrices. Doing so enables us to leverage more information across features, resulting in a stronger adjustment to the residuals that minimizes this distributional difference and gives stronger concordance. An example of this comparison can be found in Figure 10 in the Appendix. All in all, SIB ComBat had the best overall performance in significantly reducing the 11 
+
+> .CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint
+
+detection of site while generally maintaining the associations found with respect to age and sex in the original data. 0e+00 2e+05 4e+05 6e+05 0.0  0.2  0.4  0.6  0.8  1.0 
+
+# Concordance at the Top Curves 
+
+## List Size Concordance 
+
+## Unharmonized ComBat CovBat SIB ComBat 
+
+Figure 8: Concordance at the top (CAT) plot comparing the concordance of t-statistics for age be-tween HABS and OASIS studies with unharmonized, ComBat-harmonized, CovBat-harmonized, and SIB ComBat-harmonized datasets. 
+
+# 5 Discussion 
+
+Through various simulation experiments, compared to ComBat and CovBat, CAM ComBat was the most robust in removing batch effects under varying levels of heterogeneity between the batch-specific covariance matrices, with a notably better performance when the heterogeneity between batches was large. It demonstrated superior performance with a larger sample size, which implies that sample size affects how well CAM ComBat can harmonize the data. CAM ComBat also maintained associations with the simulated binary covariate to a similar degree as ComBat and CovBat. However, it may not be a practical method to implement when harmonizing a large number of features. We thus developed SIB ComBat, which expands upon CAM ComBat to accommodate these higher dimensional scenarios. In our simulation experiments, SIB ComBat proved to be equally effective in mitigating batch effects while magnifying the strength of the binary covariate association. When comparing the performance of SIB ComBat to ComBat and CovBat for harmonizing multi-site voxel intensity measurements from the iSTAGING consortium, SIB ComBat was superior in removing site-specific effects while maintaining the strength of the association found with respect to sex and age in the original data. Although we developed SIB ComBat to make it more accommodating in higher dimensional situa-12 
+
+> .CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint
+
+tions, there are still practical limitations in its implementation. Despite the improvements relative to CAM ComBat, SIB ComBat can still take a long time to run and use a lot of memory. This method benefits from parallelizing the cluster-specific harmonization. Although this is reasonable if using a cluster with multiple nodes, it may be less feasible on a local laptop. With our implementation of SIB ComBat using a total of eight cores, it took over 36 hours to run and used over 120 GB of memory. More work could be done to make this method run more efficiently. In addition, the performance of SIB ComBat may be sensitive to the choice of clusters per iteration as well as the number of iterations. For our real data analysis, we were able to leverage the MuSIC atlases to determine optimal cluster assignments based on relevant spatial information. However, additional work could be conducted to develop a streamlined way to determine the ideal cluster assignments and number of iterations if such information is not available. We also saw from the VBM analysis that a subset of features that were deemed statistically significant with respect to age in the original data were not statistically significant and vice-versa after performing harmonization with SIB-ComBat. Although the majority of associations were maintained, further work would aim to address this shortcoming (see Appendix for additional VBM analysis and simulation results). A potential future direction would expand upon this framework to account for non-linear relation-ships with covariates. One way to do so would be to incorporate a generalized additive model, similar to ComBat-GAM [Pomponio et al., 2020]. Another possible future direction would look at the effec-tiveness of this method with other types of neuroimaging data. Here, we mainly were interested in the harmonization of high-dimensional, voxel-level intensity data, but it may be interesting to see how generally applicable this framework is for harmonizing various types of datasets, including longitudinal neuroimaging data. Furthermore, CAM ComBat could be expanded to include an additional prior on the batch specific covariance matrices. Because of the extra computational demand of introducing this prior, particularly in high dimensions, this direction was not explored in this paper. However, finding a way to introduce this prior in a computationally efficient way could be beneficial. In conclusion, CAM ComBat has shown to be an effective harmonization method to account for notable spatial heterogeneity between batches. In situations where you are working with hundreds of thousands of features, the ex-tension of this method, SIB ComBat, is a promising alternative that both mitigates site-specific effects and maintains at least the same strength of biological associations found in the original data. 
+
+# Acknowledgements 
+
+The iSTAGING study is a multi-institutional effort funded by the National Institute on Aging (NIA). Data were provided by the Open Access Series of Imaging Studies (OASIS) and the Harvard Aging Brain Study (HABS). 
+
+Declaration of Funding : The work was supported by the following NIH grants: R01-AG054409, R01-MH123550, and U24-NS130411. 
+
+# References 
+
+Brian B Avants, Charles L Epstein, Murray Grossman, and James C Gee. Symmetric diffeomorphic image registration with cross-correlation: evaluating automated labeling of elderly and neurodegenerative brain. Medical image analysis , 12(1):26–41, 2008. Jonas Botz, Valerie Lohner, and Markus D Schirmer. Spatial patterns of white matter hyperintensities: a systematic review. Frontiers in aging neuroscience , 15:1165324, 2023. Andrew A Chen, Joanne C Beer, Nicholas J Tustison, Philip A Cook, Russell T Shinohara, Haochang Shou, and Alzheimer’s Disease Neuroimaging Initiative. Mitigating site effects in covariance for ma-chine learning in neuroimaging data. Human brain mapping , 43(4):1179–1195, 2022. Alexander Dagley, Molly LaPoint, Willem Huijbers, Trey Hedden, Donald G McLaren, Jasmeer P Chat-wal, Kathryn V Papp, Rebecca E Amariglio, Deborah Blacker, Dorene M Rentz, et al. Harvard aging brain study: dataset and accessibility. Neuroimage , 144:255–258, 2017. 13 
+
+> .CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint
+
+Christos Davatzikos, Ahmet Genc, Dongrong Xu, and Susan M Resnick. Voxel-based morphometry using the ravens maps: methods and validation using simulated longitudinal atrophy. NeuroImage , 14(6): 1361–1369, 2001. Jimit Doshi, Guray Erus, Yangming Ou, Susan M Resnick, Ruben C Gur, Raquel E Gur, Theodore D Satterthwaite, Susan Furth, Christos Davatzikos, Alzheimer’s Neuroimaging Initiative, et al. Muse: Multi-atlas region segmentation utilizing ensembles of registration algorithms and parameters, and locally optimal atlas selection. Neuroimage , 127:186–195, 2016. Jean-Philippe Fortin, Elizabeth M Sweeney, John Muschelli, Ciprian M Crainiceanu, Russell T Shino-hara, Alzheimer’s Disease Neuroimaging Initiative, et al. Removing inter-subject technical variability in magnetic resonance imaging studies. NeuroImage , 132:198–212, 2016. Jean-Philippe Fortin, Drew Parker, Birkan Tun¸ c, Takanori Watanabe, Mark A Elliott, Kosha Ruparel, David R Roalf, Theodore D Satterthwaite, Ruben C Gur, Raquel E Gur, et al. Harmonization of multi-site diffusion tensor imaging data. Neuroimage , 161:149–170, 2017. Jean-Philippe Fortin, Nicholas Cullen, Yvette I Sheline, Warren D Taylor, Irem Aselcioglu, Philip A Cook, Phil Adams, Crystal Cooper, Maurizio Fava, Patrick J McGrath, et al. Harmonization of cortical thickness measurements across scanners and sites. Neuroimage , 167:104–120, 2018. Mohamad Habes, Raymond Pomponio, Haochang Shou, Jimit Doshi, Elizabeth Mamourian, Guray Erus, Ilya Nasrallah, Lenore J Launer, Tanweer Rashid, Murat Bilgel, et al. The brain chart of aging: machine-learning analytics reveals links between brain aging, white matter disease, amyloid burden, and cognition in the istaging consortium of 10,216 harmonized mr scans. Alzheimer’s & Dementia , 17 (1):89–102, 2021. Rafael A Irizarry, Daniel Warren, Forrest Spencer, Irene F Kim, Shyam Biswal, Bryan C Frank, Edward Gabrielson, Joe GN Garcia, Joel Geoghegan, Gregory Germino, et al. Multiple-laboratory comparison of microarray platforms. Nature methods , 2(5):345–350, 2005. W Evan Johnson, Cheng Li, and Ariel Rabinovic. Adjusting batch effects in microarray expression data using empirical bayes methods. Biostatistics , 8(1):118–127, 2007. Simon S Keller, Marko Wilke, Udo C Wieshmann, Vanessa A Sluming, and Neil Roberts. Comparison of standard and optimized voxel-based morphometry for analysis of brain changes associated with temporal lobe epilepsy. Neuroimage , 23(3):860–868, 2004. Marek Kubicki, Martha Elizabeth Shenton, Dean F Salisbury, Yoshio Hirayasu, Kiyoto Kasai, Ron Kikinis, Ferenc A Jolesz, and Robert W McCarley. Voxel-based morphometric analysis of gray matter in first episode schizophrenia. Neuroimage , 17(4):1711–1719, 2002. Pamela J LaMontagne, Tammie LS Benzinger, John C Morris, Sarah Keefe, Russ Hornbeck, Chengjie Xiong, Elizabeth Grant, Jason Hassenstab, Krista Moulder, Andrei G Vlassenko, et al. Oasis-3: longitudinal neuroimaging, clinical, and cognitive dataset for normal aging and alzheimer disease. 
+
+medrxiv , pages 2019–12, 2019. Andy Liaw and Matthew Wiener. Classification and regression by randomforest. R News , 2(3):18–22, 2002. URL https://CRAN.R-project.org/doc/Rnews/ .Andrew D. Martin, Kevin M. Quinn, and Jong Hee Park. MCMCpack: Markov chain monte carlo in R. 
+
+Journal of Statistical Software , 42(9):22, 2011. doi: 10.18637/jss.v042.i09. AR McIntosh, FL Bookstein, James V Haxby, and e CL Grady. Spatial pattern analysis of functional brain images using partial least squares. Neuroimage , 3(3):143–157, 1996. Andrea Mechelli, Cathy J Price, Karl J Friston, and John Ashburner. Voxel-based morphometry of the human brain: methods and applications. Current Medical Imaging , 1(2):105–113, 2005. Susanne G Mueller, Michael W Weiner, Leon J Thal, Ronald C Petersen, Clifford Jack, William Jagust, John Q Trojanowski, Arthur W Toga, and Laurel Beckett. The alzheimer’s disease neuroimaging initiative. Neuroimaging Clinics , 15(4):869–877, 2005. 14 
+
+> .CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint
+
+Yangming Ou, Aristeidis Sotiras, Nikos Paragios, and Christos Davatzikos. Dramms: Deformable regis-tration via attribute matching and mutual-saliency weighting. Medical image analysis , 15(4):622–639, 2011. Raymond Pomponio, Guray Erus, Mohamad Habes, Jimit Doshi, Dhivya Srinivasan, Elizabeth Mamourian, Vishnu Bashyam, Ilya M Nasrallah, Theodore D Satterthwaite, Yong Fan, et al. Har-monization of large mri datasets for the analysis of brain imaging patterns throughout the lifespan. 
+
+NeuroImage , 208:116450, 2020. Shona Price, Dominic Paviour, Rachael Scahill, John Stevens, Martin Rossor, Andrew Lees, and Nick Fox. Voxel-based morphometry detects patterns of atrophy that help differentiate progressive supranuclear palsy and parkinson’s disease. Neuroimage , 23(2):663–669, 2004. Anil Rao, Joao M Monteiro, Janaina Mourao-Miranda, Alzheimer’s Disease Initiative, et al. Predictive modelling using neuroimaging data in the presence of confounds. NeuroImage , 150:23–49, 2017. Xavier Robin, Natacha Turck, Alexandre Hainard, Natalia Tiberti, Fr´ ed´ erique Lisacek, Jean-Charles Sanchez, and Markus M¨ uller. proc: an open-source package for r and s+ to analyze and compare roc curves. BMC Bioinformatics , 12:77, 2011. Cathie Sudlow, John Gallacher, Naomi Allen, Valerie Beral, Paul Burton, John Danesh, Paul Downey, Paul Elliott, Jane Green, Martin Landray, et al. Uk biobank: an open access resource for identifying the causes of a wide range of complex diseases of middle and old age. PLoS medicine , 12(3):e1001779, 2015. Hidemasa Takao, Naoto Hayashi, and Kuni Ohtomo. Effect of scanner in longitudinal studies of brain volume changes. Journal of Magnetic Resonance Imaging , 34(2):438–444, 2011. Junhao Wen, Ilya M Nasrallah, Ahmed Abdulkadir, Theodore D Satterthwaite, Zhijian Yang, Guray Erus, Timothy Robert-Fitzgerald, Ashish Singh, Aristeidis Sotiras, Aleix Boquet-Pujadas, et al. Ge-nomic loci influence patterns of structural covariance in the human brain. Proceedings of the National Academy of Sciences , 120(52):e2300842120, 2023. Ayumu Yamashita, Noriaki Yahata, Takashi Itahashi, Giuseppe Lisi, Takashi Yamada, Naho Ichikawa, Masahiro Takamura, Yujiro Yoshihara, Akira Kunimatsu, Naohiro Okada, et al. Harmonization of resting-state functional mri data across multiple imaging sites via the separation of site differences into sampling bias and measurement bias. PLoS biology , 17(4):e3000042, 2019. Rongqian Zhang, Linxi Chen, Lindsay D Oliver, Aristotle N Voineskos, and Jun Young Park. San: Mitigating spatial covariance heterogeneity in cortical thickness data collected from multiple scanners or sites. Human Brain Mapping , 45(7):e26692, 2024. 15 
+
+> .CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint
+
+# Appendix 
+
+## 5.1 Supplemental Calculations and Details 
+
+We first assume that Yijv can be modeled in the following way: 
+
+Yijv = αv + xTij βv + γ∗ 
+
+> iv
+
++ δ∗ 
+
+> iv
+
+eijv 
+
+in which eijv ∼ N (0 , σ 2 
+
+> v
+
+). We first calculate the standardized data Zijv as 
+
+Zijv = Yijv − (ˆ αv + xTij ˆβv )ˆσv
+
+.
+
+ˆαv , ˆβv , and ˆ γiv are calculated using their respective voxel-wise ordinary least squares estimates. ˆσ2 
+
+> v
+
+is calculated as ˆ σ2 
+
+> v
+
+= 1
+
+> N
+
+P 
+
+> ij
+
+(Yijv − (ˆ αv + xTij ˆβv + ˆ γiv )) 2, with N = P 
+
+> i
+
+ni.Set Zij = ( Zij 1, ..., Z ijV ). We will assume Zij ∼ M V N (γi, Σi) and introduce a multivariate normal prior such that γi ∼ M V N (γ0i, τ 20iI). We use the method of moments estimators to estimate γi, Σi, γ 0i, and 
+
+τ 20i such that ˆγi = 1
+
+ni
+
+X
+
+> j
+
+Zij , ˆΣi = 1
+
+ni
+
+X
+
+> j
+
+(Zij − ˆγi)( Zij − ˆγi)T , ˆγ0i = 1
+
+V 11 T ˆγi, ˆτ 20i = 1
+
+V − 1 (ˆ γi − ˆγ0i)T (ˆ γi − ˆγ0i)We can derive the conditional (posterior) distribution of γi : π(γi|Zi, Σi)
+
+π(γi|Zi, Σi) ∝ L(Zi|γi, Σi)π(γi)= exp 
+
+n
+
+− 12
+
+P 
+
+> j
+
+(Zij − γi)T Σ−1 
+
+> i
+
+(Zij − γi)
+
+o
+
+exp 
+
+n
+
+− 12τ 20i
+
+(γi − γ0i)T (γi − γ0i)
+
+o
+
+= exp 
+
+n
+
+− 12
+
+hP 
+
+> j
+
+(Zij − γi)T Σ−1 
+
+> i
+
+(Zij − γi) + 1 
+
+> τ20i
+
+(γi − γ0i)T (γi − γ0i)
+
+io 
+
+= exp 
+
+n −12
+
+hP 
+
+> j
+
+(ZTij − γTi )Σ −1 
+
+> i
+
+(Zij − γi) + 1 
+
+> τ20i
+
+(γi − γ0i)T (γi − γ0i)
+
+io 
+
+= exp 
+
+n −12
+
+hP 
+
+> j
+
+(ZTij Σ−1 
+
+> i
+
+− γTi Σ−1 
+
+> i
+
+)( Zij − γi) + 1 
+
+> τ20i
+
+(γi − γ0i)T (γi − γ0i)
+
+io 
+
+= exp 
+
+n
+
+− 12
+
+hP 
+
+> j
+
+(ZTij Σ−1 
+
+> i
+
+Zij − 2ZTij Σ−1 
+
+> i
+
+γi + γTi Σ−1 
+
+> i
+
+γi) + 1 
+
+> τ20i
+
+(γi − γ0i)T (γi − γ0i)
+
+io 
+
+= exp 
+
+n −12
+
+hP 
+
+> j
+
+(ZTij Σ−1 
+
+> i
+
+Zij − 2ZTij Σ−1 
+
+> i
+
+γi + γTi Σ−1 
+
+> i
+
+γi) + 1 
+
+> τ20i
+
+(γTi γi − 2γT
+
+> 0i
+
+γi + γT
+
+> 0i
+
+γ0i)
+
+io 
+
+∝ exp 
+
+n
+
+( −12
+
+hP 
+
+> j
+
+(−2ZTij Σ−1 
+
+> i
+
+γi + γTi Σ−1 
+
+> i
+
+γi) + 1 
+
+> τ20i
+
+(γTi γi − 2γT
+
+> 0i
+
+γi)
+
+io 
+
+= exp 
+
+n −12
+
+hP 
+
+> j
+
+(−2ZTij Σ−1 
+
+> i
+
+γi + niγTi Σ−1 
+
+> i
+
+γi) + 1 
+
+> τ20i
+
+(γTi γi − 2γT
+
+> 0i
+
+γi)
+
+io 
+
+= exp 
+
+n −12
+
+h
+
+niγTi Σ−1 
+
+> i
+
+γi + 1 
+
+> τ20i
+
+γTi γi − 2
+
+P 
+
+> j
+
+ZTij Σ−1 
+
+> i
+
+γi + 1 
+
+> τ20i
+
+γT
+
+> 0i
+
+γi
+
+io 
+
+= exp 
+
+n −12τ 20i
+
+h
+
+niτ 20iγTi Σ−1 
+
+> i
+
+γi + γTi γi − 2
+
+
+
+τ 20i
+
+P 
+
+> j
+
+ZTij Σ−1 
+
+> i
+
+γi + γT
+
+> 0i
+
+γi
+
+io 
+
+= exp 
+
+n −12τ 20i
+
+h
+
+γTi
+
+ niτ 20iΣ−1
+
+> i
+
+ γi + γTi γi − 2
+
+
+
+τ 20i
+
+P 
+
+> j
+
+ZTij Σ−1 
+
+> i
+
+γi + γT
+
+> 0i
+
+γi
+
+io 
+
+= exp 
+
+n −12τ 20i
+
+h
+
+γTi
+
+ niτ 20iΣ−1 
+
+> i
+
++ I γi − 2
+
+
+
+τ 20i
+
+P 
+
+> j
+
+ZTij Σ−1 
+
+> i
+
++ γT
+
+> 0i
+
+
+
+γi
+
+io 
+
+= exp 
+
+ 
+
+> −12τ20i
+
+
+
+γTi
+
+ niτ 20iΣ−1 
+
+> i
+
++ I γi − 2
+
+
+
+τ 20iΣ−1
+
+> i
+
+P 
+
+> j
+
+Zij + γ
+
+T
+
+γi
+
+ 
+
+16 
+
+.CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint By completing the square, we can conclude that 
+
+π(γi|Zi, Σi) ∝ exp 
+
+ −12 (γi − ˜γi) Ω −1 (γi − ˜γi)
+
+
+
+where ˜ γi =  niτ 20iΣ−1 
+
+> i
+
++ I−1
+
+γ0i + τ 20iΣ−1
+
+> i
+
+X
+
+> j
+
+Zij 
+
+
+
+with matrix Ω calculated accordingly. This shows the posterior distribution is a multivariate normal distribution. We can then estimate γi based on the posterior mean, resulting in the following estimate: 
+
+γ∗ 
+
+> i
+
+=
+
+
+
+ni ˆτ 20i ˆΣ−1 
+
+> i
+
++ I
+
+−1
+
+ˆγ0i + ˆ τ 20i ˆΣ−1
+
+> i
+
+X
+
+> j
+
+Zij 
+
+
+
+To model the batch-specific covariance effects, we first estimate the overall pooled covariance based on the sample covariance estimate: ˆΣ = 1 
+
+> N−1
+
+P 
+
+> i,j
+
+(Zij − ˆγ)( Zij − ˆγ)T , where N = P 
+
+> i
+
+ni and ˆ γ = 1
+
+> N
+
+P 
+
+> ij
+
+Zij .We then assume that Σ i = AiΣATi , where Ai is a matrix dictating the batch-specific rotation. Leveraging the eigendecomposition of real symmetric matrices, we can rewrite the covariance matrices as Σ i = LiLTi
+
+and Σ = P P T , in which 
+
+Li = U D 1/2, where U is a matrix of eigenvectors and D1/2 = diag (pλ1, ..., pλV ) of ˆΣi
+
+P = EK 1/2, where E is a matrix of eigenvectors and K1/2 = diag (pλ1, ..., pλV ) of ˆΣwith λ1, ..., λ V as the eigenvalues of the respective covariance matrix. We can then write that LiLTi =
+
+AiP P T ATi and subsequently Ai = LiP −1. We finally adjust the data as follows to get the harmonized vector of imaging features Mij 
+
+Mij = ˆ σA −1 
+
+> i
+
+(Zij − γ∗ 
+
+> i
+
+) + ˆ α + Xij ˆβ, 
+
+where ˆ α = (ˆ α1, ... ˆαV )T , ˆβ = ( ˆβ1, ... ˆβV )T , ˆ σ = diag (ˆ σ1, ...., ˆσv ), and Xij is the matrix of covariate information. 17 
+
+> .CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint
+
+## 5.2 Supplemental Simulation Results: Medium Difference 0.6 0.7 0.8 0.9 1.0 
+
+Unharm ComBat CovBat CAM SIB 
+
+> Average AUC for Batch Detection
+
+# N=100: Medium Difference 
+
+0.5 0.6 0.7 0.8 0.9 1.0 
+
+Unharm ComBat CovBat CAM SIB 
+
+# N=200: Medium Difference 
+
+0.6 0.7 0.8 0.9 
+
+Unharm ComBat CovBat CAM SIB 
+
+Harmonization Method 
+
+> Average AUC for Binary Covariate
+
+# N=100: Medium Difference 
+
+0.70 0.75 0.80 0.85 0.90 
+
+Unharm ComBat CovBat CAM SIB 
+
+Harmonization Method 
+
+# N=200: Medium Difference 
+
+Figure 9: Side-by-side boxplots comparing AUC for detecting batch (top row) and binary covariate level (bottom row) between ComBat, CovBat, CAM ComBat, and SIB ComBat. Comparisons done between N=100 (left) and N=200 (right) for medium difference between covariances. 18 
+
+.CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint 5.3 Supplemental Figure: The Effect of Different Harmonization Methods on Age Association 50 60 70 80 90 −500  0 500  1000  2000 
+
+## Unharmonized 
+
+Age Intensity 
+
+HABS OASIS 
+
+50 60 70 80 90 0 500  1000  1500  2000 
+
+## ComBat 
+
+Age Intensity 
+
+HABS OASIS 
+
+50 60 70 80 90 0 500  1000  1500  2000  2500  CovBat 
+
+Age Intensity 
+
+HABS OASIS 
+
+50 60 70 80 90 −500  0 500  1000  1500 
+
+## SIB ComBat 
+
+Age Intensity 
+
+HABS OASIS 
+
+Figure 10: Scatter plots visualizing the association between the intensity of a given voxel-level feature and age across different harmonized datasets. Associations are compared between individuals from HABS against those from OASIS. 19 
+
+> .CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint
+
+## 5.4 Supplemental VBM Analysis 010000 20000 
+
+SIB Unharmonized 
+
+Harmonization 
+
+> Count
+
+# Number of Significant Voxels 
+
+0.0 0.1 0.2 0.3 
+
+0 5 10 15 20 
+
+Value 
+
+> Density
+
+Harmonization 
+
+SIB ComBat 
+
+Unharmonized 
+
+# T−Statistic Magnitudes: All Voxels 
+
+0.0 0.2 0.4 0.6 
+
+0 5 10 15 20 
+
+Value 
+
+> Density
+
+Harmonization 
+
+SIB ComBat 
+
+Unharmonized 
+
+# T−Statistic Magnitudes: Significant Voxels 
+
+0.0 0.1 0.2 0.3 
+
+0 5 10 15 
+
+Value 
+
+> Density
+
+Harmonization 
+
+SIB ComBat 
+
+Unharmonized 
+
+# T−Statistic Magnitudes: NS Voxels 
+
+Figure 11: Plots showing the number of significant voxels for age (upper left) and the distributions of age t-statistic magnitudes across all voxels (upper right) / originally significant voxels (lower left) / originally not significant (NS) voxels (lower right) between SIB ComBat-harmonized and unharmonized data. 20 
+
+> .CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint
+
+## 5.5 Supplemental Figure: Comparison of Principal Component Loadings Be-tween Sites PC1 PC2 PC3 PC4 PC5 PC6 PC7 PC8 PC9 PC10          
+
+> PC1 PC2 PC3 PC4 PC5 PC6 PC7 PC8 PC9 PC10
+
+HABS 
+
+> OASIS
+> −0.2 0.0 0.2 0.4
+
+Dot Product 
+
+Pairwise Dot Products Between HABS and OASIS PC Loadings 
+
+Figure 12: Heatmap that illustrates the pairwise similarity of the first ten principal component eigen-vectors between two study sites, HABS and OASIS, by calculating their respective dot product. In this figure, most of the dot products between eigenvectors were close to 0, demonstrating strong dissimilarity. 21 
+
+.CC-BY 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 8, 2026. ;https://doi.org/10.64898/2026.06.03.729396 doi: bioRxiv preprint
