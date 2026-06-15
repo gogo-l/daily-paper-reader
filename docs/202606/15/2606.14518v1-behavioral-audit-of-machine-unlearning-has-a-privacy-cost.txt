@@ -1,0 +1,2641 @@
+Title: Behavioral Audit of Machine Unlearning Has a Privacy Cost
+
+URL Source: https://arxiv.org/pdf/2606.14518v1
+
+Published Time: Mon, 15 Jun 2026 01:11:55 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+## Behavioral Audit of Machine Unlearning Has a Privacy Cost 
+
+Liou Tang 1, James Joshi 1, Ashish Kundu 2
+
+> 1
+
+University of Pittsburgh, Pittsburgh, PA, USA 
+
+> 2
+
+Cisco Research, San Jose, CA, USA liou.tang@pitt.edu jjoshi@pitt.edu ashkundu@cisco.com 
+
+Abstract —The removal of learned data from Machine Learning models through Machine Unlearning (MU) has been widely studied; however, there has yet to be an agreed-upon scheme for auditing MU. Existing work has shown that a dishonest model owner can falsify evidence to avoid executing MU, while curious auditors (and adversaries) can infer the privacy-sensitive properties of the model and its training data even with limited access. Yet auditing of MU under mutual distrust between the model owner and the auditor remains unexplored. We provide an information-theoretic proof for this scenario: for convex ML models, a generic audit scheme that relies solely on querying the model for behavioral signals cannot identify insufficiently unlearned models without revealing membership information of the retained set. Therefore, auditing MU under the assumption of a dishonest model owner and an honest-but-curious auditor faces an inherent privacy-audit tradeoff. Our empirical results on convex models strongly supports this re-sult, while further experiments demonstrate that this privacy-audit tension persists in non-convex models. Our results call for a more careful consideration of the privacy-audit tension under a realistic auditor threat model, and serve as a foundation for more scrutiny of designs of privacy-preserving audit schemes for the MU pipeline. We also release our code implementation. 
+
+1. Introduction 
+
+Machine Unlearning (MU) [1]–[3] has emerged as a key approach to support removal of private data, copyrighted or intellectual property information used for training Machine Learning (ML) models, as well as to provide a basis for compliance with regulations that support right to be forgot-ten/erasure/delete or right to rectification , etc., highlighted by various regulations such as the General Data Protection Regulation (GDPR) [4] and the California Consumer Pri-vacy Act (CCPA) [5]. A variety of MU algorithms across different model architectures have been developed, marking it an active and rapidly developing field [3], [6], [7] However, the verification and audit of MU algorithms remains largely under-explored: in a Machine Learning as-a-service (MLaaS) scenario, a user/client can request the model owner to unlearn their data, but lack verifiable con-firmation of unlearning, while a dishonest/malicious model owner can actively forge evidence of unlearning to retain information of the user data [8], [9]. In a worst-case sce-nario, even the unaltered original model parameter offers “plausible deniability” for unlearning [8]. Alternatively, an (third-party) auditor that has aggregated knowledge beyond singular user data (e.g., governmental agencies for regula-tion enforcement) poses strong abilities for privacy inference comparable with active adversaries against ML/MU, there-fore, even an honest auditor can inadvertently or intentionall cause privacy leakage on data retained in the model out of the scope of unlearning [10]–[13]. In this paper, we take the first step towards addressing the clear privacy-audit tension between the untrusting/un-trustworthy model owner and auditor. We make the follow-ing claim: A generic audit scheme for MU that relies on 
+
+purely query access cannot simultaneously prevent (i) a dishonest model owner from under-execution of unlearning and (ii) an honest-but-curious audi-tor from inferring privacy-sensitive properties of retained data not revealed by the model owner. We present an information-theoretic proof of the above claim on convex ML models that concretely demonstrates the privacy-audit tradeoff, supported by empirical results. We further demonstrate that the same tension persists in non-convex models. Our results provide a concrete and needed foundation for examining privacy leakage from auditors in MU, and call for caution for future designs of MU audit schemes. 
+
+2. Related Works 
+
+2.1. Machine Unlearning 
+
+First proposed by Cao et al. in [1], Machine Unlearning (MU) aims to efficiently remove the influence of training data from an already-trained Machine Learning (ML) model [1], [2]. Under this general definition, Cooper et al. in their recent work [14] further specify MU algorithms in three categories, i.e.: (i) Exact Unlearning , which (partially) retrains the model to ensure removal of the unlearned set [2]. Bourtoule et al. in [2] propose the first exact unlearning algorithm by partitioning the training set into disjoint subsets and training ensembled sub-models on the subsets. Retraining in this approach is therefore limited to 
+
+> arXiv:2606.14518v1 [cs.LG] 12 Jun 2026
+
+sub-models whose training sets contain samples to be unlearned. Aldaghri et al. in [15] and Yan et al. in [16] further propose different training set partition strategies to avoid performance loss. In [17], Chowd-hury et al. propose a SISA-based exact unlearning scheme on Large Language Models (LLMs), in which different parameter-efficient fine-tuning (PEFT) layers are trained on partitioned subsets, ensuring parameter isolation and exact unlearning through deactivation and retraining on limited layers. (ii) Approximate Unlearning , which updates the model parameters to remove/minimize the estimated influence of the unlearned samples [18]–[22], and has been established as the de facto unlearning approach for its efficiency and scalability [6], [7]. Huang et al. in [22] position (gradient-based) approximate unlearning as a combination of three directions: minimize the influence of unlearned samples, maintain performance on retained samples, and constrain the magnitude of parameter update. Kurmanji et al. in [20] provide an alternative information-based definition of maximiz-ing divergence between the unlearned model and the original model on the unlearned set while minimizing divergence on the retained set. (iii) Output Filtering (for generative models), which avoids modifying the model parameters, but instead de-tects and prevents the generation of undesirable output, especially for Large Language Models (LLMs). The filter can be placed at user input- [23], system prompt-[24], and output-levels [25]. However, these filters are imprecise and can be circumvented by jailbreak attacks [26], [27], and fall outside the scope of our paper. In this paper, we target approximate unlearning (tier ii) and a family of (ε, δ )-certified unlearning algorithms in particular [28], [29]. To formalize, we define ML and (approximate) MU following Chourasia and Shah [30]: 
+
+Definition 1 (Machine Learning [30]) . Let Z = X × Y be the data population, in which X and Y are the input and output domains, respectively. A learning algorithm: 
+
+A : Zn → Θ, (1) 
+
+takes a dataset D ∈ Z n with n samples as the input and produces a model θ ∈ Θ, fθ : X → Y .
+
+Definition 2 (Honest Machine Unlearning [30]) . Given a model θ = A(D) (Def. 1), let Du ⊆ D be the unlearned set 
+
+with nu samples and Dr = D \ Du be the retained set . An unlearning algorithm: 
+
+¯A : Zn × Z nu × Θ → Θ, (2) 
+
+produces an updated/unlearned model θu, such that θu is 
+
+(ε, δ )-indistinguishable [31] from a model trained on the retained set Dr .
+
+2.2. Auditing Machine Unlearning 
+
+Beyond a general definition of MU (Def. 2), consider a dishonest (or partially honest ) unlearning algorithm that aims to preserve partial influence of the unlearned set in the updated model [8], [9], which we define as follows: 
+
+Definition 3 (η-Honest Unlearning) . For the unlearning algorithm ¯A (Def. 2), let ∆ := ¯A(θ, D, D u) − θ denote its update. For η ∈ [0 , 1] , we define an η-honest unlearning algorithm ¯Aη as: 
+
+¯Aη (θ, D, D u) := θ + η · ∆, (3) 
+
+which only performs a portion of the update. Under this definition, ¯A1 is the honest unlearning algorithm described by Def. 2; ¯A0 is a “lazy” unlearning algorithm, i.e., θ =
+
+θu = ¯A0(θ, D, D u) [8], [32]. 
+
+In this scenario, equally important as the model owner’s 
+
+execution of MU is the auditor’s verification of MU, i.e., whether one can distinguish between ¯Aη∈[0 ,1) (θ) and ¯A1(θ).Thudi et al. in [8] provide the first argument for audit and verification of MU. As demonstrated by Shumailov et al. in [32], two ML models trained on adjacent but different datasets can produce the same parameters by manipulating orders of data batches in gradient calculations, utilizing the data ordering attack with stochastic gradient descent (SGD). Therefore, the model owner can claim to have executed the MU algorithm even without modifying the model itself. From here, two lines of MU verification/audit schemes emerge: (i) Behavioral Audit of Unlearning , in which the auditor queries the unlearned model for behavioral signals. Sommer et al. in [33] and Guo et al. in [34] pro-pose injecting triggers in samples in the training set and submitting unlearning requests on these samples. Therefore, an honest MU algorithm will result in the absence of backdoor behavior on queries with triggered input. Gao et al. in [35] further extend backdoor-based MU verification to federated (un-)learning. More generally, we can include membership inference attacks (MIAs) against ML/MU on the unlearned set 
+
+Du in this family of auditing schemes, in which honest MU will ensure that any unlearned sample is no longer classified as a member of the training set of θu [10]– [13], [20], [36]–[38]. Hayes et al. in [13] propose U-LiRA, an adaptation of the likelihood-ratio attack (LiRA) proposed by Carlini et al. [11], and examine the likelihood of a model being trained and subsequently unlearned the target sample x or not trained on x
+
+at all. Tang et al. in [38] propose a label-only MIA against MU by examining artifacts of Under- and Over-Unlearning in θu, which requires neither access to the original model θ nor to the posterior probabilities. Gu et al. in [39] propose A-LiRA, a data augmentation-based LiRA attack for auditing MU algorithms, and empirically demonstrate that approximate unlearning algorithms compromise the privacy of both Du and Dr
+
+even when the model is trained with DP guarantee. (ii) Reproducible Proof-of-Unlearning , in which the model owner offers cryptographic guarantees of exe-cution of the unlearning algorithm. Weng et al. in [40] propose a trusted execution environment (TEE)-based protocol for verification of MU. Eisenhofer et al. in [41] propose a verifiably secure unlearning protocol utiliz-ing Succinct Non-Interactive Arguments of Knowledge (SNARKs) [42] and hash chains. Zhang et al. in [9] propose two approaches targeting both auditing/verification schemes (i) and (ii) by forg-ing a {w(t), d (t), g (t)}-triplet proof-of-unlearning/retraining, which tracks the update of model weight, unlearned data, and gradient function. A malicious model owner utilizes mini-batches within Dr as well as the original gradient steps when training the model to mimic the behavior of Du, thus providing a strong instance of attack against MU auditing. We present a complementary approach to that of Zhang et al. in [9]: instead of an empirical refute to unlearning verification/audits, we prove an information-theoretic bound which demonstrates that behavioral audits of MU (scheme i) come not only with security/soundness vulnerabilities, but also a privacy cost. Additionally, our contribution is also complementary to the empirical privacy attack/audits of unlearning in [13], [38], [39]: while these works construct concrete attacks that demonstrate privacy leakage in specific unlearning algorithms, we establish that the leakage they observe is not algorithm-specific but rather a structural property inherent in any behavioral audit. Following Carlini et al. [11], we can define an audit protocol Π towards MU as a game between the challenger (model owner) and the auditor that tests whether or not the unlearned model θu complies with honest unlearning: 
+
+Game 1: Compliance game Comp Π,η 
+
+Input: θ, Du, bit b ∈ { 0, 1} 
+
+> 1
+
+if b = 0 then  
+
+> 2
+
+θu ← ¯Aη (θ, D, D u) // partially honest unlearning  
+
+> 3
+
+else  
+
+> 4
+
+θu ← ¯A1(θ, D, D u) // honest unlearning  
+
+> 5
+
+end  
+
+> 6
+
+τ ← Audit Transcript Π(θu) 
+
+> 7
+
+ˆb ← Verify Π(τ )
+
+Output: 1[ˆb = b]
+
+In this paper, we further study an honest-but-curious auditor who aims to infer a privacy-sensitive property s(Dr ) ∈ S 
+
+of the retained set Dr ; we present this as the curiosity game 
+
+Cur Π (Game 2), in parallel with compliance game Comp Π,η 
+
+(Game 1): Based on Games 1 and 2, to account for the (partially) dishonest model owner and the honest-but-curious auditor, we propose a probability-based definition of accountability for Π:
+
+Definition 4 ((η, α, α ′, β )-Accountability) . For the sensitive property s, given α, α ′, β ∈ [0 , 1] , we say an audit protocol 
+
+Π is (η, α, α ′, β )-accountable on s if it satisfies the follow-ing: 
+
+Game 2: Curiosity game Cur Π
+
+Input: Du, Dr 
+
+> 1
+
+s ← s(Dr | θu) // s is the truth property of Dr 
+
+> 2
+
+τ ← Audit Transcript Π(θu) 
+
+> 3
+
+ˆs ← Infer (θu | K = {τ, D u}) // Auditor infers property of Dr as ˆs with knowledge of both Du and τ
+
+Output: ∥ˆs − s∥ 
+
+> •
+
+Soundness: under the compliance game (Game 1), for any θu produced by ¯Aη , η ∈ [0 , 1) , Π ensures: 
+
+Pr Verify Π(τ ) = 1 | θu = ¯Aη (·) ≤ α, (4) 
+
+where the false negative rate for a partially honest unlearning algorithm is bounded by α. 
+
+> •
+
+Completeness: under the compliance game (Game 1), for any θu produced by ¯A1, Π ensures: 
+
+Pr Verify Π(τ ) = 0 | θu = ¯A1(·) ≤ α′, (5) 
+
+where the false positive rate for an honest unlearning algorithm ¯A1 is bounded by α′• Privacy: under the curiosity game (Game 2), the cu-riosity advantage satisfies: 
+
+Adv Cur  
+
+> Π,s
+
+:= sup 
+
+> I
+
+|∥ ˆs − s∥τ ∈K − ∥ ˆs − s∥τ / ∈K | ≤ β, (6) 
+
+that is, following Π, any inference advantage on prop-erty s gained by I by observing the audit transcript τ
+
+is bounded by β1.
+
+3. Behavioral Auditing of Machine Unlearning 
+
+3.1. Threat Model 
+
+Goals. We study the model owner/auditor game under a dishonest challenger (model owner) Chal and an honest-but-curious auditor Aud , both parties have distinct goals: (i) Chal aims to minimize η and the model update such that the information of the unlearned set can be maximally preserved in θu; and (ii) Aud adheres strictly to the audit protocol Π, however, it also aims to infer private property 
+
+s(Dr ) through knowledge gained during the query. 
+
+Access. We assume that Aud has oracle access to θu and can submit arbitrary query xt to θu up to a query budget 
+
+T . Further, we follow the common assumption that Aud 
+
+can draw surrogate datasets from the same underlying data distribution Z. Chal releases an η-honest unlearned model 
+
+θu, and has information on its training set D, training algorithm A and unlearning algorithm ¯Aη . Both parties have knowledge of the unlearned set Du.
+
+> 1. We again stress an affinity between this definition and the LiRA attack of Carlini et al. [11] as well as the U-LiRA attack of Hayes et al. [13]. We expand on this intuition in Sec. 4.3 and 5.1, where we discuss the privacy-audit tradeoff in non-convex models.
+
+Assumptions. In this paper, we focus on an Aud that is curious in inferring membership of the retained set sample, i.e., s(z∗, D r ) = 1[z∗ ∈ Dr ]2. The curiosity advantage β
+
+under this construction is a probability metric, which can be interpreted as the advantage of Aud with access to τ over random guessing. We define a purely behavioral audit scheme as follows: 
+
+Assumption 5 (Behavioral Audit) . A behavioral audit pro-ceeds as follows: at each round, the auditor Aud submits a query xt to θu following audit protocol Π, and receives oracle response of the posterior probability fθu (xt); this proceeds for T rounds. The resulting audit transcript is a sequence: 
+
+τ = {(xt, f θu (xt) + N (0 , σ 2)) }Tt=1 , (7) 
+
+Importantly, we assume that the query response is observed with additive Gaussian noise with variance σ2 as a proxy for stochastic errors from both Chal and Aud . Chal reveals no parameter- and gradient-level information to Aud .
+
+Additionally, we make the explicit assumption that the models θ and θu are convex , which gives unique closed-form expressions for the model parameter θ and the Newton update ∆, while ensuring the Hessian Hθ is positive-definite. We defer the extension to non-convex models to Sec. 4.3 and 5.1. The convexity assumption allows us to simplify Def. 1 and 2 as follows: 
+
+Assumption 6 (Learning and Unlearning for Convex Mod-els) . For a convex model θ ∈ Θ = Rp, let ℓ be a per-sample loss that is twice continuously differentiable in θ.The trained model is the unique minimizer: 
+
+θ = argmin 
+
+> w∈Rp
+
+1
+
+n
+
+X
+
+> z∈D
+
+ℓ(w, z ) + λ
+
+2 ∥w∥2, λ > 0. (8) 
+
+The regularized empirical risk is μ-strongly convex with μ ≥
+
+λ. The Hessian: 
+
+Hθ := ∇2
+
+> θ
+
+1
+
+n
+
+X
+
+> z∈D
+
+ℓ(θ, z ) + λI, (9) 
+
+is positive definite. Consequently, the (ε, δ )-certified MU algorithm discussed by Guo et al. in [28] is: 
+
+¯A(θ, D, D u) := θ − 1
+
+n H−1
+
+> θ
+
+X
+
+> z∈Du
+
+∇ℓ(θ, z ), (10) 
+
+i.e., first-order influence approximation of A(D \ Du). We also use ¯A(θ) for brevity. 
+
+We also make the following remark: 
+
+Remark 3.1 (Input non-convexity) . We emphasize that con-vexity is required in the parameter θ only, while the model output fθ (x) may be an arbitrary smooth function of x
+
+that does not observe convexity in x. Therefore, the model’s        
+
+> 2. While we only study the case for membership inference in this paper, the curiosity game Cur Πallows s(Dr)to be an arbitrary privacy-sensitive property of Dr. We discuss an extension to more general privacy inferences in Sec. 5.3.
+
+architecture only needs to satisfy the condition that the loss is a convex function of the parameters. We demonstrate this in Sec. 4.1 and 4.2. 
+
+3.2. Bridging Compliance and Curiosity 
+
+Consider an ideal auditor Aud described by Sec. 3.1 that is able to train and unlearn arbitrary surrogate models on the training sets sampled from Z. When querying the target model on x, such an Aud captures two signals:  
+
+> •
+
+The compliance signal: the discrepancy between the posterior probability on x of a η-honest unlearned model with an 1-honest baseline: 
+
+Sig Comp  
+
+> η
+
+(x) := fθ(1) 
+
+> u
+
+(x) − fθ(η)
+
+> u
+
+(x); (11)  
+
+> •
+
+The curiosity signal: the discrepancy between the posterior probability on x of an unlearned model with 
+
+z∗ ∈ Dr or with z∗ /∈ Dr :
+
+Sig Cur (x; z∗) := fθmem  
+
+> u
+
+(x) − fθnon  
+
+> u
+
+(x), (12) To derive an information-theoretic result, we aim to show the coupling between amplifying both signals. We define the whitened gradient of a sample z = ( x, y ) and of the unlearned set Du as: 
+
+gz := ∇θ ℓ(θ, z ), GDu := X
+
+> z∈Du
+
+gz , (13) in which the whitened gradient of the prediction at x is: 
+
+hx := H−1/2 
+
+> θ
+
+∇θ fθ (x). (14) We denote ⟨u, v ⟩H−1
+
+> θ
+
+:= u⊤H− 
+
+> θ
+
+1v as the Mahalanobis inner product, with associated norm ∥u∥H−1
+
+> θ
+
+:= 
+
+q
+
+u⊤H−1 
+
+> θ
+
+u. We can describe the alignment of z∗ with Du as: 
+
+ρ(z∗) := ⟨gz∗ , G Du ⟩H−1
+
+> θ
+
+∥gz∗ ∥H−1
+
+> θ
+
+∥GDu ∥H−1
+
+> θ
+
+∈ [−1, 1] . (15) We introduce the following lemma that bridges 
+
+Sig Comp (x) with Sig Cur (x; z∗):
+
+Lemma 3.2 (Bridging Inequality) . Under Assumption 6, for any query x ∈ X and target sample z∗ ∈ Z with 
+
+∥gz∗ ∥H−1
+
+> θ
+
+> 0 and ∥GDu ∥H−1
+
+> θ
+
+> 0, for η ∈ [0 , 1) , we have: 
+
+Sig Cur (x; z∗) ≥κ · Sig Comp  
+
+> η
+
+(x)
+
+−
+
+p1 − ρ(z∗)2
+
+n ∥gz∗ ∥H−1
+
+> θ
+
+∥hx∥
+
+| {z }
+
+> Cauchy–Schwarz residual
+
+− |E 1| − |E 2|,
+
+(16) 
+
+in which: 
+
+κ = |ρ(z∗)|
+
+1 − η · ∥gz∗ ∥H−1
+
+> θ
+
+∥GDu ∥H−1
+
+> θ
+
+. (17) The Taylor error terms E1 and E2 satisfy the following: 
+
+|E 1(x; η)| ≤ E ub 1 := C1(1 − η)∥∆∥2 + C′
+
+> 1
+
+∥∆∥3,
+
+|E 2(x; z∗)| ≤ E ub 2 := C2
+
+∥gz∗ ∥2
+
+> H−1
+> θ
+
+n2 + ∥∆∥2
+
+!
+
+, (18) 
+
+in which: C1 and C′ 
+
+> 1
+
+depends on second- and third-order derivative of fθ and ∆; C2 depends additionally on second-and third-derivative bounds of ℓ in a neighborhood of θ.The residual term in Eq. 16 vanishes when hx lies in the subspace spanned by H−1/2 
+
+> θ
+
+GDu .Proof. We provide an intuitive sketch of the proof here, and leave a detailed proof in Appendix A. By construction, at the parameter level, Assumption 6 gives: 
+
+θu − θ(η) 
+
+> u
+
+= − 1 − ηn H−1 
+
+> θ
+
+GDu . (19) Simultaneously, Koh and Liang in [43] prove that: 
+
+θmem  
+
+> u
+
+− θnon  
+
+> u
+
+= − 1
+
+n H−1 
+
+> θ
+
+gz∗ + O(1 /n 2). (20) First-order Taylor of fθ would therefore convert both 
+
+Sig Comp  
+
+> η
+
+(x) and Sig Cur (x; z∗) into inner products of the auditor’s whitened query gradient hx against two whitened gradient sums, i.e.: 
+
+Sig Comp  
+
+> η
+
+(x) = − 1 − ηn ⟨hx, H −1/2 
+
+> θ
+
+GDu ⟩ + E1,
+
+Sig Cur (x; z∗) = − 1
+
+n ⟨hx, H −1/2 
+
+> θ
+
+gz∗ ⟩ + E2.
+
+(21) The query only selects hx; the remainder of both signals are determined by Du and z∗, respectively. From this ob-servation, we project the curiosity signal direction onto the compliance signal direction. Let: 
+
+ˆG := H−1/2 
+
+> θ
+
+GDu /∥GDu ∥H−1
+
+> θ
+
+, (22) The component parallel with ˆG is shared by both the sig-nals and contributes to κ, while the orthogonal component contributes to the residual component. The inequality estab-lished between the norms Sig Comp  
+
+> η
+
+(x) and Sig Cur (x; z∗)
+
+(Eq. 16) is given by Cauchy-Schwarz inequality. Specifically, we note the intuition on the leading scaling coefficient κ: a factor of 1/(1 − η) demonstrates that more honest unlearning does not offer stronger privacy protection on z∗ as |Sig Comp  
+
+> η
+
+| ∝ (1 − η), as shown in Eq. 21; |ρ(z∗)|
+
+indicates the extent of correlation between the compliance and curiosity signals (i.e., alignment), and is purely deter-mined by z∗ and Du. The ratio ∥gz∗ ∥/∥GDu ∥ compensates for the fact that the compliance signal aggregates gradients from multiple samples while the curiosity signal accounts for a single sample. 
+
+3.3. Compliance-Curiosity Tradeoff 
+
+Lemma 3.2 provides a bound that establishes a per-query 
+
+correlation between the compliance accounting through au-dit query and privacy leakage on the target sample z∗. We can therefore repeat this result over multiple aggregated 
+
+queries, and establish a relationship between the curiosity advantage β and compliance error α + α′:
+
+Theorem 3.3 (Privacy-Audit Tradeoff) . Under Assumption 6, for any η ∈ [0 , 1) , Gaussian noise level σ > 0, and target 
+
+z∗ with ρ(z∗)̸ = 0 , given a behavioral audit protocol Π (As-sumption 5) with budget T that is (η, α, α ′, β )-accountable in s(z∗) (Def. 4). Assume further that Π is generic , i.e., the queries {xt}Tt=1 are chosen independent of z∗. We have: 
+
+β ≥ min( κ, 1) · (1 − α − α′)
+
+− c1∥gz∗ ∥H−1
+
+> θ
+
+B√Tnσ − c2
+
+√Tσ
+
+ Eub 1 + Eub 2
+
+ ,
+
+(23) 
+
+where B2 := E[∥hxt ∥2] is the auditor’s average whitened-gradient query magnitude, c1 and c2 are absolute constants. The bound is non-vacuous for T = o(n2) as n → ∞ ; in particular, with T and σ fixed and n → ∞ , we have: 
+
+β ≥ min( κ, 1) · (1 − α − α′) − o(1) . (24) 
+
+Proof. We provide an intuitive sketch of the proof here, and leave a detailed proof in Appendix B. We define the 
+
+integrated compliance and curiosity signals as follows: 
+
+d2 
+
+> Comp
+
+:= E
+
+" TX
+
+> t=1
+
+Sig Comp 
+
+> η
+> 2
+
+#
+
+,d2 
+
+> Cur
+
+:= E
+
+" TX
+
+> t=1
+
+Sig Cur 2
+
+#
+
+.
+
+(25) Le Cam’s two-point method [44] provides a lower bound on dComp with the per-game errors α and α′, i.e., a larger (integrated) compliance signal ensures a higher success rate in the detection of dishonest unlearning. Combining with Lemma 3.2, we can further give a lower bound on dCur .By Assumption 3, the compliance measures P (0)  
+
+> τ
+
+and 
+
+P (1)  
+
+> τ
+
+and the curiosity measures P mem  
+
+> τ
+
+and P non  
+
+> τ
+
+are product Gaussians: the Bayes-optimal test statistic on x over T
+
+noisy responses weighted by its known signal Sig Comp  
+
+> η
+
+(xt)
+
+follows a Gaussian distribution, characterized as the total variance between two Gaussian distributions separated by a Mahalanobis distance of dComp /σ . Therefore: 
+
+α + α′ = 2 ×
+
+
+
+1 − Φ
+
+ dComp 
+
+2σ
+
+ 
+
+,β = 2Φ 
+
+ dCur 
+
+2σ
+
+
+
+− 1.
+
+(26) Eq. 23 can therefore be established through a Lemma 3.2 and the concavity of Φ.From Theorem 3.3, we can immediately arrive at the following corollary: Corollary 3.4. For any η ∈ [0 , 1) , query budget T ≥ 1, and 
+
+z∗ with ρ(z∗)̸ = 0 , the asymptotic limit α + α′ → 0 and 
+
+β → 0 is unattainable in the regime n → ∞ with fixed T
+
+and σ. Therefore, any behavioral audit protocol Π faces a fundamental (1 − α − α′) 7 → β tradeoff, in which:  
+
+> •
+
+β → 0 forces α + α′ → 1, when an auditor that cannot learn additional information on Dr cannot successfully audit MU; alternatively,  
+
+> •
+
+α + α′ → 0 forces β → min( κ, 1) , when a strong auditor can non-trivially infer private information of the retained set. 
+
+We also make the remark on the genericity assumption of 
+
+Π in Theorem 3.3, which we will revisit in Sec. 4.2: 
+
+Remark 3.5 (Genericity is forced by the curiosity game) .
+
+We note that the assumption of a generic Π that selects queries {xt}T dependent on Du and not on z∗ should be understood not as a restriction on the strategy of Aud but as a consequence of the structure of Cur Π (Game 2). An auditor can design queries with hx in the orthogonal complement of 
+
+{H−1/2 
+
+> θ
+
+g∗ 
+
+> z
+
+| z∗ ∈ Dr } to obtain compliance signal without curiosity leakage on Dr , however, this query design would require a priori knowledge of g∗ 
+
+> z
+
+for any z∗ ∈ Dr , which admits full knowledge of the retained set to the auditor .Therefore, there exists no equilibrium that permits a non-generic, privacy-preserving behavioral audit protocol Π.
+
+4. Evaluation 
+
+4.1. Experimental Setup 
+
+Dataset. We provide empirical confirmations of our theo-retical results (Sec. 3.2 through 3.3) on a two-dimensional dataset (x, y ) ∈ R2 × { 0, 1, 2, 3}. We generate class-balanced samples across 4 classes, each class following a 2-dimensional Gaussian distribution that roughly aligns with different quadrants, as shown in Fig. 1a. 
+
+Models. We train a multinomial logistic regression model as the classifier with damped Newton to convergence. We use 
+
+ℓ2 regularization with λ = 5 ×10 −3 (Eq. 8) to ensure strong convexity on the model. For feature lift, we use ϕ(x) = (x1, x 2, x 1x2, |x1|, |x2|, 1) , which is deliberately non-convex in x consistent with Remark 3.1 and the settings used by existing works [18], [28]. 
+
+Unlearning. Following Def. 2 and Assumption 6, We un-learn the target model(s) through the (ε, δ )-certified unlearn-ing algorithm proposed by Guo et al. [28], which ensures that a baseline honest unlearning ¯A1 is sufficient. We sample a class-balanced unlearned set Du uniformly from each class. Unless specified, the error bars are reported across 30 
+
+randomization seeds for each experiment. We refer to our code implementation for more details. 4 3 2 1 0 1 2 3 4 
+
+> 4
+> 3
+> 2
+> 1
+> 0
+> 1
+> 2
+> 3
+> 4
+> D
+> Du
+> z*
+
+(a) fθu (x) over x ∈ R2.4 2 0 2 4 
+
+> 4
+> 2
+> 0
+> 2
+> 4
+> 90%
+> 90%
+> 90%
+> 95%
+> 99%
+
+(b) Sig Comp  
+
+> η
+
+and Sig Cur 
+
+over x ∈ R2.0.0 0.2 0.4 0.6 0.8 1.0      
+
+> Sig Comp ×10 1
+> 0.0
+> 1.0
+> 2.0
+> 3.0
+> 4.0
+> Sig Cur
+> ×10 2
+> All queries
+> Top-10% compliance queries
+> Theoretical ()=0.39
+
+(c) Sig Cur vs. Sig Comp  
+
+> η
+
+.0.0 0.2 0.4 0.6 0.8 1.0          
+
+> Theoretical (z*)
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Empirical  (z * )
+> seed 0
+> seed 10
+> seed 20
+> fit: emp 1.52 th (R2= 0.813)
+
+(d) Empirical vs. theoretical κ.Figure 1. We fit logistic regression models over (x, y ) ∈ R2 × { 0, 1, 2, 3}
+
+and demonstrate the bridging inequality between the compliance signal and the curiosity signal. 
+
+4.2. Results on Convex Models 
+
+Bridging Inequality. We start by calculating Sig Comp  
+
+> η
+
+(x)
+
+and Sig Cur (x; z∗) on a dense grid of x from (−2, −2) to 
+
+(2 , 2) on a fixed z∗ and Du, as shown in Fig. 1b. The results confirm the bridging lemma (Lemma 3.2) and establish a correlation between compliance of unlearning Du and curiosity on z∗ ∈ Dr .In addition, we select multiple z∗ with differ-ent alignment values: argmax ρ(z∗), argmin ρ(z∗), and 
+
+argmin |ρ(z∗)|. We include the full results in Fig. 5 and 6 (see Appendix C), in which highly aligned ( |ρ| → 1) targets show strong correlation between curiosity and compliance signals regardless of the sign of ρ; for non-aligned ( |ρ| → 0)targets, the signals decouple. 
+
+Scaling Coefficient κ. We further examine the scaling coefficient κ. In Fig. 1c and 6. Importantly, we highlight only queries within the top-10% Sig Comp  
+
+> η
+
+(x) values, while a majority of the queries have low magnitude for both signals, consistent with Fig. 1b and 5. The scaling coefficient κ fitted from these observations agrees well with the theoretical 
+
+κ which provides a lower bound on Sig Cur (Eq. 16), and holds across 30 × 30 runs of z∗ and Du (see Fig. 1d). The empirical values of κ that lie below the theoretical baseline are explained by the Cauchy–Schwarz residue in Eq. 16. 0.0 0.2 0.4 0.6 0.8 1.0        
+
+> 10 1
+> 10 0
+> 10 1
+> ( )
+> Empirical
+> Theoretical =|(z*)| 1
+> gz*
+> GDu
+
+(a) κ(η) over η ∈ [0 , 1) 
+
+at a fixed z∗ and Du.0.0 0.1 0.2 0.3 0.4 0.5 0.6    
+
+> (z*)
+> 10 1
+> 10 0
+> 10 1
+> log Pr( z * )
+> median = 0.001
+> @ 90% = 0.048
+> @ 99% = 0.354
+
+(b) κ(z∗) over z∗ ∈ Dr
+
+at a fixed Du, η = 0 .0.00 0.05 0.10 0.15 0.20 0.25 0.30    
+
+> |Du|/| D|
+> 10 2
+> 10 1
+> 10 0
+> (Du)
+> mean ± 1 std over D
+> @ 90%
+> @ 99%
+> 1/| Du|
+
+(c) κ(Du) over Du ⊆ D
+
+at a fixed z∗, η = 0 .Figure 2. The trend of κ at different settings of η, z∗ and Du.0.0 0.2 0.4 0.6 0.8 1.0     
+
+> Compliance error +′
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Curiosity advantage
+> T=10
+> T=50
+> T=100
+> T=500
+> Theoretical floor:
+> (1 ′), = 0.33
+> Impossibility region
+
+(a) η = 0 .10.0 0.2 0.4 0.6 0.8 1.0      
+
+> Compliance error +′
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Curiosity advantage
+> T=10
+> T=50
+> T=100
+> T=500
+> Theoretical floor:
+> (1 ′), = 0.59
+> Impossibility region
+
+(b) η = 0 .50.0 0.2 0.4 0.6 0.8 1.0      
+
+> Compliance error +′
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Curiosity advantage
+> T=10
+> T=50
+> T=100
+> T=500
+> Theoretical floor:
+> (1 ′), = 2.96
+> Impossibility region
+
+(c) η = 0 .9
+
+Figure 3. Pareto curve between α + α′ vs β across observational noise level 0.005 ≤ σ ≤ 0.5 and query budget T = 10 , 50 , 100 , 500 on a fixed z∗.We also show the theoretical floor for β = min( κ, 1)(1 − α − α′) (Eq. 23). 
+
+Further, recall our observation on genericity requirement of the audit policy Π (Remark 3.5): we calculate both the signals on a dense grid of x in Fig. 1 independent of z∗,while designing specific compliance queries orthogonal to the curiosity signal to suppress κ would still require auditor knowledge of z∗ and Du.To gain a more intuitive understanding of the relation-ship between the compliance and curiosity signals, recall the definition of κ:
+
+κ = |ρ(z∗)|
+
+1 − η · ∥gz∗ ∥H−1
+
+> θ
+
+∥GDu ∥H−1
+
+> θ
+
+, (27) which is contributed by η, z∗ and Du. We plot κ (Eq. 17) under different settings of η, z∗ and Du in Fig. 2. Our results confirm our theoretical intuition in the proof sketch for Theorem 3.3. Fig. 2a traces empirical and theoretical values of κ(η), in which we see consistent advantage of empirical κ over the theoretical κ that agrees with Fig. 1d. 
+
+κ(η) scales as 1/(1 − η) for effective compliance queries, as discussed above. Fig. 2b plots the distribution of κ(z∗). We observe that, while a majority of z∗ is non-aligned with Du with 
+
+|ρ(z∗)| ≈ 0, a few z∗ (e.g., at the 90% or 99% percentile) have a high κ(z∗), allowing compliance queries to more efficiently contribute to curiosity advantages. Therefore, the honest-but-curious Aud presents an elevated privacy threat to specific target samples. This is consistent with findings for MIAs against both ML [46] and MU [13] algorithms. In particular, Hayes et al. in [13] demonstrate that privacy inference under MU is instance-sensitive, where a few sam-ples have significantly higher privacy leakage compared to the population Dr .More interestingly, we plot the empirical κ(Du) over different sizes of |Du| in Fig. 2c. Our result demonstrates that κ scales proportionally to 1/p|Du|, suggesting that the privacy leakage of individual target samples is well protected by a more generalized unlearning set. Never-theless, we observe that κ degrades slightly slower for top 90% or 99% percentile targets; therefore, a subset of the population remains susceptible to privacy leakage even with a large unlearning set. Further, for per-request MU of small subsets central to regulation compliance [4], [5] where |Du|/|D| ≤ 0.1, our result translates to a non-negligible curiosity advantage of β ≥ 0.2(1 − α − α′) for 
+
+Aud at a worst-case z∗; for |Du|/|D| → 1, while the curiosity advantage becomes negligible, performance loss and computational cost of MU itself becomes unfavorable to retraining-from-scratch. Purchase-100 [10] 0.0 0.2 0.4 0.6 0.8 1.0   
+
+> Compliance error +′
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Curiosity advantage
+> T=10
+> T=20
+> T=30
+
+(a) GA , η = 0 .5.0.0 0.2 0.4 0.6 0.8 1.0    
+
+> Compliance error +′
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Curiosity advantage
+> T=10
+> T=20
+> T=30
+
+(b) SalUn , η = 0 .5.0.0 0.2 0.4 0.6 0.8 1.0   
+
+> Compliance error +′
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Curiosity advantage
+> T=10
+> T=20
+> T=30
+
+(c) GA , η = 0 .9.0.0 0.2 0.4 0.6 0.8 1.0    
+
+> Compliance error +′
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Curiosity advantage
+> T=10
+> T=20
+> T=30
+
+(d) SalUn , η = 0 .9.
+
+CIFAR-10 [45] 0.0 0.2 0.4 0.6 0.8 1.0   
+
+> Compliance error +′
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Curiosity advantage
+> T=10
+> T=20
+> T=30
+
+(e) GA , η = 0 .5.0.0 0.2 0.4 0.6 0.8 1.0    
+
+> Compliance error +′
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Curiosity advantage
+> T=10
+> T=20
+> T=30
+
+(f) GA , η = 0 .5,Class-wise Unlearning 0.0 0.2 0.4 0.6 0.8 1.0   
+
+> Compliance error +′
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Curiosity advantage
+> T=10
+> T=20
+> T=30
+
+(g) GA , η = 0 .9.0.0 0.2 0.4 0.6 0.8 1.0    
+
+> Compliance error +′
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Curiosity advantage
+> T=10
+> T=20
+> T=30
+
+(h) GA , η = 0 .9,Class-wise Unlearning 
+
+Figure 4. Pareto points of (α + α′, β ) across query budget 1 ≤ T ≤ 30 on a fixed z∗ for non-convex models. We also plot the centroid trajectory μ(T )
+
+and covariance ellipses of one σT for each T . We perform our audit against different datasets (Fig. 4a-4d vs. Fig. 4e-4h), honesty level η (Fig. 4a, 4b, 4e, 4f vs. Fig. 4c, 4d, 4g, 4h), MU algorithms (Fig. 4a, 4c vs. Fig. 4b, 4d), and random-sampling or class-wise unlearning (Fig. 4e, 4g vs. Fig. 4f, 4h). 
+
+Privacy-Audit Tradeoff. Beyond a confirmation of the bridging inequality, we simulate the audit process for the unlearned set Du and a target sample z∗ which Aud 
+
+aims to infer the membership of. We directly calculate the compliance error α + α′ and the curiosity advantage β on different observational noise levels σ (Assumption 5) by performing Monte Carlo trials for each query xt over T
+
+queries. The results are shown in Fig. 3. Our results confirm the theoretical lower bound for the (worst-case) sup β on z∗ established by Theorem 3.3, in which the honest-but-curious auditor Aud has a curiosity advantage on the membership z∗ ∈ Dr that scales with the compliance error characterized by κ (for η = 0 .9, κ = 2 .96 ,which takes min( κ, 1) = 1 ). For the same pair of (T, σ ),
+
+α + α′ increases with a higher η as the discrepancy between 
+
+¯Aη becomes harder to detect, while β remains the same, pushing the Pareto curve to the right. Noteworthily, empiri-cal observations of worst-case β are consistently higher than the theoretical lower bound, demonstrating that the bound given by Eq. 23 should therefore be read as existence of privacy leakage, rather than a tight lower bound. More interestingly, we note that the Pareto curve for different combinations of (T, σ ) collapses. Recall that, α+α′
+
+and β are uniquely determined by dComp /σ and dCur σ (Eq. 26). From the proof to Theorem 3.3, we know: 
+
+dCur 
+
+(71) 
+
+≥ κd Comp − 2R, R/d Comp → 0. (28) Therefore, the curve determined by the ratio dCur /d Comp 
+
+is invariant on T , causing the curves under different T to collapse under the same η (Fig. 3a through 3c). A higher query budget T for Aud is therefore equivalent to reducing the observational noise σ.
+
+4.3. Results on Non-Convex Models 
+
+Experimental Setup. In addition to confirming our theo-retical results on (small) convex models, we aim to extend our analysis and provide empirical evidence that the same privacy-audit tradeoff exists in non-convex (e.g., convolu-tional neural networks). We examine the audit protocol Π
+
+on two settings, and train (i) 128 surrogate models of fully-connected neural networks with 4 hidden layers of 1024 dimension for the Purchase-100 dataset 3 (197,324 samples, 
+
+3. A subset of Kaggle’s “acquire valued shoppers” challenge dataset, see: https://www.kaggle.com/c/acquire-valued-shoppers-challenge/data and https://github.com/privacytrustlab/datasets by Shokri et al. [10]. 600-dimension binary input, 100 classes) used by Shokri et al. in [10], and (ii) 32 ResNet-18 models [47] on subsets of the CIFAR-10 dataset [45] (50,000 training set samples, 
+
+3 × 32 × 32 image, 10 classes), respectively. The training set of each surrogate model ˜θi contains two parts: (i) a shared set Du that will be unlearned 4 and (ii) random splits of half of the remaining training set (excluding 
+
+Du). We set |Du| = 1000 for Purchase-100 and |Du| = 500 
+
+for CIFAR-10. We examine both random-sampled unlearn-ing and class-wise unlearning for CIFAR-10, for the latter, 
+
+Du is exclusively sampled from class 0. The models are trained to 75% accuracy on a separate validation set. We unlearn Du from each model with two representative approximate MU algorithm: Gradient Ascent ( GA ) [18] as a baseline and Saliency Unlearning ( SalUn ) [21] as state-of-the-art. To simulate η-honest unlearning on the methods, we use η to scale the unlearning process: GA and SalUn , we unlearn only ⌊η · K⌋ epochs against K epochs in 1-honest unlearning. For a more detailed account of the unlearning algorithms, we refer the readers to their respective papers [18], [20]–[22]. We adopt the hyperparameter settings of the algorithms in Huang et al. [22]. We refer to our code implementation for more details. 
+
+Adopting LiRA and U-LiRA for Auditing. For non-convex models, we note that the assumption of noisy response (Assumption 5) is no longer applicable. Therefore, while for convex models we can easily select best possible query 
+
+xt, t = 1 , . . . , T by calculating Sig Comp  
+
+> η
+
+(x) a priori, non-convex models do not have a closed-form expression for the compliance signal. Therefore, to perform the audit, we randomly select T samples to query the surrogate models, and collect the posterior probabilities from each model. Following the LiRA tests of membership inference of Carlini et al. [11] and Hayes et al. [13], we perform two set of tests for compliance error ( α, α′) and curiosity advantage ( β). For the former, we aim to distinguish between two worlds: the model is η-honest unlearned, or the model is 1-honest unlearned. We fit two Gaussian distributions: 
+
+n
+
+f˜θ(η)
+
+> u
+
+(xt)y
+
+oTt=1 
+
+∼ N 
+
+
+
+μ(η), σ (η)
+
+
+
+,
+
+n
+
+f˜θ(1) 
+
+> u
+
+(xt)y
+
+oTt=1 
+
+∼ N 
+
+
+
+μ(1) , σ (1) 
+
+
+
+.
+
+(29) Note that we do not distinguish between different surrogate models ˜θi, as they are trained with identical hyperparame-ters (e.g., optimizers, learning rates) and only on different datasets, we can assume equal covariance for individual Gaussian distributions for each ˜θi and avoid fitting a multi-variate Gaussian. We can therefore derive an upper bound 
+
+sup θu (α+α′) across all possible target models by the sepa-rability of the distributions under the worlds of η-unlearning and 1-unlearning with T observations. We calculate sup β
+
+similarly for two worlds with z∗ ∈ Dr and z∗ /∈ Dr .      
+
+> 4. We make the explicit assumption in Sec. 3.1 that Aud has knowledge of Duand therefore can universally unlearn Dufor all surrogate models. Note the subtle distinction between this auditor and the adversary in the U-MIA [20] and U-LiRA [13] attacks without this knowledge, who require more surrogate models with different selections of the unlearned set.
+
+Privacy-Audit Tradeoff. We repeat the selection of T
+
+query-points for 30 times with each T . The results are shown in Fig. 4. While non-convex models prevent us from deriving a clean Pareto front for the (α + α′, β )-tradeoff, we can nev-ertheless observe the trends present across different datasets, unlearning algorithms and honesty levels: the centroid tra-jectory (i.e., “reasonable privacy-audit tradeoff for a fixed-budget Aud ”) is similar to the Pareto front in Fig. 3. Under a fixed query budget T , the achievable (α + α′, β )
+
+lie within a range, confirming that there exist information-theoretic bounds that constrain the ability of Aud . By increasing the query budget, Aud rapidly reduces the com-pliance error and simultaneously gains curiosity advantage, where η = 0 .1 can be trivially distinguished by only 10 randomly selected queries, demonstrating the same privacy-audit tradeoff for non-convex models. The variance induced by different queries also decreases with larger T , as the marginal information gained by individual observations di-minishes. The tradeoff is additionally influenced by a variety of factors: SalUn incurs more privacy leakage at the same compliance error (Fig. 4a, 4c vs. Fig. 4b, 4d); further, class-wise unlearning is more susceptible to Aud , as Du is more homogeneous, ρ(z∗) naturally increases for z∗ of the same class (class 0). 
+
+5. Discussion and Future Work 
+
+5.1. From Convex to Non-Convex Models 
+
+From the results of Sec. 4.3, we discuss further where the privacy-audit tradeoff for convex and non-convex models depart. Our proof of the impossibility result exists on two levels: the bridging lemma establishes an instance-level cor-relation between Sig Cur and Sig Comp  
+
+> η
+
+through the whitened gradients gz∗ and GDu , parameterized by κ (Eq. 17); the result is then translated to the population-level sup β and 
+
+sup( α+α′). Note that our selection of strong convex models (Assumption 6) guarantees θ as the global unique minimizer and the (ε, δ )-certified MU algorithm of Guo et al. [28] provides a one-step update, which serves as the geometric bridge for Lemma 3.2. Theorem 3.3 therefore proves the privacy-audit coupling when unlearning and membership inference are locally linearized in a stable Hessian geometry. For non-convex models, the geometric properties do not exist, but the hypothesis testing structure inherent in Game 1 and 2 persists. We observe in Fig. 4 that there exists a lower bound for their total variance for the (Gaussian) distributions from four worlds of a 2 × 2 matrix: 
+
+P [z∗ | mem , ¯A1], P [z∗ | mem , ¯Aη ],P [z∗ | non , ¯A1], P [z∗ | non , ¯Aη ], (30) The same privacy-audit tradeoff therefore appears empiri-cally in the transcript distributions, but it does not guarantee that compliance and curiosity directions are coupled through a single positive-definite metric for individual instances. One example when this dynamic survives is when the target sample z∗ and the unlearned set Du remain aligned even in high-dimensional input spaces, e.g., for the class-wise 
+
+unlearning scenario described in Sec. 4.3, samples from the same class that are members of Dr demonstrate more privacy leakage [13]; alternatively, we can design queries 
+
+xt that optimally encode information of Du to amplify the privacy leakage of highly-aligned samples. Derivation of a hypothesis testing-based proof for the curiosity advantage 
+
+β for non-convex models that do not rely on geometrical qualities of the model is non-trivial and requires significant extension, which is beyond the scope of this paper. We examine a possible route of future work in Sec. 5.3. 
+
+5.2. From Under-Unlearning to Over-Unlearning 
+
+As discussed by Tang et al. in [38], approximate un-learning induces two types of artifacts on the unlearned model: (i) Under-Unlearning , in which insufficient un-learning preserves information of the unlearned set in the decision boundaries of θu; and (ii) Over-Unlearning , in which overzealous unlearning imposes performance loss on the retained set by removing too much information. For the 
+
+η-honest unlearning update θ(η) 
+
+> u
+
+= θ + η · ∆ in Def. 3, the honesty η ∈ [0 , 1) represents Under-Unlearning, which aligns with the intent of dishonest or partially honest model owner that actively aims to prevent unlearning, and is more commonly observed in existing literature [12], [38]. We now examine extending η-honest unlearning to the Over-Unlearning regime, in which η > 1. Note-worthily, the discrepancy-based construction of Sig Comp  
+
+> η
+
+(x)
+
+and Sig Cur (x; z∗) remain unchanged, while for the proof to Lemma 3.2, when taking absolute values, Eq. 54 should be amended as: 
+
+|Sig Cur (x; z∗)| ≥ |ρ(z∗)||1 − η| · ∥gz∗ ∥H−1
+
+> θ
+
+∥GDu ∥H−1
+
+> θ
+
+|Sig Comp  
+
+> η
+
+(x)|− ∥g⊥ 
+
+> z∗
+
+∥H−1
+
+> θ
+
+n ⟨hx, v ⊥⟩,
+
+(31) that is, the magnitude of Sig Comp  
+
+> η
+
+and Sig Cur scales pro-portional to 1/|1 − η|. The privacy-audit tradeoff would therefore be: 
+
+β ≥ min( |κ|, 1) · (1 − α − α′)
+
+− residual term 
+
+| {z } − Taylor error 
+
+| {z } . (32) Therefore, for η ≈ 1+, detecting Over-Unlearning is mirror-identical to detecting Under-Unlearning for η ∈ [0 , 1) . A statistic test of (η, α, α ′, β )-accountability (Def. 4) does not concern the sign of Sig Comp  
+
+> η
+
+(x) but rather its magnitude .The tradeoff of Theorem 3.3 re-appears. However, for η ≫ 1, the scaling factor |κ| approaches 0 and Lemma 3.2 degrades to 
+
+|Sig Cur | ≥ 0. The model utility degrades on the retained set and approaches randomized prediction, while Sig Comp  
+
+> η
+
+and 
+
+Sig Cur decouples. This indicates that catastrophic forgetting prevents both successful auditing and membership inference [48], [49]. 
+
+5.3. From Membership Inference to General Pri-vacy Inferences 
+
+In Theorem 3.3, we prove the privacy-audit tradeoff for audit transcript-based membership inference ( MI ) on the re-tained set Dr , an instance-level privacy game. Note that we intentionally left the definition of the curiosity game Cur Π
+
+(Game 2) to a property s(Dr ). This allows us to extend our framework to an honest-but-curious auditor Aud that aims to infer additional privacy-sensitive properties of Dr similar to other privacy inference attacks, e.g., attribute inference (AI ), data reconstruction ( RC ), and property inference ( PI ). The results by Salem et al. [50] provide a viable mechanism to translate our results: if for any adversary of attack A2 we can construct an adversary with the same knowledge and access for A1 with constant c advantage βA1 ≥ c · βA2 , then 
+
+A1 is reducible to A2, denoted as A1 ⪯c A2. This reduction, therefore, indicates that resilience to A1 implies resilience to A2. As an example, we have: 
+
+AI ⪯MI , MI ⪯AI , RC ⪯MI , MI ̸⪯ RC . (33) Recall that the audit transcript τ is a post-processing of 
+
+θu, therefore, any distinguishability on MI contained by τ
+
+should translate, with attack-specific constants, into distin-guishability on AI and RC [50]. Further, Kulynych et al. [51] proves a unified f -DP bound for the curiosity advantage of 
+
+MI , AI and RC . Property Inference differs from this family of attacks ( PI ̸⪯ MI , MI ̸⪯ PI ), as it is a hypothesis test on the 
+
+underlying distribution of Dr [50]. We leave the derivation of audit-specific reduction constants c as immediate future work. 
+
+5.4. Towards a Foundation for Secure and Privacy-Preserving Audit of MU 
+
+Our results demonstrate that all audit protocol follow-ing Assumption 5 face an inherent privacy-audit tradeoff. Beyond the theoretical and empirical confirmation, we also ask the question: How should we design a privacy-preserving audit of Machine Unlearning, that addresses the tension between successful audit (enforcement of ¯A1) and privacy leakage (protection of Dr )? We present three natural mechanisms stemming from our discussion: 
+
+Differential Privacy. Naturally, injecting privacy pertur-bation to the audit transcript τ limits the contribution of each query xt and therefore bounds the auditor’s curiosity advantage β [31]. However, the role of DP is delicate, which can be categorized in three stages of the MU pipeline: (i) Training Stage , which enforces DP during the ini-tial training process. Intuitively, for an ε-differentially private model θ, any behavioral audit transcript (As-sumption 5) is a post-processing process and guarantees 
+
+β ≤ ε globally. However, it should be noted that the as-sumption also limits Sig Comp  
+
+> η
+
+and consequently α + α′,which undermines the audit. Further, as demonstrated empirically by Gu et al. in [39], a non-DP unlearning algorithm compromises the DP guarantee on retained samples, and therefore is not sufficient on its own. (ii) Unlearning Stage , which enforces DP during the un-learning process. Notably, the family of (ε, δ )-certified unlearning algorithms we employed (Def. 2) do not offer privacy guarantees, but rather offer sufficiency 
+
+guarantees that θu is indistinguishable from retraining [28], [29]. A similar tension to training stage-DP per-sists, where singular enforcement of DP at each stage is insufficient and limits the soundness and completeness of the audit protocol. (iii) Output Stage , similar to output filtering (Sec. 2.1), the model owner Chal can release noisy posteriors of model output. However, the role of DP noises is fundamentally identical to the Gaussian observation noise in Assumption 5. Adding additional DP-noise increases α+α′, but does not shift the (α+α′, β ) Pareto front of Fig. 3, and can be compensated by increasing the query budget T , as demonstrated in Sec. 4.3. 
+
+Query Restriction. One route of bounding privacy leakage is by revoking the oracle access of Aud (see Sec. 3.1), and instead restricting Aud to submit only compliance-relevant queries. As discussed in Remark 3.5, while it is possible to design xt such that hxt ⊥ H−1/2 
+
+> θ
+
+gz∗ for all z∗ ∈ Dr , this restriction itself reveals the membership information of z∗.Coarser restrictions maintains the lower bound for worst-case β given by Theorem 3.3. 
+
+Cryptographic Proof-of-Unlearning. Proof-of-Unlearning schemes (Sec. 2.2) enforce a much stronger limit on the ability of Aud than query restriction, and limit the auditor’s access to only verification of information released by Chal ,guaranteeing privacy-by-design. However, as discussed by Zhang et al. in [9], these schemes are themselves forgeable by dishonest model owners that bypass the protocol. Fur-ther, releasing gradient- or parameter-level information to third-party auditors enables Aud to reconstruct the training samples [52], [53]. We argue that any singular mechanism is insufficient for achieving a secure and privacy-preserving MU, which requires a combination of DP at learning, DP-aware unlearn-ing [54], and cryptographic proof-of-unlearning that ensures execution of the MU mechanism. A privacy-preserving audit protocol Π that is simultaneously sound against dishonest execution, non-leaking on Dr , and resilient to forgery re-mains an open research question. 
+
+6. Conclusion 
+
+Contributions. In this paper, we present theoretical and empirical evidence for a fundamental privacy-audit tradeoff for Machine Unlearning (MU), in which an audit protocol that relies on behavioral signals of the model cannot si-multaneously detect dishonest or partially honest unlearning and prevent an honest-but-curious auditor from inferring privacy-sensitive information of the retained set beyond the scope of the audit. We prove a lower bound for worst-case privacy leakage of membership information on convex models, confirmed by empirical audit results. Additionally, we provide empirical evidence that the same privacy-audit tension is observable in non-convex Convolutional Neural Networks. Our result is the first to consider the privacy implications of behavioral MU audit protocols, and provides guidance for future studies to design secure and privacy-preserving audits of MU. 
+
+Limitations. As discussed in Sec. 5, while we demonstrated the existence of the privacy-audit tradeoff in MU, several non-trivial research questions are beyond the scope of this paper: (i) a tighter lower bound for β that accounts for the higher-order error and Cauchy-Schwarz residue for Theorem 3.3 that closes the gap between the empirical and theoretical 
+
+β in Fig. 3, (ii) a hypothesis testing-based derivation of the curiosity advantage for non-convex models and general privacy-inference attacks, and (iii) a privacy-preserving and secure audit scheme for MU. We leave these questions to immediate future research. 
+
+Acknowledgments 
+
+This work is funded by Cisco Research. 
+
+References                        
+
+> [1] Y. Cao and J. Yang, “Towards making systems forget with machine unlearning,” in IEEE Symposium on Security and Privacy .IEEE Computer Society, 2015, pp. 463–480. [2] L. Bourtoule, V. Chandrasekaran, C. A. Choquette-Choo, H. Jia, A. Travers, B. Zhang, D. Lie, and N. Papernot, “Machine unlearning,” in IEEE Symposium on Security and Privacy .IEEE Computer Society, 2021, pp. 141–159. [3] T. T. Nguyen, T. T. Huynh, Z. Ren, P. L. Nguyen, A. W. Liew, H. Yin, and Q. V. H. Nguyen, “A survey of machine unlearning,” ACM Trans. Intell. Syst. Technol. , vol. 16, no. 5, pp. 108:1–108:46, 2025. [4] “Regulation (EU) 2016/679 of the European parliament and of the council of 27 April 2016,” 2016. [5] “Title 1.81.5. california consumer privacy act of 2018 [1798.100 -1798.199.100],” 2018. [6] E. Triantafillou, P. Kairouz, F. Pedregosa, J. Hayes, M. Kurmanji, K. Zhao, V. Dumoulin, J. C. S. J. J´ unior, I. Mitliagkas, J. Wan, L. Sun-Hosoya, S. Escalera, G. K. Dziugaite, P. Triantafillou, and I. Guyon, “Are we making progress in unlearning? findings from the first neurips unlearning competition,” CoRR , vol. abs/2406.09073, 2024. [7] T. Shaik, X. Tao, H. Xie, L. Li, X. Zhu, and Q. Li, “Exploring the landscape of machine unlearning: A comprehensive survey and taxonomy,” IEEE Trans. Neural Networks Learn. Syst. , vol. 36, no. 7, pp. 11 676–11 696, 2025. [8] A. Thudi, H. Jia, I. Shumailov, and N. Papernot, “On the necessity of auditable algorithmic definitions for machine unlearning,” in USENIX Security Symposium .USENIX Association, 2022, pp. 4007–4022. [9] B. Zhang, Z. Chen, C. Shen, and J. Li, “Verification of machine unlearning is fragile,” in ICML , ser. Proceedings of Machine Learning Research. PMLR, 2024, pp. 58 717–58 738. [10] R. Shokri, M. Stronati, C. Song, and V. Shmatikov, “Membership inference attacks against machine learning models,” in IEEE Sympo-sium on Security and Privacy .IEEE Computer Society, 2017, pp. 3–18.
+
+[11] N. Carlini, S. Chien, M. Nasr, S. Song, A. Terzis, and F. Tram` er, “Membership inference attacks from first principles,” in IEEE Sym-posium on Security and Privacy . IEEE Computer Society, 2022, pp. 1897–1914. [12] M. Chen, Z. Zhang, T. Wang, M. Backes, M. Humbert, and Y. Zhang, “When machine unlearning jeopardizes privacy,” in CCS . ACM, 2021, pp. 896–911. [13] J. Hayes, I. Shumailov, E. Triantafillou, A. Khalifa, and N. Papernot, “Inexact unlearning needs more careful evaluations to avoid a false sense of privacy,” in SaTML . IEEE, 2025, pp. 497–519. [14] A. F. Cooper, C. A. Choquette-Choo, M. Bogen, M. Jagielski, K. Filippova, K. Z. Liu, A. Chouldechova, J. Hayes, Y. Huang, N. Mireshghallah, I. Shumailov, E. Triantafillou, P. Kairouz, N. Mitchell, P. Liang, D. E. Ho, Y. Choi, S. Koyejo, F. Delgado, J. Grimmelmann, V. Shmatikov, C. D. Sa, S. Barocas, A. Cyphert, M. Lemley, D. Boyd, J. W. Vaughan, M. Brundage, D. Bau, S. Neel, A. Z. Jacobs, A. Terzis, H. M. Wallach, N. Papernot, and K. Lee, “Machine unlearning doesn’t do what you think: Lessons for gener-ative AI policy, research, and practice,” CoRR , vol. abs/2412.06966, 2024. [15] N. Aldaghri, H. Mahdavifar, and A. Beirami, “Coded machine un-learning,” IEEE Access , vol. 9, pp. 88 137–88 150, 2021. [16] H. Yan, X. Li, Z. Guo, H. Li, F. Li, and X. Lin, “ARCANE: an efficient architecture for exact machine unlearning,” in IJCAI .ijcai.org, 2022, pp. 4006–4013. [17] S. B. R. Chowdhury, K. M. Choromanski, A. Sehanobish, K. A. Dubey, and S. Chaturvedi, “Towards scalable exact machine unlearn-ing using parameter-efficient fine-tuning,” in ICLR . OpenReview.net, 2025. [18] S. Neel, A. Roth, and S. Sharifi-Malvajerdi, “Descent-to-delete: Gradient-based methods for machine unlearning,” in ALT , ser. Pro-ceedings of Machine Learning Research, vol. 132. PMLR, 2021, pp. 931–962. [19] V. Gupta, C. Jung, S. Neel, A. Roth, S. Sharifi-Malvajerdi, and C. Waites, “Adaptive machine unlearning,” in NeurIPS , 2021, pp. 16 319–16 330. [20] M. Kurmanji, P. Triantafillou, J. Hayes, and E. Triantafillou, “Towards unbounded machine unlearning,” in NeurIPS , 2023. [21] C. Fan, J. Liu, Y. Zhang, E. Wong, D. Wei, and S. Liu, “Salun: Em-powering machine unlearning via gradient-based weight saliency in both image classification and generation,” in ICLR . OpenReview.net, 2024. [22] Z. Huang, X. Cheng, J. Zheng, H. Wang, Z. He, T. Li, and X. Huang, “Unified gradient-based machine unlearning with remain geometry enhancement,” in NeurIPS , 2024. [23] OpenAI, “GPT-4 System Card,” 2023. [Online]. Available: https: //cdn.openai.com/papers/gpt-4-system-card.pdf [24] M. Pawelczyk, S. Neel, and H. Lakkaraju, “In-context unlearning: Language models as few-shot unlearners,” in ICML , ser. Proceedings of Machine Learning Research. PMLR, 2024, pp. 40 034–40 050. [25] P. Thaker, Y. Maurya, and V. Smith, “Guardrail baselines for unlearn-ing in llms,” CoRR , vol. abs/2403.03329, 2024. [26] S. Liu, Y. Yao, J. Jia, S. Casper, N. Baracaldo, P. Hase, Y. Yao, C. Y. Liu, X. Xu, H. Li, K. R. Varshney, M. Bansal, S. Koyejo, and Y. Liu, “Rethinking machine unlearning for large language models,” 
+
+Nat. Mac. Intell. , vol. 7, no. 2, pp. 181–194, 2025. [27] P. Chao, A. Robey, E. Dobriban, H. Hassani, G. J. Pappas, and E. Wong, “Jailbreaking black box large language models in twenty queries,” in SaTML . IEEE, 2025, pp. 23–42. [28] C. Guo, T. Goldstein, A. Y. Hannun, and L. van der Maaten, “Cer-tified data removal from machine learning models,” in ICML , ser. Proceedings of Machine Learning Research, vol. 119. PMLR, 2020, pp. 3832–3842. [29] A. Koloskova, Y. Allouah, A. Jha, R. Guerraoui, and S. Koyejo, “Certified unlearning for neural networks,” in ICML , ser. Proceedings of Machine Learning Research. PMLR, 2025. [30] R. Chourasia and N. Shah, “Forget unlearning: Towards true data-deletion in machine learning,” in ICML , ser. Proceedings of Machine Learning Research, vol. 202. PMLR, 2023, pp. 6028–6073. [31] C. Dwork, F. McSherry, K. Nissim, and A. D. Smith, “Calibrating noise to sensitivity in private data analysis,” in TCC , ser. Lecture Notes in Computer Science. Springer, 2006, pp. 265–284. [32] I. Shumailov, Z. Shumaylov, D. Kazhdan, Y. Zhao, N. Papernot, M. A. Erdogdu, and R. J. Anderson, “Manipulating SGD with data ordering attacks,” in NeurIPS , 2021, pp. 18 021–18 032. [33] D. M. Sommer, L. Song, S. Wagh, and P. Mittal, “Athena: Proba-bilistic verification of machine unlearning,” Proc. Priv. Enhancing Technol. , vol. 2022, no. 3, pp. 268–290, 2022. [34] Y. Guo, Y. Zhao, S. Hou, C. Wang, and X. Jia, “Verifying in the dark: Verifiable machine unlearning by using invisible backdoor triggers,” 
+
+IEEE Trans. Inf. Forensics Secur. , vol. 19, pp. 708–721, 2024. [35] X. Gao, X. Ma, J. Wang, Y. Sun, B. Li, S. Ji, P. Cheng, and J. Chen, “Verifi: Towards verifiable federated unlearning,” IEEE Trans. De-pendable Secur. Comput. , vol. 21, no. 6, pp. 5720–5736, 2024. [36] S. Zarifzadeh, P. Liu, and R. Shokri, “Low-cost high-power mem-bership inference attacks,” in ICML , ser. Proceedings of Machine Learning Research. PMLR, 2024, pp. 58 244–58 282. [37] J. Gao, S. Garg, M. Mahmoody, and P. N. Vasudevan, “Deletion inference, reconstruction, and compliance in machine (un)learning,” 
+
+Proc. Priv. Enhancing Technol. , vol. 2022, no. 3, pp. 415–436, 2022. [38] L. Tang, J. Joshi, and A. Kundu, “Apollo: A posteriori label-only membership inference attack towards machine unlearning,” CoRR ,vol. abs/2506.09923, 2025. [39] Y. Gu, J. He, and K. Chen, “Auditing approximate machine unlearning for differentially private models,” in ICDM . IEEE, 2025, pp. 1253– 1262. [40] J. Weng, S. Yao, Y. Du, J. Huang, J. Weng, and C. Wang, “Proof of unlearning: Definitions and instantiation,” IEEE Trans. Inf. Forensics Secur. , vol. 19, pp. 3309–3323, 2024. [41] T. Eisenhofer, D. Riepel, V. Chandrasekaran, E. Ghosh, O. Ohri-menko, and N. Papernot, “Verifiable and provably secure machine unlearning,” in SaTML . IEEE, 2025, pp. 479–496. [42] S. T. V. Setty, “Spartan: Efficient and general-purpose zksnarks with-out trusted setup,” in CRYPTO (3) , ser. Lecture Notes in Computer Science. Springer, 2020, pp. 704–737. [43] P. W. Koh and P. Liang, “Understanding black-box predictions via influence functions,” in ICML , ser. Proceedings of Machine Learning Research. PMLR, 2017, pp. 1885–1894. [44] L. Le Cam, “Convergence of estimates under dimensionality restric-tions,” Annals of Statistics , vol. 1, no. 1, pp. 38–53, 1973. [45] A. Krizhevsky, “Learning multiple layers of features from tiny im-ages,” University of Toronto, Technical Report, 2009. [46] N. Carlini, M. Jagielski, C. Zhang, N. Papernot, A. Terzis, and F. Tram` er, “The privacy onion effect: Memorization is relative,” in 
+
+NeurIPS , 2022. [47] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in CVPR . IEEE Computer Society, 2016, pp. 770–778. [48] A. Golatkar, A. Achille, and S. Soatto, “Eternal sunshine of the spot-less net: Selective forgetting in deep networks,” in CVPR . Computer Vision Foundation / IEEE, 2020, pp. 9301–9309. [49] R. Zhang, L. Lin, Y. Bai, and S. Mei, “Negative preference optimiza-tion: From catastrophic collapse to effective unlearning,” CoRR , vol. abs/2404.05868, 2024. [50] A. Salem, G. Cherubin, D. Evans, B. K¨ opf, A. Paverd, A. Suri, S. Tople, and S. Z. B´ eguelin, “Sok: Let the privacy games begin! A unified treatment of data inference privacy in machine learning,” in SP . IEEE, 2023, pp. 327–345. [51] B. Kulynych, J. F. G´ omez, G. Kaissis, J. Hayes, B. Balle, F. P. Calmon, and J. L. Raisaro, “Unifying re-identification, attribute infer-ence, and data reconstruction risks in differential privacy,” in NeurIPS ,2025. [52] R. Wen, Y. Liu, M. Backes, and Y. Zhang, “Sok: Data reconstruction attacks against machine learning models: Definition, metrics, and benchmark,” in USENIX Security Symposium . USENIX Association, 2025, pp. 5601–5620. [53] N. Haim, G. Vardi, G. Yehudai, O. Shamir, and M. Irani, “Recon-structing training data from trained neural networks,” in NeurIPS ,2022. [54] A. Sekhari, J. Acharya, G. Kamath, and A. T. Suresh, “Remember what you want to forget: Algorithms for machine unlearning,” in 
+
+NeurIPS , 2021, pp. 18 075–18 086. [55] R. Giordano, W. T. Stephenson, R. Liu, M. I. Jordan, and T. Broder-ick, “A swiss army infinitesimal jackknife,” in AISTATS , ser. Proceed-ings of Machine Learning Research. PMLR, 2019, pp. 1139–1147. [56] B. Yu, “Assouad, Fano, and Le Cam,” in Festschrift for Lucien Le Cam: Research Papers in Probability and Statistics , D. Pollard, E. Torgersen, and G. L. Yang, Eds. Springer, 1997, pp. 423–435. Appendix A. Proof to Lemma 3.2 
+
+Proof. 
+
+Compliance Signal. By Assumption 6, the parameter update is ∆ = − 1 
+
+> n
+
+H−1 
+
+> θ
+
+GDu , we have: 
+
+θ(1)  
+
+> u
+
+− θ(η) 
+
+> u
+
+= (1 − η)∆ = − 1 − ηn H−1 
+
+> θ
+
+GDu . (34) Let δ1 := θ(1)  
+
+> u
+
+− θ = ∆ , δη := θ(η) 
+
+> u
+
+− θ = η∆. For each endpoint, the second-order Taylor expansion of f(·)(x) in the parameter is: 
+
+fθ+δ (x) = fθ (x) + ∇θ fθ (x)⊤δ+1/2 · δ⊤∇2 
+
+> θ
+
+fθ (x)δ + R3(δ), (35) Subtracting the two endpoints gives: 
+
+Sig Comp  
+
+> η
+
+(x) =(1 − η)∇θ fθ (x)⊤∆+ 12 (1 − η2)∆ ⊤∇2 
+
+> θ
+
+fθ (x)∆ + R3(∆) − R3(η∆) .
+
+(36) Substituting Eq. 34: 
+
+Sig Comp  
+
+> η
+
+(x) = ∇θ fθ (x)⊤
+
+
+
+− 1 − ηn H−1 
+
+> θ
+
+GDu
+
+
+
++ E1
+
+= − 1 − ηn ∇θ fθ (x)⊤H−1 
+
+> θ
+
+GDu + E1.
+
+(37) The error term E1 consists of: 
+
+E1(x; η) = 12 (1 − η2)∆ ⊤∇2 
+
+> θ
+
+fθ (x)∆ 
+
+| {z }
+
+> leading
+
++ [ R3(∆) − R3(η∆)] 
+
+| {z }
+
+> higher −order
+
+.
+
+(38) We analyze the two terms separately as follows. Recall that 
+
+η ∈ [0 , 1] , the leading term can be bounded by: 
+
+12 (1 − η2) ∆⊤∇2 
+
+> θ
+
+fθ (x)∆ ≤ (1 − η)M2∥∆∥2, (39) in which M2 := sup θ′ ∥∇ 2 
+
+> θ
+
+fθ′ (x)∥op ; the higher-order term: 
+
+|R3(∆) − R3(η∆) | ≤ M3
+
+6 (1 + η3)∥∆∥3 ≤ M3
+
+3 ∥∆∥3 (40) in which: 
+
+M2 := sup 
+
+> θ′
+
+∥∇ 2 
+
+> θ
+
+fθ′ (x)∥op , M3 := sup 
+
+> θ′
+
+∥∇ 3 
+
+> θ
+
+fθ′ (x)∥op .
+
+(41) this gives the bound stated in Eq. 18 with C1 = M2, C′ 
+
+> 1
+
+=
+
+M3/3.
+
+Curiosity Signal. For the curiosity signal, three distinct 
+
+O(1 /n 2) sources contribute to E2. Let θnon denote amodel trained on D \ { z∗} under Assumption 6, and let 
+
+∆mem , ∆non denote the honest unlearning updates applied at θ and θnon , i.e., θmem  
+
+> u
+
+= θ + ∆ mem , θnon  
+
+> u
+
+= θnon + ∆ non .We introduce the three error terms: (i) Influence-function error. As demonstrated by Koh and Liang in [43] (Eq. 2), removing z∗ from D corresponds to up-weighting θ by ϵ = −1/n , second-order Taylor expansion of the optimality condition gives: 
+
+θ − θnon = − 1
+
+n H−1 
+
+> θ
+
+gz∗ + r1, (42) with |r1| ≤ c1∥gz∗ ∥2
+
+> H−1
+> θ
+
+/n 2, c1 depends on third-derivative bounds of the loss function ℓ at θ. An explicit finite-sample bound of Eq. 42 is proved by Giordano et al. in [55] (Theorem 1). (ii) Unlearning-step adjustment. Honest unlearning at 
+
+θnon uses Hθnon and {∇ ℓ(θnon , z )}z∈Du . Eq. 42 gives 
+
+θ − θnon = O(1 /n ) in the H−1 
+
+> θ
+
+-norm, therefore, a Taylor expansion of H−1 
+
+> θnon
+
+and of each ∇ℓ(θnon , z )
+
+around θ gives: 
+
+∆mem − ∆non = O (∥∆∥/n )= O
+
+
+
+∥GDu ∥H−1
+
+> θ
+
+/n 2
+
+
+
+, (43) in which the O-constant depends on second-derivative bounds of ℓ. Combining Eq. 42 and 43 gives: 
+
+θmem  
+
+> u
+
+− θnon  
+
+> u
+
+= ( θ − θnon ) + (∆ mem − ∆non )= − 1
+
+n H−1 
+
+> θ
+
+gz∗ + r2, (44) with |r2| ≤ c2(∥gz∗ ∥2
+
+> H−1
+> θ
+
++ ∥gz∗ ∥H−1
+
+> θ
+
+∥GDu ∥H−1
+
+> θ
+
+)/n 2.(iii) Second-order Taylor remainder of fθ . Taylor-expanding fθ around θ at the two endpoints: 
+
+fθmem  
+
+> u
+
+(x) − fθnon  
+
+> u
+
+(x) = ∇θ fθ (x)⊤(θmem  
+
+> u
+
+− θnon  
+
+> u
+
+)+ [ a⊤M a − b⊤M b ]/2+ O(∥∆∥3),
+
+(45) in which a := θmem  
+
+> u
+
+− θ, b := θnon  
+
+> u
+
+− θ, and M := 
+
+∇2 
+
+> θ
+
+fθ (x). Naturally, we have a⊤M a − b⊤M b = ( a −
+
+b)⊤M (a + b), a − b = − 1 
+
+> n
+
+H−1 
+
+> θ
+
+gz∗ + O(1 /n 2) and 
+
+a + b = 2∆ + O(1 /n 2). Therefore: 
+
+(a⊤M a − b⊤M b )2 ≤ O ∥gz∗ ∥H−1
+
+> θ
+
+∥GDu ∥H−1
+
+> θ
+
+n2
+
+!
+
+.
+
+(46) Substituting Eq. 44 into the Taylor expansion, by 
+
+∇θ fθ (x)⊤H−1 
+
+> θ
+
+gz∗ = ⟨hx, H −1/2 
+
+> θ
+
+gz∗ ⟩, we have: 
+
+Sig Cur (x; z∗) = − 1
+
+n ⟨hx, H −1/2 
+
+> θ
+
+gz∗ ⟩ + E2(x; z∗), (47) in which error E2 collects the error terms in (i) through (iii) as well as the cross term from contracting r2 against 
+
+∇θ fθ (x):
+
+|E 2(x; z∗)| ≤ ˜C2
+
+∥gz∗ ∥2
+
+> H−1
+> θ
+
+n2 + ∥gz∗ ∥H−1
+
+> θ
+
+∥GDu ∥H−1
+
+> θ
+
+n2
+
+!
+
+.
+
+(48) We know: 
+
+∥gz∗ ∥H−1
+
+> θ
+
+∥GDu ∥H−1
+
+> θ
+
+n2 ≤∥gz∗ ∥2
+
+> H−1
+> θ
+
++ ∥GDu ∥2
+
+> H−1
+> θ
+
+2n2
+
+=
+
+∥gz∗ ∥2
+
+> H−1
+> θ
+
+/n 2 + ∥∆∥2
+
+2 ,
+
+(49) by AM-GM inequality, this gives the bound stated in Eq. 18 with C2 = 2 ˜C2.
+
+Bridging Inequality. We drop the error terms E1 and 
+
+E2 temporarily and reintroduce them later in Eq. 54. De-compose H−1/2 
+
+> θ
+
+gz∗ in the orthonormal basis { ˆG, v ⊥}, let 
+
+ˆG := H−1/2 
+
+> θ
+
+GDu /∥GDu ∥H−1
+
+> θ
+
+, v⊥ is a unit vector orthogo-nal to ˆG, we have: 
+
+H−1/2 
+
+> θ
+
+gz∗ =ρ(z∗)∥gz∗ ∥H−1
+
+> θ
+
+ˆG
+
++ p1 − ρ(z∗)2∥gz∗ ∥H−1
+
+> θ
+
+v⊥. (50) Additionally, define the residue after projecting gz∗ onto 
+
+span {GDu }:
+
+g⊥ 
+
+> z∗
+
+:= gz∗ − ⟨gz∗ , G Du ⟩H−1
+
+> θ
+
+∥GDu ∥2
+
+> H−1
+> θ
+
+GDu , (51) we can write: 
+
+∥g⊥ 
+
+> z∗
+
+∥H−1
+
+> θ
+
+= p1 − ρ(z∗)2∥gz∗ ∥H−1
+
+> θ
+
+, (52) By Eq. 37, ⟨hx, ˆG⟩ = −nSig Comp  
+
+> η
+
+(x)/(1 − η)∥GDu ∥H−1
+
+> θ
+
+.Therefore: 
+
+Sig Cur (x; z∗) (47) 
+
+= − 1
+
+n ⟨hx, H −1/2 
+
+> θ
+
+gz∗ ⟩
+
+= − ρ(z∗)∥gz∗ ∥H−1
+
+> θ
+
+⟨hx, ˆG⟩
+
+n
+
++ ∥g⊥ 
+
+> z∗
+
+∥H−1
+
+> θ
+
+⟨hx, v ⊥⟩
+
+= ρ(z∗)∥gz∗ ∥H−1
+
+> θ
+
+(1 − η)∥GDu ∥H−1
+
+> θ
+
+Sig Comp  
+
+> η
+
+(x)
+
+− ∥g⊥ 
+
+> z∗
+
+∥H−1
+
+> θ
+
+n ⟨hx, v ⊥⟩.
+
+(53) Taking absolute values and applying triangle inequality gives: 
+
+|Sig Cur (x; z∗)| ≥ |ρ(z∗)|∥ gz∗ ∥H−1
+
+> θ
+
+(1 − η)∥GDu ∥H−1
+
+> θ
+
+|Sig Comp  
+
+> η
+
+(x)|− ∥g⊥ 
+
+> z∗
+
+∥H−1
+
+> θ
+
+n ⟨hx, v ⊥⟩.
+
+(54) Bounding |⟨ hx, v ⊥⟩| ≤ ∥ hx∥ via Cauchy-Schwarz and re-introducing the error terms additively gives Eq. 16. If hx ∈
+
+span( ˆG), then ⟨hx, v ⊥⟩ = 0 for any choice of v⊥ ⊥ ˆG, so the residual term in Eq. 16 vanishes and becomes equality (modulo the error terms E1, E2). 
+
+Appendix B. Proof to Theorem 3.3 
+
+B.1. Preliminaries 
+
+We introduce, first, a lemma through Le Cam’s two-point method [44], given by Yu in [56]: 
+
+Lemma B.1 (Le Cam’s Two Point [44], [56]) . Let P0, P1
+
+be two probability measures on a common space, and let 
+
+T be any test that outputs ˆb ∈ { 0, 1}. Define error rates 
+
+α := P0{ˆb = 1 } = Pr[ ˆb = 1 | b = 0] and α′ := P1{ˆb =0} = Pr[ ˆb = 0 | b = 1] . Then the total variation between 
+
+P0 and P1 satisfies: 
+
+TV (P0, P 1) ≥ 1 − α − α′. (55) 
+
+Proof. By the definition of total variation, we have: 
+
+TV( P0, P 1) = sup 
+
+> E
+
+|P0(E) − P1(E)|≥ | P0{ˆb = 0 } − P1{ˆb = 0 }| 
+
+= |(1 − α) − α′|≥ 1 − α − α′.
+
+(56) 
+
+B.2. Proof to Theorem 3.3 
+
+We now prove Theorem 3.3 as follows: 
+
+Proof. 
+
+Lower bounding the integrated compliance signal. 
+
+Comp Π,η (Game 1) has bit b with b = 0 corresponding to θu ← ¯Aη (θ) (i.e., η-honest unlearning) and b = 1
+
+corresponding to θu ← ¯A1(θ) (i.e., honest unlearning). By Lemma B.1, the transcript distributions satisfy: 
+
+TV (P (0)  
+
+> τ
+
+, P (1)  
+
+> τ
+
+) ≥ 1 − α − α′, (57) in which P (b) 
+
+> τ
+
+is the transcript distribution under branch b.The soundness guarantee α and completeness guarantee α′
+
+from Def. 4 is consistent with Lemma B.1. Under Assumption 5, conditional on the queries 
+
+{xt}Tt=1 , we can consider the responses as independent Gaussian variates with means fθ(b)
+
+> u
+
+(xt). For Gaussian noise with variance σ2, the joint distribution of responses is a product Gaussian, the KL divergence of which is given by: 
+
+KL (P (1)  
+
+> τ
+
+∥P (0)  
+
+> τ
+
+) = 12σ2 E
+
+" TX
+
+> t=1
+
+Sig Comp  
+
+> η
+
+(xt) 2
+
+#
+
+. (58) By Pinsker’s inequality, TV ≤ pKL /2, KL ≥ 2TV 2 ≥
+
+2(1 − α − α′)2, therefore: 
+
+E
+
+" TX
+
+> t=1
+
+Sig Comp  
+
+> η
+
+(xt) 2
+
+#
+
+≥ 4σ2(1 − α − α′)2. (59) 
+
+Bridging per query xt. We now apply Lemma 3.2 to each query xt, for brevity, denote St as the Cauchy–Schwarz residual, and Et := |E 1| + |E 2|, we rewrite Eq. 16 as: 
+
+Sig Cur (xt; z∗) ≥ κ Sig Comp  
+
+> η
+
+(xt) − St − E t. (60) Squaring Eq. 60 gives: 
+
+Sig Cur 2
+
+≥κ2 Sig Comp 
+
+> η
+> 2
+
+− 2κ Sig Comp  
+
+> η
+
+(xt) (St + Et)+ ( St + Et)2,
+
+≥ Sig Comp 
+
+> η
+> 2
+
+− 2κ Sig Comp  
+
+> η
+
+(xt) (St + Et)
+
+(61) summing over t = 1 , . . . , T and take expectation: 
+
+E
+
+" TX
+
+> t=1
+
+Sig Cur 2
+
+#
+
+≥κ2E
+
+" TX
+
+> t=1
+
+Sig Comp 
+
+> η
+> 2
+
+#
+
+− 2κE
+
+" TX
+
+> t=1
+
+Sig Comp  
+
+> η
+
+(St + Et)
+
+#| {z } 
+
+> cross-term residue ERR cs
+
+.
+
+(62) We have: 
+
+|Sig Comp  
+
+> η
+
+(xt)| ≤ ∥ hxt ∥ · ∥ GDu ∥H−1
+
+> θ
+
+/n, 
+
+|St| ≤ ∥ g⊥ 
+
+> z∗
+
+∥H−1
+
+> θ
+
+∥hxt ∥/n, (63) By Cauchy-Schwarz on the cross-term in Eq. 62: 
+
+E
+
+" TX
+
+> t=1
+
+|Sig Comp  
+
+> η
+
+|St
+
+#
+
+≤ ∥g⊥ 
+
+> z∗
+
+∥H−1
+
+> θ
+
+∥GDu ∥H−1
+
+> θ
+
+n2 E
+
+"X
+
+> t
+
+∥hxt ∥2
+
+#
+
+= ∥g⊥ 
+
+> z∗
+
+∥H−1
+
+> θ
+
+∥GDu ∥H−1
+
+> θ
+
+n2 T B 2,
+
+(64) which goes to 0 as n → ∞ , B is given by Theorem 3.3. The Taylor-error term Et is uniformly bounded, by Lemma 3.2 and Eq. 18, we have: 
+
+Eub  
+
+> t
+
+:= C1(1 − η)∥∆∥2 + C′
+
+> 1
+
+∥∆∥3
+
++ C2
+
+∥gz∗ ∥2
+
+> H−1
+> θ
+
+n2 + ∥∆∥2
+
+!
+
+, (65) which is O(1 /n 2), provided ∥GDu ∥H−1
+
+> θ
+
+/n is bounded and 
+
+∥gz∗ ∥H−1
+
+> θ
+
+does not grow with n.
+
+Lower bounding the integrated curiosity signal. For Gaussian observations, the curiosity measures P mem  
+
+> τ
+
+and 
+
+P non  
+
+> τ
+
+are product Gaussians with mean shifts Sig Cur (xt; z∗)
+
+and variance σ2. The total variation is given by: 
+
+TV (P mem  
+
+> τ
+
+, P non  
+
+> τ
+
+) = 2Φ 
+
+ dCur 
+
+2σ
+
+
+
+− 1, (66) in which: 
+
+d2 
+
+> Cur
+
+:= E
+
+" TX
+
+> t=1
+
+Sig Cur 2
+
+#
+
+. (67) Similarly, for the compliance signal, by Lemma B.1, we have: 
+
+TV (P (0)  
+
+> τ
+
+, P (1)  
+
+> τ
+
+) = 2Φ 
+
+ dComp 
+
+2σ
+
+
+
+− 1 ≥ 1 − α − α′, (68) in which: 
+
+d2 
+
+> Comp
+
+:= E
+
+" TX
+
+> t=1
+
+Sig Comp 
+
+> η
+> 2
+
+#
+
+dComp ≥ 2σΦ−1
+
+
+
+1 − α + α′
+
+2
+
+
+
+=: 2 σq α,α ′ .
+
+(69) To derive a lower bound on dCur , denote ERR cs as the cross-term residue in Eq. 62, by Eq. 67 and 69, we have: 
+
+ERR cs ≤ 2κ
+
+q
+
+d2
+
+> Comp
+
+vuutE
+
+" TX
+
+> t=1
+
+(St + Et)2
+
+#
+
+≤ 2κd Comp 
+
+√T B∥g⊥ 
+
+> z∗
+
+∥H−1
+
+> θ
+
+n + Eub 
+
+> t
+
+!
+
+=: 2 κd Comp R, 
+
+(70) By Eq. 63 and 65: 
+
+d2 
+
+> Cur
+
+≥ κ2d2 
+
+> Comp
+
+− ERR cs . (71) 
+
+Lower bounding β. From Eq. 71, we have: 
+
+dCur ≥
+
+q
+
+κ2d2 
+
+> Comp
+
+− ERR cs 
+
+≥ κd Comp − ERR cs 
+
+κd Comp 
+
+= κd Comp − 2R
+
+≥ 2σκq α,α ′ − 2R. 
+
+(72) By Lipschitz continuity of Φ with ϕ(0) = 1 /√2π, we have: 
+
+Φ
+
+ dCur 
+
+2σ
+
+
+
+≥ Φ
+
+
+
+κq α,α ′ − Rσ
+
+
+
+≥ Φ( κq α,α ′ ) − Rσ√2π .
+
+(73) Therefore: 
+
+TV (P mem  
+
+> τ
+
+, P non  
+
+> τ
+
+) ≥ (2Φ( κq α,α ′ ) − 1) − 2Rσ√2π . (74) By Jensen’s inequality, for all t ≥ 0, κ ≥ 0, we have: 
+
+2Φ( κt ) − 1 ≥ min( κ, 1)(2Φ( t) − 1) , (75) we prove this result later in Lemma B.2. Combining Eq. 74 and 75 gives: 
+
+TV (P mem 
+
+τ , P non 
+
+τ ) ≥ min( κ, 1)(1 − α − α′) − 2Rσ√2π . (76) By construction, the curiosity advantage Adv Cur 
+
+Π,s (Def. 4, Eq. 6) equals the total variation, therefore: 
+
+β ≥ Adv Cur 
+
+Π,s = TV (P mem 
+
+τ , P non 
+
+τ )
+
+≥ min( κ, 1)(1 − α − α′) − 2Rσ√2π . (77) Substituting R, the residual is: 
+
+2Rσ√2π = 2∥g⊥
+
+z∗ ∥H−1
+
+θ
+
+B√Tnσ √2π + 2√T Eub 
+
+t
+
+σ√2π , (78) which gives Eq. 23 with c1 = c2 = 2 /√2π (note that c1
+
+absorbs p1 − ρ2 ≤ 1). 
+
+B.3. Proof to Lemma B.2 
+
+We now prove the result used in Eq. 75: 
+
+Lemma B.2 (Concavity result on Φ( κt )). For all t ≥ 0,
+
+κ ≥ 0, we have: 
+
+2Φ( κt ) − 1 ≥ min( κ, 1)(2Φ( t) − 1) , (79) 
+
+Proof. The proof is in two parts: 
+
+• For κ ∈ [0 , 1] , Φ is concave on [0 , ∞) with Φ′′ (t) = 
+
+−tϕ (t) ≤ 0 there. By concavity: 
+
+Φ( κt ) = Φ( κt + (1 − κ) · 0) 
+
+≥ κΦ( t) + (1 − κ)Φ(0) = κΦ( t) + (1 − κ)/2.
+
+(80) Therefore, 2Φ( κt ) − 1 ≥ κ(2Φ( t) − 1) .
+
+• For κ > 1, monotonicity of Φ gives Φ( κt ) ≥ Φ( t),therefore: 
+
+2Φ( κt ) − 1 ≥ 2Φ( t) − 1
+
+≥ min( κ, 1) · (2Φ( t) − 1) . (81) 
+
+Appendix C. Additional Experimental Results 
+
+We include additional experimental results for Sec. 4 as follows, where we plot the distribution of Sig Comp 
+
+η (x) and 
+
+Sig Cur (x; z∗) on R2 in Fig. 5 and their ratio in Fig. 6. 4 2 0 2 4
+
+> 4
+> 2
+> 0
+> 2
+> 4
+> (z * ) = +0.83
+> 90%
+> 90%
+> 90%
+> 95%
+> 99%
+
+= 0.00     
+
+> 42024
+> 4
+> 2
+> 0
+> 2
+> 4
+> 90%
+> 90%
+> 90%
+> 95%
+> 99%
+
+= 0.50     
+
+> 42024
+> 4
+> 2
+> 0
+> 2
+> 4
+> 90%
+> 90%
+> 90%
+> 95%
+> 99%
+
+= 0.90 
+
+Du
+
+z *            
+
+> 42024
+> 4
+> 2
+> 0
+> 2
+> 4
+> (z * ) = +0.00
+> 90%
+> 90%
+> 90%
+> 90%
+> 95%
+> 95%
+> 99%
+> 99%
+> 42024
+> 4
+> 2
+> 0
+> 2
+> 4
+> 90%
+> 90%
+> 90%
+> 90%
+> 95%
+> 95%
+> 99%
+> 99%
+> 42024
+> 4
+> 2
+> 0
+> 2
+> 4
+> 90%
+> 90%
+> 90%
+> 90%
+> 95%
+> 95%
+> 99%
+> 99%
+
+Du
+
+z *            
+
+> 42024
+> 4
+> 2
+> 0
+> 2
+> 4
+> (z * ) =  0.87
+> 90%
+> 90%
+> 90%
+> 90%
+> 95%
+> 99%
+> 42024
+> 4
+> 2
+> 0
+> 2
+> 4
+> 90%
+> 90%
+> 90%
+> 90%
+> 95%
+> 99%
+> 42024
+> 4
+> 2
+> 0
+> 2
+> 4
+> 90%
+> 90%
+> 90%
+> 90%
+> 95%
+> 99%
+
+Du
+
+z *
+
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Sig Comp
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+
+Figure 5. Sig Comp 
+
+η (x) and Sig Cur (x; z∗) on x ∈ R2 under different values of ρ(z∗) and η.0.0 0.2 0.4 0.6 0.8 1.0    
+
+> ×10 1
+> 0.0
+> 1.0
+> 2.0
+> 3.0
+> 4.0
+> (z * ) = +0.83
+> ×10 2
+
+= 0.00 
+
+All queries 
+
+Top-10% compliance queries 
+
+Theoretical ( )=0.39         
+
+> 0.0 1.0 2.0 3.0 4.0 5.0
+> ×10 2
+> 0.0
+> 1.0
+> 2.0
+> 3.0
+> 4.0
+> ×10 2
+
+= 0.50 
+
+All queries 
+
+Top-10% compliance queries 
+
+Theoretical ( )=0.77         
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> ×10 2
+> 0.0
+> 1.0
+> 2.0
+> 3.0
+> 4.0
+> ×10 2
+
+= 0.90 
+
+All queries 
+
+Top-10% compliance queries 
+
+Theoretical ( )=3.87        
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> ×10 1
+> 0.0
+> 0.2
+> 0.5
+> 0.8
+> 1.0
+> 1.2
+> 1.5
+> 1.8
+> 2.0
+> (z * ) = +0.00
+> ×10 3
+
+All queries 
+
+Top-10% compliance queries 
+
+Theoretical ( )=0.00         
+
+> 0.0 1.0 2.0 3.0 4.0 5.0
+> ×10 2
+> 0.0
+> 0.2
+> 0.5
+> 0.8
+> 1.0
+> 1.2
+> 1.5
+> 1.8
+> 2.0 ×10 3
+
+All queries 
+
+Top-10% compliance queries 
+
+Theoretical ( )=0.00         
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> ×10 2
+> 0.0
+> 0.2
+> 0.5
+> 0.8
+> 1.0
+> 1.2
+> 1.5
+> 1.8
+> 2.0 ×10 3
+> Sig Cur
+
+All queries 
+
+Top-10% compliance queries 
+
+Theoretical ( )=0.00        
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> ×10 1
+> 0.0
+> 1.0
+> 2.0
+> 3.0
+> 4.0
+> (z * ) =  0.87
+> ×10 2
+
+All queries 
+
+Top-10% compliance queries 
+
+Theoretical ( )=0.30      
+
+> 0.0 1.0 2.0 3.0 4.0 5.0
+
+Sig Comp ×10 2 
+
+> 0.0
+> 1.0
+> 2.0
+> 3.0
+> 4.0
+> ×10 2
+
+All queries 
+
+Top-10% compliance queries 
+
+Theoretical ( )=0.59        
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> ×10 2
+> 0.0
+> 1.0
+> 2.0
+> 3.0
+> 4.0
+> ×10 2
+
+All queries 
+
+Top-10% compliance queries 
+
+Theoretical ( )=2.96 
+
+Figure 6. Sig Comp 
+
+η (x) vs Sig Cur (x; z∗) under different values of ρ(z∗) and 
+
+η. Note the difference in x-axis and y-axis across experiments.

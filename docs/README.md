@@ -6,58 +6,58 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-14
-- 运行时间：2026-06-14 21:19:48 UTC
+- 最新运行日期：2026-06-15
+- 运行时间：2026-06-15 23:11:38 UTC
 - 运行状态：成功
 - 本次总论文数：12
 - 精读区：8
 - 速读区：4
 
 ### 今日简报（AI）
-今日本报精读8篇、速读4篇，聚焦联邦学习医学分割的移不变正交低秩适配与使LLM智能体自我演化的程序化世界模型。  
-最值得关注：联邦学习如何通过Shift-Dependent不对称设计提升异构数据下的分割鲁棒性（9.0分），以及生成式世界模型ProPlay让LLM智能体在仿真中持续进化（9.0分）。  
-建议读者从这两项高分研究切入，尤其是关注隐私保护和自适应学习如何落地到医疗与通用智能体构建。
-- 详情：[/202606/14/README](/202606/14/README)
+1) 今日精选12篇前沿论文，聚焦持续学习在语音识别与对抗遗忘中的突破，并深度解读两篇满分与高分研究。
+2) 最值得关注：让ASR持续学习“听出犹豫”以提升交互自然度，以及重新审视灾难性遗忘机制来强化模型后门防御。
+3) 普通读者可先体验语音助手中的不流畅（犹豫、修正）现象，再了解持续学习如何让AI在更新知识时不遗忘旧技能。
+- 详情：[/202606/15/README](/202606/15/README)
 
 ### 精读区论文标签
-1. [Shift-Dependent Asymmetry: Orthogonal Inverse Low-Rank Adaptation for Federated Medical Segmentation](/202606/14/2606.08687v1-shift-dependent-asymmetry-orthogonal-inverse-low-rank-adaptation-for-federated-medical-segmentation)  
-   标签：评分：9.0/10、query:med-lifelong
-   evidence：使用低秩适配的联邦医学图像分割
-2. [ProPlay: Procedural World Models for Self-Evolving LLM Agents](/202606/14/2606.12780v1-proplay-procedural-world-models-for-self-evolving-llm-agents)  
+1. [Learning to Hear Hesitation: Continual Learning for Disfluency-Aware ASR](/202606/15/2606.14391v1-learning-to-hear-hesitation-continual-learning-for-disfluency-aware-asr)  
+   标签：评分：10.0/10、query:continual
+   evidence：利用持续学习防止不流利语音识别适配中的灾难性遗忘
+2. [Rethinking Backdoor Adversarial Unlearning through the Lens of Catastrophic Forgetting in Continual Learning](/202606/15/2606.14078v1-rethinking-backdoor-adversarial-unlearning-through-the-lens-of-catastrophic-forgetting-in-continual-learning)  
+   标签：评分：9.0/10、query:llm-anonym
+   evidence：将后门遗忘过程形式化为持续学习中的灾难性遗忘，以擦除后门影响。
+3. [From Prompts to Responses: Dual-Sided Data Leakage and Defense in Split Large Language Models](/202606/15/2606.14210v1-from-prompts-to-responses-dual-sided-data-leakage-and-defense-in-split-large-language-models)  
+   标签：评分：9.0/10、query:llm-anonym
+   evidence：大型语言模型拆分学习中的数据泄露与防御
+4. [Decoupled Mixture-of-Experts for Parametric Knowledge Injection](/202606/15/2606.14243v1-decoupled-mixture-of-experts-for-parametric-knowledge-injection)  
    标签：评分：9.0/10、query:continual
-   evidence：程序世界模型使自进化智能体能够持续完善环境动态理解。
-3. [Learning Task-Aware Sampling with Shared Saliency through Density-Equalizing Mappings](/202606/14/2606.12869v1-learning-task-aware-sampling-with-shared-saliency-through-density-equalizing-mappings)  
-   标签：评分：9.0/10、query:med-lifelong
-   evidence：提出任务感知的共享显著性采样用于医学影像特征提取
-4. [Masked and Predictive Self-Supervised Foundation Models for 3D Brain MRI](/202606/14/2606.13315v1-masked-and-predictive-self-supervised-foundation-models-for-3d-brain-mri)  
-   标签：评分：9.0/10、query:med-lifelong
-   evidence：提出用于3D脑MRI分析的自监督基础模型，直接针对医学图像解读
-5. [The Stable Recovery Manifold: Geometric Principles Governing Recoverability in Continual Learning](/202606/14/2606.13637v1-the-stable-recovery-manifold-geometric-principles-governing-recoverability-in-continual-learning)  
+   evidence：模块化架构在向LLM注入新知识时防止灾难性遗忘
+5. [MoDiCoL: A Modular Diagnostic Continual Learning Dataset for Robust Speech Recognition](/202606/15/2606.14459v1-modicol-a-modular-diagnostic-continual-learning-dataset-for-robust-speech-recognition)  
    标签：评分：9.0/10、query:continual
-   evidence：研究持续学习中可恢复性的几何结构
-6. [TopoMIL: Topology Improves Multiple Instance Learning in Diagnostic Microscopic Images](/202606/14/biorxiv-10-64898-2026-06-10-731443-v1-topomil-topology-improves-multiple-instance-learning-in-diagnostic-microscopic-images)  
-   标签：评分：9.0/10、query:med-lifelong
-   evidence：将拓扑结构引入多实例学习以改善医学图像分析
-7. [Learning What to Remember: Observability-Safe Memory Retention via Constrained Optimization for Long-Horizon Language Agents](/202606/14/2606.10616v1-learning-what-to-remember-observability-safe-memory-retention-via-constrained-optimization-for-long-horizon-language-agents)  
-   标签：评分：8.0/10、query:continual
-   evidence：通过约束优化实现记忆保留，使语言代理能保留重要信息，直接解决知识保留问题。
-8. [Batch Effect Correction for Neuroimaging Data with Heterogeneous Spatial Correlations](/202606/14/biorxiv-10-64898-2026-06-03-729396-v1-batch-effect-correction-for-neuroimaging-data-with-heterogeneous-spatial-correlations)  
-   标签：评分：8.0/10、query:med-lifelong
-   evidence：解决神经影像MRI数据中的批次效应，直接提升医学图像分析的可靠性。
+   evidence：针对分布偏移的语音识别模块化持续学习数据集
+6. [From Chatbot to Digital Colleague: The Paradigm Shift Toward Persistent Autonomous AI](/202606/15/2606.14502v1-from-chatbot-to-digital-colleague-the-paradigm-shift-toward-persistent-autonomous-ai)  
+   标签：评分：9.0/10、query:continual
+   evidence：概念化LLM向持续自主AI的转变，通过推理、记忆和工具使用实现自我改进，符合自我改进AI系统
+7. [Behavioral Audit of Machine Unlearning Has a Privacy Cost](/202606/15/2606.14518v1-behavioral-audit-of-machine-unlearning-has-a-privacy-cost)  
+   标签：评分：9.0/10、query:llm-anonym
+   evidence：机器遗忘审计与隐私成本
+8. [Climbing-fiber-like online readout adaptation in frozen continuous-time networks reproduces force-field adaptation and after-effects](/202606/15/biorxiv-10-64898-2026-06-11-731593-v1-climbing-fiber-like-online-readout-adaptation-in-frozen-continuous-time-networks-reproduces-force-field-adaptation-and-after-effects)  
+   标签：评分：9.0/10、query:continual
+   evidence：通过冻结连续时间网络并仅在线适配读出层，实现无遗忘的持续学习，应用于机器人力场适应。
 
 ### 速读区论文标签
-1. [Comparative Evaluation of Deep Generative Models for Capturing Topological Features in Brain Structural Connectivity](/202606/14/biorxiv-10-64898-2026-06-03-729714-v1-comparative-evaluation-of-deep-generative-models-for-capturing-topological-features-in-brain-structural-connectivity)  
+1. [Generalisable tissue-wide molecular reconstruction from histology](/202606/15/biorxiv-10-64898-2026-06-09-731252-v1-generalisable-tissue-wide-molecular-reconstruction-from-histology)  
    标签：评分：8.0/10、query:med-lifelong
-   evidence：评估生成模型用于大脑结构连接（源自MRI）
-2. [Advancing the State-of-the-Art in Empirical Privacy Auditing](/202606/14/2606.10481v1-advancing-the-state-of-the-art-in-empirical-privacy-auditing)  
+   evidence：GHIST+从H&E组织学预测单细胞分子状态，实现空间转录组学分析。
+2. [Let's Ask Gauss: Improved One-Run Privacy Auditing](/202606/15/2606.12733v2-lets-ask-gauss-improved-one-run-privacy-auditing)  
    标签：评分：7.0/10、query:llm-anonym
-   evidence：提出用于LLM隐私审计的合成金丝雀方法，量化记忆风险，与隐私保护策略相关。
-3. [Let's Ask Gauss: Improved One-Run Privacy Auditing](/202606/14/2606.12733v1-lets-ask-gauss-improved-one-run-privacy-auditing)  
-   标签：评分：7.0/10、query:llm-anonym
-   evidence：差分隐私机器学习的隐私审计
-4. [Brainana: an end-to-end preprocessing framework for macaque neuroimaging](/202606/14/biorxiv-10-64898-2026-06-03-729972-v1-brainana-an-end-to-end-preprocessing-framework-for-macaque-neuroimaging)  
-   标签：评分：6.0/10、query:med-lifelong
-   evidence：猕猴MRI的端到端预处理框架，支持医学图像分析
+   evidence：利用金丝雀信号的高斯分布改进DP-SGD的一次性隐私审计
+3. [Efficient Deep Learning Models for Predicting Individualized Task Activation from Resting-State Functional Connectivity](/202606/15/biorxiv-10-1101-2024-09-10-612309-v4-efficient-deep-learning-models-for-predicting-individualized-task-activation-from-resting-state-functional-connectivity)  
+   标签：评分：7.0/10、query:med-lifelong
+   evidence：开发高效深度学习模型从静息态fMRI预测任务激活，推进医学图像分析
+4. [Learning What to Remember: Observability-Safe Memory Retention via Constrained Optimization for Long-Horizon Language Agents](/202606/15/2606.10616v2-learning-what-to-remember-observability-safe-memory-retention-via-constrained-optimization-for-long-horizon-language-agents)  
+   标签：评分：6.0/10、query:continual
+   evidence：将记忆保留建模为长程语言智能体的约束随机优化问题
 
 
 <div class="dpr-home-promo-card">
