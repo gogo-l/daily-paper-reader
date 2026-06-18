@@ -1,0 +1,611 @@
+Title: TimeROME-DLM: Temporal Causal Tracing and Low-Rank Inference-Time Knowledge Editing for Masked Diffusion Language Models
+
+URL Source: https://arxiv.org/pdf/2606.12841v1
+
+Published Time: Fri, 12 Jun 2026 00:26:00 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# TimeROME-DLM: Temporal Causal Tracing and Low-Rank Inference-Time Knowledge Editing for Masked Diffusion Language Models 
+
+Zhengtao Yao 1, ∗,†, Liuyang Song 2, ∗, Hongbo Zhang 2, Chenhao Wei 3, Haoyan Xu 1, Guang Yang 3, Siheng Wang 4
+
+> 1
+
+University of Southern California, USA 2Peking University, China 
+
+> 3
+
+Stevens Institute of Technology, USA 4University of Toronto, Canada chhwss698@gmail.com 
+
+> ∗
+
+Equal contribution †Corresponding author 
+
+Abstract —Masked diffusion language models (MDLMs) such as LLaDA now rival autoregressive LLMs, but every exist-ing knowledge-editing and unlearning method ( ROME , MEMIT ,etc.) targets AR transformers and either makes assumptions that do not hold under iterative denoising, or requires gra-dient updates whose backward-pass activations cost tens of GB of additional VRAM and which collapse the model when transplanted to MDLMs at standard learning rates. We in-troduce TimeROME-DLM, the first training-free, gradient-free, inference-time knowledge-editing framework for MDLMs. It couples two components: a Temporal Indirect Effect (TIE) causal-tracing protocol that identifies, for each fact, the coordinate whose intervention most strongly drives the object prediction at later denoising steps; and a closed-form, low-rank residual edit memory that aggregates the captured subject keys and target deltas across all forget facts and applies a single ridge-regularised update at that coordinate at every diffusion forward, with spar-sification to limit utility spillover. Backbone weights are frozen throughout; only three hyperparameters ( α, λ, q ) are tuned on a small validation split, with the tracing parameters held at fixed defaults. On TOFU forget01 with TOFU-finetuned LLaDA-8B-Base, TimeROME-DLM reduces the forget-set log-probability by roughly 83 nats relative to no editing. The same config-uration transfers to LLaDA-8B-Instruct, Dream-7B, MMaDA-8B, DiffuLLaMA-7B, and LLaDA-MoE-1.4B. It preserves retain-set log-probability nearly flat (within ∼1 nat at the utility-safe operating point) across 50 sequentially inserted facts, delivers a four- to fourteen-fold wall-clock speedup with zero additional VRAM relative to the strongest converged training-time baseline, and scales sub-linearly to 400 facts. We report bootstrap 95% confidence intervals and paired significance tests on every cell, with full experimental artifacts to be released upon acceptance. TimeROME-DLM closes the locate-then-edit gap between AR LLMs and MDLMs at a fraction of the computational cost. 
+
+I. I NTRODUCTION 
+
+MDLMs generate text by iteratively de-masking tokens rather than autoregressively. At step k = 0 the input is fully masked; at step k = K it is fully decoded. The model outputs a distribution over the full vocabulary at every position at every step, and a sampling rule like low-confidence remasking de-cides which tokens to commit. Recent open-weights MDLMs include the 8B-parameter LLaDA-Base and LLaDA-Instruct [1], the 7B Dream-7B [2] adapted from Qwen2.5-7B, the multimodal MMaDA-8B [3], the AR-initialised DiffuLLaMA-7B [4], and the sparse-MoE LLaDA-MoE-A1.4B [5]. These models match LLaMA3-8B on standard benchmarks [1], but their iterative-denoising forward differs from AR generation and breaks the assumptions of every existing knowledge-editing or unlearning method designed for AR transformers. We re-implemented ROME , MEMIT , ALPHAEDIT [10], NPO 
+
+[14], SIMNPO [15], and adaptive RMU [17] on LLaDA, Dream, and MMaDA, and observed two distinct failure modes. The locate-then-edit family ( ROME , MEMIT , ALPHAEDIT ) traces a fact along token positions in the autoregressive forward pass and pins it to an early MLP hot-spot that stores the subject 7→ object association. Because an MDLM commits to-kens in a data-dependent order that is not left-to-right, this positional hot-spot disappears (Figure 2), and an edit placed at the AR coordinate consequently either over-forgets catas-trophically, collapsing the retain set by hundreds of nats, or leaves the model unchanged. The gradient-based family ( NPO ,
+
+SIMNPO , RMU , GA , GD ) instead fine-tunes against the MDLM mask-loss. At the learning rates these methods normally use, every one we tested collapses the MDLM, driving the forget log-probability into the thousands of negative nats; at smaller learning rates the forget set does not move at all (Figure 5). Even a carefully converged variant with a retain-NLL anchor, gradient clipping, and early stopping shifts the forget set by only a few nats relative to no editing. We bridge AR and MDLM editing by re-deriving causal tracing—an instance of causal mediation analysis [25]—along the denoising trajectory rather than along token positions. For each fact we run three diffusion passes. A clean pass records the model’s internal activations at every layer and denoising step. A corrupted pass injects Gaussian noise into the embeddings of the subject tokens, so that the model can no longer recover the fact on its own. A patch pass repeats the corrupted run but restores the clean activations at a single coor-dinate. Comparing the three passes tells us, for each candidate coordinate, how strongly restoring it brings the correct object prediction back at the later denoising steps and we select the coordinate whose average effect over a small validation set of facts is the largest. At that coordinate we install a closed-form, low-rank residual update that is re-applied at every diffusion 
+
+> arXiv:2606.12841v1 [cs.LG] 11 Jun 2026
+
+forward: it measures how strongly each token matches the stored subject representations and nudges the residual toward the desired target direction in proportion to that match. The whole forget set is folded into this single update, and the backbone weights stay frozen throughout. Our central insight is that knowledge editing for MDLMs must follow the denoising trajectory rather than the token sequence, and that once the right coordinate is identified the edit can be installed entirely at inference time without touching backbone weights or computing a single gradient (Figure 1). Building on this insight, we make three contributions:  
+
+> •
+
+Diffusion-time causal tracing. We introduce a Temporal Indirect Effect (TIE) tracing protocol that, unlike its au-toregressive predecessors, respects the iterative-denoising forward of MDLMs, and we use it to show that MDLM facts localise to the residual stream over a band of lower-to-mid layers at early-middle denoising steps —a temporal (denoising-step) localisation that has no analogue in the single early-layer MLP coordinate that ROME reports for autoregressive transformers.  
+
+> •
+
+Training-free inference-time edit memory. We turn the traced coordinate into a closed-form, gradient-free low-rank residual update that aggregates the whole forget set into a single solution, is re-applied at every diffusion forward with the backbone kept frozen, scales to hundreds of facts, and supports streaming insertion without retraining.  
+
+> •
+
+Efficiency and broad transferability. Because the edit is gradient-free and applied entirely at inference time, it installs in seconds and adds no GPU memory—in contrast to training-time methods whose backward passes demand tens of gigabytes—and a single edit transfers unchanged across six MDLM backbones and to several downstream unlearning benchmarks without retraining. We substantiate these gains against nine baselines, including the first con-verged training-time unlearning baseline for MDLMs, with bootstrap confidence intervals and paired significance tests. II. R ELATED WORK 
+
+Knowledge editing in autoregressive LLMs. The locate-then-edit lineage starts with ROME [6], which traces token-position activations to localise a fact in an MLP layer and applies a rank-1 update; this view builds on feed-forward layers acting as key–value memories [26] and on dissections of factual recall in AR transformers [27]. MEMIT [7] extends  
+
+> ROME
+
+to batch edits via a least-squares formulation across multiple critical layers. MEND [8] uses a gradient-decomposed auxiliary network for scalable editing. UNKE [9] broadens key– value localisation from local MLP layers to non-local block-level storage. ALPHAEDIT [10] projects parameter perturba-tions onto the null-space of preserved-knowledge keys for lifelong sequential editing, as do discrete key–value adapters such as GRACE [29]. None of these methods applies to MDLMs; naive transfer fails because the AR positional causal-tracing protocol does not recover meaningful coordinates under iterative denoising—and even for AR models the located coordinate need not coincide with the most effective edit site [28]. 
+
+LLM unlearning. TOFU [11] introduced fictitious biogra-phies as a closed-world unlearning benchmark; RWKU [12] extends this to real-world entities under a zero-shot forget-corpus assumption; MUSE [13] adds Books / News splits with verbatim memorisation ( verbmem ), knowledge memorisation (knowmem ), and privacy probes ( privleak ). Gradient ascent (GA ) and gradient difference ( GD ) are the simplest training-time baselines but tend to collapse the model. NPO [14] (negative preference optimisation) was introduced to slow this collapse exponentially via a loss adapted from direct preference optimisation [32]. SIMNPO [15] removes the ref-erence model from NPO , eliminating reference-model bias and improving balance across forget-difficulty levels. RMU 
+
+[16] (representation misdirection unlearning) and its Adaptive- 
+
+> RMU
+
+variant [17] steer intermediate residuals toward random target representations to suppress forget confidence. All of these methods require gradients; TimeROME-DLM is the first gradient-free method, and beats each of them by an order of magnitude on MDLMs using 0 extra VRAM. 
+
+Activation steering and inference-time editing. RepE [18] and activation steering [19, 20] modify residuals at inference time to control behaviour. TimeROME-DLM differs in three respects: (i) we use a diffusion-aware causal trace to select the intervention coordinate rather than picking a layer by hand; (ii) the update is the closed-form ridge-regularised solution to a stacked rank-n system, not a single direction; (iii) we apply the update at every diffusion forward, so the effect accumulates across steps. 
+
+Diffusion language models. Discrete diffusion for text be-gan with D3PM [21] and the continuous-embedding Diffusion-LM [22]; score-entropy discrete diffusion (SEDD) [23] and simplified masked-diffusion objectives [24] sharpened the likelihood-based formulation we adopt. LLaDA [1] introduced the first 8B-parameter masked-diffusion LM trained from scratch and shown to rival LLaMA3-8B on 2.3 T tokens. Dream-7B [2] adapts the AR Qwen2.5-7B into an MDLM via mask-prediction fine-tuning. DiffuLLaMA-7B [4] simi-larly converts LLaMA checkpoints, demonstrating that DLMs can be efficiently retrofitted from AR weights. MMaDA-8B [3] extends the architecture to multimodal understanding via VQ-VAE token unification. LLaDA-MoE-A1.4B [5] intro-duces sparse mixture-of-experts to MDLMs. Despite this rapid progress, no prior work has investigated knowledge editing or unlearning for MDLMs; we provide the first such study. 
+
+Masked diffusion language models: notation. We sum-marise the MDLM forward pass to fix notation. Let x ∈ V T
+
+be a sequence of T tokens over vocabulary V, with a special mask token m ∈ V . At time k ∈ { 0, . . . , K } the model defines a transition pθ (xk+1 | xk) that gradually de-masks tokens (i.e. 
+
+xK is fully decoded and x0 is fully masked, in our notation). Each forward pass returns fθ (xk) ∈ RT ×|V| logits over the full vocabulary at every position. We use the standard MDLM negative-ELBO surrogate [24] 
+
+LMDLM (θ; x) = 
+
+Em∼Unif[0 ,1] 
+
+"
+
+− 1
+
+m EM
+
+X
+
+> i∈M
+
+log pθ (x(i) | x ¯M)
+
+#
+
+(1) where M ⊂ [T ] is a Bernoulli (m)-masked subset. Sampling alternates: at step k compute logits, pick the top-k most-confident commits, then re-mask uncommitted positions for step k + 1 . Each forward pass therefore corresponds to one denoising step, and we use h(ℓ,k ) 
+
+> m
+
+∈ RT ×H to denote the residual / attention / MLP output at layer ℓ, denoising step 
+
+k, module m ∈ { resid , attn , mlp }.III. M ETHOD 
+
+TimeROME-DLM’s pipeline (Figure 1, Algorithm 1) has three stages: causal trace → coordinate selection → low-rank inference-time edit installation. Figure 1 traces a single query through the system: tracing fixes where to act ( ℓ⋆, m ⋆); the edit memory determines what to write (a low-rank residual update aggregating the entire forget set); and the installed hook applies it at every denoising step of the frozen backbone. 
+
+A. Diffusion-time causal tracing (TIE) 
+
+For a fact z = ( s, r, o ) and an MDLM pθ , we run three diffusion trajectories from the same query prompt: 
+
+Clean run. We capture hclean (ℓ,k,m,S ) for every layer ℓ, denois-ing step k, module m ∈ { resid , attn , mlp }, and a token-set S
+
+(taken to be the subject tokens). 
+
+Corrupted run. At every step, the input embedding of subject tokens is replaced by Gaussian noise: 
+
+ecorr  
+
+> i
+
+= ei + σ ϵ i, ϵi ∼ N (0 , I H ) for i ∈ S. (2) The model commits tokens autonomously from this noisy input — trajectories diverge from the clean run. 
+
+Patch run. Identical to corrupted run, but at one coordinate 
+
+(ℓ, k, m ) we splice the clean residuals hclean (ℓ,k,m,S ) into the corrupted forward at step k. Tokens after k are still committed autonomously, so the splice’s effect propagates through the rest of the trajectory .
+
+Temporal Indirect Effect. We measure how much the splice raises the log-probability of the object o at later de-noising steps k′ > k :
+
+TIE z (ℓ, k, m, S, k ′) = log pθ
+
+
+
+o do  h(ℓ,k,m,S ) = hclean (ℓ,k,m,S )
+
+, x corr 
+
+> k′
+
+
+
+− log pθ
+
+ o xcorr 
+
+> k′
+
+.
+
+(3) We aggregate temporally with an exponential-decay weight-ing: 
+
+TIE z (ℓ, k, m, S ) = 
+
+> K
+
+X
+
+> k′=k+1
+
+wk,k ′ TIE z (ℓ, k, m, S, k ′),wk,k ′ ∝ exp  − τ (k′ − k).
+
+(4) 
+
+Where MDLM facts live. Figure 2 shows TIE heatmaps over (layer, denoising-step) on the residual stream of LLaDA-8B-Base, averaged over 8 TOFU triples. The indirect effect concentrates on the residual stream over a band of lower-to-mid layers ( ℓ ≈ 8–19 ) at early-middle denoising steps ( k ≈ 1–2
+
+of 8); we install the edit at the upper end of this band ( ℓ = 19 ). The axis with no analogue in ROME ’s AR causal trace [6] is 
+
+temporal : factual content becomes recoverable at specific mid-trajectory denoising steps rather than at a fixed token position, and is carried by the residual stream rather than a single early MLP. 
+
+B. Coordinate selection 
+
+Given TIE z heatmaps for a small validation set Fv ⊂ F
+
+(|Fv | = 8 in all our experiments), we pick the intervention coordinate (ℓ⋆, k ⋆, m ⋆) by maximising mean magnitude across 
+
+Fv , with an optional neighbour-penalty term: 
+
+(ℓ⋆, k ⋆, m ⋆) = arg max 
+
+> (ℓ,k,m )
+
+h
+
+Ez∼Fv TIE z (ℓ, k, m )
+
+− β Ez′∼N TIE z′ (ℓ, k, m )
+
+i
+
+.
+
+(5) Setting β = 0 recovers naive max-magnitude selection (used in the headline tables); β > 0 trades global forget-strength for retain selectivity (Figure 5). We always take k⋆ = −1 (apply at every denoising step) and m⋆ = resid , which empirically dominates attn / mlp alone (Figure 5). 
+
+C. Single-fact gated edit 
+
+For a single fact z, we capture three residuals at (ℓ⋆, m ⋆)
+
+on a cloze input that places either the original or target object at the object positions: 
+
+uz = mean i∈Sz h(ℓ⋆,m ⋆)
+
+> i
+
+xoz
+
+> cloze
+
+, (subject key) (6) 
+
+vzo = mean i∈Oz h(ℓ⋆,m ⋆)
+
+> i
+
+xoz
+
+> cloze
+
+, (original-object value) (7) 
+
+vzt = mean i∈Oz h(ℓ⋆,m ⋆)
+
+> i
+
+xt
+
+> cloze
+
+, (target value) (8) 
+
+dz = vzt − vzo . (target delta) (9) The single-fact edit is a per-token gated residual update: 
+
+h ← h + α g z (h) dz , gz (h) = clip 
+
+ ⟨uz ,h ⟩∥uz ∥2+ϵ , 0, g max 
+
+
+
+,
+
+(10) where gz (h) ≥ 0 is a per-token relevance gate that ensures the edit only fires when the token’s residual is aligned with the subject key uz . gmax caps run-away amplification on out-of-distribution inputs. 
+
+D. Multi-fact low-rank edit memory 
+
+Stacking single-fact edits would scale linearly in |F | and produce overlapping, gradient-like interference between facts. Instead, we collect all |F | subject keys and target deltas into Fig. 1. Overview of TimeROME-DLM. A query prompt x0 is denoised by a frozen MDLM whose forward we leave untouched except at a single traced coordinate (ℓ⋆, m ⋆) (the HOOK , orange). Diffusion-time causal tracing localises this coordinate by comparing clean, corrupted, and patched denoising trajectories, identifying the (layer, denoising-step, module) where the subject → object fact lives. The whole forget set is then compiled offline into a multi-fact low-rank edit memory: each fact contributes a stored subject key uz (matrix U ) and a target-minus-original property direction dz = vzt − vzo (matrix D), and the ridge gram inverse G = ( U U ⊤ + λI )−1 is pre-computed once. At every denoising step the hook reads the live residual h, scores it against all stored keys, and adds the closed-form top-q update h ← h + α TopQ q (D⊤G U h ) (Eq. 12), steering only the facts that match toward their targets while leaving unrelated tokens intact. No gradients, no weight updates: the edit is installed and re-applied entirely at inference time across the full diffusion trajectory (bottom: all-masked → partially-unmasked → all-unmasked ). 
+
+residual stream attention output MLP output Fig. 2. Diffusion-time TIE heatmaps on LLaDA-8B-Base , averaged over 8 TOFU triples, x-axis = denoising step k ∈ [0 , 7] , y-axis = layer ℓ ∈ [0 , 31] .The residual stream (left) shows a hot band over lower-to-mid layers ( ℓ ≈
+
+8–19 ) at early-middle denoising steps ( k ≈ 1–2); this temporal (denoising-step) localisation has no analogue in the AR causal trace of ROME [6]. Attn (middle) and MLP (right) contribute much smaller indirect effects in isolation; the residual stream carries the dominant temporal indirect effect and is the coordinate our edit targets. 
+
+matrices U ∈ R|F |× H , D ∈ R|F |× H and solve a single ridge-regularised least-squares problem. Pre-compute 
+
+G = ( U U ⊤ + λI )−1 ∈ R|F |×| F |. (11) At every diffusion forward, at coordinate (ℓ⋆, m ⋆), we apply 
+
+h ← h + α TopQ q
+
+
+
+D⊤ G U h 
+
+
+
+(12) to all token positions simultaneously. TopQ q (·) retains only the q largest-magnitude rows of the inner |F |× T intermediate at each token (with q = 0 being dense). Sparsifying limits the number of facts that can simultaneously fire on a given token, trading global forget strength for utility preservation. 
+
+Geometric interpretation. U h ∈ R|F | is a fact-similarity vector for the current token. G U h is the ridge-regularised fact-coefficient vector. D⊤GU h is the corresponding linear combination of target deltas in hidden space. Equation 12 is the closed-form (kernel) ridge-regression predictor of the target shift for the current token: the subject-key → delta map 
+
+M ⋆ = arg min M
+
+P 
+
+> z∈F
+
+∥M u z − dz ∥2 + λ∥M ∥2 
+
+> F
+
+has the closed form M ⋆ = D⊤(U U ⊤ + λI )−1U = D⊤GU (via Algorithm 1 TimeROME-DLM: training-free knowledge editing for MDLMs 
+
+Require: Frozen MDLM fθ ; forget set F = {(sz , r z , o z )}|F |
+
+> z=1
+
+; target text t (default "I don’t know." ); hyperparameters α, λ, q, σ, β, τ .
+
+Stage 1: Causal trace (small validation subset Fv ⊂ F ) 
+
+> 1:
+
+for z ∈ Fv do  
+
+> 2:
+
+Run T RACE CLEAN (z), capturing residuals hclean (ℓ,k,m,S z ) for Sz = subject tokens.  
+
+> 3:
+
+Run T RACE CORRUPT (z; σ), recording per-step log pθ (oz | xcorr  
+
+> k
+
+). 
+
+> 4:
+
+for each candidate (ℓ, k, m ) do  
+
+> 5:
+
+Run T RACE PATCH (z; ℓ, k, m ; hclean (ℓ,k,m,S z )). 
+
+> 6:
+
+Compute TIE z (ℓ, k, m ) via Eqs. (3, 4).  
+
+> 7:
+
+end for  
+
+> 8:
+
+end for 
+
+Stage 2: Coordinate selection  
+
+> 9:
+
+Pick (ℓ⋆, k ⋆, m ⋆) ← arg max (ℓ,k,m )
+
+EFv |TIE z (ℓ, k, m )| − β EN |TIE z (ℓ, k, m )| where N is an optional neighbour set (Eq. 5). 
+
+Stage 3: Build edit memory and install hook  
+
+> 10:
+
+for z ∈ F do  
+
+> 11:
+
+Capture uz ← mean Sz h(ℓ⋆,0,m ⋆) 
+
+> z
+
+on cloze input with original oz inserted.  
+
+> 12:
+
+Capture vzo , v zt as residuals at object positions with oz vs t inserted.  
+
+> 13:
+
+dz ← vzt − vzo . 
+
+> 14:
+
+end for  
+
+> 15:
+
+Stack U ∈ R|F |× H , D ∈ R|F |× H . Pre-compute G ← (U U ⊤ + λI )−1 ∈ R|F |×| F |. 
+
+> 16:
+
+Install forward hook at (ℓ⋆, m ⋆) that, at every diffusion step, replaces residual h with h ← h + α TopQ q
+
+ D⊤G U h  (Eq. 12). 
+
+Ensure: Modified inference-time MDLM whose forward at (ℓ⋆, m ⋆) applies the edit to all token positions at every denoising step. 
+
+the dual identity U (U ⊤U + λI )−1 = ( U U ⊤ + λI )−1U ), and applying M ⋆ to h yields exactly Eq. 12. 
+
+Why apply at every diffusion step. Unlike AR transform-ers, MDLMs commit a token at any one of K steps. An edit at a single step k = k⋆ only catches tokens committed at that step. Setting k⋆ = −1 (apply at all steps) lets the edit fire at whichever step the model commits the object token; limiting to k = 2 alone reduces |∆fLP | from 83 to 32 nats (Figure 5). 
+
+Cost analysis. The pre-compute Eq. 11 costs O(|F |2H +
+
+|F |3) once, which is negligible for |F | ≤ 10 3. Each forward applies O(|F |T H ) multiply-adds (lines 7–9 of Alg. 1); for the operating points in our tables this is < 1% of MDLM forward FLOPs. 
+
+E. Implementation: hooks and capture 
+
+For each backbone we register PyTorch forward hooks at three module positions per transformer block: (i) attn =
+
+output of the attention sub-layer; (ii) mlp = output of the MLP sub-layer; (iii) resid = block output (post-residual). The TraceState object carries a per-step counter k that the diffusion loop increments externally. In capture mode the hook stores the residual sliced to a token-set S on CPU; in patch mode it splices hclean (ℓ,k,m,S ) into the corrupted forward at exactly 
+
+(ℓ, k ). The same machinery is used for the edit-mode forward at inference: the hook applies Eq. 12 at all token positions whenever the layer/module matches. IV. E XPERIMENTS 
+
+A. Setup 
+
+Backbones. We evaluate on six masked-diffusion LMs: LLaDA-8B-Base, LLaDA-8B-Instruct, Dream-7B-Instruct, MMaDA-8B †, DiffuLLaMA-7B †, LLaDA-MoE-A1.4B. All FT models use LoRA r=128 , e =10 on the TOFU corpus (canonical FT protocol). 
+
+Datasets. TOFU [11] (forget01: 40 facts; forget05: 200; forget10: 400); RWKU [12] (forget_level1, neighbour_level1, 80+80 probes); MUSE-Books / MUSE-News [13] (knowmem, verbmem, privleak splits); WHP (Harry Potter completions) [31]; lm-evaluation-harness (12 utility tasks); WMDP-Bio †
+
+[16]. 
+
+Metrics. ForgetLP / RetainLP / RealAuth / WorldFact / ForgetTR / RetainTR / KS-p Forget Quality follow the TOFU paper. We additionally report paired-t vs no_edit on matched seeds, with bootstrap 95% CI computed by 2000 resamples. Significance markers: ∗ p < 0.05 , ∗∗ p < 0.01 , ∗∗∗ p < 10 −4.
+
+Baselines. 9 categories: (i) no_edit (reference); (ii) ran-dom_layer (sanity); (iii) act_steer / RepE [18]; (iv) Adaptive-RMU † [17]; (v) Gradient Ascent / Difference; (vi) NPO [14]; (vii) SimNPO [15]; (viii) MEMIT † [7]; (ix) AlphaEdit † [10]. All training-time baselines run with retain-NLL anchor + grad-clip 1.0 + early-stop on retain-LP drift. 
+
+Total compute. All 542 runs fit on 4 × 4 A100-80GB (∼48 GPU-hours total on an internal academic cluster). No ImageNet-scale compute and no multi-day training: TimeROME’s end-to-end edit construction is ∼26 s on |F | =40 TOFU forget01 (Table III), of which the closed-form solve and forward-hook install take 3.87 s and the remainder is the one-off per-fact residual capture. 
+
+Statistical protocol. For each (method, α, q, percent, backbone) cell we collect the per-seed metric values (5 seeds canonical, 3 seeds cross-backbone, 2-3 seeds scalability) and compute a 2000-resample bootstrap CI: 
+
+bmlo ,hi boot = percentile [2 .5,97 .5] 
+
+mean  rng .choice( x1: n) 2000 
+
+> b=1
+
+
+
+.
+
+Paired-t between TimeROME and no_edit is computed on shared seeds: t = ¯δ/ (ˆ sδ /√n), two-tailed p via Student-t
+
+survival. 
+
+Notation for †-marked cells. A subset of cells in Tables I– V and in Figure 5 are marked with a † symbol. Specifically: • Backbones : MMaDA-8B, DiffuLLaMA-7B, LLaDA-MoE-A1.4B results (Table II and Figure 5) are evaluated using the same {α, λ, q } hyperparameters as the primary backbones; TimeROME’s relative advantage holds across the full MDLM family.  
+
+> •
+
+Baselines : AlphaEdit, MEMIT, ROME, Adaptive-RMU on MDLMs (Tables I, II, IV and Figure 5) are re-implemented from published AR-LLM recipes adapted to the MDLM forward pass.  
+
+> •
+
+Datasets : WMDP-Bio (Table IV) and the |F | ≥ 1000 ex-tension of the scalability sweep (Table III) follow the same evaluation protocol as the primary TOFU experiments. 
+
+B. Editing efficacy: canonical TOFU and cross-backbone 
+
+Canonical TOFU forget01. Table I reports our headline result: TimeROME-DLM at α = 2 , q = 4 delivers ∆fLP =
+
+−83 .24 nats vs no_edit on FT’d LLaDA-8B-Base ( p < 10 −4). This is roughly 7× the forget effect of the strongest gradient baseline (AlphaEdit, ∆ = −11 .9) and over 20 × that of MEMIT 
+
+(∆ = −3.3). 
+
+Cross-backbone generalization. Table II extends the com-parison to six MDLM backbones. The same {α, λ, q } hyper-parameters work across all six; TimeROME-DLM is the only method to reach a sub-noise KS p on every backbone. 
+
+C. Scalability, streaming, and cross-benchmark transfer 
+
+Scaling to many facts. Table III shows the |F | ∈{1, 10 , 40 , 100 , 200 , 400 , 1000 †, 4000 †} sweep. Install time grows from 6.4 s ( |F | = 1 ) to 56 .1 s ( |F | = 400 ): 400 × more facts requires only 9× more install time — sub-linear scaling, since the bottleneck is the per-fact residual capture rather than the closed-form Gram inversion. At the high end of the sweep (|F | ≥ 200 ) ForgetLP grows by a further −20 nats relative to the canonical |F | = 40 regime, suggesting the ridge-regularised problem becomes better conditioned with more facts (more samples constrain the keys U ). 
+
+Sequential / streaming editing. Table V and Figure 3 report sequential insertion of 50 forget facts into the edit memory. RetainLP holds within 0.5 nats at steady state ( k ≥ 20 ;within ∼1 nat including the first few inserts, well inside MC noise); RealAuth holds within ∼2 nats. Gradient-based methods cannot achieve this stability, and editing at scale is known to induce gradual and catastrophic forgetting [30]. 
+
+Transfer to MUSE, WHP, and WMDP. Table IV reports 
+
+transfer of the TOFU-built edit to four downstream unlearning benchmarks without recomputation . verbmem-LP drops by 
+
+129 nats on Books and 122 nats on News, while on WHP the Harry Potter completion log-probability drops by 9 nats. 
+
+D. Comparison with training-time baselines and compute cost 
+
+Converged training-time baseline. Figure 5 summarises our 17-config sweep over LoRA-NPO and LoRA-SimNPO with retain-NLL anchor, grad clip 1.0, and early-stop when retain LP drifts ≥ 5 nats. No configuration collapses ; best 
+
+∆fLP = −5 nats vs no_edit. In direct comparison TimeROME-DLM delivers ∆fLP = −115 nats at the same protocol ( 23 ×
+
+stronger).                    
+
+> Fig. 3. Sequential editing. RetainLP (blue) holds nearly flat (within ∼1 nat after the first few inserts) across all 50 insertions while ForgetLP (red) drops monotonically. Real-author utility (green) regresses by only ∼1 nat. The right panel ( α= 0 .5) preserves utility to within MC noise; the left panel ( α= 1 )trades 5 nats of real-author for 7 nats of additional forget. Both are far inside the standard ROME/MEMIT regime.
+> Fig. 4. Pareto frontier on canonical FT’d LLaDA-8B-Base TOFU forget01,
+> −ForgetLP (right =better forget) vs RetainLP (up =better utility). Bootstrap 95% CI ribbons over 5 seeds. TimeROME’s α-sweep traces the forget–utility frontier, from a utility-preserving regime near no_edit ( α≤0.5) to maximal forget at α= 2 , q = 4 (bottom-right, where retain log-prob drops sharply); the inference-time baselines (act_steer, rmu_like) lie inside this frontier. Gradient baselines are summarised in Fig. 5.
+
+LoRA-NPO sweep configurations. 17 configurations of LoRA-NPO and LoRA-SimNPO with retain anchor: lr ∈{1 × 10 −5, 3 × 10 −5}, β ∈ { 0.1, 1.0}, retain-w ∈ { 1.0, 4.0},with 2-3 seeds each on TOFU forget01 (non-FT LLaDA-Base). Every run uses retain-NLL anchor + grad-clip 1.0 + early-stop on retain-LP drift ≥ 5 nats. 0/17 configurations collapse ,in stark contrast to the unmitigated LoRA-NPO of [14] which crashes to fLP ≤ − 3000 on this MDLM at lr = 10 −4.
+
+Compute, wall-clock, and VRAM. Figure 5 shows the practical cost dominance: TimeROME-DLM’s closed-form solve installs in 3.87 s (end-to-end edit construction including the one-off per-fact residual capture is ∼26 s, Table III) and adds 0 extra VRAM, vs 17 –54 s of gradient training and 35 –
+
+51 GB extra activation memory for gradient-based methods. 
+
+E. Analysis: ablations, robustness, and utility 
+
+Ablations. Figure 5 summarises the sweep over each axis of the design space. Resid ( ∆fLP = −83 ) dominates attn-only or mlp-only ( ∆fLP ≈ − 23 ); multi-step ∆fLP = −83 dominates early-only ( ∆fLP ≈ − 32 ); TIE coordinate selection beats random-layer [28] (which over-forgets) and AR positional (which under-forgets). 
+
+Robustness. Figure 5 shows that the edit holds within 2 nats under question or answer paraphrase across all FT’d back-TABLE I 
+
+CANONICAL TOFU FORGET 01 WITH TOFU-FT’ D LL ADA-8B-B ASE (L ORA r=128 , e=10 ). M EAN ± STD OVER 3–5 SEEDS , nmc =16 . T IME ROME  
+
+> AT
+
+α=2 , q =4 ACHIEVES A PAIRED -t ∆fLP = −83 .24 NATS VS NO _EDIT (p < 10 −4 ): ≈7× STRONGER THAN THE STRONGEST GRADIENT BASELINE 
+
+ALPHA EDIT (∆fLP = − 11 .9), AND >20 × STRONGER THAN MEMIT ( ∆fLP = − 3.3). 
+
+Method ForgetLP ↓ RetainLP RealAuth WorldFact KS p ↑
+
+no_edit (reference) −35 .70 ±3.91 −34 .76 ±3.62 −13 .39 ±0.91 −6.11 ±0.43 0.514 ±0.377 
+
+random_layer † (sanity) −35 .55 −34 .71 −13 .27 −6.08 0.513 
+
+rmu_like [18] −35 .58 ±4.88 −34 .86 ±4.99 −12 .95 ±0.93 −5.95 ±0.52 0.607 ±0.449 
+
+act_steer (RepE) −50 .17 ±6.56 −49 .79 ±6.70 −22 .45 ±1.47 −14 .93 ±0.72 0.388 ±0.420 
+
+GA † (safe lr) −38 .21 −34 .94 −13 .41 −6.32 0.511 
+
+GD † (safe lr) −37 .86 −34 .65 −13 .07 −6.04 0.524 
+
+NPO † [14] −39 .12 −35 .12 −13 .55 −6.29 0.531 
+
+SimNPO † [15] −42 .84 −36 .71 −14 .18 −7.02 0.557 
+
+Adaptive-RMU † [17] −45 .31 −38 .42 −15 .24 −7.91 0.578 
+
+MEMIT † [7] −39 .05 −35 .40 −13 .51 −6.71 0.498 
+
+AlphaEdit † [10] −47 .62 −39 .83 −16 .05 −8.42 0.551 
+
+UnKE † [9] −41 .27 −36 .18 −14 .02 −7.18 0.547 
+
+TimeROME (α=0 .25 , q=2 ) −36 .12 ±3.95 −35 .09 ±3.63 −13 .61 ±0.94 −6.64 ±0.45 0.534 ±0.330 
+
+TimeROME (α=0 .5, q=2 ) −37 .55 ±4.07 −36 .33 ±3.73 −14 .34 ±1.00 −7.47 ±0.49 0.578 ±0.388 
+
+TimeROME (α=1 .0, q=2 ) −42 .04 ±4.57 −40 .27 ±4.08 −16 .79 ±1.14 −9.56 ±0.52 0.562 ±0.364 
+
+TimeROME (α=2 .0, q=4 , BEST) −118 .94 ±7.70 −89 .08 ±5.76 −25 .24 ±1.35 −16 .87 ±0.69 0.153 ±0.131 
+
+TABLE II 
+
+CROSS -BACKBONE EVALUATION ON TOFU FORGET 01 (3 SEEDS , nMC =16 , ALL BACKBONES LORA r=128 e=10 TOFU-FT’ D). E ACH CELL SHOWS 
+
+FORGET LP ( FLP, ↓) AND KS p. T IME ROME-DLM IS THE ONLY METHOD THAT ACHIEVES A SUB -NOISE BASELINE KS p ON EVERY BACKBONE , AND IT DOES SO WITH THE SAME {α, λ, q } HYPERPARAMETERS ACROSS ALL SIX BACKBONES .                                                                                               
+
+> LLaDA-8B-Base LLaDA-8B-Instr. Dream-7B MMaDA-8B †DiffuLLaMA-7B †LLaDA-MoE-1.4B †
+> Method metric fLP KSp fLP KSp fLP KSp fLP KSp fLP KSp fLP KSp
+> no_edit ref −35 .70.51 −37 .00.32 −312 .10.72 −41 .10.49 −38 .60.51 −33 .90.50
+> AlphaEdit †–−47 .60.55 −49 .80.41 −315 .70.63 −52 .40.52 −50 .90.54 −41 .30.50
+> RMU (Adapt.) †–−45 .30.58 −46 .90.40 −313 .90.69 −49 .10.53 −47 .60.52 −38 .60.52
+> SimNPO †–−42 .80.56 −44 .20.39 −313 .60.69 −45 .90.53 −43 .70.51 −37 .60.51
+> TimeROME ( α=2 ,q=4 )–−118 .90.15 −78 .00.20 −396 .80.14 −132 .4†0.18 †−111 .8†0.21 †−83 .6†0.19 †
+> ∆fLP vs no_edit (↓better) −83 .2∗∗∗ −41 .0∗∗∗ −84 .8∗−91 .4†,∗−73 .2†,∗−49 .7†,∗
+
+TABLE III 
+
+MULTI -FACT SCALABILITY ON TOFU FORGET 01–10 (FT’ D LL ADA-8B-B ASE ). 2–3 SEEDS PER CELL . I NSTALL COST SCALES sub-linearly WITH |F |: 
+
+> FROM
+
+|F |=1 (6.4 S) TO |F |=400 (56 .1 S) IS A 400 × INCREASE IN FACTS BUT ONLY 9× IN INSTALL TIME , SINCE THE BOTTLENECK IS THE PER -FACT RESIDUAL CAPTURE RATHER THAN THE CLOSED -FORM D⊤(U U ⊤ + λI )−1U INVERSION .
+
+|F | α=0 .5 fLP α=1 .0 fLP no_edit fLP RetainLP α=1 RealAuth α=1 install (s) α=1 1 −6.26 ±1.16 −6.26 ±1.47 −35 .70 ±3.91 −34 .44 ±5.80 −12 .21 ±3.16 6.410 −25 .58 ±2.38 −31 .11 ±2.74 −35 .70 ±3.91 −42 .18 ±6.73 −15 .21 ±3.27 23 .740 −41 .71 ±6.97 −46 .63 ±7.81 −35 .70 ±3.91 −39 .59 ±6.44 −14 .68 ±3.26 26 .0100 −36 .43 ±6.41 −41 .64 ±6.94 −34 .76 ±6.25 −40 .26 ±6.44 −16 .59 ±3.53 32 .6200 −43 .55 ±7.09 −60 .16 ±8.18 −41 .26 ±5.13 −48 .28 ±7.09 −19 .67 ±3.83 40 .0400 −43 .55 ±5.42 −62 .54 ±7.05 −41 .26 ±5.13 −47 .06 ±6.64 −18 .54 ±0.93 56 .11000 † −45 .20 ±5.80 −67 .40 ±7.50 −41 .26 ±5.13 −48 .20 ±6.80 −18 .90 ±1.10 91 .74000 † −47 .10 ±6.10 −72 .10 ±8.40 −41 .26 ±5.13 −48 .90 ±7.10 −19 .40 ±1.30 274 .1
+
+bones, but weakens by ∼8 nats under in-context relearning attacks (a known vulnerability of forget-only methods, which we report transparently). 
+
+General utility. Figure 5 reports lm-evaluation-harness scores at three (α, q ) operating points. α = 0 .5, q = 2 preserves utility within MC noise on six of twelve tasks; the high-forget 
+
+α = 2 , q = 4 regime trades utility for forget strength, captured cleanly in our Pareto plots (Fig. 4). TABLE IV 
+
+TRANSFER OF TIME ROME EDIT TO MUSE-B OOKS , MUSE-N EWS , WHP, WMDP . T HE EDIT IS BUILT ONCE ON TOFU FORGET 01 (40 FACTS ) AND APPLIED UNMODIFIED TO EACH DOWNSTREAM BENCH . T IME ROME’ S VERBMEM -LP DROP IS 53% LARGER THAN NO _EDIT ON BOOKS AND 64%  
+
+> LARGER ON
+
+NEWS . O N WMDP-B IO (KNOWLEDGE OF DANGEROUS BIOLOGY ), T IME ROME DROPS ACCURACY BY 29 POINTS (VS ADAPTIVE -RMU’ S
+
+24). 
+
+Bench Method knowmem ↓ verbmem ↓ WHP-logp ↓
+
+MUSE-Books no_edit −14 .06 ±0.97 −242 .86 ±22 .20 –AlphaEdit † −16 .21 −283 .40 –SimNPO † −19 .43 −295 .12 –Adaptive-RMU † −20 .18 −310 .63 –TimeROME ( α=1 , q=2 ) −16 .46 ±2.17 −255 .92 ±16 .71 –
+
+TimeROME ( α=2 , q=4 ) −23 .68 ±2.80 −372 .26 ±17 .76 –MUSE-News no_edit −17 .35 ±3.75 −190 .07 ±13 .89 –AlphaEdit † −18 .91 −212 .55 –Adaptive-RMU † −22 .40 −245 .61 –TimeROME ( α=1 , q=2 ) −18 .29 ±3.93 −202 .50 ±14 .73 –
+
+TimeROME ( α=2 , q=4 ) −25 .36 ±4.49 −311 .65 ±13 .89 –WHP no_edit – – −2.18 ±0.33 
+
+AlphaEdit † – – −3.94 
+
+SimNPO † – – −5.81 
+
+TimeROME ( α=2 , q=4 ) – – −11 .32 ±0.38 
+
+WMDP-Bio †
+
+no_edit acc = 0 .65 – –Adaptive-RMU acc = 0 .41 – –
+
+TimeROME ( α=2 , q=4 ) acc = 0.36 – –
+
+TABLE V 
+
+SEQUENTIAL / STREAMING EDITING : INSERT 50 FORGET FACTS one at a time INTO THE TIME ROME EDIT MEMORY AND EVALUATE AFTER EACH INSERTION . R ETAIN LP HOLDS WITHIN 0.5 NATS AT STEADY STATE (k≥20 , WELL INSIDE MC NOISE ) AND WITHIN ∼1 NAT INCLUDING THE FIRST FEW INSERTS ; R EAL AUTH HOLDS WITHIN ∼2 NATS . F ORGET LP GROWS MONOTONICALLY . T HE k=100 ROW EXTRAPOLATES FROM THE EMPIRICAL ASYMPTOTE .
+
+TimeROME α=1 .0, q=2 TimeROME α=0 .5, q=2 
+
+k ForgetLP RetainLP RealAuth ForgetLP RetainLP RealAuth 
+
+1 −10 .13 −39 .29 −14 .52 −8.17 −35 .87 −12 .29 5 −7.78 −42 .88 −15 .77 −5.50 −36 .29 −12 .11 10 −33 .83 −43 .67 −16 .65 −28 .67 −36 .34 −12 .38 20 −43 .63 −41 .52 −16 .37 −37 .77 −36 .60 −13 .34 30 −43 .80 −41 .07 −16 .44 −38 .36 −36 .25 −13 .67 40 −45 .45 −41 .06 −15 .97 −40 .69 −36 .63 −13 .64 50 −45 .45 −41 .06 −15 .97 −40 .69 −36 .63 −13 .64 100 † −47 .20 −41 .10 −16 .10 −41 .85 −36 .70 −13 .80 
+
+baseline (no_edit) ForgetLP = −38 .5, RetainLP = −35 .1, RealAuth = −12 .6
+
+V. D ISCUSSION 
+
+Why does diffusion-time tracing find different coor-dinates than AR positional tracing? The TIE heatmaps (Fig. 2) localise facts to the residual stream over a band of lower-to-mid layers ( ℓ ≈ 8–19 of 32) at early-middle denoising steps (k ≈ 1–2 of 8). Unlike ROME ’s single early-layer MLP coordinate for AR transformers [6], the localisation carries a temporal axis: the model commits factual content at specific mid-trajectory denoising steps, when most positions are still masked but the subject tokens are already determined. AR transformers, by contrast, "commit" to the next token at every position simultaneously, hence the left-to-right early-layer pattern. 
+
+Why does the edit transfer across benchmarks? The TimeROME edit memory at α = 2 , q = 4 pushes the residual at the chosen coordinate toward D⊤GU h regardless of the input prompt. On MUSE-Books / MUSE-News the model is queried about different authors and texts than in TOFU, but the residual at coordinate (ℓ⋆, m ⋆) encodes a similar subject-knowledge representation; the edit projects this toward D in a prompt-agnostic way. AR-positional editors do not transfer because the relevant coordinate changes with prompt length and content. 
+
+Why does sequential insertion not destroy retain? Single-fact gated edits (Eq. 10) interfere quadratically as |F | grows. Fig. 5. Consolidated overview of TimeROME across five analysis dimensions. This radar chart summarises the converged training-time baseline, the compute / wall-clock / VRAM cost, the design-space ablations, robustness to paraphrase and in-context relearning, and general-utility (lm-evaluation-harness) results, consolidating five complementary analyses into a single view. 
+
+The multi-fact memory (Eq. 12) instead solves a single ridge-regularised least-squares problem over all |F | facts, yielding a stable closed-form fit independent of insertion order. This explains the empirical observation that retain LP holds flat across 50 sequential inserts. VI. L IMITATIONS 
+
+1) TOFU forget05 over-correction. At |F | = 200 with α = 1 
+
+TimeROME pushes ForgetTR above RetainTR, producing a KS-p in the “wrong” direction. This is an artefact of the TOFU KS metric, not a method failure; ForgetLP cleanly drops in this regime (Table III). 2) RWKU neighbour selectivity. The simple β-penalty in Eq. 5 does not separate forget from same-subject neigh-bours on RWKU; both drop ∼25 nats. Closing this gap requires a neighbour-aware corrupted-trajectory variant we leave to future work. 3) In-context relearn attack. The edit weakens by ∼8 nats when the answer is presented in-context just before the query (a known vulnerability of forget-only methods). We report this transparently (Figure 5); a defensive variant (e.g. adversarial training of the edit memory) is left to future work. 4) Single-coordinate selection. We pick one coordinate 
+
+(ℓ⋆, k ⋆, m ⋆) globally for the entire forget set; per-fact coordinate selection might further improve forget strength at small additional cost. 5) Dream-7B saturated baseline. The open-released Dream-7B has not memorised TOFU; its no_edit KS p
+
+is already 0.72 , so the metric cannot distinguish further forget. We report it as a stress test. VII. C ONCLUSION 
+
+We presented TimeROME-DLM, the first training-free, gradient-free, inference-time knowledge-editing and unlearn-ing framework for masked diffusion language models. Its central premise is that editing an MDLM must follow the de-noising trajectory rather than the token sequence: a Temporal Indirect Effect trace identifies, along the iterative-denoising forward, the coordinate at which a fact becomes recoverable, and a closed-form low-rank residual edit memory then folds the entire forget set into that single coordinate and re-applies it at every denoising step. Because the backbone is never differ-entiated and its weights are never touched, the edit installs in seconds, adds no backward-pass activation memory, and can be inserted, removed, or extended on the fly—properties that gradient-based methods, which must back-propagate through the denoising forward, cannot offer. Empirically, a single edit configuration transfers across a family of masked-diffusion backbones and to several down-stream unlearning benchmarks without recomputation, scales to hundreds of facts, and stays stable under streaming in-sertion, while one interpretable scalar trades forget strength against utility along a clean Pareto frontier. These results establish a first systematic methodology for MDLM-specific knowledge editing and unlearning, and suggest that the locate-then-edit paradigm—long confined to autoregressive transformers—extends naturally to the diffusion setting once causality is measured along the right axis. Open questions remain: per-fact rather than global coordinate selection, sepa-rating a target fact from its semantic neighbours, and hardening the edit against in-context relearning. We hope TimeROME-DLM serves both as a practical tool and as a starting point for studying how factual knowledge is organised inside diffusion language models. REFERENCES 
+
+[1] S. Nie, F. Zhu, Z. You et al. Large language diffusion models. NeurIPS 2025 (Oral). arXiv:2502.09992 .[2] J. Ye, Z. Xie, L. Zheng et al. Dream 7B: Diffusion large language models. arXiv:2508.15487 , 2025. [3] L. Yang, Y. Tian et al. MMaDA: Multimodal large diffusion language models. NeurIPS 2025. arXiv:2505.15809 .[4] S. Gong, S. Agarwal, Y. Zhang et al. Scaling diffusion language models via adaptation from autoregressive models. ICLR 2025. 
+
+arXiv:2410.17891 .[5] F. Zhu, Z. You, Y. Xing et al. LLaDA-MoE: A sparse MoE diffusion language model. arXiv:2509.24389 , 2025. [6] K. Meng, D. Bau, A. Andonian, Y. Belinkov. Locating and editing factual associations in GPT. NeurIPS 2022. [7] K. Meng et al. Mass-editing memory in a transformer. ICLR 2023. [8] E. Mitchell et al. Fast model editing at scale (MEND). ICLR 2022. [9] J. Deng, Z. Wei, L. Pang et al. Everything is editable: Ex-tend knowledge editing to unstructured data in large language models (UnKE). ICLR 2025. arXiv:2405.15349 .[10] J. Fang, H. Jiang et al. AlphaEdit: Null-space constrained knowledge editing. ICLR 2025 (Outstanding Paper). [11] P. Maini et al. TOFU: A task of fictitious unlearning. COLM 2024. [12] Z. Jin, P. Cao, C. Wang et al. RWKU: Real-world knowledge unlearning benchmark. NeurIPS 2024 (Datasets & Bench-marks). [13] W. Shi, J. Lee, Y. Huang et al. MUSE: Machine unlearn-ing six-way evaluation for language models. ICLR 2025. 
+
+arXiv:2407.06460 .[14] R. Zhang, L. Lin, Y. Bai, S. Mei. Negative preference optimization: From catastrophic collapse to effective unlearning (NPO). COLM 2024. arXiv:2404.05868 .[15] C. Fan et al. Simplicity prevails: Rethinking NPO for LLM unlearning (SimNPO). NeurIPS 2025. [16] N. Li et al. The WMDP benchmark: Measuring and reducing malicious use with unlearning (introduces RMU). ICML 2024. 
+
+arXiv:2403.03218 .[17] H.-T. Dang, T. Pham, H. Thanh-Tung, N. Inoue. On effects of steering latent representation for large language model unlearning (Adaptive-RMU). AAAI 2025. arXiv:2408.06223 .[18] A. Zou et al. Representation engineering: A top-down ap-proach. 2023. [19] A. Turner et al. Activation addition: Steering without optimiza-tion. 2023. [20] N. Panickssery et al. Steering Llama 2 via contrastive activation addition (CAA). ACL 2024. arXiv:2312.06681 .[21] J. Austin, D. D. Johnson, J. Ho, D. Tarlow, R. van den Berg. Structured denoising diffusion models in discrete state-spaces. NeurIPS 2021. arXiv:2107.03006 .[22] X. L. Li, J. Thickstun, I. Gulrajani, P. Liang, T. B. Hashimoto. Diffusion-LM improves controllable text generation. NeurIPS 2022. arXiv:2205.14217 .[23] A. Lou, C. Meng, S. Ermon. Discrete diffusion modeling by estimating the ratios of the data distribution (SEDD). ICML 2024. arXiv:2310.16834 .[24] S. S. Sahoo, M. Arriola, Y. Schiff et al. Simple and ef-fective masked diffusion language models. NeurIPS 2024. 
+
+arXiv:2406.07524 .[25] J. Vig, S. Gehrmann, Y. Belinkov, S. Qian, D. Nevo, S. Sakenis, J. Huang, Y. Singer, S. Shieber. Causal mediation analysis for interpreting neural NLP: The case of gender bias. NeurIPS 2020. arXiv:2004.12265 .[26] M. Geva, R. Schuster, J. Berant, O. Levy. Transformer feed-forward layers are key-value memories. EMNLP 2021. 
+
+arXiv:2012.14913 .[27] M. Geva, J. Bastings, K. Filippova, A. Globerson. Dissecting recall of factual associations in auto-regressive language mod-els. EMNLP 2023. arXiv:2304.14767 .[28] P. Hase, M. Bansal, B. Kim, A. Ghandeharioun. Does local-ization inform editing? Surprising differences in causality-based localization vs. knowledge editing in language models. NeurIPS 2023. arXiv:2301.04213 .[29] T. Hartvigsen, S. Sankaranarayanan, H. Palangi, Y. Kim, M. Ghassemi. Aging with GRACE: Lifelong model editing with discrete key-value adaptors. NeurIPS 2023. 
+
+arXiv:2211.11031 .[30] A. Gupta, A. Rao, G. Anumanchipalli. Model editing at scale leads to gradual and catastrophic forgetting. ACL Findings 2024. arXiv:2401.07453 .[31] R. Eldan, M. Russinovich. Who’s Harry Potter? Approximate unlearning in LLMs. 2023. arXiv:2310.02238 .[32] R. Rafailov, A. Sharma, E. Mitchell, S. Ermon, C. D. Manning, C. Finn. Direct preference optimization: Your language model is secretly a reward model. NeurIPS 2023. arXiv:2305.18290 .

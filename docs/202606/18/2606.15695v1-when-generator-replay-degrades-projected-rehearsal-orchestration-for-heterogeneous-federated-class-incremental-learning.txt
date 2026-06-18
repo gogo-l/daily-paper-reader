@@ -1,0 +1,2828 @@
+Title: When Generator Replay Degrades: Projected Rehearsal Orchestration for Heterogeneous Federated Class-Incremental Learning
+
+URL Source: https://arxiv.org/pdf/2606.15695v1
+
+Published Time: Tue, 16 Jun 2026 01:08:03 GMT
+
+Number of Pages: 46
+
+Markdown Content:
+# When Generator Replay Degrades: Projected Rehearsal Orchestration for Heterogeneous Federated Class-Incremental Learning 
+
+Thinh T. H. Nguyen 1, Khoa D. Doan 1, Binh T. Nguyen 2, Danh Le-Phuoc 3, Kok-Seng Wong 1∗
+
+> 1
+
+VinUniversity, Hanoi, Vietnam 
+
+> 2
+
+VNU-HCM, University of Science, Ho Chi Minh City, Vietnam 
+
+> 3
+
+Technische Universität Berlin, Germany 
+
+{thinh.nth, khoa.dd}@vinuni.edu.vn, ngtbinh@hcmus.edu.vn, danh.lephuoc@tu-berlin.de, wong.ks@vinuni.edu.vn 
+
+## Abstract 
+
+Federated class-incremental learning (FCIL) becomes substantially harder when clients observe different label subsets, progress through tasks at different stages, and provide uneven supervision for the same semantic concepts. Existing FCIL methods often preserve old knowledge through input-space synthesis, but they can be fragile under heterogeneous task streams and difficult to transfer across modalities. To alleviate such issues, we propose PRO, a framework that replaces synthetic input replay with projected rehearsal orchestration. To remove external pretraining, we evaluate all methods under the same warmup. After this, PRO maintains compact class-level projected memories on the server and allows clients perform balanced pseudo multi-task training over current examples and old projected memories. To handle stronger representation drift, we further introduce PRO-MAX, which augments PRO with neighborhood-weighted memory alignment while preserving the same server-light principle that the server only aggregates model updates and memory statistics. Across image, text, and graph benchmarks, PRO and PRO-MAX improve retention and final utility under heterogeneous streams while remaining competitive in homogeneous FCIL. Even when baselines are given expanded replay budgets, they degrade under supervision imbalance and stage misalignment, indicating that replay quantity alone does not resolve replay-quality failures. Additional weak-task diagnostics further show that larger replay mismatch is associated with larger downstream degradation, while our method keeps projected memories better aligned with the evolving representation. 
+
+## 1 Introduction 
+
+Federated learning (FL) [ 1–3 ] enables collaborative training without centralizing raw data, making it suitable for privacy-sensitive applications. However, real client data streams are often non-stationary: new classes appear, label spaces expand, and clients encounter novel concepts under different conditions. This motivates federated class-incremental learning (FCIL) [ 4–6 ], where a global model must learn new classes while retaining prior knowledge under privacy and communication constraints. Although FCIL has gained attention, most studies assume relatively homogeneous task sequences across clients [ 7 –9 ]. In real deployments, clients may observe different label subsets, follow distinct task orders, and provide uneven supervision for the same concepts. Consequently, even within one communication round, clients can optimize different parts of the label space, making representation learning and memory preservation more challenging [10, 11].  
+
+> ∗Corresponding author: wong.ks@vinuni.edu.vn
+> Preprint.
+> arXiv:2606.15695v1 [cs.LG] 14 Jun 2026
+
+A common approach in FCIL to handle forgetting is to use generator-based replay or data-free synthesis [ 5, 12 , 13 ]. Rather than storing old examples, these methods create artificial samples of previous classes and reuse them during training. While effective on standard vision benchmarks, this design can become fragile as a retention mechanism under heterogeneous streams. There are two main reasons for this. First, the quality of the replay depends on how well each task was learned in the first place. If the supervision was weak or biased, the replayed data can reflect those problems, and errors may accumulate over time. Second, generating samples in the input space ties the memory method to the type of data. Adapting this approach to other data types often needs new generators, extra modules, or makes the system much more complicated. Ideally, memory in FCIL should work across different data types and not be too sensitive to uneven learning. These observations suggest that the key abstraction should be a modality-agnostic memory interface rather than a modality-specific generator. Motivated by this view, we propose Projected Rehearsal 
+
+Orchestration ( PRO ), a generator-free framework for heterogeneous FCIL. PRO maintains compact projected memories on the server, i.e., feature-space summaries computed after the modality-specific encoder rather than input-space examples. The server broadcasts these memories to clients, where they are sampled as old-class pseudo features and combined with current-task features in a class-balanced projected rehearsal objective. In this way, old-new consolidation is performed distributively on clients without an additional server-side optimization loop. To further handle stronger representation drift, we introduce a Memory Alignment e Xtension, yielding PRO-MAX . PRO-MAX estimates how old projected memories should move as client updates shift the feature space and aligns them through confidence-weighted aggregation. Both variants follow the same principle that the server 
+
+only aggregates model updates and memory statistics and performs no gradient-based training. We evaluate our methods across image, text, and graph benchmarks under both homogeneous and heterogeneous FCIL protocols. The experiments test whether projected rehearsal remains competitive in standard FCIL, whether it is more robust than generator-based replay under heterogeneous streams, and whether the same memory abstraction transfers across modalities. We further include a controlled weak-task stress test to examine whether replay derived from a poorly learned task causes downstream degradation. In summary, this work makes four contributions: • We identify two limitations of generator-based FCIL under heterogeneous streams, i.e., modality-coupled memory and error compounding when weakly learned tasks produce weak replay signals. • To enable modality-agnostic continual memory without input synthesis, we propose PRO, a generator-free FCIL framework that performs projected rehearsal through compact class-level memories and client-side balanced pseudo multi-task learning. • To keep old memories compatible with evolving representations under severe heterogeneity, we introduce PRO-MAX, which adds neighborhood-weighted memory alignment through confidence-weighted server aggregation. • We evaluate our methods across image, text, and graph benchmarks under homogeneous and heterogeneous FCIL, including system-cost measurements and additional tests for replay robustness. 
+
+## 2 Related Work 
+
+Representation-based Continual Learning. Continual learning (CL) mitigates forgetting via regularization, distillation, replay, or dynamic architectures. Closest to our work are methods that preserve old knowledge in representation space instead of reconstructing raw inputs. Early approaches used feature-space class means for incremental recognition [ 14 ], while later exemplar-free methods rely on prototypes, prototype augmentation, or translated pseudo-features to avoid storing raw examples [ 15 , 16 ]. A key challenge in this setting is feature drift, where evolving representations make old class memories stale and require compensation [ 17 ]. PRO builds on this idea for federated streams by storing compact class-level memories and rehearsing them on clients. Unlike per-example feature banks, which may raise privacy concerns [18–20], PRO uses class-level projected statistics. 
+
+Input-Space Replay and Generator-Based FCIL. FCIL introduces both local forgetting on clients and global forgetting after aggregation. GLFC is an early method that explicitly addresses this dual forgetting problem [ 4]. A major exemplar-free branch avoids storing old examples by using data-free distillation, generator-based replay, diffusion replay, or hybrid replay mechanisms [ 5, 7–9, 12 , 13 ]. These methods are effective in standard vision-centered protocols, but their memory quality depends 2on the task state from which replay is derived. Under heterogeneous FCIL, weak or biased task learning can therefore produce weak replay signals. Moreover, input-space synthesis is naturally tied to the data modality. PRO differs from this line by replacing input-space generation with projected class memories, while PRO-MAX further aligns these memories when the representation drifts. 
+
+Heterogeneous Federated Continual Learning. This field studies clients with different data distributions, task orders, availability, or learning stages. Prior methods address heterogeneity through inter-client transfer, selective transfer, asynchronous updates, synaptic regularization, class-wise balancing, or prototype communication [ 21 –28 ]. These works motivate our heterogeneous protocol and baselines. Specifically, PRO focuses on a generator-free memory interface for heterogeneous FCIL streams while keeping old-new consolidation on clients and maintaining only compact projected memories on the server. We provide a full discussion in Appendix A. 
+
+## 3 Problem Setup and Motivating Observation 
+
+3.1 Heterogeneous FCIL 
+
+We consider an FL system with C clients and a sequence of semantic tasks S = {1, . . . , T }. Each task t introduces a disjoint class set Yt, and the full label space is Y = STt=1 Yt. Unlike homogeneous FCIL, where clients usually follow the same task sequence, we allow each client c to follow a client-specific task order πc. At local position p, client c receives data Dc,p = {(xi, y i)}Nc,p  
+
+> i=1
+
+with observed labels yi ∈ eYc,p ⊆ Y πc[p]. The notation eYc,p emphasizes that a client may observe only part of the semantic task label set. We assume that every evaluated semantic class is supported by at least one client when its task appears, i.e., S 
+
+> (c,p ): πc[p]= t
+
+eYc,p = Yt, for all t ∈ S . Thus, supervision can be sparse and unevenly distributed, but no evaluated class is completely absent from the federation. For client c, the semantic task history up to position p is T (p) 
+
+> c
+
+= {πc[0] , . . . , π c[p]}. The global prediction space is defined at the semantic-task level, i.e, Y(p) = SCc=1 
+
+S 
+
+> t∈T (p)
+> c
+
+Yt. All methods are evaluated under the single-head FCILprotocol where the task identity is not given at inference time. Within this setup, we instantiate heterogeneity through two controls. Supervision imbalance 
+
+means that different clients may provide different class coverage or sample counts for the same semantic task. Stage misalignment means that clients need not learn the same semantic task at the same communication time, i.e., πc[p]̸ = πc′ [p] can hold for two clients at the same local position. Together, these two factors create a stream where task supervision is uneven and client progress is not synchronized. Full formal definitions, samplers, and metric details are provided in Appendix B. 
+
+Evaluation Summary. Because clients can follow different task histories, we use a client-first evaluation protocol. At each position, each client is evaluated on the semantic tasks it has encountered so far, while predictions are still made by the global single-head model over the cumulative label space. By this, evaluation respects client-specific CL histories without abandoning the FCIL setting. We report three metrics. Final average accuracy (FAA) measures final utility over each client’s accumulated task history. Current-task accuracy (CTA) measures whether the system still learns new tasks under heterogeneous supervision. Average forgetting (AF) measures how much previous tasks degrade after subsequent learning. The formal metric definitions are given in Appendix B. 
+
+3.2 Motivating Observation: When Weak Tasks Poison Generator Replay 
+
+Generator-based and data-free replay methods are effective when previous tasks are learned under stable supervision, since their replay signals are derived from the task states already learned by the model [ 5, 7]. However, under heterogeneous FCIL, supervision imbalance can leave a task weakly learned, while stage misalignment can force the server to aggregate clients that are optimizing different parts of the label space. Consequently, a weak task state may produce unreliable synthetic replay, and this error can be reused in later stages: weak task learning =⇒ poor synthetic replay =⇒ downstream degradation .
+
+This does not mean that projected memories are immune to weak task learning. Any memory derived from a poorly learned task can be imperfect. Rather, input-space generators introduce an additional 3amplification channel, where a biased task state can be repeatedly converted into synthetic samples and rehearsed later. We test this failure mode in Section 6.3 through task-wise accuracy heatmaps and feature-space comparisons between real and synthetic samples from weakly learned tasks. Motivated by this observation, we replace input-space replay with compact projected class memories. 
+
+## 4 Methodology 
+
+Our approach is guided by three key requirements, as discussed in Section 3.2. First , clients need to achieve strong performance on their current task; otherwise, any subsequent memory based on that task risks being inaccurate. Second , to ensure the method is broadly applicable and efficient, we represent memory with compact, modality-agnostic class-level statistics instead of relying on raw data, synthetic samples, or storing features for every example. Third , since clients can have diverse data and may focus on different parts of the label space, we use a balanced pseudo multi-task objective for integrating new and previous knowledge. To realize these requirements, we decompose the model as follows: x hθ
+
+−→ u aψ
+
+−−→ z W
+
+−→ ℓ, where hθ
+
+serves as a modality-specific base encoder, aψ is a lightweight adapter, and W is a unified classifier head. Here, u = hθ (x) ∈ Rdu , and z = aψ (u) ∈ Rdz . The prediction at position p uses a single-head class-incremental protocol: ˆy = arg max y∈Y (p) W ⊤ 
+
+> y
+
+aψ (hθ (x)) . This decomposition allows the base encoder to project raw inputs into unified feature space, enabling the memory mechanism to function across modalities. The adapter, in turn, provides a targeted point for continual adaptation, aligning with the principle of parameter-efficient learning [29, 30]. PRO does not rely on an externally pretrained encoder. To ensure a fair comparison, we apply the same warmup phase before the start of the FCIL stream. During warmup, the modality-specific base encoder hθ is initialized using only in-domain client data, after which the auxiliary warmup head is removed. This warmup is treated as a protocol-level initialization, not as a unique advantage for PRO. Once this shared initialization is complete, each method proceeds with its own continual learning process. Details of the warmup objective and computational overhead are provided in Appendix C.1 and Appendix G. The specific impact of warmup on PRO is analyzed in the ablation study (Table 4). 
+
+4.1 PRO: Projected Rehearsal Orchestration 
+
+After the warmup phase, the server stores compact projected memories for each class in the base feature space. Specifically, it maintains Mu = {(μuy , σ uy , n y )}y∈Y (p) , where μuy and σuy represent the mean and diagonal standard deviation of the base features u = hθ (x) for each class. In PRO, this memory bank is essential because old projected samples are generated from Mu before being processed by the adapter aψ . This setup ensures that gradients from old classes continue to update both the adapter and the classifier during training. At each communication round r within position p, the server sends (Θ g , Mu) to participating clients, where Θg = ( θg , ψ g , W g ). If auxiliary adapted-space memory is used, Mz is also shared. Clients initialize their models from Θg and begin with a brief controlled-plasticity phase designed to learn the current task before constructing memory, while limiting excessive representation drift. In heterogeneous FCIL, labels for the current task may be sparse, incomplete, or biased on each client. As a result, relying solely on supervised updates can lead to overfitting to the limited label subset and disrupt the projected feature space. To address this, when the base encoder is unfrozen, we optionally include a modality-compatible self-supervised auxiliary regularizer. This regularizer does not involve replay or a teacher model; it only constrains the short current-task representation update. The local plasticity objective is given as follows: 
+
+Lplastic = Lsup + λaux Laux + λprox ∥Πr (Θ) − Πr (Θ g )∥22 , (1) where Θ = ( θ, ψ, W ) and Πr (·) selects only trainable parameters in round r. The supervised term is 
+
+Lsup = E(x,y )∈D c,p CE  W ⊤aψ (hθ (x)) , y  . (2) The proximal term uses a single coefficient λprox and constrains the local trainable parameters to remain close to the broadcast global model, which is motivated by client drift in heterogeneous federated optimization [ 31 , 32 ]. When the base encoder is frozen, it is excluded from Πr (Θ) and we 4PHASE 1 Federated In-Domain Warmup Local Clients   
+
+> Training Data Augmentation (Multi-view) ... ...
+> self-supervised warmup
+> Base Encoder Features
+
+Server Side       
+
+> Local model updates Aggregation Global model
+> learns representation, no external pretraining
+> Client 1 Client 2 Client K ... ... ... Broadcast
+> PHASE 2 PRO: Projected Rehearsal Orchestration
+> Current Task Base Encoder Controlled Plasticity
+> A. Current-Task Branch
+> Current Features
+> B. Old-Memory Branch
+> Sample from server the memory
+> Old Projected Memories
+> Balanced pseudo multi-task batch balanced training encoder updated shortly, then frozen Adapter
+> Classifier
+> short local adaptation stable updates avoid drift Projected memory
+> Optional memory
+> Global model
+> used for rehearsal diagnostics/ PRO-MAX model updates + class stats
+> Broadcast Package Server aggregation + memory refresh
+> Refreshed memory (and )
+> memory accounting
+
+... 
+
+... ... 
+
+...     
+
+> PHASE 3 PRO-MAX: Memory Alignment Extension
+> Local memory transport estimation (calibration subset) Before local update (feature cache) After local update (feature cache) Old class memory (from )
+> Memory transport estimate
+> neighbor samples other samples Upload: memory transport estimates Transport estimates from clients Client 1 Client 2 Client K ...
+> Memory Alignment Align primary memory
+> (optional: )Before alignment After alignment
+> Re-broadcast aligned memories
+> Upload: (1) Local model updates (2) Current-class memory statistics
+
+Figure 1: Overview of PRO and PRO-MAX. The server broadcasts the global model and projected memories. Each client learns its current task with controlled plasticity, samples old projected memories from the server bank, and trains on a balanced pseudo multi-task objective. The server aggregates model updates and refreshes memory statistics. PRO-MAX further aligns old projected memories using neighborhood-weighted transport. set λaux = 0 . The distinction between the pre-stream warmup objective and this in-stream auxiliary regularizer is detailed in Appendix C.1. In practice, this controlled-plasticity phase is deliberately short. The base encoder is updated only in early rounds of a new task. Later rounds freeze the base encoder and focus on the adapter and classifier. After this phase, the client constructs a projected pseudo multi-task dataset. For current classes, it uses real examples mapped into the base space Ucur 
+
+c,p = {(hθc (xi), y i) : ( xi, y i) ∈ D c,p }. For old classes, it samples projected memories ˜uy,j = μuy + γσ uy ⊙ ϵj , where ϵj ∼ N (0 , I ), which yields 
+
+eUold 
+
+c,p = {(˜ uy,j , y ) : y ∈ Y (p−1) }. The client trains on the joint dataset Ujoint 
+
+c,p = Ucur 
+
+c,p ∪ eUold 
+
+c,p with 
+
+LPRO 
+
+c = E(u,y )∈U joint  
+
+> c,p
+
+CE  W ⊤aψ (u), y  . (3) The key design choice is that pseudo-old samples are inserted before the adapter: ˜u → aψ (˜ u) → W .Thus, old memories provide gradients to both the adapter and the classifier. If old pseudo features were inserted only after the adapter, they would calibrate W but would not prevent aψ from drifting toward the current task. We optimize this objective with a class-balanced sampler so that current real features and old projected memories contribute comparably. After local training, the server aggregates model updates as Θg ← P
+
+c ωcΘc, where ωc = ncP 
+
+> c′
+
+nc′ . It then refreshes current-class memories using the aggregated global model, since statistics computed under local models may not share the same feature space. In the final round of each task, the server sends the global model to participating clients, which recompute class-level projected statistics without gradient updates. The server aggregates only means, second moments, radii, and counts. 
+
+4.2 PRO-MAX: Memory Alignment eXtension 
+
+PRO assumes that the algorithm keeps representation drift moderate. Under heterogenous scenarios, however, even short local updates can make old projected memories stale. PRO-MAX therefore adds neighborhood-weighted memory alignment while preserving the same server-light principle. 5Each client caches a small calibration subset before and after local training, i.e., u− 
+
+> i
+
+= hθ− (xi), and 
+
+u+ 
+
+> i
+
+= hθ+ (xi), and observes sample drift δui = u+ 
+
+> i
+
+− u− 
+
+> i
+
+. For an old class y, the client looks at calibration samples that were close to μuy before the update. With dui,y = ∥u− 
+
+> i
+
+− μuy ∥22, it selects a nearest-neighbor set N uy and assigns weights αui,y = exp 
+
+
+
+− dui,y  
+
+> 2τ2
+> u
+
+
+
+.The local memory transport vector is ∆uc,y =       
+
+> P
+> i∈N uyαui,y δui
+> P
+> i∈N uyαui,y +ϵ
+
+, where quc,y = P  
+
+> i∈N uy
+
+αui,y . The same construction can be applied in the adapted space for Mz . The server aggregates transport vectors by confidence, i.e., μuy ← μuy + ∆ u,g y , where ∆u,g y =     
+
+> P
+> cquc,y ∆uc,y P
+> cquc,y +ϵ
+
+. The confidence score prevents clients whose current data are far from an old class from strongly influencing that class memory. Algorithms 1 and 2 in Appendix C summarize the complete training procedures for PRO and PRO-MAX. 
+
+## 5 Experimental Protocol 
+
+We structure our experiments around four main objectives. First , we test whether PRO and PRO-MAX achieve strong performance in homogeneous FCIL settings, confirming their effectiveness extends beyond the heterogeneous scenarios. Second , we evaluate whether generator-based and replay-heavy FCIL methods remain robust when facing heterogeneous streams caused by supervision imbalance and stage misalignment. Third , we investigate modality transfer by applying our projected-memory approach to text and graph classification tasks. Finally , we measure communication, memory, and training costs to ensure that the benefits of PRO and PRO-MAX are not due to hidden server-side computation or excessive replay. All results follow the client-first metrics described in Section 3. 
+
+Benchmarks and settings. CIFAR-100 serves as our main image benchmark, divided into 10 semantic tasks with 10 classes each. We use this dataset for experiments on homogeneous and heterogeneous FCIL, generator-replay diagnostics, resource analysis, and ablation studies. For modality transfer, we evaluate on THUCNews-10 for text classification (5 tasks, 2 categories each) and Cora for graph node classification (3 tasks with class groups of size 2, 2, and 3). Additional large-scale results for TinyImageNet, CLINC150, and ogbn-arxiv are provided in Appendix F. 
+
+Baselines. We compare with FL-only baselines FedAvg [ 1], FedProx [ 31 ], and FedProto [ 26 ]; generator-based or replay-heavy FCIL baselines TARGET [ 5], MFCL [ 7 ], and HR [ 12 ]; and heterogeneity-aware or asynchronous FCIL baselines FedSpace [ 23 ], FedSSI [ 24 ], and Fed-CBDR [ 25 ]. For text, we use FedSeIT [ 22 ] where its assumptions match the THUCNews protocol. For graph node classification, we compare with POWER [27] and MOTION [28]. 
+
+Resource regimes. For CIFAR-100, we evaluate a resource-matched regime, where additional replay or memory communication is matched to the projected-memory budget of PRO/PRO-MAX, and a resource-expanded regime, where replay-heavy baselines receive a larger shared replay budget selected on the homogeneous validation setting. The expanded budget is reused in heterogeneous FCIL to test whether replay degradation persists when replay quantity is no longer the limiting factor. To diagnose generator replay, we visualize final task-wise accuracy and compare real versus synthetic features for weakly learned tasks. Full details are given in Appendix E and Appendix G. 
+
+Implementation. Images use ResNet-18 [ 33 ], text uses TextCNN [ 22 ], and graphs use a two-layer GAT [ 28 , 27 ] unless otherwise stated. All methods use the same task splits, client partitions, communication schedule, random seeds, and warmup. After this shared warmup, each baseline follows its original mechanism, while PRO and PRO-MAX use the warmed encoder for projected-memory rehearsal. The concrete protocol values are reported in Appendix D and Appendix E. 
+
+## 6 Results and Analysis 
+
+6.1 Results under Homogeneous FCIL 
+
+In Table 1, the organization emphasizes resource regime rather than method family, allowing for a clearer comparison of how memory and replay budgets affect performance. In the resource-matched regime, all methods operate with the same additional memory or replay communication budget as PRO and PRO-MAX. The resource-expanded regime provides generator-based and replay-heavy 6baselines with a larger shared replay budget, testing whether their performance gains are primarily due to increased synthetic or replay resources. This comparison is essential for interpreting the results in heterogeneous settings that follow. If generator-based baselines only match PRO or PRO-MAX in the homogeneous setting when given an expanded budget, this highlights the resource efficiency of projected memory. Importantly, we apply the same expanded budget in the heterogeneous experiments. If generator-based methods still experience performance drops under heterogeneity, this suggests that the issue is not merely the amount of replay, but also the quality and reliability of the replay signal. Table 1: Homogeneous CIFAR-100 FCIL under resource-matched and resource-expanded regimes. We report normalized incremental-stream communication cost together with FAA, CTA, and AF. Resource-matched gives all methods the same additional replay or memory budget as PRO/PRO-MAX. Resource-expanded gives generator-based and replay-heavy FCIL baselines a larger shared replay budget selected on the homogeneous validation setting. Regime Group Method Budget Comm. ↓ FAA ↑ CTA ↑ AF ↓
+
+Matched Resource FL only FedAvg None 1.00 × 10.84 ± 0.36 62.14 ± 1.05 79.86 ± 0.81 
+
+FedProx None 1.00 × 11.27 ± 0.42 62.04 ± 0.98 78.92 ± 0.77 
+
+FedProto Proto 1.08 × 20.65 ± 0.88 60.88 ± 1.16 62.40 ± 1.42 
+
+Generator / replay FCIL TARGET Synthetic 1.22 × 35.92 ± 1.06 66.58 ± 1.12 39.48 ± 1.55 
+
+MFCL Synthetic 1.30 × 37.84 ± 1.18 67.36 ± 1.19 36.22 ± 1.46 
+
+HR Hybrid 1.35 × 40.76 ± 1.04 68.92 ± 1.01 32.64 ± 1.31 
+
+Heterogeneous FCIL FedSpace Proto 1.15 × 38.72 ± 1.12 65.82 ± 1.23 35.76 ± 1.45 
+
+FedSSI Memory 1.10 × 39.84 ± 1.08 66.24 ± 1.17 34.96 ± 1.39 
+
+FedCBDR Replay 1.25 × 41.42 ± 0.94 69.18 ± 1.04 31.88 ± 1.24 
+
+Ours PRO Projected memory 1.00 × 43.86 ± 0.82 67.20 ± 0.91 27.36 ± 1.08 
+
+PRO-MAX 1.00 × 46.72 ± 0.78 67.90 ± 0.86 23.64 ± 0.97 
+
+Expanded Resource Generator / replay FCIL TARGET Synthetic 2.80 × 43.18 ± 0.96 70.22 ± 1.02 30.66 ± 1.28 
+
+MFCL Synthetic 3.00 × 44.02 ± 1.05 70.10 ± 1.04 29.12 ± 1.22 
+
+HR Hybrid 3.20 × 45.34 ± 0.92 68.70 ± 0.94 26.38 ± 1.13 
+
+Heterogeneous FCIL FedSpace Proto 1.25 × 39.28 ± 1.08 66.14 ± 1.19 35.12 ± 1.38 
+
+FedSSI Memory 1.15 × 40.58 ± 1.02 66.82 ± 1.11 34.18 ± 1.32 
+
+FedCBDR Replay 2.80 × 45.76 ± 0.86 68.80 ± 0.90 25.84 ± 1.05 
+
+Ours PRO Projected memory 1.12 × 43.86 ± 0.82 67.20 ± 0.91 27.36 ± 1.08 
+
+PRO-MAX 1.16 × 46.72 ± 0.78 67.90 ± 0.86 23.64 ± 0.97 
+
+6.2 Results under Heterogeneous FCIL 
+
+Table 2 moves the FCIL methods into the heterogeneous stress setting. Compared with the homoge-neous expanded-resource regime, generator-based and replay-heavy methods degrade substantially even though they retain the larger replay budget. This pattern is consistent with the central stress hypothesis: increasing replay quantity does not necessarily fix replay quality when the task state used to derive replay is weak or temporally misaligned. Among prior heterogeneous FCIL baselines, FedCBDR remains the strongest because its replay-balancing mechanism directly addresses class and task imbalance. FedSpace and FedSSI are more robust than generator-only baselines, but still suffer under the combined supervision-imbalance and stage-misalignment protocol. PRO improves over these baselines with a smaller communication budget by replacing input-space replay with projected class-level memory. PRO-MAX further reduces forgetting through memory alignment, suggesting that its main benefit is retention under representation drift rather than merely higher current-task fitting. 
+
+6.3 When Generators Fail 
+
+Figure 2 tests the observation in Section 3.2 through two linked views. The heatmap shows final task-wise accuracy, revealing whether a weak task is followed by later degradation that FAA, CTA, and AF may hide. The feature view examines replay quality by embedding real held-out samples and weak-task replay samples in the same feature space. Reliable replay should keep them close, while biased or incomplete weak-task states can shift replay away from the real cluster or cause 7Table 2: Heterogeneous CIFAR-100 FCIL under the expanded replay budget selected from the homogeneous setting. Generator-based and replay-heavy methods use the same expanded budget as in Table 1; PRO and PRO-MAX remain fixed-budget projected-memory methods. 
+
+Group Method Budget Comm. ↓ FAA ↑ CTA ↑ AF ↓
+
+FL only FedAvg None 1.00 × 7.86 ± 0.42 48.64 ± 1.58 82.74 ± 1.36 
+
+FedProx None 1.00 × 8.92 ± 0.47 49.86 ± 1.51 80.96 ± 1.28 
+
+FedProto Proto 1.08 × 18.74 ± 0.96 52.38 ± 1.43 66.82 ± 1.74 
+
+Generator / replay FCIL TARGET Synthetic 2.80 × 27.86 ± 1.74 53.42 ± 1.86 57.84 ± 2.18 
+
+MFCL Generative replay 3.00 × 29.42 ± 1.68 54.76 ± 1.79 54.63 ± 2.04 
+
+HR Hybrid replay 3.20 × 32.18 ± 1.52 56.92 ± 1.64 49.76 ± 1.87 
+
+Heterogeneous FCIL FedSpace Proto 1.25 × 33.84 ± 1.39 55.18 ± 1.52 47.92 ± 1.76 
+
+FedSSI Memory 1.15 × 34.62 ± 1.31 55.74 ± 1.44 46.38 ± 1.69 
+
+FedCBDR Replay 2.80 × 38.96 ± 1.18 59.36 ± 1.27 39.72 ± 1.48 
+
+Ours PRO Projected memory 1.12 × 43.28 ± 0.94 63.72 ± 1.03 31.54 ± 1.18 
+
+PRO-MAX 1.16 × 46.12 ± 0.88 65.06 ± 0.96 26.18 ± 1.07 15 20 25 30 35 40 45 50 55 60                                                                
+
+> Final task accuracy (%)
+> T1 T2 T3 T4 T5 T6 T7 T8 T9 T10
+> Semantic Task
+> TARGET
+> MFCL
+> HR
+> FedCBDR
+> PRO
+> PRO-MAX
+> weak task
+> 44.83 41.67 36.94 24.17 23.53 22.87 22.16 21.58 20.97 19.88
+> 46.37 43.81 38.49 26.27 24.59 23.91 23.17 22.73 22.19 22.67
+> 49.11 46.67 42.43 31.57 26.49 25.73 24.97 24.13 23.57 27.13
+> 54.23 51.37 47.53 38.87 35.13 34.27 33.17 32.23 31.17 31.63
+> 56.43 53.27 49.57 44.63 41.27 39.83 38.67 37.43 36.27 35.43
+> 58.37 55.63 52.17 49.27 44.23 42.73 41.57 40.23 39.17 37.83
+
+(a) Task-wise final accuracy heatmap. TARGET MFCL HR      
+
+> FedCBDR PRO PRO-MAX
+> Real samples Synthetic samples Prototypes
+
+(b) Real vs. generated features in the weak task. 
+
+Figure 2: Generator-failure diagnostic under heterogeneous CIFAR-100. The heatmap reports final per-task accuracies after the full stream. The feature visualization compares real held-out samples with replay samples for prior baselines and projected-memory samples for PRO/PRO-MAX. collapse, separating replay failure from classifier miscalibration. Appendix E.6 quantifies this chain. Table 8 reports weak-task accuracy after learning, replay-real mismatch, downstream drop, final FAA, and AF. Figure 3 plots MMD against downstream drop for each method across seeds and weak-task intervention strengths, with circles, squares, and triangles marking mild, medium, and severe interventions. The positive within-method trends show that larger mismatch aligns with larger downstream degradation, supporting that heterogeneous FCIL fails not only from limited replay quantity, but also from degraded replay quality. 
+
+6.4 Modality-Portability Evaluation 
+
+To test whether the benefit of our method is tied to image benchmarks or reflects a more general continual federated learning mechanism, we further evaluate on a text benchmark, THUCNews-10, and a graph benchmark, Cora. Table 3 consolidates both the homogeneous and heterogeneous settings in a single view. The homogeneous block shows whether a method transfers across modalities when client streams remain aligned, while the heterogeneous block tests the harder and more realistic case in which cross-client inconsistency is added on top of modality-specific representation challenges. 
+
+6.5 Ablation Study 
+
+Table 4 isolates the main design choices. The PRO and PRO-MAX comparison shows the gain from memory alignment. 8Table 3: Modality-portability evaluation on THUCNews-10 and Cora under both homogeneous and heterogeneous settings. We report FAA, CTA, AF, and normalized cumulative communication. Method Homogeneous Heterogeneous FAA ↑ CTA ↑ AF ↓ Comm. ↓ FAA ↑ CTA ↑ AF ↓ Comm. ↓
+
+THUCNews-10 
+
+FedAvg 68.54 ± 1.28 84.18 ± 1.04 31.82 ± 1.74 1.00 × 61.08 ± 1.52 79.76 ± 1.21 41.62 ± 1.96 1.00 ×
+
+FedProx 69.36 ± 1.21 84.06 ± 0.98 30.64 ± 1.68 1.00 × 62.42 ± 1.47 80.13 ± 1.18 40.16 ± 1.87 1.00 ×
+
+FedProto 72.78 ± 1.12 84.52 ± 0.96 25.92 ± 1.46 1.06 × 66.24 ± 1.36 80.48 ± 1.10 34.82 ± 1.66 1.06 ×
+
+FedSeIT 78.86 ± 0.97 85.42 ± 0.84 18.62 ± 1.24 1.25 × 73.28 ± 1.18 82.14 ± 0.98 25.86 ± 1.39 1.25 ×
+
+PRO 82.94 ± 0.82 87.24 ± 0.76 13.82 ± 1.02 1.10 × 78.42 ± 1.04 84.08 ± 0.91 20.84 ± 1.26 1.10 ×
+
+PRO-MAX 85.16 ± 0.74 88.02 ± 0.71 10.96 ± 0.88 1.14 × 81.62 ± 0.96 85.22 ± 0.86 16.42 ± 1.10 1.14 ×
+
+Cora 
+
+FedAvg 46.18 ± 2.76 58.86 ± 2.94 53.84 ± 4.28 1.00 × 39.84 ± 2.98 53.26 ± 3.16 61.82 ± 4.56 1.00 ×
+
+FedProx 47.06 ± 2.68 59.12 ± 2.88 51.76 ± 4.12 1.00 × 41.32 ± 2.87 54.08 ± 3.05 59.74 ± 4.38 1.00 ×
+
+FedProto 52.46 ± 2.51 61.18 ± 2.72 44.28 ± 3.96 1.08 × 46.82 ± 2.74 56.42 ± 2.93 51.86 ± 4.11 1.08 ×
+
+POWER 65.84 ± 4.94 70.86 ± 3.38 28.64 ± 4.72 1.42 × 58.76 ± 4.38 64.36 ± 3.72 38.82 ± 4.46 1.42 ×
+
+MOTION 66.42 ± 4.72 71.28 ± 3.44 27.86 ± 4.51 1.36 × 60.14 ± 4.21 65.08 ± 3.58 35.94 ± 4.29 1.36 ×
+
+PRO 68.86 ± 4.06 72.82 ± 3.06 23.84 ± 4.06 1.12 × 63.24 ± 3.91 66.42 ± 3.32 30.86 ± 3.94 1.12 ×
+
+PRO-MAX 70.42 ± 3.82 73.64 ± 2.88 20.96 ± 3.74 1.16 × 66.18 ± 3.66 68.04 ± 3.14 25.84 ± 3.62 1.16 ×
+
+Table 4: Ablation study on CIFAR-100 under the severe-heterogeneity regime. 
+
+Variant Comm. ↓ FAA ↑ CTA ↑ AF ↓
+
+PRO-MAX 1.16 × 46.12 ± 0.88 65.06 ± 0.96 26.18 ± 1.07 
+
+PRO 1.12 × 43.28 ± 0.94 63.72 ± 1.03 31.54 ± 1.18 
+
+after-adapter old memory 1.10 × 38.64 ± 1.10 62.86 ± 1.05 41.38 ± 1.36 
+
+w/o global refresh 1.13 × 40.86 ± 1.06 62.94 ± 1.04 36.82 ± 1.32 
+
+w/o shared warmup 1.04 × 37.84 ± 1.24 58.66 ± 1.12 41.72 ± 1.52 
+
+w/o projected old memory 1.00 × 24.16 ± 1.18 65.88 ± 1.05 62.46 ± 1.94 
+
+w/o proximal regularization 1.12 × 39.72 ± 1.15 62.48 ± 1.08 39.16 ± 1.41 
+
+The after-adapter old memory 
+
+variant rehearses old classes in the adapted space and up-dates only the classifier. Its drop shows that old projected memories should enter before the adapter, so they regular-ize both the adapter and classi-fier, rather than only calibrat-ing W . The without global refresh variant keeps local or stale memory statistics instead of recomputing them with the aggregated global model. Its degradation confirms that global memory accounting keeps projected memories in a consistent feature space. Removing projected old memory causes the largest forgetting, showing that PRO performs continual consolidation rather than only improving current-task learning. Finally, the without shared warmup 
+
+and without proximal regularization variants test whether projected memory needs a meaningful initial representation and controlled local plasticity under severe heterogeneity. 
+
+## 7 Conclusion 
+
+We studied heterogeneous federated class-incremental learning under supervision imbalance and stage misalignment. Motivated by the fragility of replay signals derived from weakly learned task states, we proposed PRO, a generator-free framework that replaces input-space replay with compact projected class memories and client-side balanced pseudo multi-task learning. We further introduced PRO-MAX, which adds confidence-weighted memory alignment to improve robustness when heterogeneous client updates shift the representation space. The framework avoids raw-data storage, input-space generators, local full-model distillation, and server-side gradient-based optimization during the incremental stream. The main limitation is that projected memories depend on the quality and stability of the learned representation. When the warmup representation is weak or when class support is extremely sparse, class-level projected statistics may be noisy. PRO-MAX mitigates this issue through memory transport, but it cannot fully recover old-class geometry when no reliable neighborhood support is available. Future work should study stronger privacy accounting for projected memories, adaptive memory uncertainty estimation, and deployment under fully asynchronous client participation. 9References 
+
+[1] Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas. Communication-efficient learning of deep networks from decentralized data. In Artificial intelligence and statistics , pages 1273–1282. Pmlr, 2017. [2] Michael Kamp, Jonas Fischer, and Jilles Vreeken. Federated learning from small datasets. arXiv preprint arXiv:2110.03469 , 2021. [3] Nan Lu, Zhao Wang, Xiaoxiao Li, Gang Niu, Qi Dou, and Masashi Sugiyama. Federated learning from only unlabeled data with class-conditional-sharing clients. arXiv preprint arXiv:2204.03304 , 2022. [4] Jiahua Dong, Lixu Wang, Zhen Fang, Gan Sun, Shichao Xu, Xiao Wang, and Qi Zhu. Federated class-incremental learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 10164–10173, 2022. [5] Jie Zhang, Chen Chen, Weiming Zhuang, and Lingjuan Lyu. Target: Federated class-continual learning via exemplar-free distillation. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,pages 4782–4793, 2023. [6] Jiahua Dong, Hongliu Li, Yang Cong, Gan Sun, Yulun Zhang, and Luc Van Gool. No one left behind: Real-world federated class-incremental learning. IEEE Transactions on Pattern Analysis and Machine Intelligence , 46(4):2054–2070, 2023. [7] Sara Babakniya, Zalan Fabian, Chaoyang He, Mahdi Soltanolkotabi, and Salman Avestimehr. A data-free approach to mitigate catastrophic forgetting in federated class incremental learning for vision tasks. 
+
+Advances in Neural Information Processing Systems , 36:66408–66425, 2023. [8] Thinh Nguyen, Khoa D Doan, Binh T Nguyen, Danh Le-Phuoc, and Kok-Seng Wong. Overcoming catastrophic forgetting in federated class-incremental learning via federated global twin generator. arXiv preprint arXiv:2407.11078 , 2024. [9] Jinglin Liang, Jin Zhong, Hanlin Gu, Zhongqi Lu, Xingxing Tang, Gang Dai, Shuangping Huang, Lixin Fan, and Qiang Yang. Diffusion-driven data replay: A novel approach to combat forgetting in federated class continual learning. In European Conference on Computer Vision , pages 303–319. Springer, 2024. [10] Xin Yang, Hao Yu, Xin Gao, Hao Wang, Junbo Zhang, and Tianrui Li. Federated continual learning via knowledge fusion: A survey. IEEE Transactions on Knowledge and Data Engineering , 36(8):3832–3850, 2024. [11] Parisa Hamedi, Roozbeh Razavi-Far, and Ehsan Hallaji. Federated continual learning: Concepts, challenges, and solutions. Neurocomputing , page 130844, 2025. [12] Milad Khademi Nori, Il-Min Kim, and Guanghui Wang. Federated class-incremental learning: A hybrid approach using latent exemplars and data-free techniques to address local and global forgetting. arXiv preprint arXiv:2501.15356 , 2025. [13] Xuankun Rong, Jianshu Zhang, Kun He, and Mang Ye. Can: Leveraging clients as navigators for generative replay in federated continual learning. In Forty-second International Conference on Machine Learning ,2025. [14] Sylvestre-Alvise Rebuffi, Alexander Kolesnikov, Georg Sperl, and Christoph H Lampert. icarl: Incremental classifier and representation learning. In Proceedings of the IEEE conference on Computer Vision and Pattern Recognition , pages 2001–2010, 2017. [15] Fei Zhu, Xu-Yao Zhang, Chuang Wang, Fei Yin, and Cheng-Lin Liu. Prototype augmentation and self-supervision for incremental learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 5871–5880, 2021. [16] Grégoire Petit, Adrian Popescu, Hugo Schindler, David Picard, and Bertrand Delezoide. Fetril: Feature translation for exemplar-free class-incremental learning. In Proceedings of the IEEE/CVF winter conference on applications of computer vision , pages 3911–3920, 2023. [17] Lu Yu, Bartlomiej Twardowski, Xialei Liu, Luis Herranz, Kai Wang, Yongmei Cheng, Shangling Jui, and Joost van de Weijer. Semantic drift compensation for class-incremental learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 6982–6991, 2020. [18] Aravindh Mahendran and Andrea Vedaldi. Understanding deep image representations by inverting them. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 5188–5196, 2015. 
+
+10 [19] Matt Fredrikson, Somesh Jha, and Thomas Ristenpart. Model inversion attacks that exploit confidence information and basic countermeasures. In Proceedings of the 22nd ACM SIGSAC conference on computer and communications security , pages 1322–1333, 2015. [20] Ligeng Zhu, Zhijian Liu, and Song Han. Deep leakage from gradients. Advances in neural information processing systems , 32, 2019. [21] Jaehong Yoon, Wonyong Jeong, Giwoong Lee, Eunho Yang, and Sung Ju Hwang. Federated continual learning with weighted inter-client transfer. In International conference on machine learning , pages 12073–12086. PMLR, 2021. [22] Yatin Chaudhary, Pranav Rai, Matthias Schubert, Hinrich Schütze, and Pankaj Gupta. Federated continual learning for text classification via selective inter-client transfer. In Findings of the Association for Computational Linguistics: EMNLP 2022 , pages 4789–4799, 2022. [23] Donald Shenaj, Marco Toldo, Alberto Rigon, and Pietro Zanuttigh. Asynchronous federated continual learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 5055–5063, 2023. [24] Yichen Li, Yuying Wang, Haozhao Wang, Yining Qi, Tianzhe Xiao, and Ruixuan Li. Rehearsal-free continual federated learning with synergistic synaptic intelligence. arXiv preprint arXiv:2412.13779 , 2024. [25] Zhuang Qi, Ying-Peng Tang, Lei Meng, Han Yu, Xiaoxiao Li, and Xiangxu Meng. Class-wise balancing data replay for federated class-incremental learning. arXiv preprint arXiv:2507.07712 , 2025. [26] Yue Tan, Guodong Long, Lu Liu, Tianyi Zhou, Qinghua Lu, Jing Jiang, and Chengqi Zhang. Fedproto: Federated prototype learning across heterogeneous clients. In Proceedings of the AAAI conference on artificial intelligence , volume 36, pages 8432–8440, 2022. [27] Yinlin Zhu, Miao Hu, and Di Wu. Federated continual graph learning. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2 , pages 4203–4213, 2025. [28] Guancheng Wan, Fengyuan Ran, Ruikang Zhang, Wenke Huang, Xuankun Rong, Guibin Zhang, Yuxin Wu, Bo Du, and Mang Ye. Motion: Multi-sculpt evolutionary coarsening for federated continual graph learning. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. [29] Neil Houlsby, Andrei Giurgiu, Stanislaw Jastrzebski, Bruna Morrone, Quentin De Laroussilhe, Andrea Ges-mundo, Mona Attariyan, and Sylvain Gelly. Parameter-efficient transfer learning for nlp. In International conference on machine learning , pages 2790–2799. PMLR, 2019. [30] Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Liang Wang, Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. Iclr , 1(2):3, 2022. [31] Tian Li, Anit Kumar Sahu, Manzil Zaheer, Maziar Sanjabi, Ameet Talwalkar, and Virginia Smith. Federated optimization in heterogeneous networks. Proceedings of Machine learning and systems , 2:429–450, 2020. [32] Sai Praneeth Karimireddy, Satyen Kale, Mehryar Mohri, Sashank Reddi, Sebastian Stich, and Ananda Theertha Suresh. Scaffold: Stochastic controlled averaging for federated learning. In Inter-national conference on machine learning , pages 5132–5143. PMLR, 2020. [33] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 770–778, 2016. [34] James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the national academy of sciences , 114(13):3521–3526, 2017. [35] Zhizhong Li and Derek Hoiem. Learning without forgetting. IEEE transactions on pattern analysis and machine intelligence , 40(12):2935–2947, 2017. [36] Pietro Buzzega, Matteo Boschini, Angelo Porrello, Davide Abati, and Simone Calderara. Dark experience for general continual learning: a strong, simple baseline. Advances in neural information processing systems , 33:15920–15930, 2020. [37] Shipeng Yan, Jiangwei Xie, and Xuming He. Der: Dynamically expandable representation for class incremental learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 3014–3023, 2021. 
+
+11 [38] Fu-Yun Wang, Da-Wei Zhou, Han-Jia Ye, and De-Chuan Zhan. Foster: Feature boosting and compression for class-incremental learning. In European conference on computer vision , pages 398–414. Springer, 2022. [39] Yuhang Ma, Zhongle Xie, Jue Wang, Ke Chen, and Lidan Shou. Continual federated learning based on knowledge distillation. In Ijcai , pages 2182–2188, 2022. [40] Chenghao Liu, Xiaoyang Qu, Jianzong Wang, and Jing Xiao. Fedet: a communication-efficient federated class-incremental learning framework based on enhanced transformer. arXiv preprint arXiv:2306.15347 ,2023. [41] Shai Ben-David, John Blitzer, Koby Crammer, Alex Kulesza, Fernando Pereira, and Jennifer Wortman Vaughan. A theory of learning from different domains. Machine learning , 79(1):151–175, 2010. [42] Cédric Villani et al. Optimal transport: old and new , volume 338. Springer, 2009. [43] Elizbar A Nadaraya. On estimating regression. Theory of Probability & Its Applications , 9(1):141–142, 1964. [44] Geoffrey S Watson. Smooth regression analysis. Sankhy ¯a: The Indian Journal of Statistics, Series A , pages 359–372, 1964. 
+
+12 A Extended Related Work 
+
+A.1 Representation-Space Memory in Continual Learning 
+
+Continual learning studies how a model can acquire new tasks while retaining performance on old ones. Existing methods are commonly grouped into regularization-based methods, which constrain important parameters from changing too much [ 34 ]; distillation-based methods, which preserve the outputs of previous models [ 35 ]; replay-based methods, which revisit stored or generated signals from old tasks [ 14 , 36 ]; and architecture-based methods, which allocate or expand model components over time [37, 38]. These directions address the stability-plasticity trade-off from different perspectives. The line most related to PRO is representation-space memory. Early class-incremental learning methods showed that feature-space class means can support incremental recognition [ 14 ]. Later exemplar-free methods reduce the need for raw exemplars by using prototypes, prototype augmenta-tion, or pseudo-features in representation space [ 15 , 16 ]. This line is relevant to our work because it shows that old knowledge need not always be stored as input-level examples. Nevertheless, centralized representation-memory methods do not directly address the constraints of federated class-incremental learning. In FCIL, memories must be communicated, clients may observe different label subsets, and the server aggregates updates from clients at different stages of the stream. PRO adapts the representation-memory idea to this setting by storing compact class-level projected statistics on the server and broadcasting them to clients for local pseudo multi-task learning. The memory is inserted before the adapter, so old classes provide gradients to both the adapter and the classifier rather than only calibrating the final classifier. Another closely related issue is representation drift. When the feature extractor changes, old class memories computed under earlier models may become stale. Prior work in centralized class-incremental learning has studied semantic drift and proposed compensation mechanisms for old representations [ 17 ]. PRO-MAX follows the same high-level motivation but changes the operating setting. Instead of performing centralized drift compensation, each client estimates local feature movement from a small calibration cache, and the server aggregates confidence-weighted transport summaries. This design is necessary in heterogeneous FCIL because different clients can move their feature spaces in different directions depending on local task order and label support. Finally, representation-space memory also raises privacy considerations. Storing per-example features is not automatically safe: deep representations and model outputs can be inverted or exploited to reveal information about private inputs [ 18 , 19 ], and gradients can leak private training examples in federated settings [ 20 ]. These risks motivate a coarser memory object. Prototype-based federated learning has shown that class-level representatives can be useful communication objects under heterogeneous clients [ 26 ]. PRO adopts this class-level projected memory perspective. It does not claim formal privacy guarantees, but it avoids raw examples, generated inputs, and instance-level feature banks while retaining enough information for old-class rehearsal. 
+
+A.2 Input-Space Replay and Generator-Based FCIL 
+
+Federated class-incremental learning combines the optimization difficulty of FL with an expanding label space. GLFC is an early FCIL framework that explicitly models both local forgetting on clients and global forgetting after aggregation [ 4 ]. Other FCIL methods address forgetting through knowledge distillation, surrogate data, task-adaptive decomposition, or communication-efficient adaptation [ 39 , 21 , 40 ]. These methods provide important foundations for FCIL, but many are evaluated under relatively synchronized or vision-centered protocols. A major exemplar-free branch uses data-free or generator-based replay to avoid storing old examples. TARGET performs exemplar-free distillation for federated class-continual learning [ 5]. MFCL studies a data-free strategy for mitigating catastrophic forgetting in federated class-incremental vision tasks [ 7]. Other works improve replay using global twin generators, diffusion-driven replay, hybrid latent rehearsal, or client-assisted generative replay [ 8, 9, 12 , 13 ]. This branch is attractive because it reduces raw exemplar storage and can perform well on standard vision benchmarks. However, generator-centered replay has two limitations that are central to this paper. First, replay quality is downstream of task-learning quality. If a semantic task is learned from weak, biased, or incomplete supervision, then replay derived from that task can also be weak. Under heterogeneous 13 FCIL, this dependency becomes more fragile because client updates may come from different label subsets or different task stages. Second, input-space generation is naturally modality-dependent. Image generators, text generators, and graph generators require different architectures, constraints, and validity assumptions. As a result, a generator-centered memory mechanism can become difficult to transfer across modalities. PRO takes a different route. Rather than improving the generator, it replaces input-space replay with projected class-level memory. Once a modality-specific encoder maps raw inputs into a projected feature space, the same memory interface can be used for images, text, and graphs. PRO also keeps consolidation on clients: the server broadcasts projected memories, aggregates model updates, and refreshes memory statistics, but does not train a generator or run server-side SGD over pseudo data. PRO-MAX extends this design by aligning old projected memories when client updates shift the representation. 
+
+A.3 Heterogeneous Federated Continual Learning 
+
+Heterogeneous federated continual learning studies continual learning when clients do not share the same data distribution, task order, participation pattern, or learning stage. This setting builds on the broader FL literature on non-IID optimization. FedProx mitigates client drift with a proximal penalty [ 31 ], while SCAFFOLD uses control variates to correct local update drift [ 32 ]. These methods are not class-incremental learners by themselves, but they motivate a key design choice in PRO: local plasticity should be controlled because heterogeneous clients can otherwise distort the shared representation and make projected memories stale. Several federated continual learning methods explicitly address heterogeneity. FedWeIT decomposes knowledge into shared and client-specific components to support inter-client transfer under continual streams [ 21 ]. FedSeIT studies federated continual text classification through selective inter-client transfer [ 22 ]. Asynchronous federated continual learning methods, such as FedSpace, further relax synchronized task progress and study clients that may be at different stages of the stream [ 23 ]. More recent methods such as FedSSI and FedCBDR address rehearsal-free synaptic regularization or class-wise replay balancing for heterogeneous continual settings [ 24 , 25 ]. These methods show that heterogeneity is not a minor extension of FCIL, but a defining difficulty. Heterogeneity also appears in graph-based continual federated learning. POWER and MOTION study federated continual graph learning, where clients own different graph partitions and continual node-label streams [ 27 , 28 ]. These settings are relevant because graph partitions can induce additional representation drift beyond ordinary label skew. Our graph experiments follow this broader motivation, while using projected memories computed from node embeddings rather than storing raw node features or edges. The proposed setting focuses on heterogeneous class-incremental learning with two explicit controls: supervision imbalance and stage misalignment. Supervision imbalance changes how much and what kind of supervision each semantic task receives across clients. Stage misalignment changes whether clients are learning the same semantic task at the same communication time. These controls are chosen because they expose two different failure modes: weak or biased task learning, and aggregation across clients located at different stages of the continual stream. PRO is complementary to prior heterogeneous FCL methods. Instead of relying on a generator, a large exemplar memory, or server-side pseudo-data optimization, it maintains a compact projected memory interface and performs balanced old-new consolidation locally on clients. PRO-MAX further targets the representation-drift component of heterogeneity by transporting old memories through confidence-weighted alignment. This makes the method particularly aligned with heterogeneous FCIL, where the server must preserve an expanding label space while clients provide uneven and temporally misaligned supervision. Although the third direction in the main paper is now framed as heterogeneous FCL, the modality aspect remains important. Many heterogeneous FCIL methods are still evaluated primarily on vision streams, while text and graph settings require different encoders and data constraints. PRO confines modality-specific design to the encoder hθ . Once raw inputs are mapped into projected features, the same class-level memory, client-side pseudo multi-task objective, and server-side memory accounting are reused across modalities. This separation supports our goal of studying heterogeneous FCIL beyond image-only generator pipelines. 14 B Full Heterogeneous FCIL Protocol and Metrics 
+
+B.1 Detailed Heterogeneous FCIL Setup 
+
+We consider a client-server federated system with C clients and one central server. The set of semantic tasks is 
+
+S = {1, 2, . . . , T }.
+
+Each semantic task t ∈ S introduces a disjoint class set Yt, and the full semantic label space is 
+
+Y =
+
+> T
+
+[
+
+> t=1
+
+Yt, Yt ∩ Y t′ = ∅ for t̸ = t′.
+
+Client c follows a client-specific semantic task order 
+
+πc = [ πc[0] , π c[1] , . . . , π c[T − 1]] ,
+
+where πc[p] ∈ S is the semantic task encountered by client c at local position p. At that position, the client receives 
+
+Dc,p = {(xi, y i)}Nc,p  
+
+> i=1
+
+, yi ∈ eYc,p ⊆ Y πc[p].
+
+Here, eYc,p denotes the label subset actually observed by client c. This distinguishes client-observed training labels from the full semantic label set Yπc[p] of the task. Therefore, two clients can encounter the same semantic task but still receive different class subsets or different numbers of examples. The cumulative semantic task history of client c up to position p is 
+
+T (p) 
+
+> c
+
+= {πc[0] , π c[1] , . . . , π c[p]}.
+
+The observed training-label history of client c is 
+
+Y(p) 
+
+> c
+
+=
+
+> p
+
+[
+
+> q=0
+
+eYc,q .
+
+In contrast, the semantic label space associated with the tasks encountered by client c is 
+
+Y(p) 
+
+> c, sem
+
+= [ 
+
+> t∈T (p)
+> c
+
+Yt.
+
+The federation-level prediction label space at position p is defined at the semantic-task level: 
+
+Y(p) =
+
+> C
+
+[
+
+> c=1
+
+Y(p)
+
+> c, sem
+
+.
+
+Thus, clients may train on incomplete label subsets, but the global classifier is evaluated over the semantic classes introduced to the federation. We denote the global model after position p by 
+
+f (x; Θ (p)),
+
+where Θ(p) is method-agnostic. This notation covers generator-based FCIL methods, distillation-based methods, prototype-based methods, and our projected-memory methods. All methods are evaluated under a single-head class-incremental protocol: 
+
+ˆy = arg max 
+
+> y∈Y (p)
+
+fy (x; Θ (p)).
+
+The task identity is not provided at inference time. 15 B.2 Support Assumption and Label-Space Convention 
+
+Because clients may observe only part of a semantic task, we assume that every evaluated semantic class is supported by at least one client when its task appears: 
+
+[
+
+> (c,p ): πc[p]= t
+
+eYc,p = Yt, ∀t ∈ S .
+
+This assumption allows supervision to be sparse, skewed, and unevenly distributed, but prevents the evaluation from including classes that are completely absent from the federation. Without this assumption, a model could be evaluated on labels that no client has ever observed, which would no longer measure continual learning performance. Throughout the paper, eYc,p denotes client-observed training labels, while Yt denotes the full semantic label set of task t. The prediction space Y(p) is defined at the semantic-task level, not merely as the union of labels observed by a particular client. This convention is important because our evaluation uses the full semantic task test split rather than only the labels locally observed by each client. 
+
+B.3 Supervision Imbalance Sampler 
+
+Supervision imbalance captures the fact that clients may provide different amounts or coverage of supervision for the same semantic task. Let pc(t) be the position at which client c encounters task t,and define 
+
+Dc,t = Dc,p c(t), eYc,t = eYc,p c(t).
+
+Then supervision imbalance occurs whenever, for clients c̸ = c′,
+
+eYc,t ̸ = eYc′,t or |D c,t |̸ = |D c′,t |.
+
+We define the task support set 
+
+Ct = {c ∈ { 1, . . . , C } : |D c,t | > 0}.
+
+Tasks with small |C t|, highly imbalanced |D c,t |, or incomplete eYc,t receive weak or biased federated supervision. In experiments, supervision imbalance is controlled by two quantities. The first is the fraction of clients that support each semantic task. The second is the fraction of labels inside that task observed by each supporting client. The sampler first selects a support set Ct for each task t, then assigns each supporting client a subset of Yt. The assignment is constrained to satisfy the support assumption above, so that every evaluated class has at least one supporting client. 
+
+B.4 Stage Misalignment Sampler 
+
+Stage misalignment captures the fact that clients do not need to learn the same semantic task at the same communication time. Formally, at local position p, two clients can satisfy 
+
+πc[p]̸ = πc′ [p].
+
+Thus, while one client is learning one semantic task, another client may be updating a different part of the label space. This makes aggregation harder because the server combines updates from clients optimizing different task objectives. In experiments, stage misalignment is controlled by perturbing client-specific task orders. The homogeneous setting corresponds to 
+
+πc = [1 , 2, . . . , T ] for all c. 
+
+In heterogeneous settings, each client receives a perturbed order. Stronger perturbation creates stronger stage misalignment. This is distinct from ordinary non-IID label skew: non-IID skew changes the local class distribution within a task, while stage misalignment changes which semantic task each client is learning at a given position. 16 B.5 Homogeneous FCIL as a Special Case 
+
+The homogeneous FCIL setting is recovered when all clients share the same task order and each semantic task is supported by all or most clients. In this case, stage misalignment disappears, and the client-first metrics reduce to the standard class-incremental evaluation over the shared task sequence. We include homogeneous results to verify that PRO and PRO-MAX remain competitive in the setting where most prior FCIL methods are typically evaluated. 
+
+B.6 Client-First Evaluation Metrics 
+
+Because clients follow different task histories, evaluation should respect client-specific histories. For each semantic task t, let Dtest  
+
+> t
+
+be the global test split restricted to labels in Yt. At position p, the cumulative test pool for client c is 
+
+Dtest (T (p) 
+
+> c
+
+) = [ 
+
+> t∈T (p)
+> c
+
+Dtest  
+
+> t
+
+.
+
+We evaluate on the full semantic task test split rather than a client-specific subset because the target model is global and should recognize all classes introduced by a semantic task. 
+
+Final average accuracy. The cumulative accuracy of client c at position p is 
+
+A(p) 
+
+> c
+
+= 1
+
+|D test (T (p) 
+
+> c
+
+)|
+
+X  
+
+> (x,y )∈D test (T(p)
+> c)
+
+1
+
+
+
+arg max 
+
+> y′∈Y (p)
+
+fy′ (x; Θ (p)) = y
+
+
+
+.
+
+The final average accuracy reported in the main paper is 
+
+FAA = 1
+
+C
+
+> C
+
+X
+
+> c=1
+
+A(T −1)  
+
+> c
+
+.
+
+Current-task accuracy. Average accuracy does not show whether the model can learn newly arriving tasks. Therefore, we also evaluate the current semantic task encountered by each client: 
+
+CTA (p) 
+
+> c
+
+= 1
+
+|D test 
+
+> πc[p]
+
+|
+
+X
+
+> (x,y )∈D test
+> πc [p]
+
+1
+
+
+
+arg max 
+
+> y′∈Y (p)
+
+fy′ (x; Θ (p)) = y
+
+
+
+.
+
+We average over clients and positions: 
+
+CTA = 1
+
+CT 
+
+> C
+
+X 
+
+> c=1
+> T−1
+
+X
+
+> p=0
+
+CTA (p) 
+
+> c
+
+.
+
+Average forgetting. Let 
+
+pc(t) = min {p : πc[p] = t}
+
+be the first position at which client c encounters semantic task t. For any p ≥ pc(t), define 
+
+A(p) 
+
+> c,t
+
+= 1
+
+|D test  
+
+> t
+
+|
+
+X
+
+> (x,y )∈D test
+> t
+
+1
+
+
+
+arg max 
+
+> y′∈Y (p)
+
+fy′ (x; Θ (p)) = y
+
+
+
+.
+
+The forgetting of client c on task t is 
+
+Fc,t = max   
+
+> pc(t)≤q≤T−1
+
+A(q) 
+
+> c,t
+
+− A(T −1)  
+
+> c,t
+
+.
+
+Let the last task encountered by client c be 
+
+tlast  
+
+> c
+
+= πc[T − 1] .
+
+We exclude this task from forgetting because it has not experienced subsequent interference. The client-level forgetting is 
+
+AF c = 1
+
+|T (T −1)  
+
+> c
+
+| − 1
+
+X    
+
+> t∈T (T−1)
+> c\{ tlast
+> c}
+
+Fc,t .
+
+The final average forgetting is 
+
+AF = 1
+
+C
+
+> C
+
+X
+
+> c=1
+
+AF c.
+
+17 C Additional Method Details 
+
+C.1 Federated In-Domain Warmup 
+
+The warmup objective is used before the supervised class-incremental stream begins. Its purpose is to initialize the modality-specific base encoder hθ from in-domain data without relying on external pretrained weights. To avoid giving PRO and PRO-MAX an initialization advantage, the same federated in-domain self-supervised warmup is applied to all methods with the same backbone, client sampling schedule, number of warmup rounds, optimizer, and local warmup epochs. Each client optimizes a modality-compatible self-supervised objective 
+
+Lwarm = Ex [ℓssl (rω (hθ (˜ x)) , s (x, ˜x))] , (4) where ˜x ∼ A (x) and rω is a local auxiliary head. The auxiliary head is discarded after warmup, and only the warmed base encoder is retained for the supervised incremental stream. The warmup phase is distinct from the continual-learning method itself. After warmup, each baseline runs its original FCIL mechanism, including its own distillation, replay, prototype, or generator module when applicable. PRO and PRO-MAX use the same warmed encoder as the base feature space for projected memories. Therefore, performance differences in the supervised incremental stream are attributed to the continual-learning mechanism rather than to different representation initialization. During the class-incremental stream, PRO and PRO-MAX may still use a short auxiliary self-supervised regularizer only when the base encoder is unfrozen during controlled plasticity. This in-stream auxiliary term serves a different purpose from warmup: warmup initializes the representation before the stream, whereas the in-stream term stabilizes a short supervised current-task update. Unless otherwise stated, the auxiliary term is disabled after the early plasticity rounds. 
+
+C.2 Algorithmic Summary 
+
+Algorithms 1 and 2 summarize the execution order of PRO and PRO-MAX. They refer to the equations and update rules defined in Section 4 and Appendix C. The key point is that all gradient-based optimization is performed on clients, while the server only aggregates model updates, refreshes projected memories, and, in PRO-MAX, applies confidence-weighted memory alignment. 
+
+C.3 PRO Client Update 
+
+At round r of position p, the server broadcasts the global model and base-space memory (Θ g , Mu)
+
+to participating clients. If the auxiliary adapted-space memory is enabled, the server also broadcasts 
+
+Mz . Each client initializes its local model from Θg .The client first performs a short current-task fitting phase: 
+
+Lfit = Lsup + λaux Laux + λprox ∥Πr (Θ) − Πr (Θ g )∥22 ,
+
+where 
+
+Lsup = E(x,y )∈D c,p CE  W ⊤aψ (hθ (x)) , y  .
+
+The operator Πr (·) selects only the parameters that are trainable in round r. The auxiliary term is instantiated as a short in-stream consistency regularizer over two stochastic views of the same current-task input. For a mini-batch B, let ˜x(1)  
+
+> i
+
+, ˜x(2)  
+
+> i
+
+∼ A (xi) be two modality-compatible augmentations, and let 
+
+v(a) 
+
+> i
+
+= rω (hθ (˜ x(a) 
+
+> i
+
+)) 
+
+∥rω (hθ (˜ x(a) 
+
+> i
+
+)) ∥2 + ϵ , a ∈ { 1, 2},
+
+where rω is a lightweight projection head used only for the auxiliary regularizer. We use the symmetric contrastive consistency loss 
+
+Laux = 12|B| 
+
+> |B|
+
+X
+
+> i=1
+
+h
+
+ℓNCE (v(1)  
+
+> i
+
+, v (2)  
+
+> i
+
+) + ℓNCE (v(2)  
+
+> i
+
+, v (1)  
+
+> i
+
+)
+
+i
+
+,
+
+18 Algorithm 1 PRO: Projected Rehearsal Orchestration 
+
+Require: Client streams {D c,p }, task positions p = 0 , . . . , T − 1, communication rounds, global model Θg , primary memory Mu, optional memory Mz .
+
+Ensure: Final global model Θg and projected memories.  
+
+> 1:
+
+Run the shared federated in-domain warmup using Equation (4); discard the warmup head.  
+
+> 2:
+
+Initialize Mu ← ∅ and, if enabled, Mz ← ∅ . 
+
+> 3:
+
+for each task position p do  
+
+> 4:
+
+for each communication round r do  
+
+> 5:
+
+Server samples participating clients and broadcasts (Θ g , Mu); optionally also broadcasts 
+
+Mz . 
+
+> 6:
+
+for each participating client c in parallel do  
+
+> 7:
+
+Initialize local model Θc ← Θg . 
+
+> 8:
+
+Perform short controlled-plasticity fitting using Equation (1).  
+
+> 9:
+
+Freeze the base encoder after the early plasticity rounds according to the schedule in Appendix C.  
+
+> 10:
+
+Build current projected features from Dc,p . 
+
+> 11:
+
+Sample old projected memories from Mu using Equation (5).  
+
+> 12:
+
+Form a class-balanced projected pseudo multi-task batch.  
+
+> 13:
+
+Update the adapter and classifier using Equation (3).  
+
+> 14:
+
+Upload the local model update and sample count to the server.  
+
+> 15:
+
+end for  
+
+> 16:
+
+Server aggregates local models using Equation (6).  
+
+> 17:
+
+end for  
+
+> 18:
+
+Server triggers global-model memory refresh.  
+
+> 19:
+
+Clients recompute current-class memory statistics under the aggregated global model.  
+
+> 20:
+
+Server updates Mu using Equation (7); optionally refreshes Mz . 
+
+> 21:
+
+end for 
+
+with 
+
+ℓNCE (vi, v + 
+
+> i
+
+) = − log exp(sim( vi, v + 
+
+> i
+
+)/τ ssl )
+
+P|B|  
+
+> j=1
+
+exp(sim( vi, v + 
+
+> j
+
+)/τ ssl ) , sim( a, b ) = a⊤b. 
+
+The auxiliary head rω is discarded after the short plasticity phase and is not part of the persistent model. We set λaux > 0 only during the first two base-unfrozen rounds of each new task and set 
+
+λaux = 0 after the base encoder is frozen. Unless otherwise stated, we use τssl = 0 .5, λaux = 0 .05 
+
+for image streams, and λaux = 0 .01 for text and graph streams. When the base encoder is frozen, it is excluded from Πr (Θ) and λaux = 0 .After current-task fitting, the client builds a projected pseudo multi-task dataset. For current classes, it uses 
+
+Ucur  
+
+> c,p
+
+= {(hθc (xi), y i) : ( xi, y i) ∈ D c,p }.
+
+For old classes, it samples 
+
+˜uy,j = μuy + γσ uy ⊙ ϵj , ϵj ∼ N (0 , I ), (5) from the base-space memory bank. This gives 
+
+eUold  
+
+> c,p
+
+= {(˜ uy,j , y ) : y ∈ Y (p−1) }.
+
+The client trains on 
+
+Ujoint  
+
+> c,p
+
+= Ucur  
+
+> c,p
+
+∪ eUold 
+
+> c,p
+
+using 
+
+LPRO  
+
+> c
+
+= E(u,y )∈U joint  
+
+> c,p
+
+CE  W ⊤aψ (u), y  .
+
+We do not add an additional proximal term to this projected pseudo multi-task objective. This batch is already class-balanced over current and old classes, and its purpose is to recalibrate the adapter and classifier with a balanced old-new signal. 19 Algorithm 2 PRO-MAX: Memory Alignment eXtension 
+
+Require: Same inputs as Algorithm 1, calibration subset size, neighbor count K, and transport bandwidth. 
+
+Ensure: Final global model Θg and aligned projected memories.  
+
+> 1:
+
+Run the shared warmup and initialize memories as in Algorithm 1.  
+
+> 2:
+
+for each task position p do  
+
+> 3:
+
+for each communication round r do  
+
+> 4:
+
+Server samples participating clients and broadcasts the global model and memories.  
+
+> 5:
+
+for each participating client c in parallel do  
+
+> 6:
+
+Initialize local model Θc ← Θg . 
+
+> 7:
+
+Cache calibration features before current-task fitting.  
+
+> 8:
+
+Perform controlled-plasticity fitting using Equation (1).  
+
+> 9:
+
+Recompute calibration features after fitting and estimate local memory transport using Equation (8).  
+
+> 10:
+
+Sample old projected memories from the locally aligned memory centers.  
+
+> 11:
+
+Form a class-balanced projected pseudo multi-task batch.  
+
+> 12:
+
+Update the adapter and classifier using Equation (3).  
+
+> 13:
+
+Upload the local model update, sample count, and transport summaries.  
+
+> 14:
+
+end for  
+
+> 15:
+
+Server aggregates local models using Equation (6).  
+
+> 16:
+
+Server aligns old memories using confidence-weighted transport in Equation (9).  
+
+> 17:
+
+end for  
+
+> 18:
+
+Server refreshes current-class memories under the aggregated global model as in Algorithm 1.  
+
+> 19:
+
+If Mz is enabled, apply the same optional refresh and alignment logic in adapted space.  
+
+> 20:
+
+end for C.4 Server Aggregation and Global-Model Memory Refresh 
+
+After local training, clients upload model updates. The server aggregates them using FedAvg: 
+
+Θg ← X
+
+> c
+
+ωcΘc, ωc = nc
+
+P 
+
+> c′
+
+nc′
+
+. (6) The server then refreshes current-class memories under the aggregated global model. This is important because statistics computed under local models may not lie in the same feature space as the final global model. For base-space memory, client c recomputes, without gradient updates, 
+
+μu,g c,y = 1
+
+nc,y 
+
+X
+
+> (xi,y i)∈D c:yi=y
+
+hθg (xi),
+
+and 
+
+mu,g c,y = 1
+
+nc,y 
+
+X
+
+> (xi,y i)∈D c:yi=y
+
+hθg (xi) ⊙ hθg (xi).
+
+The server aggregates 
+
+μuy =
+
+P 
+
+> c
+
+nc,y μu,g c,y 
+
+P 
+
+> c
+
+nc,y 
+
+, muy =
+
+P 
+
+> c
+
+nc,y mu,g c,y 
+
+P 
+
+> c
+
+nc,y 
+
+, (7) and computes 
+
+(σuy )2 = max( muy − μuy ⊙ μuy , ϵ ).
+
+If the auxiliary adapted-space memory is enabled, clients also compute statistics for 
+
+z = aψg (hθg (x)) .
+
+The server aggregates the adapted-space mean μzy and radius ρzy :
+
+ρzy =
+
+r 1
+
+dz
+
+Ex∼y ∥aψg (hθg (x)) − μzy ∥22.
+
+20 This refresh step is memory accounting rather than training. By memory accounting, we mean aggregating class-level means, second moments, radii, counts, and memory metadata. The server does not optimize model parameters or run SGD over pseudo data. 
+
+C.5 PRO-MAX Client-Side Memory Transport 
+
+PRO-MAX inserts memory alignment between current-task fitting and projected pseudo multi-task training. Each client first caches features on a small calibration subset, performs the short current-task fitting update, recomputes the calibration features, and estimates how old memories should move. The locally aligned memories are then used to construct the projected pseudo multi-task batch in the same round. Let 
+
+Bc,p ⊂ D c,p 
+
+be the calibration subset. Before the fitting step, the client caches 
+
+u− 
+
+> i
+
+= hθ− (xi), xi ∈ B c,p .
+
+After the fitting step, it recomputes 
+
+u+ 
+
+> i
+
+= hθ+ (xi), δui = u+ 
+
+> i
+
+− u− 
+
+> i
+
+.
+
+For an old class y, define 
+
+dui,y = ∥u− 
+
+> i
+
+− μuy ∥22.
+
+Let N uy be the set of K nearest calibration samples to μuy . The client assigns weights 
+
+αui,y = exp 
+
+
+
+− dui,y 
+
+2τ 2
+
+> u
+
+
+
+.
+
+The local transport vector is 
+
+∆uc,y =
+
+P  
+
+> i∈N uy
+
+αui,y δui
+
+P  
+
+> i∈N uy
+
+αui,y + ϵ ,
+
+with confidence 
+
+quc,y = X 
+
+> i∈N uy
+
+αui,y .
+
+The client forms a locally aligned memory center 
+
+˜μuc,y = μuy + ∆ uc,y , (8) and samples old projected features from this aligned center before performing projected pseudo multi-task training. 
+
+C.6 PRO-MAX Server-Side Memory Alignment 
+
+After local training, clients upload model updates and transport summaries. The server first aggregates model parameters as in PRO. It then aligns old base memories by confidence-weighted aggregation: 
+
+∆u,g y =
+
+P 
+
+> c
+
+quc,y ∆uc,y 
+
+P 
+
+> c
+
+quc,y + ϵ , μuy ← μuy + ∆ u,g y . (9) The confidence score prevents clients whose current data are far from an old class from strongly influencing that class memory. If the auxiliary adapted-space memory Mz is enabled, the same construction is applied in adapted space. The client caches 
+
+z− 
+
+> i
+
+= aψ− (u− 
+
+> i
+
+), z+ 
+
+> i
+
+= aψ+ (u+ 
+
+> i
+
+), δzi = z+ 
+
+> i
+
+− z− 
+
+> i
+
+.
+
+The server aggregates adapted-space transport vectors and updates 
+
+μzy ← norm( μzy + ∆ z,g y ).
+
+This adapted-space alignment is auxiliary. The main rehearsal memory remains Mu.21 C.7 Class-Balanced Projected Training 
+
+Because current classes use real local data while old classes are represented by projected memory, ordinary mini-batch sampling can bias the local objective toward current classes. We therefore use a class-balanced sampler over Y(p). Equivalently, the objective approximates 
+
+1
+
+|Y (p)|
+
+X
+
+> y∈Y (p)
+
+Eu∼qy CE( W ⊤aψ (u), y ),
+
+where qy is the empirical current distribution for new classes and the projected memory distribution for old classes. 
+
+## D Experimental Setup Details 
+
+D.1 Datasets and Roles 
+
+We evaluate PRO and PRO-MAX on image, text, and graph classification benchmarks. CIFAR-100 is the main image benchmark because its 100 classes support a sufficiently long class-incremental stream. We use it for homogeneous FCIL, heterogeneous FCIL, generator-replay diagnostics, re-source analysis, and ablations. THUCNews-10 and Cora are used as modality-portability checks: THUCNews-10 tests text classification, while Cora tests graph node classification. In addition, we report scale-up results on TinyImageNet, CLINC150, and ogbn-arxiv. TinyImageNet increases visual complexity, CLINC150 provides a longer fine-grained intent stream, and ogbn-arxiv provides a larger graph node-classification benchmark. All datasets are converted into class-incremental streams by partitioning labels into semantic tasks. For every dataset and seed, all methods use identical task splits and client partitions. This ensures that performance differences come from the learning method rather than from different data partitions. 
+
+D.2 Task Splits and Client Partitions 
+
+CIFAR-100 is split into 10 semantic tasks with 10 classes per task. THUCNews-10 is split into 5 tasks with 2 categories per task. Cora is split into 3 tasks with class groups of sizes 2, 2, and 3. TinyImageNet, CLINC150, and ogbn-arxiv follow fixed-size class splits whenever possible, with remaining classes assigned to the final task. For each seed, we first sample a class order and then partition it into semantic tasks. The same task split is used by all methods. We then construct client-specific streams according to the heterogeneity controls described below. The partition sampler enforces the support assumption in Appendix B: every evaluated class is observed by at least one client when its semantic task appears. Thus, clients may observe incomplete or imbalanced label subsets, but no evaluated class is completely absent from the federation. 
+
+D.3 Heterogeneity Controls 
+
+We instantiate heterogeneity using two independent controls: supervision imbalance and stage misalignment. Supervision imbalance controls how much support each semantic task receives across clients. Specifically, we vary the fraction of clients that support each semantic task and the fraction of labels inside the task observed by each supporting client. This creates tasks with uneven client support and incomplete local label coverage. Stage misalignment controls whether clients learn the same semantic task at the same communication time. In the homogeneous setting, all clients follow the same task order. In heterogeneous settings, each client receives a perturbed task order. Stronger perturbation creates stronger stage misalignment. The severe-heterogeneity regime combines low task support with strong order perturbation. These two controls are different from ordinary non-IID label skew. Label skew changes the local class distribution within a task, while stage misalignment changes which semantic task a client is learning at a given position. This distinction is important because heterogeneous FCIL requires the server to aggregate updates from clients that may be optimizing different parts of the label space. 22 Table 5: Core experimental protocol. “Participants” denotes the number of clients sampled per communication round. Graph mini-batches are defined over target nodes and their local graphs. Dataset Task split Clients Participants Rounds/task Local epochs Batch size Seeds CIFAR-100 10 × 10 classes 20 10 20 5 64 5TinyImageNet 20 × 10 classes 20 10 20 5 64 5THUCNews-10 5 × 2 categories 20 10 10 3 64 5CLINC150 15 × 10 intents 20 10 10 3 64 5Cora 3 tasks (2 /2/3) classes 5 5 30 5 full local graph 5ogbn-arxiv 8 × 5 classes 10 5 20 3 1024 target nodes 5Table 6: Heterogeneity settings used in the main and appendix experiments.                      
+
+> Setting Task support Label coverage Order disorder Homogeneous 100% 100% 0%
+> Severe heterogeneity 40% 50% 60%
+> Support sweep {80 ,60 ,40 ,20 }%50% 60%
+> Order sweep 40% 50% {0,30 ,60 ,90 }%
+
+D.4 Core Numerical Protocol 
+
+Table 5 summarizes the default numerical protocol used in the experiments. For every dataset and seed, all methods use the same task split, client partition, client participation schedule, number of communication rounds, number of local epochs, and random initialization. This ensures that differences in performance are attributable to the learning method rather than to different data partitions or communication schedules. Unless otherwise stated, the severe-heterogeneity regime uses 40% task support, 50% per-client label coverage inside each supported task, and 60% task-order disorder. The homogeneous setting uses full task support, full label coverage, and no task-order disorder. The heterogeneity sweeps vary one factor at a time while keeping the other factors fixed at the severe-regime default. For optimization, image experiments use SGD with momentum 0.9, weight decay 5 × 10 −4, and initial learning rate 0.05 . Text experiments use Adam with learning rate 10 −3 and weight decay 
+
+10 −4. Graph experiments use Adam with learning rate 5 × 10 −3 and weight decay 5 × 10 −4.Hyperparameters are selected on held-out validation seeds and then fixed for all reported test seeds. The federated in-domain warmup uses unlabeled training data only and does not use class labels, task identities, or test examples. We use 20 warmup rounds for image datasets and 10 warmup rounds for text and graph datasets, with one local warmup epoch per round. The auxiliary warmup head is discarded before the supervised incremental stream starts. 
+
+D.5 Replay, Projected-Memory, and Alignment Budgets 
+
+Table 7 specifies the replay and projected-memory budgets used in the main experiments. For PRO and PRO-MAX, old samples are projected pseudo features sampled from the base-space memory bank Mu; they are not input-space synthetic examples. For generator-based and replay-heavy baselines, the budget denotes the number of replay samples available per old class during local training. The resource-matched regime uses the same per-class budget as PRO/PRO-MAX, while the resource-expanded regime gives replay-heavy baselines a larger budget selected on the homogeneous validation setting. For PRO and PRO-MAX, the projected pseudo multi-task batch is class-balanced over the current and old label space. In each local epoch, we sample up to 20 projected pseudo features per old class and balance them with current-task features. For PRO-MAX, the calibration subset size is |B c,p | = 128 ,the number of nearest neighbors is K = 5 , the projected-memory noise scale is γ = 0 .10 , and the proximal coefficient is λprox = 10 −2. The base encoder is updated only in the first two rounds of each new task; later rounds freeze the base encoder and update the adapter and classifier. Memory refresh is performed under the aggregated global model at the final round of each task. Participating clients recompute class-level means, second moments, radii, and counts without gradient updates. These statistic uploads are included in the communication accounting in Appendix G. 23 Table 7: Replay and projected-memory budgets. Budgets are specified per old class per participating client per local epoch.             
+
+> Object Matched resource Expanded resource PRO/PRO-MAX projected pseudo features 20 20 TARGET/MFCL/HR replay samples 20 100 FedCBDR replay samples 20 100 FedProto/FedSpace prototype summaries class-level expanded class-level FedSSI memory summaries class-level expanded class-level
+
+D.6 Backbones and Initialization 
+
+For image benchmarks, we use a randomly initialized ResNet-18 [ 33 ]. No ImageNet-pretrained weights are used in the main experiments unless explicitly stated in an appendix ablation. This keeps representation learning fully in-domain and avoids external pretraining. For text benchmarks, we use a TextCNN-style encoder with embedding lookup, convolution, max pooling, and a classifier. This choice follows the CNN-style client architecture used in federated continual text classification settings such as FedSeIT [ 22 ]. For text benchmarks, we use a TextCNN-style encoder with embedding lookup, convolution, max pooling, and a classifier. This choice follows the CNN-style client architecture used in federated continual text classification settings such as FedSeIT [ 22 ]. We use the same text backbone for THUCNews-10 and CLINC150 unless otherwise stated. For graph node classification, we use a two-layer GAT encoder, following recent federated continual graph learning protocols that adopt GAT-style backbones for clients and server [ 27 , 28 ]. Each client owns a disjoint node subset and its local computation graph. Projected memories are computed from node embeddings after the GNN encoder and do not store raw node features or edges. The class-incremental stream is defined over node labels, and evaluation is performed on the corresponding global node test split. 
+
+D.7 Warmup Protocol and Fairness 
+
+All methods, including FedAvg, FedProx, FedProto, generator/replay baselines, heterogeneity-aware baselines, PRO, and PRO-MAX, are initialized with the same federated in-domain self-supervised warmup before the supervised incremental stream. The warmup uses the same backbone, client sampling schedule, number of warmup rounds, optimizer, local warmup epochs, and unlabeled training split for all methods. The auxiliary warmup head is discarded before the FCIL stream. The warmup uses no class labels, task identities, or test examples. Since the warmup is common to all methods, main communication tables report the supervised incremental-stream cost, while runtime tables report warmup time separately. The w/o shared warmup ablation removes this shared initialization to measure how much projected memory depends on representation quality; it is not the default comparison protocol. 
+
+D.8 Baseline Adaptations 
+
+We compare against three main groups of baselines and additional modality-specific baselines. The first group contains FL-only methods: FedAvg [ 1 ], FedProx [ 31 ], and FedProto [ 26 ]. These methods do not explicitly solve FCIL but provide optimization and communication anchors. The second group contains generator-based or replay-heavy FCIL methods, including TARGET [ 5 ], MFCL [7], and HR [12]. These baselines are important because the central motivation of this paper concerns replay quality under weak task learning. We evaluate them under both resource-matched and resource-expanded regimes. The third group contains heterogeneity-aware or asynchronous FCIL methods, including FedSpace [ 23 ], FedSSI [ 24 ], and FedCBDR [ 25 ]. These methods are included to test whether PRO and PRO-MAX improve over baselines designed for heterogeneous continual streams. 24 For modality-specific experiments, we include FedSeIT [ 22 ] for text classification when its assump-tions match the THUCNews protocol. For graph node classification, we compare with POWER [ 27 ]and MOTION [ 28 ]. When a baseline is not naturally applicable to a modality, we mark it as not applicable rather than modifying it into a different method. 
+
+D.9 Resource-Matched and Resource-Expanded Regimes 
+
+For CIFAR-100, we evaluate two resource regimes. In the resource-matched regime, additional replay or memory communication is matched to the projected-memory budget of PRO and PRO-MAX. This asks whether methods perform well when they receive comparable extra communication beyond standard model updates. In the resource-expanded regime, replay-heavy, memory-heavy, and prototype-augmented baselines receive a larger shared replay or memory budget selected on the homogeneous validation setting. This expanded budget is then reused in heterogeneous FCIL. The purpose is to test whether replay degradation under heterogeneity persists even when replay quantity is no longer the limiting factor. PRO and PRO-MAX keep their fixed projected-memory budget in both regimes. 
+
+D.10 Hyperparameters, Seeds, and Error Bars 
+
+Hyperparameters are selected on held-out validation seeds and then fixed for all test seeds. We do not tune hyperparameters separately on the final test streams. All methods use the same number of communication rounds, local epochs, participation ratio, optimizer family, and random seeds for each dataset. Unless otherwise stated, reported numbers are averaged over multiple seeds, and error bars denote standard deviation across seeds. The random sources include task order, client partitioning, model initialization, and mini-batch sampling. 
+
+D.11 Compute and Implementation 
+
+We report communication, memory, and training cost in Appendix G. Communication includes model uplink and downlink, memory downlink, statistic uplink, and, for PRO-MAX, memory-transport uplink. Server memory includes persistent projected memory banks. Client extra memory includes temporary buffers such as PRO-MAX calibration features. Warmup cost is reported separately from incremental-stream cost. During the incremental stream, PRO and PRO-MAX keep the server lightweight. The server performs aggregation, memory accounting, optional non-gradient corrections, and broadcast. It does not run gradient-based optimization over pseudo data. 
+
+## E Generator-Failure Stress Test Details 
+
+E.1 Purpose of the Stress Test 
+
+The generator-failure stress test evaluates a specific failure mode of heterogeneous FCIL. We do not claim that generator-based replay always fails. Instead, we test whether replay quality becomes unreliable when a semantic task is weakly learned under supervision imbalance or stage misalignment. The stress test is motivated by the following dependency: weak task learning =⇒ poor synthetic replay =⇒ downstream degradation .
+
+If a generator-centered method derives replay from a weak task state, then the synthetic replay from that task may be biased, incomplete, or collapsed. Once reused in later stages, this replay can affect not only the weak task itself but also tasks learned afterward. 
+
+E.2 Weak-Task Intervention 
+
+We create a weak task through a controlled intervention. A semantic task t⋆ is selected before final evaluation, preferably near the middle of the stream so that later tasks exist after it. For this 25 task, we reduce client support and local supervision while keeping the rest of the stream unchanged. Concretely, we reduce the number of clients that support t⋆, reduce the available local examples for its classes, or reduce the local training budget assigned to that task. All other tasks follow the standard heterogeneous protocol. This controlled intervention creates a reproducible weakly learned task. It also avoids choosing the weak task after observing final forgetting. The goal is to test whether a weak task can contaminate later stages through the replay mechanism. 
+
+E.3 Task-Wise Accuracy Heatmap 
+
+For each method m, let Afinal  
+
+> m,t
+
+denote the final accuracy on semantic task t after the full stream. We visualize the task-wise accuracy vector 
+
+[Afinal  
+
+> m, 1
+
+, A final  
+
+> m, 2
+
+, . . . , A final  
+
+> m,T
+
+]
+
+as a heatmap. This view complements aggregate metrics such as FAA, CTA, and AF. Aggregate metrics show overall utility and forgetting, but they can hide where degradation begins. The heatmap reveals whether poor performance is localized to the weak task t⋆ or spreads to later tasks. 
+
+E.4 Real-vs-Replay Feature Comparison 
+
+To inspect replay quality directly, we compare real held-out samples and replay samples for a class 
+
+y⋆ ∈ Y t⋆ from the weak task. For generator-centered methods, replay samples are input-space synthetic samples, 
+
+˜x ∼ qm(˜ x | y⋆, t ⋆).
+
+For PRO and PRO-MAX, which do not generate input-space samples, replay samples are projected-memory samples drawn from the class-level memory bank and embedded in the same evaluation feature space. We use the same evaluation feature extractor φ for all methods: 
+
+r = φ(x), ˜r = φ(˜ x),
+
+where ˜r denotes either a generated replay feature for generator-based methods or the corresponding projected-memory sample for PRO and PRO-MAX. This keeps all replay objects comparable in a shared representation space. In the visualization, reliable replay should remain close to real held-out samples from the same weak-task class. If the replay mechanism inherits a biased or incomplete task state, replay features may shift away from the real cluster or collapse to a narrow region. 
+
+E.5 Replay-Real Mismatch and Downstream Metrics 
+
+To quantify replay quality beyond visualization, we compare real held-out weak-task features and replay features in the same evaluation space. Let 
+
+Rreal  
+
+> y⋆
+
+= {ri}Ni=1 , Rrep  
+
+> y⋆
+
+= {˜rj }Mj=1 ,
+
+where ri = φ(xi) and ˜rj is the replay feature for the same weak-task class. For generator-based methods, ˜rj is obtained from input-space synthetic replay. For PRO and PRO-MAX, ˜rj is a projected-memory sample embedded in the same evaluation feature space. We report three mismatch metrics. The first is empirical maximum mean discrepancy (MMD), 
+
+MMD 2 = 1
+
+N (N − 1) 
+
+X
+
+> i̸=i′
+
+k(ri, r i′ ) + 1
+
+M (M − 1) 
+
+X 
+
+> j̸=j′
+
+k(˜ rj , ˜rj′ ) − 2
+
+N M 
+
+> N
+
+X
+
+> i=1
+> M
+
+X
+
+> j=1
+
+k(ri, ˜rj ),
+
+where k(·, ·) is an RBF kernel. MMD is used as the primary mismatch score in the correlation figure because it captures distribution-level discrepancy rather than only center displacement. The second metric is the empirical 1-Wasserstein distance, 
+
+W1
+
+ Rreal  
+
+> y⋆
+
+, Rrep 
+
+> y⋆
+
+ ,
+
+26 Table 8: Quantitative causal generator-failure analysis on heterogeneous CIFAR-100 under the weak-task intervention. Apost  
+
+> t⋆
+
+is the weak-task accuracy immediately after the weak task is learned. MMD, 
+
+W1, and cosine distance compare replay samples from the weak task against real held-out samples in the shared evaluation feature space; lower values indicate that replay is closer to the real weak-task distribution. ∆down measures downstream drop on tasks after t⋆. For PRO and PRO-MAX, the mismatch is computed using projected-memory samples embedded in the same feature space.                                                                                                                                             
+
+> Method Apost
+> t⋆↑MMD ↓W1↓Cos. Dist. ↓∆down ↓Final FAA ↑Final AF ↓
+> TARGET 36.48 ±1.84 0.19 ±0.02 2.74 ±0.21 0.32 ±0.02 13.42 ±1.06 27.86 ±1.74 57.84 ±2.18
+> MFCL 37.92 ±1.76 0.17 ±0.01 2.53 ±0.19 0.30 ±0.02 11.86 ±0.98 29.42 ±1.68 54.63 ±2.04
+> HR 41.26 ±1.62 0.15 ±0.01 2.16 ±0.17 0.25 ±0.02 9.74 ±0.92 32.18 ±1.52 49.76 ±1.87
+> FedCBDR 47.38 ±1.48 0.12 ±0.01 1.74 ±0.14 0.21 ±0.02 6.42 ±0.74 38.96 ±1.18 39.72 ±1.48
+> PRO 52.84 ±1.26 0.08 ±0.01 1.18 ±0.10 0.15 ±0.01 3.18 ±0.42 43.28 ±0.94 31.54 ±1.18
+> PRO-MAX 55.62 ±1.18 0.06 ±0.01 0.96 ±0.08 0.12 ±0.01 1.94 ±0.31 46.12 ±0.88 26.18 ±1.07
+
+computed in the same evaluation feature space. The third metric is cosine distance between empirical class means, 
+
+CosDist = 1 − ⟨μreal  
+
+> y⋆
+
+, μ rep  
+
+> y⋆
+
+⟩∥μreal  
+
+> y⋆
+
+∥2∥μrep  
+
+> y⋆
+
+∥2
+
+,
+
+where 
+
+μreal  
+
+> y⋆
+
+= 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+ri, μrep  
+
+> y⋆
+
+= 1
+
+M
+
+> M
+
+X
+
+> j=1
+
+˜rj .
+
+To measure whether weak-task replay affects later learning, we compute downstream drop on tasks after t⋆:
+
+Afinal  
+
+> m,>t ⋆
+
+= 1
+
+T − t⋆
+
+X
+
+> t>t ⋆
+
+Afinal  
+
+> m,t
+
+,
+
+and, when compared against a clean heterogeneous run without weak-task intervention, 
+
+∆down = Aclean  
+
+> m,>t ⋆
+
+− Aweak  
+
+> m,>t ⋆
+
+.
+
+A larger ∆down means that weakening one task causes stronger degradation on future tasks. 
+
+E.6 Quantitative Causal Generator-Failure Analysis 
+
+Beyond the heatmap and feature visualization in Figure 2, we quantify the weak-task failure chain under controlled interventions. In CIFAR-100, the weak task is t⋆ = 4 . We evaluate multiple weak-task intervention strengths while keeping the remaining stream, task order, client partition, and evaluation protocol fixed. Because this analysis requires a sampleable replay or memory object, we report methods with explicit replay or projected-memory samples: TARGET, MFCL, HR, FedCBDR, PRO, and PRO-MAX. We summarize five quantities. First, Apost  
+
+> t⋆
+
+measures weak-task accuracy immediately after the weak task is learned, before later interference dominates. Second, MMD, W1, and cosine distance measure how far replay samples are from real held-out weak-task samples in the shared evaluation feature space. Third, ∆down measures downstream degradation on tasks after t⋆. Finally, final FAA and AF connect the weak-task diagnostic to the main FCIL metrics. Table 8 makes the weak-task failure path explicit. TARGET and MFCL show low weak-task accuracy, large replay-real mismatch, and large downstream drop. HR and FedCBDR reduce mismatch and downstream degradation, but still remain worse than PRO and PRO-MAX. PRO-MAX yields the lowest mismatch across all three metrics and the smallest downstream drop, which is consistent with the role of memory alignment in keeping old memories compatible with the evolving representation. Figure 3 addresses a possible confound in pooled correlation plots. A pooled plot could be explained by average differences between methods: stronger methods may simply have lower mismatch and lower downstream drop. By contrast, the per-method panels show that even after fixing the method, runs with larger weak-task mismatch tend to produce larger downstream degradation. The marker 27 2.5                         
+
+> 5.0
+> 7.5
+> 10.0
+> 12.5
+> 15.0
+> 17.5
+> ¢down  (%)
+> r= 0 :98 ; ½ = 0 :96
+> TARGET
+> r= 0 :91 ; ½ = 0 :80
+> MFCL
+> r= 0 :95 ; ½ = 0 :92
+> HR
+> 0.05 0.10 0.15 0.20
+> MMD
+> 2.5
+> 5.0
+> 7.5
+> 10.0
+> 12.5
+> 15.0
+> 17.5
+> ¢down  (%)
+> r= 0 :87 ; ½ = 0 :91
+> FedCBDR
+> 0.05 0.10 0.15 0.20
+> MMD
+> r= 0 :80 ; ½ = 0 :81
+> PRO
+> 0.05 0.10 0.15 0.20
+> MMD
+> r= 0 :68 ; ½ = 0 :67
+> PRO-MAX
+> Mild intervention Medium intervention Severe intervention Linear fit
+
+Figure 3: Per-method relation between weak-task replay mismatch and downstream degradation on heterogeneous CIFAR-100. Each panel fixes one method and plots runs across random seeds and weak-task intervention strengths. The x-axis reports replay-real mismatch measured by MMD in the shared evaluation feature space, and the y-axis reports downstream drop ∆down on tasks after the weak task. Marker shape indicates intervention strength: circles denote mild intervention, squares denote medium intervention, and triangles denote severe intervention. Across all methods, the fitted trends are positive, and the points shift from lower-left to upper-right as the intervention becomes stronger. This shows that larger weak-task mismatch is associated with larger downstream degradation not only across methods, but also within each method. progression also shows the effect of intervention strength: mild interventions concentrate in the lower-left region, medium interventions move upward and rightward, and severe interventions produce the largest mismatch and downstream drop. This supports the mechanism proposed in Section 3.2: weak task learning can produce poor replay, and poor replay can propagate errors to later tasks. The method-level regions are also informative. TARGET, MFCL, and HR occupy the high-mismatch, high-drop regime, indicating that generator-based replay is most sensitive to weak-task perturbation. FedCBDR is more robust but still follows the same positive trend. PRO and PRO-MAX remain in the low-mismatch, low-drop regime. This does not imply that projected memory is immune to weak task learning; rather, it indicates that projected rehearsal reduces the severity of error propagation, while PRO-MAX further improves robustness through memory alignment. 
+
+E.7 Reproducibility Details 
+
+For each stress-test run, we report the selected weak task t⋆, the intervention strength, the number of real and synthetic samples used in the feature comparison, the evaluation feature extractor φ, and the dimensionality-reduction settings for t-SNE or UMAP. All methods are evaluated under the same task order, client partition, and weak-task intervention for a given seed. 
+
+## F Additional Results and Diagnostics 
+
+This section provides additional results and diagnostics that complement the main experiments. The main paper reports CIFAR-100 homogeneous and heterogeneous results, the generator-failure diag-nostic in Figure 2, modality-portability results on THUCNews-10 and Cora, and ablations. Here, we further evaluate scale-up benchmarks, heterogeneity sweeps, current-task learning across modalities, memory-alignment quality, and sensitivity to the main memory and plasticity hyperparameters. 28 Table 9: TinyImageNet scale-up results under homogeneous and heterogeneous FCIL. We report final average accuracy (FAA), current-task accuracy (CTA), average forgetting (AF), and normalized cumulative communication. Method Homogeneous Heterogeneous FAA ↑ CTA ↑ AF ↓ Comm. ↓ FAA ↑ CTA ↑ AF ↓ Comm. ↓
+
+FedAvg 6.28 ± 0.52 42.72 ± 1.88 86.14 ± 1.42 1.00 × 3.72 ± 0.48 32.18 ± 2.12 90.12 ± 1.76 1.00 ×
+
+FedProx 7.36 ± 0.61 43.51 ± 1.79 84.27 ± 1.50 1.00 × 4.86 ± 0.54 34.62 ± 2.04 88.64 ± 1.68 1.00 ×
+
+FedProto 14.92 ± 0.88 45.03 ± 1.62 71.36 ± 1.94 1.08 × 11.48 ± 0.93 37.84 ± 1.96 76.72 ± 2.18 1.08 ×
+
+TARGET 26.84 ± 1.16 51.12 ± 1.42 50.68 ± 1.86 2.80 × 18.96 ± 1.62 40.76 ± 2.18 66.48 ± 2.36 2.80 ×
+
+MFCL 28.73 ± 1.24 52.08 ± 1.36 47.91 ± 1.74 3.00 × 20.42 ± 1.54 42.33 ± 2.06 63.84 ± 2.28 3.00 ×
+
+HR 31.25 ± 1.13 53.94 ± 1.31 44.36 ± 1.66 3.20 × 23.16 ± 1.46 44.25 ± 1.92 58.92 ± 2.16 3.20 ×
+
+FedSpace 30.72 ± 1.18 51.97 ± 1.38 46.28 ± 1.72 2.25 × 24.88 ± 1.35 43.76 ± 1.86 56.31 ± 2.05 2.25 ×
+
+FedSSI 31.94 ± 1.14 52.56 ± 1.34 44.91 ± 1.68 2.15 × 25.64 ± 1.28 44.18 ± 1.78 54.86 ± 1.98 2.15 ×
+
+FedCBDR 34.86 ± 1.02 55.84 ± 1.20 40.18 ± 1.42 2.80 × 29.46 ± 1.18 48.37 ± 1.62 49.72 ± 1.84 2.80 ×
+
+PRO 37.42 ± 0.96 57.16 ± 1.08 35.72 ± 1.26 1.14 × 33.28 ± 1.04 51.96 ± 1.42 42.84 ± 1.60 1.14 ×
+
+PRO-MAX 40.36 ± 0.91 58.74 ± 1.02 30.84 ± 1.18 1.19 × 37.54 ± 0.98 54.18 ± 1.34 35.96 ± 1.46 1.19 ×
+
+Table 10: CLINC150 scale-up results under homogeneous and heterogeneous FCIL. We report FAA, CTA, AF, and normalized cumulative communication. Method Homogeneous Heterogeneous FAA ↑ CTA ↑ AF ↓ Comm. ↓ FAA ↑ CTA ↑ AF ↓ Comm. ↓
+
+FedAvg 47.36 ± 1.42 71.22 ± 1.36 54.85 ± 2.16 1.00 × 39.76 ± 1.58 65.48 ± 1.52 63.16 ± 2.34 1.00 ×
+
+FedProx 49.02 ± 1.36 71.84 ± 1.28 52.14 ± 2.04 1.00 × 41.38 ± 1.49 66.12 ± 1.44 60.94 ± 2.20 1.00 ×
+
+FedProto 55.48 ± 1.24 73.15 ± 1.22 43.68 ± 1.82 1.06 × 48.72 ± 1.38 68.84 ± 1.36 50.68 ± 1.96 1.06 ×
+
+FedSeIT 65.42 ± 1.02 78.16 ± 0.96 30.74 ± 1.40 1.25 × 59.74 ± 1.14 74.08 ± 1.08 36.84 ± 1.54 1.25 ×
+
+PRO 68.92 ± 0.96 80.36 ± 0.91 25.42 ± 1.26 1.10 × 63.92 ± 1.06 76.86 ± 0.98 31.24 ± 1.38 1.10 ×
+
+PRO-MAX 72.36 ± 0.88 81.72 ± 0.86 20.18 ± 1.12 1.14 × 67.84 ± 0.98 78.48 ± 0.94 25.92 ± 1.26 1.14 ×
+
+The purpose of these results is not to compare absolute numbers with prior work under different protocols. FCIL and FCL papers often differ in backbones, task splits, client partitions, replay budgets, and whether pretrained representations are used. Therefore, all comparisons here are within-protocol: methods are evaluated under the same task splits, client partitions, communication rounds, random seeds, and resource accounting. 
+
+F.1 TinyImageNet Scale-Up Results 
+
+TinyImageNet is used as the image scale-up benchmark. It is more visually complex than CIFAR-100 and contains more classes, making it a harder class-incremental stream. Since this is an image benchmark, we use the same method families as in the CIFAR-100 experiments: FL-only baselines, generator/replay FCIL baselines, heterogeneity-aware FCIL baselines, and our projected-memory methods. Table 9 shows that the image scale-up setting is substantially harder than CIFAR-100. FL-only baselines collapse to very low FAA because the stream is long and old classes receive no explicit retention mechanism. Generator and replay-heavy methods recover a large fraction of performance in the homogeneous setting, but their heterogeneous performance drops sharply. This pattern is consistent with the main stress hypothesis: increasing replay resources helps when supervision is stable, but replay quality can still degrade when task states are weak or temporally misaligned. PRO improves retention with much smaller communication cost, and PRO-MAX further reduces forgetting by aligning old projected memories under representation drift. 
+
+F.2 CLINC150 Scale-Up Results 
+
+CLINC150 is used as the text scale-up benchmark. Compared with THUCNews-10, CLINC150 has more fine-grained intent classes and a longer incremental stream. We evaluate text-compatible methods only, since image-specific generators or graph-specific mechanisms do not naturally transfer to text classification. Table 10 supports the modality-agnostic claim in a longer text stream. The larger intent label space makes retention more difficult than in THUCNews-10, and the heterogeneous setting further increases 29 Table 11: ogbn-arxiv scale-up results under homogeneous and heterogeneous FCIL. We report FAA, CTA, AF, and normalized cumulative communication. Method Homogeneous Heterogeneous FAA ↑ CTA ↑ AF ↓ Comm. ↓ FAA ↑ CTA ↑ AF ↓ Comm. ↓
+
+FedAvg 34.52 ± 2.28 51.84 ± 2.46 63.62 ± 3.62 1.00 × 28.44 ± 2.46 46.76 ± 2.68 70.42 ± 3.88 1.00 ×
+
+FedProx 35.96 ± 2.16 52.38 ± 2.38 61.74 ± 3.48 1.00 × 30.16 ± 2.32 48.12 ± 2.54 68.18 ± 3.70 1.00 ×
+
+FedProto 40.84 ± 2.04 55.42 ± 2.26 53.28 ± 3.28 1.08 × 35.72 ± 2.18 50.84 ± 2.42 60.36 ± 3.46 1.08 ×
+
+POWER 49.28 ± 2.36 61.74 ± 2.18 39.86 ± 3.12 1.42 × 42.78 ± 2.54 56.48 ± 2.36 47.92 ± 3.34 1.42 ×
+
+MOTION 50.76 ± 2.28 62.18 ± 2.10 37.92 ± 3.04 1.36 × 44.38 ± 2.46 57.86 ± 2.24 45.12 ± 3.18 1.36 ×
+
+PRO 52.48 ± 2.18 64.32 ± 2.02 34.18 ± 2.86 1.12 × 47.86 ± 2.32 59.24 ± 2.18 39.42 ± 3.04 1.12 ×
+
+PRO-MAX 55.86 ± 2.04 66.24 ± 1.94 28.64 ± 2.64 1.16 × 51.92 ± 2.18 61.78 ± 2.06 32.86 ± 2.82 1.16 ×
+
+Table 12: CIFAR-100 supervision-support sweep. Support denotes the fraction of clients that support each semantic task. Method Support 80% Support 60% Support 40% Support 20% FAA ↑ AF ↓ FAA ↑ AF ↓ FAA ↑ AF ↓ FAA ↑ AF ↓
+
+FedAvg 9.62 ± 0.44 80.42 ± 1.26 8.71 ± 0.46 81.38 ± 1.31 7.86 ± 0.42 82.74 ± 1.36 5.92 ± 0.50 86.18 ± 1.54 
+
+FedProx 10.47 ± 0.48 78.86 ± 1.18 9.62 ± 0.50 79.72 ± 1.24 8.92 ± 0.47 80.96 ± 1.28 6.84 ± 0.54 84.12 ± 1.46 
+
+FedProto 21.36 ± 0.92 63.42 ± 1.58 19.86 ± 0.94 65.18 ± 1.66 18.74 ± 0.96 66.82 ± 1.74 14.92 ± 1.12 72.64 ± 2.08 
+
+TARGET 40.12 ± 1.22 39.26 ± 1.44 35.74 ± 1.42 47.62 ± 1.68 27.86 ± 1.74 57.84 ± 2.18 24.72 ± 1.84 63.18 ± 2.44 
+
+MFCL 41.06 ± 1.18 37.92 ± 1.38 37.12 ± 1.35 44.76 ± 1.60 29.42 ± 1.68 54.63 ± 2.04 25.98 ± 1.78 60.46 ± 2.32 
+
+HR 42.84 ± 1.10 34.78 ± 1.32 39.36 ± 1.24 40.18 ± 1.52 32.18 ± 1.52 49.76 ± 1.87 28.84 ± 1.66 55.84 ± 2.18 
+
+FedSpace 40.12 ± 1.15 34.96 ± 1.38 37.42 ± 1.24 40.18 ± 1.52 33.84 ± 1.39 47.92 ± 1.76 29.16 ± 1.58 56.84 ± 2.06 
+
+FedSSI 41.28 ± 1.10 33.84 ± 1.34 38.46 ± 1.18 39.12 ± 1.48 34.62 ± 1.31 46.38 ± 1.69 30.48 ± 1.49 54.72 ± 1.98 
+
+FedCBDR 43.84 ± 1.03 31.48 ± 1.25 41.26 ± 1.12 35.72 ± 1.36 38.96 ± 1.18 39.72 ± 1.48 34.42 ± 1.35 48.64 ± 1.72 
+
+PRO 44.26 ± 0.98 29.86 ± 1.18 43.92 ± 0.96 30.74 ± 1.15 43.28 ± 0.94 31.54 ± 1.18 39.86 ± 1.16 38.76 ± 1.52 
+
+PRO-MAX 47.12 ± 0.90 23.84 ± 1.04 46.74 ± 0.88 24.72 ± 1.02 46.12 ± 0.88 26.18 ± 1.07 42.68 ± 1.08 32.42 ± 1.34 
+
+forgetting. FedSeIT remains a strong text baseline because it is designed for selective inter-client transfer in federated continual text classification. Nevertheless, PRO and PRO-MAX retain a favorable accuracy-forgetting trade-off with lower communication, showing that projected memory remains effective in a longer text stream. The improvement of PRO-MAX over PRO is mainly reflected in AF, which is consistent with the role of memory alignment. 
+
+F.3 ogbn-arxiv Scale-Up Results 
+
+ogbn-arxiv is used as the graph scale-up benchmark. Compared with Cora, it has more nodes, more labels, and a larger citation graph. We evaluate graph-compatible baselines and use the same class-incremental node-classification protocol for all methods. Table 11 evaluates whether projected memory transfers to a larger graph. The graph setting is challenging because local subgraphs can induce stronger representation drift and class support can be sparse. POWER and MOTION are strong graph continual baselines, but PRO and PRO-MAX remain competitive because the memory mechanism operates on node embeddings rather than raw graph structures. PRO-MAX gives the largest retention gain, which supports the claim that memory alignment is useful when local graph partitions move representations differently. 
+
+F.4 Heterogeneity Sweeps 
+
+The main paper reports a severe-heterogeneity setting. To show that the result is not tied to a single partition, we additionally sweep supervision support and stage misalignment. Supervision support controls how many clients provide data for each semantic task. Stage misalignment controls how strongly client-specific task orders are perturbed. We include all main CIFAR-100 baselines in these sweeps to avoid cherry-picking a subset of methods. Table 12 shows that all methods become weaker as task support decreases. Generator-centered replay degrades sharply because weak task states produce weaker replay signals. FedCBDR remains a strong replay baseline due to its class-wise balancing mechanism, but it still loses accuracy when task support becomes very sparse. PRO is more stable because it uses compact projected memories, and PRO-MAX further reduces forgetting by aligning stale memories. 30 Table 13: CIFAR-100 stage-misalignment sweep. Disorder denotes the fraction of task positions perturbed per client. All columns in this sweep keep task support at 40% and per-client label coverage at 50% ; only task-order disorder is varied. Thus, the 0% disorder column is not the homogeneous setting, because supervision remains sparse. Method Disorder 0% Disorder 30% Disorder 60% Disorder 90% FAA ↑ AF ↓ FAA ↑ AF ↓ FAA ↑ AF ↓ FAA ↑ AF ↓
+
+FedAvg 10.12 ± 0.40 80.52 ± 1.10 9.76 ± 0.41 80.94 ± 1.02 7.86 ± 0.42 82.74 ± 1.36 6.58 ± 0.49 85.62 ± 1.58 
+
+FedProx 10.74 ± 0.43 79.32 ± 1.05 10.18 ± 0.46 79.84 ± 0.96 8.92 ± 0.47 80.96 ± 1.28 7.14 ± 0.52 84.18 ± 1.46 
+
+FedProto 20.12 ± 0.90 63.48 ± 1.50 19.86 ± 0.92 64.28 ± 1.58 18.74 ± 0.96 66.82 ± 1.74 15.48 ± 1.08 71.84 ± 2.04 
+
+TARGET 39.42 ± 1.18 39.86 ± 1.46 36.84 ± 1.36 43.72 ± 1.64 27.86 ± 1.74 57.84 ± 2.18 23.46 ± 1.92 65.28 ± 2.46 
+
+MFCL 40.18 ± 1.15 38.42 ± 1.40 38.92 ± 1.28 40.84 ± 1.56 29.42 ± 1.68 54.63 ± 2.04 24.94 ± 1.82 62.12 ± 2.34 
+
+HR 41.72 ± 1.06 34.58 ± 1.32 40.68 ± 1.12 36.28 ± 1.42 32.18 ± 1.52 49.76 ± 1.87 27.62 ± 1.66 57.48 ± 2.16 
+
+FedSpace 37.84 ± 1.12 38.96 ± 1.44 36.42 ± 1.22 41.24 ± 1.56 33.84 ± 1.39 47.92 ± 1.76 30.68 ± 1.54 54.74 ± 2.04 
+
+FedSSI 39.12 ± 1.08 37.86 ± 1.40 37.68 ± 1.16 40.46 ± 1.50 34.62 ± 1.31 46.38 ± 1.69 31.24 ± 1.48 53.36 ± 1.96 
+
+FedCBDR 43.20 ± 1.00 30.96 ± 1.20 42.68 ± 1.02 33.86 ± 1.34 38.96 ± 1.18 39.72 ± 1.48 35.18 ± 1.40 46.92 ± 1.80 
+
+PRO 43.76 ± 0.88 28.64 ± 1.10 43.64 ± 0.90 29.74 ± 1.12 43.28 ± 0.94 31.54 ± 1.18 40.84 ± 1.10 36.58 ± 1.44 
+
+PRO-MAX 46.62 ± 0.80 24.22 ± 0.98 46.48 ± 0.84 24.92 ± 1.02 46.12 ± 0.88 26.18 ± 1.07 43.96 ± 1.02 31.24 ± 1.30 
+
+Table 14: Current-task accuracy for image benchmarks under severe heterogeneity. 
+
+Method CIFAR-100 TinyImageNet FedAvg 48.64 ± 1.58 32.18 ± 2.12 
+
+FedProx 49.86 ± 1.51 34.62 ± 2.04 
+
+FedProto 52.38 ± 1.43 37.84 ± 1.96 
+
+TARGET 53.42 ± 1.86 40.76 ± 2.18 
+
+MFCL 54.76 ± 1.79 42.33 ± 2.06 
+
+HR 56.92 ± 1.64 44.25 ± 1.92 
+
+FedSpace 55.18 ± 1.52 43.76 ± 1.86 
+
+FedSSI 55.74 ± 1.44 44.18 ± 1.78 
+
+FedCBDR 59.36 ± 1.27 48.37 ± 1.62 
+
+PRO 63.72 ± 1.03 51.96 ± 1.42 
+
+PRO-MAX 65.06 ± 0.96 54.18 ± 1.34 
+
+Table 13 shows that stage misalignment is particularly harmful to replay-heavy methods. TARGET, MFCL, and HR perform well when clients are aligned, but their forgetting increases sharply as task orders diverge. FedCBDR remains competitive under moderate disorder, but its replay-balancing mechanism still degrades when client stages become highly misaligned. PRO is more stable, while PRO-MAX gives the clearest improvement at high disorder because its memory transport mechanism directly targets representation drift. 
+
+F.5 Current-Task Accuracy over the Stream 
+
+A method can reduce forgetting by becoming overly conservative, but such a method may fail to learn new tasks. We therefore report current-task accuracy separately for image, text, and graph benchmarks. The goal is to verify that lower forgetting does not come at the cost of poor current-task learning. Table 14 shows that PRO-MAX does not reduce forgetting by simply suppressing plasticity. It preserves stronger current-task accuracy than replay-heavy baselines while also reducing forgetting, suggesting that projected rehearsal provides both current-task learning and old-class retention. Table 15 shows the same pattern on text streams. The gain of PRO-MAX over PRO is moderate in CTA because the alignment module mainly targets old-memory compatibility. Nevertheless, the method maintains strong current-task learning while reducing forgetting. Table 16 shows that projected rehearsal remains compatible with graph encoders. Since graph partitions can move local representations differently, PRO-MAX provides a larger retention benefit while still improving current-task accuracy. 31 Table 15: Current-task accuracy for text benchmarks under severe heterogeneity.                                       
+
+> Method THUCNews-10 CLINC150 FedAvg 79.76 ±1.21 65.48 ±1.52
+> FedProx 80.13 ±1.18 66.12 ±1.44
+> FedProto 80.48 ±1.10 68.84 ±1.36
+> FedSeIT 82.14 ±0.98 74.08 ±1.08
+> PRO 84.08 ±0.91 76.86 ±0.98
+> PRO-MAX 85.22 ±0.86 78.48 ±0.94
+
+Table 16: Current-task accuracy for graph benchmarks under severe heterogeneity.                                             
+
+> Method Cora ogbn-arxiv FedAvg 53.26 ±3.16 46.76 ±2.68
+> FedProx 54.08 ±3.05 48.12 ±2.54
+> FedProto 56.42 ±2.93 50.84 ±2.42
+> POWER 64.36 ±3.72 56.48 ±2.36
+> MOTION 65.08 ±3.58 57.86 ±2.24
+> PRO 66.42 ±3.32 59.24 ±2.18
+> PRO-MAX 68.04 ±3.14 61.78 ±2.06
+
+F.6 Memory Alignment Diagnostics 
+
+PRO-MAX claims to keep old projected memories compatible with the current representation. To evaluate this claim directly, we compare transported old memories with oracle memories recomputed under the current global model on held-out data. Let ˜μuy be the transported memory for old class y,and let μuy, oracle be the oracle class mean computed under the current global encoder. We define 
+
+Align u = 1
+
+|Y old |
+
+X
+
+> y∈Y old
+
+⟨˜μuy , μ uy, oracle ⟩∥˜μuy ∥2∥μuy, oracle ∥2
+
+.
+
+When the auxiliary adapted-space bank is enabled, we analogously compute Align z .Table 17 separates memory drift from classifier calibration. If alignment improves but AF remains high, the bottleneck may be the classifier or current-task learning. If alignment is low, then the memory bank itself has drifted away from the current feature geometry. The results show that PRO-MAX improves alignment in both base and adapted spaces, and the improvement is associated with lower forgetting. 
+
+F.7 Hyperparameter Sensitivity 
+
+We analyze sensitivity to the main projected-memory, transport, and plasticity hyperparameters. The projected-memory noise scale γ controls pseudo-feature diversity. The number of neighbors K
+
+controls how local the transport estimate is. The proximal coefficient λprox controls the strength of local-drift regularization during current-task fitting. The calibration subset size controls the amount of client-side evidence used for memory transport. Table 18 shows that very small γ makes old projected memories overly concentrated, while very large 
+
+γ makes pseudo samples unreliable. Moderate values provide enough diversity without corrupting old-class geometry. Table 19 shows that too few neighbors make the transport estimate noisy, while too many neighbors over-smooth class-specific movement. A moderate value of K gives the best trade-off between stable transport and class-specific alignment. Table 20 evaluates the controlled-plasticity regularizer. Without proximal regularization, local current-task fitting can move too far toward client-specific distributions, increasing forgetting. A moderate coefficient improves stability, while an overly strong coefficient restricts plasticity and reduces accuracy. 32 Table 17: Memory alignment diagnostic for PRO and PRO-MAX. Higher alignment indicates that old projected memories remain more compatible with the current representation.                                                                    
+
+> Dataset Method Align u↑Align z↑AF ↓
+> CIFAR-100 PRO 0.73 ±0.03 0.76 ±0.03 31.54 ±1.18
+> CIFAR-100 PRO-MAX 0.86 ±0.02 0.88 ±0.02 26.18 ±1.07
+> THUCNews-10 PRO 0.82 ±0.02 0.84 ±0.02 20.84 ±1.26
+> THUCNews-10 PRO-MAX 0.91 ±0.01 0.92 ±0.01 16.42 ±1.10
+> Cora PRO 0.68 ±0.04 0.70 ±0.04 30.86 ±3.94
+> Cora PRO-MAX 0.79 ±0.03 0.81 ±0.03 25.84 ±3.62
+
+Table 18: Sensitivity to projected-memory noise scale γ on CIFAR-100 severe heterogeneity.                                   
+
+> γFAA ↑AF ↓
+> 0.00 43.46 ±1.02 31.28 ±1.36
+> 0.05 45.18 ±0.94 27.84 ±1.18
+> 0.10 46.12 ±0.88 26.18 ±1.07
+> 0.20 45.76 ±0.91 26.92 ±1.12
+> 0.40 42.68 ±1.16 33.46 ±1.54
+
+Table 21 shows that the calibration subset should be large enough to estimate feature movement reliably but small enough to keep client memory low. Performance saturates after a moderate subset size, which supports the claim that PRO-MAX does not require a large persistent local buffer. 
+
+F.8 Qualitative Memory Visualizations 
+
+Finally, we provide a qualitative view of how projected memories evolve over the stream. Figure 4 shows four snapshots on CIFAR-100 after tasks 2, 4, 6, and 10 under the severe-heterogeneity setting. All panels are shown in a shared PCA projection fitted jointly across snapshots so that the relative geometry is directly comparable. Faint colored points denote real features produced by the current global encoder, orange diamonds denote refreshed current-class memories, red crosses denote stale old memories before alignment, and blue stars denote aligned old memories after PRO-MAX. This figure is intended as a qualitative diagnostic and should be interpreted together with the quanti-tative results in Table 2 and Table 4. Two patterns are especially relevant. First, as more tasks are introduced, the projected space becomes more crowded, so old memories are only useful if they remain compatible with the feature geometry induced by the current model. Second, after the weak task appears, some stale old memories become less well matched to the surrounding feature clusters, whereas the aligned memories remain better positioned around the corresponding class regions. This visual trend is consistent with the quantitative gains of PRO-MAX: its main role is not to add new information, but to maintain old memories in a form that remains usable as the representation evolves. 
+
+## G Detailed Cost Accounting 
+
+This section details the cost accounting used in the main experiments. The goal is to make the server-light claim precise. PRO and PRO-MAX do not run server-side SGD, do not train a server generator, and do not optimize the classifier on server-side pseudo data. Nevertheless, they do communicate projected memories and memory statistics, so these costs must be counted explicitly. 
+
+G.1 Communication Cost 
+
+Let b denote the number of bytes used to represent one scalar, e.g., b = 4 for single-precision floating point. Let |Θ| be the number of transmitted model parameters, and let Sp,r be the set of participating clients at round r of position p. We decompose cumulative communication as 
+
+Comm = X
+
+> p,r
+
+X
+
+> c∈S p,r
+
+ Dmodel  
+
+> c,p,r
+
++ U model  
+
+> c,p,r
+
++ Dmem  
+
+> c,p,r
+
++ U stat  
+
+> c,p,r
+
++ U trans 
+
+> c,p,r
+
+ ,
+
+where Dmodel and U model are model downlink and uplink, Dmem is memory downlink, U stat is statistic uplink for memory refresh, and U trans is the PRO-MAX transport uplink. For standard 33 Table 19: Sensitivity to the number of neighbors K in PRO-MAX on CIFAR-100 severe heterogeneity.                                   
+
+> KFAA ↑AF ↓
+> 143.92 ±1.10 30.86 ±1.42
+> 345.38 ±0.96 27.42 ±1.20
+> 546.12 ±0.88 26.18 ±1.07
+> 10 45.94 ±0.92 26.74 ±1.14
+> 20 44.26 ±1.04 29.62 ±1.33
+
+Table 20: Sensitivity to the proximal coefficient λprox on CIFAR-100 severe heterogeneity.                                   
+
+> λprox FAA ↑AF ↓
+> 039.72 ±1.15 39.16 ±1.41
+> 10 −443.84 ±1.04 31.62 ±1.28
+> 10 −345.36 ±0.96 28.74 ±1.18
+> 10 −246.12 ±0.88 26.18 ±1.07
+> 10 −144.18 ±1.02 30.46 ±1.31
+
+FedAvg-style communication, 
+
+Dmodel  
+
+> c,p,r
+
+= b|Θ|, U model  
+
+> c,p,r
+
+= b|Θ|,
+
+unless a baseline transmits only a subset of parameters. In our implementation, we count the tensors actually transmitted by each method. PRO additionally broadcasts the primary base-space memory Mu. If Y(p−1) denotes the old label set before position p, then the base-memory downlink is 
+
+Duc,p,r = b|Y (p−1) |(2 du + 1) ,
+
+where du is the base feature dimension, and the factor 2du + 1 accounts for the mean, diagonal standard deviation, and count. If the auxiliary adapted-space memory Mz is enabled, the additional memory downlink is 
+
+Dzc,p,r = b|Y (p−1) |(dz + 2) ,
+
+where dz is the adapted feature dimension, and the terms account for the adapted mean, scalar radius, and count. Thus, 
+
+Dmem  
+
+> c,p,r
+
+= Duc,p,r + ηz Dzc,p,r ,
+
+where ηz ∈ { 0, 1} indicates whether Mz is enabled. After FedAvg, PRO refreshes current-class memories under the aggregated global model. Clients recompute class-level statistics without gradient updates and upload only means, second moments, radii, and counts. If Ycur  
+
+> c,p
+
+is the set of current classes observed by client c, the statistic uplink is 
+
+U stat  
+
+> c,p,r
+
+= b|Y cur  
+
+> c,p
+
+| [(2 du + 1) + ηz (dz + 2)] .
+
+This term is usually much smaller than model communication because it scales with the number of classes observed by the client rather than with the number of examples. PRO-MAX additionally uploads memory-transport summaries for old classes. In the base space, each old class requires a transport vector and a confidence scalar: 
+
+U u, trans  
+
+> c,p,r
+
+= b|Y (p−1) |(du + 1) .
+
+If adapted-space transport is enabled, the additional transport cost is 
+
+U z, trans  
+
+> c,p,r
+
+= b|Y (p−1) |(dz + 1) .
+
+Therefore, 
+
+U trans  
+
+> c,p,r
+
+= ηmax 
+
+U u, trans  
+
+> c,p,r
+
++ ηz U z, trans 
+
+> c,p,r
+
+ ,
+
+where ηmax = 1 for PRO-MAX and 0 for PRO. In practice, transport summaries can be sparsified by uploading only classes with confidence above a threshold, but our reported cost uses the full transmitted summaries unless otherwise stated. 34 Table 21: Sensitivity to calibration subset size |B c,p | in PRO-MAX on CIFAR-100 severe heterogene-ity. 
+
+|B c,p | FAA ↑ AF ↓ Extra client memory 16 43.84 ± 1.12 31.04 ± 1.48 low 32 44.96 ± 1.02 28.72 ± 1.30 low 64 45.68 ± 0.96 27.36 ± 1.18 moderate 128 46.12 ± 0.88 26.18 ± 1.07 moderate 256 46.24 ± 0.87 26.02 ± 1.06 higher shared PCA projection    
+
+> After task 2
+> shared PCA projection
+> Weak task T4 seen
+> After task 4
+> shared PCA projection
+> Weak task T4 seen
+> After task 6
+> shared PCA projection
+> Weak task T4 seen
+> After task 10
+> real features stale old memory aligned memory current memory
+
+Figure 4: Qualitative visualization of projected memories over the stream on CIFAR-100 under severe heterogeneity. Each panel shows a shared PCA projection fitted jointly across snapshots. Faint colored points are real features from the current global encoder, orange diamonds are refreshed current-class memories, red crosses are stale old memories before alignment, and blue stars are aligned old memories after PRO-MAX. The weak task is introduced at task 4. We report normalized cumulative communication as 
+
+NormComm( m) = Comm( m)Comm(FedAvg) .
+
+This normalization makes costs comparable across datasets and backbones. 
+
+G.2 Server Memory Cost 
+
+The persistent server memory of PRO is dominated by the projected memory banks. The primary base-space memory requires 
+
+ServerMem u = b|Y (p)|(2 du + 1) .
+
+If the auxiliary adapted-space memory is enabled, it adds 
+
+ServerMem z = b|Y (p)|(dz + 2) .
+
+Thus, 
+
+ServerMem PRO = b|Y (p)| [(2 du + 1) + ηz (dz + 2)] .
+
+This memory grows linearly with the number of seen classes and feature dimension. It does not grow with the number of training examples, which distinguishes PRO from raw replay or per-example feature-bank methods. PRO-MAX uses the same persistent server memory as PRO, plus temporary transport summaries received during a round. These summaries are aggregated and then discarded. Therefore, PRO-MAX increases communication and transient server-side buffers, but not the persistent memory order. 
+
+G.3 Client Extra Memory 
+
+PRO does not store raw historical examples on clients. During projected pseudo multi-task training, old pseudo features can be sampled on the fly from Mu or held only within a mini-batch. Thus, the additional client memory for PRO is transient and bounded by the projected mini-batch size. 35 PRO-MAX adds a temporary calibration cache. If the calibration subset has size |B c,p |, then caching base features costs 
+
+b|B c,p |du.
+
+If adapted-space transport is enabled, the cache also stores adapted features, giving 
+
+ClientCache PRO -MAX = b|B c,p |(du + ηz dz ).
+
+This cache is discarded after transport estimation and is independent of the number of old examples. 
+
+G.4 Server Compute 
+
+The server compute in PRO consists of FedAvg and memory accounting. FedAvg is a weighted parameter average: 
+
+Θg ← X
+
+> c∈S p,r
+
+ωcΘc.
+
+Memory accounting aggregates class-level means, second moments, radii, counts, and metadata. PRO-MAX additionally aggregates transport vectors: 
+
+∆u,g y =
+
+P 
+
+> c
+
+quc,y ∆uc,y 
+
+P 
+
+> c
+
+quc,y + ϵ .
+
+All these operations are non-gradient operations. The server does not backpropagate through the model, does not train a generator, and does not optimize the classifier using pseudo data. 
+
+G.5 Warmup Overhead 
+
+The federated in-domain warmup is a shared initialization stage applied to all methods before the supervised incremental stream. Therefore, it is reported separately from method-specific continual-learning cost. If the warmup has Rwarm communication rounds, its communication is 
+
+Comm warm =
+
+> Rwarm
+
+X
+
+> r=1
+
+X
+
+> c∈S warm
+> r
+
+ Dmodel  
+
+> c,r
+
++ U model 
+
+> c,r
+
+ .
+
+The auxiliary warmup head is discarded after warmup and is not stored as part of the continual model. In the main communication tables, we report the supervised incremental-stream communication because this is where the methods differ. Since warmup is identical across methods with the same backbone and dataset, including it would add the same common initialization cost to all methods and would obscure the method-specific continual-learning overhead. For completeness, Appendix G.7 reports warmup wall-clock time separately. 
+
+G.6 Resource-Matched and Resource-Expanded Regimes 
+
+In the resource-matched regime, additional replay or memory communication is matched to the projected-memory budget of PRO and PRO-MAX. This regime asks whether methods perform well under comparable extra communication. In the resource-expanded regime, replay-heavy, memory-heavy, and prototype-augmented baselines receive a larger replay or memory budget selected on the homogeneous validation setting. PRO and PRO-MAX keep their fixed projected-memory budget. This regime tests whether replay-heavy baselines can recover under heterogeneity when replay quantity is no longer the limiting factor. Overall, the cost accounting shows that PRO and PRO-MAX trade a small amount of class-level mem-ory communication for avoiding input-space generators, local full-model distillation, raw exemplar storage, and server-side SGD. 
+
+G.7 Hardware, Runtime, and Bidirectional Communication 
+
+We report hardware, wall-clock time, memory footprint, and bidirectional communication to make the system-cost evaluation reproducible. All experiments are run as federated simulations on a single 36 Table 22: Compute platform used in the experiments. CPU information is obtained from 
+
+/proc/cpuinfo , and GPU information is obtained from lspci and nvidia-smi .            
+
+> Component Specification CPU 2×Intel Xeon Gold 6242 @ 2.80GHz CPU cores / threads 32 physical cores / 64 logical threads CPU cache 22 MB L3 cache per socket CPU instruction support AVX2, AVX-512, AVX512-VNNI GPU NVIDIA RTX A5000 GPU memory 24 GB GDDR6 System memory 256 GB DDR4 RAM Storage 2 TB local SSD Software Python 3.10, PyTorch 2.x, CUDA 12.x, cuDNN Execution mode Single-GPU sequential FL simulation
+
+Table 23: Wall-clock time and peak memory for the main benchmarks. Time is reported for one seed. Peak CPU memory includes data loaders, simulated client buffers, replay or memory buffers. Dataset Method Incremental time Warmup time Total time Peak GPU mem. Peak CPU mem. CIFAR-100 FedAvg 2.10 h - 2.10 h 4.6 GB 10.2 GB CIFAR-100 FedProx 2.20 h - 2.20 h 4.7 GB 10.4 GB CIFAR-100 FedProto 2.40 h - 2.40 h 4.9 GB 11.1 GB CIFAR-100 TARGET 4.80 h - 4.80 h 8.2 GB 14.0 GB CIFAR-100 MFCL 5.40 h - 5.40 h 8.6 GB 15.2 GB CIFAR-100 HR 5.80 h - 5.80 h 9.0 GB 16.1 GB CIFAR-100 FedSpace 3.00 h - 3.00 h 5.4 GB 12.1 GB CIFAR-100 FedSSI 2.80 h - 2.80 h 5.2 GB 11.8 GB CIFAR-100 FedCBDR 4.20 h - 4.20 h 7.4 GB 14.3 GB CIFAR-100 PRO 3.20 h 0.60 h 3.80 h 5.6 GB 12.0 GB CIFAR-100 PRO-MAX 3.60 h 0.60 h 4.20 h 6.2 GB 13.1 GB THUCNews-10 FedAvg 0.32 h - 0.32 h 1.8 GB 5.0 GB THUCNews-10 FedProx 0.34 h - 0.34 h 1.8 GB 5.1 GB THUCNews-10 FedProto 0.38 h - 0.38 h 1.9 GB 5.3 GB THUCNews-10 FedSeIT 0.74 h - 0.74 h 2.6 GB 7.0 GB THUCNews-10 PRO 0.52 h 0.12 h 0.64 h 2.2 GB 6.0 GB THUCNews-10 PRO-MAX 0.60 h 0.12 h 0.72 h 2.4 GB 6.4 GB Cora FedAvg 0.18 h - 0.18 h 1.5 GB 4.0 GB Cora FedProx 0.19 h - 0.19 h 1.5 GB 4.0 GB Cora FedProto 0.23 h - 0.23 h 1.6 GB 4.3 GB Cora POWER 0.54 h - 0.54 h 2.8 GB 7.1 GB Cora MOTION 0.58 h - 0.58 h 3.0 GB 7.4 GB Cora PRO 0.42 h 0.08 h 0.50 h 2.1 GB 5.2 GB Cora PRO-MAX 0.48 h 0.08 h 0.56 h 2.4 GB 5.6 GB workstation. Client updates are executed sequentially on one GPU, while data loading, aggregation, memory accounting, and logging use CPU workers. Thus, the reported wall-clock time measures simulation cost on our workstation rather than real deployment latency. In a real cross-device deployment, clients may train in parallel and the end-to-end latency would additionally depend on network delays, client availability, and stragglers. Because the warmup stage is shared across all methods, the reported incremental time in Tables 23 and 24 separates warmup time from supervised continual-learning time. Table 23 reports wall-clock time and peak memory for the main benchmarks. The time includes local client training, projected-memory sampling or replay generation, server aggregation, memory accounting, and task-boundary evaluation. For PRO and PRO-MAX, warmup time is reported separately because it is performed before the supervised incremental stream. The results show that generator-based and replay-heavy baselines require higher runtime and GPU memory because they construct or process input-space replay. In contrast, PRO and PRO-MAX mostly add projected-memory sampling, class-statistic aggregation, and, for PRO-MAX, temporary transport estimation. Table 24 reports the same quantities for the scale-up benchmarks. TinyImageNet is the most expensive image stream because it has a longer class-incremental horizon and higher visual complexity. CLINC150 is more expensive than THUCNews-10 because it has more intent classes and more 37 Table 24: Wall-clock time and peak memory for scale-up benchmarks. Time is reported for one seed. Dataset Method Incremental time Warmup time Total time Peak GPU mem. Peak CPU mem. TinyImageNet FedAvg 7.40 h - 7.40 h 6.8 GB 18.0 GB TinyImageNet FedProx 7.80 h - 7.80 h 6.9 GB 18.2 GB TinyImageNet FedProto 8.40 h - 8.40 h 7.2 GB 19.0 GB TinyImageNet TARGET 18.60 h - 18.60 h 11.8 GB 24.0 GB TinyImageNet MFCL 20.40 h - 20.40 h 12.4 GB 26.0 GB TinyImageNet HR 21.80 h - 21.80 h 13.0 GB 28.0 GB TinyImageNet FedSpace 10.60 h - 10.60 h 8.0 GB 21.0 GB TinyImageNet FedSSI 9.80 h - 9.80 h 7.8 GB 20.0 GB TinyImageNet FedCBDR 15.20 h - 15.20 h 10.2 GB 23.0 GB TinyImageNet PRO 11.00 h 1.40 h 12.40 h 8.1 GB 20.0 GB TinyImageNet PRO-MAX 12.40 h 1.40 h 13.80 h 8.8 GB 21.0 GB CLINC150 FedAvg 1.40 h - 1.40 h 2.2 GB 7.0 GB CLINC150 FedProx 1.50 h - 1.50 h 2.2 GB 7.2 GB CLINC150 FedProto 1.70 h - 1.70 h 2.4 GB 8.0 GB CLINC150 FedSeIT 2.80 h - 2.80 h 3.4 GB 10.0 GB CLINC150 PRO 2.10 h 0.30 h 2.40 h 2.8 GB 8.2 GB CLINC150 PRO-MAX 2.40 h 0.30 h 2.70 h 3.1 GB 9.0 GB ogbn-arxiv FedAvg 2.80 h - 2.80 h 4.6 GB 18.0 GB ogbn-arxiv FedProx 3.00 h - 3.00 h 4.7 GB 18.4 GB ogbn-arxiv FedProto 3.40 h - 3.40 h 4.9 GB 19.0 GB ogbn-arxiv POWER 5.60 h - 5.60 h 7.4 GB 24.0 GB ogbn-arxiv MOTION 6.20 h - 6.20 h 7.8 GB 25.0 GB ogbn-arxiv PRO 4.80 h 0.60 h 5.40 h 6.2 GB 21.0 GB ogbn-arxiv PRO-MAX 5.40 h 0.60 h 6.00 h 6.8 GB 22.0 GB Table 25: Bidirectional communication for image benchmarks under the severe-heterogeneity setting. 
+
+S → C denotes server-to-client communication, and C → S denotes client-to-server communication. Values are cumulative over the supervised incremental stream and exclude the shared warmup. 
+
+Method CIFAR-100 TinyImageNet 
+
+S → C C → S Total / FedAvg S → C C → S Total / FedAvg FedAvg 89.4 GB 89.4 GB 1.00 × 178.8 GB 178.8 GB 1.00 ×
+
+FedProx 89.4 GB 89.4 GB 1.00 × 178.8 GB 178.8 GB 1.00 ×
+
+FedProto 94.8 GB 98.3 GB 1.08 × 189.5 GB 196.7 GB 1.08 ×
+
+TARGET 272.6 GB 228.0 GB 2.80 × 545.0 GB 455.0 GB 2.80 ×
+
+MFCL 286.1 GB 250.3 GB 3.00 × 572.0 GB 500.8 GB 3.00 ×
+
+HR 299.5 GB 272.6 GB 3.20 × 599.0 GB 545.0 GB 3.20 ×
+
+FedSpace 111.8 GB 111.7 GB 1.25 × 402.3 GB 402.3 GB 2.25 ×
+
+FedSSI 101.8 GB 103.6 GB 1.15 × 384.4 GB 384.4 GB 2.15 ×
+
+FedCBDR 263.7 GB 237.0 GB 2.80 × 527.4 GB 474.0 GB 2.80 ×
+
+PRO 110.6 GB 89.7 GB 1.12 × 226.8 GB 180.9 GB 1.14 ×
+
+PRO-MAX 110.6 GB 96.8 GB 1.16 × 226.8 GB 198.7 GB 1.19 ×
+
+tasks. ogbn-arxiv is more expensive than Cora because clients operate on larger node sets and local computation graphs. We next report bidirectional communication for the supervised incremental stream. Server-to-client communication includes model broadcasts and method-specific memory or replay-state broadcasts. Client-to-server communication includes model updates and method-specific statistics. The shared warmup is excluded from these totals and reported separately in the runtime table. This separation avoids mixing method-specific continual-learning communication with the common initialization cost. For PRO and PRO-MAX, the additional communication beyond model transmission is small because projected memories, memory-refresh statistics, and transport summaries scale with the number of classes and feature dimension, not with the number of training examples. Finally, Table 27 summarizes the total compute used for the reported experiments. We separate reported experiments from preliminary exploration because hyperparameter search and failed runs can require additional compute that is not directly reflected in the final result tables. 38 Table 26: Bidirectional communication for text and graph benchmarks under the severe-heterogeneity setting. Values are cumulative over the full stream. Method THUCNews-10 CLINC150 Cora ogbn-arxiv S→C C→S Total / FedAvg S→C C→S Total / FedAvg S→C C→S Total / FedAvg S→C C→S Total / FedAvg FedAvg 4.20 4.20 1.00 × 12.60 12.60 1.00 × 0.18 0.18 1.00 × 1.80 1.80 1.00 ×                                                                                    
+
+> FedProx 4.20 4.20 1.00 ×12.60 12.60 1.00 ×0.18 0.18 1.00 ×1.80 1.80 1.00 ×
+> FedProto 4.41 4.49 1.06 ×13.20 13.50 1.06 ×0.19 0.20 1.08 ×1.93 1.96 1.08 ×
+> FedSeIT 5.88 4.62 1.25 ×17.60 13.90 1.25 ×------POWER ------0.27 0.24 1.42 ×2.70 2.41 1.42 ×
+> MOTION ------0.26 0.23 1.36 ×2.56 2.34 1.36 ×
+> PRO 4.58 4.66 1.10 ×13.70 14.00 1.10 ×0.20 0.20 1.12 ×1.98 2.05 1.12 ×
+> PRO-MAX 4.62 4.96 1.14 ×13.90 14.80 1.14 ×0.20 0.22 1.16 ×2.00 2.18 1.16 ×
+
+Table 27: Approximate total compute used in the reported experiments. GPU-hours are computed from the wall-clock time of sequential single-GPU simulations. 
+
+Experiment group Number of seeds Approx. GPU-hours Main CIFAR-100 homogeneous and heterogeneous runs 5 395 Generator-failure stress-test runs 5 136 THUCNews-10 and Cora modality-portability runs 5 55 CIFAR-100 ablation runs 5 75 TinyImageNet scale-up runs 5 790 CLINC150 scale-up runs 5 63 ogbn-arxiv scale-up runs 5 192 Sensitivity and diagnostic runs 5 270 Preliminary tuning and failed runs - 320 Reported experiments only - 1871 Total including preliminary runs - 2191 
+
+Overall, PRO and PRO-MAX add a modest amount of runtime and communication relative to FedAvg because they transmit class-level projected memories and memory statistics. Their overhead remains substantially smaller than generator-based and replay-heavy methods, which require additional replay generation, replay-state transmission, or heavier local replay training. PRO-MAX is slightly more expensive than PRO because it stores a temporary calibration cache and uploads transport summaries, but it does not change the server role: the server still performs aggregation, memory accounting, and confidence-weighted memory alignment without running server-side SGD. 
+
+## H Theoretical Analysis 
+
+This section provides mechanism-level theoretical support for PRO and PRO-MAX. The goal is not to prove global convergence of the full nonconvex heterogeneous FCIL procedure. Instead, we formalize the main mechanisms used in the paper: replay mismatch under weak task learning, projected-memory approximation, class-balanced pseudo multi-task learning, controlled representa-tion plasticity, neighborhood-weighted memory transport, and server-light complexity. These results follow standard arguments from distribution mismatch and domain adaptation [ 41 ], optimal trans-port [ 42 ], prototype-based continual/federated learning [ 14 , 26 ], semantic drift compensation [ 17 ], proximal federated optimization [31], and local kernel regression [43, 44]. 
+
+H.1 Notation and Assumptions 
+
+At a task position p, let f (·; Θ) denote the global classifier. For input-space replay, let Pt be the real distribution of task t and let Qt be the replay distribution produced by a generator or data-free synthesis procedure. For projected rehearsal, let u = hθ (x) be the base feature, and let P uy be the class-conditional feature distribution of class y. The memory-induced pseudo-feature distribution of class y is denoted by Quy . For a feature u and label y, define 
+
+ℓuy (u; Θ) = ℓ(W ⊤aψ (u), y ),
+
+where ℓ is the classification loss. For an input x, define 
+
+ℓxy (x; Θ) = ℓ(f (x; Θ) , y ).
+
+39 Assumption 1 (Bounded and Lipschitz losses) . For all models considered in the analysis, the loss is bounded, 0 ≤ ℓ ≤ B. In addition, ℓxy (·; Θ) is Lx-Lipschitz on the input representation space used for replay comparison, and ℓuy (·; Θ) is Lu-Lipschitz on the projected feature space. 
+
+Assumption 2 (Feature memory regularity) . For every class y, the class-conditional feature distri-bution P uy has finite first moment. When a finite-sample rate is stated, features are assumed to be sub-Gaussian with bounded coordinate-wise variance. 
+
+Assumption 3 (Local parameter-to-feature Lipschitzness) . In the local neighborhood of a broadcast model Θg , the base encoder satisfies 
+
+∥hθ (x) − hθg (x)∥2 ≤ Lh∥θ − θg ∥2
+
+for all samples x in the local training support. 
+
+Assumption 4 (Smooth feature displacement) . For PRO-MAX, let the local feature displacement field be 
+
+δ(u) = E[u+ − u− | u− = u].
+
+Around each old memory center μuy , δ(·) is β-Lipschitz: 
+
+∥δ(u) − δ(v)∥2 ≤ β∥u − v∥2.
+
+The residual displacement noise is zero-mean and has bounded second moment. 
+
+H.2 Replay Mismatch under Weak Task Learning 
+
+Generator-based replay trains on a synthetic distribution Qt, while the true evaluation distribution is 
+
+Pt. The following proposition states that replay becomes biased when Qt differs from Pt.
+
+Proposition 1 (Replay-mismatch bound) . For an old task t, define real-task risk and replay risk as 
+
+Rt(f ) = E(x,y )∼Pt ℓ(f (x), y ), eRt(f ) = E(˜ x,y )∼Qt ℓ(f (˜ x), y ).
+
+Under Assumption 1, 
+
+|Rt(f ) − eRt(f )| ≤ LxW1(Pt, Q t),
+
+where W1 is the Wasserstein-1 distance. If only boundedness is used, then 
+
+|Rt(f ) − eRt(f )| ≤ B TV( Pt, Q t),
+
+where TV is total variation distance. Moreover, if a later training stage uses replay weights λp,t ≥ 0
+
+for old tasks, then the discrepancy between the ideal old-task objective and the replay objective is bounded by 
+
+X
+
+> t<p
+
+λp,t Rt(f ) − X
+
+> t<p
+
+λp,t eRt(f ) ≤ X
+
+> t<p
+
+λp,t LxW1(Pt, Q t).
+
+Proof. Let g(x, y ) = ℓ(f (x), y ). By Assumption 1, g is Lx-Lipschitz. The Kantorovich-Rubinstein duality for W1 gives 
+
+|EPt g − EQt g| ≤ LxW1(Pt, Q t).
+
+If 0 ≤ g ≤ B, the standard total-variation inequality gives 
+
+|EPt g − EQt g| ≤ B TV( Pt, Q t).
+
+The weighted objective bound follows by applying the first inequality to each old task and using the triangle inequality. 
+
+Implication. If a task is weakly learned under supervision imbalance or stage misalignment, the replay distribution derived from that task can be far from the real task distribution. Proposition 1 shows that the replay objective can then be a biased surrogate for the real old-task objective. Because the same replay signal may be reused in later stages, the bias can repeatedly affect future training. 40 H.3 Projected Memory Approximation 
+
+PRO replaces input-space replay with projected feature memory. This removes the generator but introduces a feature-space approximation error. The next result makes this trade-off explicit. Let Yold be the old label set. Define the ideal old-class feature risk 
+
+Rreal old (Θ) = 1
+
+|Y old |
+
+X
+
+> y∈Y old
+
+Eu∼P uy ℓuy (u; Θ) ,
+
+and the memory-based risk 
+
+Rmem old (Θ) = 1
+
+|Y old |
+
+X
+
+> y∈Y old
+
+E˜u∼Quy ℓuy (˜ u; Θ) .
+
+Proposition 2 (Projected-memory approximation) . Under Assumption 1, 
+
+Rreal old (Θ) − Rmem old (Θ) ≤ Lu
+
+|Y old |
+
+X
+
+> y∈Y old
+
+W1(P uy , Q uy ).
+
+Furthermore, suppose the memory distribution is a diagonal Gaussian 
+
+Quy = N (bμuy , γ 2diag(( bσuy )2)) ,
+
+and let the ideal diagonal Gaussian summary be 
+
+Qu,⋆ y = N (μuy , γ 2diag(( σuy )2)) .
+
+Then 
+
+W1(P uy , Q uy ) ≤ W1(P uy , Q u,⋆ y ) + ∥bμuy − μuy ∥2 + γ∥bσuy − σuy ∥2.
+
+Under sub-Gaussian feature concentration with ny effective samples, the estimation term is 
+
+∥bμuy − μuy ∥2 + γ∥bσuy − σuy ∥2 = Op
+
+s
+
+du
+
+ny
+
+!
+
+.
+
+Proof. For each class y, the function ℓuy (·; Θ) is Lu-Lipschitz by Assumption 1. Therefore, 
+
+EP uy ℓuy − EQuy ℓuy ≤ LuW1(P uy , Q uy ).
+
+Averaging over old classes proves the first inequality. For the second inequality, apply the triangle inequality: 
+
+W1(P uy , Q uy ) ≤ W1(P uy , Q u,⋆ y ) + W1(Qu,⋆ y , Q uy ).
+
+Since W1 ≤ W2, and the W2 distance between two diagonal Gaussians is bounded by the Euclidean distance between their means and standard deviations, 
+
+W1(Qu,⋆ y , Q uy ) ≤ W2(Qu,⋆ y , Q uy ) ≤ ∥ bμuy − μuy ∥2 + γ∥bσuy − σuy ∥2.
+
+The final rate follows from standard concentration of empirical means and coordinate-wise variances for sub-Gaussian random vectors. 
+
+Implication. The approximation error of PRO decomposes into two terms. The first term, 
+
+W1(P uy , Q u,⋆ y ), measures how well a class-level projected memory can represent the real feature distribution. The second term measures finite-support estimation error. Thus, projected memory is strongest when the representation is meaningful and each class has sufficient support. This also explains why extremely rare classes remain challenging. 41 H.4 Class-Balanced Projected Pseudo Multi-Task Training 
+
+PRO trains clients on a balanced mixture of current features and old projected memories. The following lemma shows that the class-balanced sampler optimizes a balanced objective rather than the skewed local empirical objective. Let 
+
+Rbal (Θ) = 1
+
+|Y (p)|
+
+X
+
+> y∈Y (p)
+
+Eu∼qy ℓuy (u; Θ) ,
+
+where qy is the empirical current-task feature distribution for current classes and the projected-memory distribution for old classes. 
+
+Lemma 1 (Unbiased gradient of the balanced objective) . Suppose a mini-batch sample is generated by first sampling 
+
+y ∼ Unif( Y(p)),
+
+and then sampling u ∼ qy . If gradients and expectations can be interchanged, then the stochastic gradient 
+
+g(Θ) = ∇Θℓuy (u; Θ) 
+
+satisfies 
+
+E[g(Θ)] = ∇ΘRbal (Θ) .
+
+Proof. By the sampling rule, 
+
+E[g(Θ)] = 1
+
+|Y (p)|
+
+X
+
+> y∈Y (p)
+
+Eu∼qy ∇Θℓuy (u; Θ) .
+
+Interchanging gradient and expectation gives 
+
+E[g(Θ)] = ∇Θ
+
+ 1
+
+|Y (p)|
+
+X
+
+> y∈Y (p)
+
+Eu∼qy ℓuy (u; Θ) 
+
+ = ∇ΘRbal (Θ) .
+
+We completed the proof. 
+
+Implication. Without balanced sampling, the local objective is weighted by the empirical class prior, which is dominated by current classes in class-incremental learning. Lemma 1 shows that PRO directly optimizes a balanced old-new objective, explaining why no additional regularizer is needed in the projected pseudo multi-task phase. 
+
+H.5 Controlled Representation Plasticity 
+
+The short current-task fitting stage must learn the current task while avoiding excessive representation drift. The following proposition formalizes the role of the proximal term. Let 
+
+Fc(Θ) = Lsup (Θ) + λaux Laux (Θ) 
+
+be the non-proximal part of the local plasticity objective on client c. Let 
+
+Θ = Π r (Θ) 
+
+denote the trainable parameter subset in round r.
+
+Proposition 3 (Proximal control of local drift) . Assume ∥∇ ΘFc(Θ) ∥2 ≤ G in the local training region. Suppose the client returns a ξ-stationary point of 
+
+Fc(Θ) + λprox ∥Πr (Θ) − Πr (Θ g )∥22,
+
+meaning 
+
+∇ΘFc(Θ c) + 2 λprox (Θ c − Θg ) 2
+
+≤ ξ. 
+
+42 Then 
+
+∥Θc − Θg ∥2 ≤ G + ξ
+
+2λprox 
+
+.
+
+If the base encoder is trainable and Assumption 3 holds, then 
+
+∥hθc (x) − hθg (x)∥2 ≤ Lh(G + ξ)2λprox 
+
+.
+
+If the base encoder is frozen, the base-space feature drift is zero. Proof. From ξ-stationarity, 
+
+2λprox (Θ c − Θg ) 2
+
+≤ ∥∇ ΘFc(Θ c)∥2 + ξ ≤ G + ξ. 
+
+Dividing by 2λprox gives the parameter drift bound. The feature drift bound follows directly from Assumption 3. If the base encoder is frozen, θc = θg , hence hθc (x) = hθg (x).
+
+Implication. The proximal coefficient controls how far local trainable parameters can move from the broadcast global model. This explains the role of controlled plasticity: early rounds may update the base encoder to learn the new task, while later rounds freeze the base encoder so that the base-space memory remains meaningful. 
+
+H.6 Neighborhood-Weighted Memory Transport in PRO-MAX 
+
+PRO-MAX estimates how old memories should move when the representation changes. We formalize this as local regression of the feature displacement field. For a client c and old class y, let the calibration features before and after local fitting be 
+
+u− 
+
+> i
+
+= hθ− (xi), u+ 
+
+> i
+
+= hθ+ (xi), δui = u+ 
+
+> i
+
+− u− 
+
+> i
+
+.
+
+Let N uy be the selected neighbor set around μuy , and define 
+
+αui,y = exp − ∥u− 
+
+> i
+
+− μuy ∥22
+
+2τ 2
+
+> u
+
+!
+
+, quc,y = X 
+
+> i∈N uy
+
+αui,y .
+
+The PRO-MAX transport estimate is 
+
+∆uc,y =
+
+P  
+
+> i∈N uy
+
+αui,y δui
+
+quc,y + ϵ .
+
+For the analysis, ignore the negligible numerical stabilizer ϵ when quc,y > 0, and define normalized weights 
+
+¯αui,y = αui,y 
+
+quc,y 
+
+.
+
+Theorem 1 (Local consistency of PRO-MAX transport) . Assume the displacement model 
+
+δui = δ(u− 
+
+> i
+
+) + ξi, E[ξi | u− 
+
+> i
+
+] = 0 ,
+
+with residual second moment bounded as 
+
+E X
+
+> i
+
+wiξi
+
+> 22
+
+≤ σ2
+
+> δ
+
+X
+
+> i
+
+w2
+
+> i
+
+for any deterministic weights {wi}. Under Assumption 4, let 
+
+rc,y = max  
+
+> i∈N uy
+
+∥u− 
+
+> i
+
+− μuy ∥2.
+
+Then 
+
+E ∆uc,y − δ(μuy ) 22 ≤ 2β2r2 
+
+> c,y
+
++ 2σ2
+
+> δ
+
+quc,y 
+
+.
+
+43 Furthermore, if the server aggregates client transports as 
+
+∆u,g y =
+
+P 
+
+> c
+
+quc,y ∆uc,y 
+
+P 
+
+> c
+
+quc,y 
+
+, Qy = X
+
+> c
+
+quc,y ,
+
+and the client residuals are independent, then 
+
+E ∆u,g y − δ(μuy ) 22 ≤ 2β2r2 
+
+> y
+
++ 2σ2
+
+> δ
+
+Qy
+
+,
+
+where ry = max c rc,y over clients with quc,y > 0.Proof. For a single client, decompose the error as 
+
+∆uc,y − δ(μuy ) = X 
+
+> i∈N uy
+
+¯αui,y 
+
+δ(u− 
+
+> i
+
+) − δ(μuy ) + X 
+
+> i∈N uy
+
+¯αui,y ξi.
+
+Using ∥a + b∥22 ≤ 2∥a∥22 + 2 ∥b∥22, we bound the bias and variance terms separately. By β-Lipschitzness, 
+
+X
+
+> i
+
+¯αui,y 
+
+δ(u− 
+
+> i
+
+) − δ(μuy )
+
+> 2
+
+≤ X
+
+> i
+
+¯αui,y β∥u− 
+
+> i
+
+− μuy ∥2 ≤ βr c,y .
+
+For the noise term, the residual assumption gives 
+
+E X
+
+> i
+
+¯αui,y ξi
+
+> 22
+
+≤ σ2
+
+> δ
+
+X
+
+> i
+
+(¯ αui,y )2.
+
+Since 0 ≤ αui,y ≤ 1,
+
+X
+
+> i
+
+(¯ αui,y )2 =
+
+P
+
+> i
+
+(αui,y )2
+
+(quc,y )2 ≤
+
+P 
+
+> i
+
+αui,y 
+
+(quc,y )2 = 1
+
+quc,y 
+
+.
+
+Combining the two bounds proves the client-side result. For the server-side result, write 
+
+∆u,g y − δ(μuy ) = X
+
+> c
+
+quc,y 
+
+Qy
+
+∆uc,y − δ(μuy ) .
+
+The weighted bias is bounded by βr y . With independent residuals, the variance is bounded by 
+
+σ2
+
+> δ
+
+X
+
+> c
+
+ quc,y 
+
+Qy
+
+2 1
+
+quc,y 
+
+= σ2
+
+> δ
+
+Qy
+
+.
+
+Applying the same ∥a + b∥2 decomposition yields the stated bound. 
+
+Implication. The PRO-MAX transport estimate is reliable when nearby calibration samples exist and the local representation shift is smooth around the old memory center. The confidence score quc,y 
+
+has a clear role: clients whose calibration samples are far from an old memory have small confidence and therefore weak influence on that memory. This justifies confidence-weighted server aggregation. 
+
+H.7 PRO and PRO-MAX Server Complexity 
+
+Finally, we formalize the server-light property of PRO and PRO-MAX. Let Cr be the number of participating clients in a communication round, |Θ| be the number of model parameters, du be the base feature dimension, dz be the adapted feature dimension, and ηz ∈ { 0, 1} indicate whether the optional adapted-space memory is enabled. 44 Proposition 4 (Server memory and communication order) . At position p, the persistent server memory of PRO is 
+
+O
+
+
+
+|Y (p)| [2 du + 1 + ηz (dz + 2)] 
+
+
+
+.
+
+The memory downlink per participating client is 
+
+O
+
+
+
+|Y (p−1) | [2 du + 1 + ηz (dz + 2)] 
+
+
+
+.
+
+For PRO-MAX, the additional transport uplink per participating client is 
+
+O
+
+
+
+|Y (p−1) | [du + 1 + ηz (dz + 1)] 
+
+
+
+.
+
+The server compute per round consists of parameter averaging and memory accounting: 
+
+O(Cr |Θ|) + O(Cr |Y (p)|du),
+
+up to constants and optional adapted-space terms. No server-side backpropagation or generator training is required. Proof. The base-space memory stores a mean, diagonal standard deviation, and count per class, requiring 2du + 1 scalars per class. The optional adapted-space memory stores a mean, radius, and count per class, requiring dz + 2 scalars per class. This proves the persistent memory order and the memory downlink order. For PRO-MAX, each old class transport summary contains a base-space transport vector and confi-dence scalar, requiring du + 1 scalars. If adapted-space transport is enabled, it adds dz + 1 scalars per old class. This proves the transport uplink order. The server averages Cr model updates, which costs O(Cr |Θ|). Memory accounting aggregates class-level statistics and transport summaries, which scales with the number of participating clients, seen classes, and feature dimension. None of these operations differentiates through the model, trains a generator, or optimizes a classifier on pseudo data. 
+
+Overall interpretation. Propositions 1-4 support the main design choices of PRO and PRO-MAX. Generator replay can suffer from distribution mismatch when a task is weakly learned. Projected memory approximates old-task rehearsal in feature space with error controlled by memory quality and support; class-balanced sampling targets an unbiased balanced objective. The proximal term controls local representation drift, and PRO-MAX reduces memory staleness through local transport; and the server remains lightweight because it performs only aggregation and memory accounting. 
+
+## I Limitations and Privacy Discussion 
+
+I.1 Representation Quality and Sparse Support 
+
+The main limitation of PRO is that projected memories depend on the quality of the learned repre-sentation. If the in-domain warmup is weak, or if a semantic class receives very little support, the class-level projected statistics can be noisy. In such cases, pseudo projected rehearsal may preserve an inaccurate class geometry. PRO-MAX can mitigate moderate representation drift by transporting old memories, but it cannot fully recover old-class geometry when no reliable neighborhood evidence is available. This limitation is especially relevant for rare classes. Our protocol assumes that every evaluated class is observed by at least one client, but a class with very small support can still produce unreliable statistics. In practice, this suggests using minimum-support thresholds, memory uncertainty estimates, or conservative updates for rare classes. 
+
+I.2 Scalability with Large Label Spaces 
+
+The server memory of PRO grows linearly with the number of seen classes and the feature dimension. This is much smaller than storing raw exemplars or per-example feature banks, but it may still become 45 large for extremely large label spaces. In such cases, memory compression, quantization, low-rank summaries, or selective memory transmission may be necessary. Communication also grows with the number of seen classes because old memories are broadcast to clients. In our experiments this cost remains small relative to model communication, but in very large-label settings the memory downlink may become non-negligible. 
+
+I.3 Privacy Discussion 
+
+PRO avoids raw-data storage, input-space generators, and per-example feature banks. The server stores class-level projected statistics rather than individual examples. This reduces instance specificity and makes the memory object more compact. However, projected class memories are not a formal privacy guarantee. Prior work has shown that deep representations, model outputs, and gradients can leak information about private data [ 18 –20 ]. Class-level aggregation reduces this risk but does not eliminate it, especially when a class is supported by very few examples or very few clients. Therefore, PRO should be viewed as privacy-aware rather than privacy-proving. It can be combined with secure aggregation so that the server observes only aggregated memory statistics, and with differential privacy so that means, second moments, counts, and transport summaries are perturbed before upload. Another practical safeguard is to update a class memory only when the class has sufficient client support. We leave formal privacy accounting for projected memories to future work. 
+
+I.4 Deployment Scope 
+
+Our experiments study heterogeneous task orders, supervision imbalance, and modality transfer, but they do not fully cover all cross-device deployment issues. Real deployments may include unreliable client availability, long offline periods, stragglers, device-specific compute limits, and fully asynchronous updates. Such settings may require additional mechanisms for stale-client handling, adaptive participation, and memory expiration. 
+
+I.5 Broader Impact 
+
+A generator-free and server-light FCIL method may be useful in privacy-sensitive applications such as medical networks, on-device intent classification, and graph-based recommendation or citation systems. At the same time, continual learning systems can propagate biased or incomplete supervision if rare classes are poorly represented. The projected memory bank may also encode sensitive class-level information. Deployments should therefore include data governance, monitoring for class imbalance, and privacy-preserving aggregation mechanisms when sensitive data are involved. 46
